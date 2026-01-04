@@ -1,0 +1,105 @@
+# =============================================================================
+# Cloud Run Service Configuration for TransMaint
+# Deploy: gcloud run services replace service.yaml --region=us-central1
+# =============================================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: transmaint-api
+  labels:
+    app: transmaint
+    tier: backend
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scaling configuration
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        # CPU allocation
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+        # VPC connector for Cloud SQL
+        run.googleapis.com/vpc-access-connector: projects/${PROJECT_ID}/locations/${REGION}/connectors/transmaint-vpc
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+        # Cloud SQL connection
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:transmaint-db
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: transmaint-api@${PROJECT_ID}.iam.gserviceaccount.com
+      containers:
+        - image: gcr.io/${PROJECT_ID}/transmaint-api:latest
+          ports:
+            - containerPort: 8080
+              name: http1
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+            requests:
+              cpu: "1"
+              memory: 1Gi
+          env:
+            # Django settings
+            - name: DJANGO_SETTINGS_MODULE
+              value: config.settings.production
+            - name: ALLOWED_HOSTS
+              value: ".run.app,transmaint.instelec.com.co"
+            # GCP Project
+            - name: GOOGLE_CLOUD_PROJECT
+              value: ${PROJECT_ID}
+            - name: GS_PROJECT_ID
+              value: ${PROJECT_ID}
+            - name: GCP_REGION
+              value: ${REGION}
+            # Cloud Storage
+            - name: GS_BUCKET_NAME
+              value: transmaint-${PROJECT_ID}-media
+            # Database (from Secret Manager)
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: DATABASE_URL
+            # Django Secret Key
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: DJANGO_SECRET_KEY
+            # Redis (Memorystore)
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: REDIS_URL
+            # Sentry (optional)
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: SENTRY_DSN
+          startupProbe:
+            httpGet:
+              path: /api/health/
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+  traffic:
+    - percent: 100
+      latestRevision: true

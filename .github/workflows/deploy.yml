@@ -14,11 +14,17 @@ on:
           - staging
           - production
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev
   SERVICE_NAME: transmaint-api
   CELERY_SERVICE_NAME: transmaint-worker
+  MIGRATIONS_JOB_NAME: transmaint-migrations
 
 jobs:
   deploy:

@@ -1,0 +1,71 @@
+# =============================================================================
+# Cloud Run Job Configuration for Celery Worker
+# Deploy: gcloud run jobs replace celery-worker.yaml --region=us-central1
+# =============================================================================
+
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: transmaint-celery-worker
+  labels:
+    app: transmaint
+    tier: worker
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/vpc-access-connector: projects/${PROJECT_ID}/locations/${REGION}/connectors/transmaint-vpc
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:transmaint-db
+    spec:
+      parallelism: 1
+      taskCount: 1
+      template:
+        spec:
+          maxRetries: 3
+          timeoutSeconds: 3600
+          serviceAccountName: transmaint-worker@${PROJECT_ID}.iam.gserviceaccount.com
+          containers:
+            - image: gcr.io/${PROJECT_ID}/transmaint-celery:latest
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+                requests:
+                  cpu: "1"
+                  memory: 1Gi
+              env:
+                - name: DJANGO_SETTINGS_MODULE
+                  value: config.settings.production
+                - name: GOOGLE_CLOUD_PROJECT
+                  value: ${PROJECT_ID}
+                - name: GS_PROJECT_ID
+                  value: ${PROJECT_ID}
+                - name: GS_BUCKET_NAME
+                  value: transmaint-${PROJECT_ID}-media
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: latest
+                      name: DATABASE_URL
+                - name: SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: latest
+                      name: DJANGO_SECRET_KEY
+                - name: REDIS_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: latest
+                      name: REDIS_URL
+                - name: CELERY_WORKER_CONCURRENCY
+                  value: "4"
+              command:
+                - celery
+                - -A
+                - config
+                - worker
+                - --loglevel=info
+                - --queues=default,high_priority,reports
+                - --concurrency=4
+                - --max-tasks-per-child=100

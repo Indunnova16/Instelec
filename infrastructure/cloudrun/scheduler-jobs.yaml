@@ -1,0 +1,102 @@
+# =============================================================================
+# Google Cloud Scheduler Jobs for TransMaint
+# These replace Celery Beat for scheduled tasks in Cloud Run
+# Deploy with: gcloud scheduler jobs create/update
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# KPI Calculations
+# -----------------------------------------------------------------------------
+# calcular-indicadores-mensuales:
+#   schedule: "0 6 5 * *"  # 5th of each month at 6 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/calcular-indicadores/
+#     http_method: POST
+#     oidc_token:
+#       service_account_email: transmaint-scheduler@PROJECT_ID.iam.gserviceaccount.com
+
+# verificar-alertas-indicadores:
+#   schedule: "0 8 * * *"  # Daily at 8 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/verificar-alertas/
+#     http_method: POST
+
+# resumen-semanal-indicadores:
+#   schedule: "0 7 * * 1"  # Mondays at 7 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/resumen-semanal/
+#     http_method: POST
+
+# -----------------------------------------------------------------------------
+# Environmental Reports
+# -----------------------------------------------------------------------------
+# verificar-permisos-vencidos:
+#   schedule: "0 7 * * *"  # Daily at 7 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/verificar-permisos/
+#     http_method: POST
+
+# generar-informes-ambientales:
+#   schedule: "0 2 1 * *"  # 1st of each month at 2 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/generar-informes-ambientales/
+#     http_method: POST
+
+# -----------------------------------------------------------------------------
+# Financial Reports
+# -----------------------------------------------------------------------------
+# calcular-costos-actividades:
+#   schedule: "0 1 * * *"  # Daily at 1 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/calcular-costos/
+#     http_method: POST
+
+# generar-cuadro-costos:
+#   schedule: "0 3 1 * *"  # 1st of each month at 3 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/generar-cuadro-costos/
+#     http_method: POST
+
+# reporte-presupuestal-semanal:
+#   schedule: "0 8 * * 1"  # Mondays at 8 AM
+#   timezone: America/Bogota
+#   http_target:
+#     uri: https://transmaint-api-HASH.run.app/api/tasks/reporte-presupuestal/
+#     http_method: POST
+
+# =============================================================================
+# Shell script to create all scheduler jobs
+# =============================================================================
+# Run this script to create all Cloud Scheduler jobs:
+#
+# #!/bin/bash
+# PROJECT_ID=$(gcloud config get-value project)
+# SERVICE_URL=$(gcloud run services describe transmaint-api --format='value(status.url)' --region=us-central1)
+# SERVICE_ACCOUNT="transmaint-scheduler@${PROJECT_ID}.iam.gserviceaccount.com"
+#
+# # KPI Calculations - Monthly
+# gcloud scheduler jobs create http calcular-indicadores-mensuales \
+#   --schedule="0 6 5 * *" \
+#   --time-zone="America/Bogota" \
+#   --uri="${SERVICE_URL}/api/tasks/calcular-indicadores/" \
+#   --http-method=POST \
+#   --oidc-service-account-email="${SERVICE_ACCOUNT}" \
+#   --location=us-central1
+#
+# # KPI Alerts - Daily
+# gcloud scheduler jobs create http verificar-alertas-indicadores \
+#   --schedule="0 8 * * *" \
+#   --time-zone="America/Bogota" \
+#   --uri="${SERVICE_URL}/api/tasks/verificar-alertas/" \
+#   --http-method=POST \
+#   --oidc-service-account-email="${SERVICE_ACCOUNT}" \
+#   --location=us-central1
+#
+# # Add remaining jobs following the same pattern...

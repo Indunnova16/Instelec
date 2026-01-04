@@ -1,31 +1,93 @@
+# =============================================================================
 # Dockerfile for Celery Worker
-FROM python:3.12-slim
+# Optimized for Google Cloud Run Jobs
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder
+# -----------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
-    gdal-bin \
     libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal \
+    C_INCLUDE_PATH=/usr/include/gdal
+
+WORKDIR /build
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements/production.txt requirements.txt
+RUN pip install --upgrade pip wheel && \
+    pip install -r requirements.txt
+
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime
+# -----------------------------------------------------------------------------
+FROM python:3.12-slim AS runtime
+
+LABEL maintainer="Instelec Ingeniería S.A.S." \
+      app.name="transmaint-celery" \
+      app.description="Celery Worker for TransMaint"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=config.settings.production \
+    PATH="/opt/venv/bin:$PATH" \
+    # Celery settings
+    CELERY_WORKER_CONCURRENCY=4 \
+    CELERY_WORKER_PREFETCH_MULTIPLIER=2 \
+    CELERY_TASK_ACKS_LATE=true
+
+# Runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    gdal-bin \
+    libgdal32 \
+    libgeos-c1v5 \
+    libproj25 \
+    # Image processing for photos
+    libjpeg62-turbo \
+    libpng16-16 \
+    # WeasyPrint dependencies
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+RUN useradd -m -u 1000 -s /bin/bash appuser
+
+COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements/production.txt requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
-# Copy application
 COPY --chown=appuser:appuser . .
+
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
 USER appuser
 
-# Default command (can be overridden)
-CMD ["celery", "-A", "config", "worker", "-l", "info", "-Q", "default,high_priority,reports"]
+# Default: Celery worker for all queues
+CMD exec celery -A config worker \
+    --loglevel=info \
+    --queues=default,high_priority,reports \
+    --concurrency=${CELERY_WORKER_CONCURRENCY} \
+    --prefetch-multiplier=${CELERY_WORKER_PREFETCH_MULTIPLIER} \
+    --max-tasks-per-child=1000 \
+    --without-heartbeat \
+    --without-gossip \
+    --without-mingle
