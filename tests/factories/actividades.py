@@ -40,11 +40,12 @@ class ProgramacionMensualFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = ProgramacionMensual
+        django_get_or_create = ('linea', 'anio', 'mes')
 
     linea = factory.SubFactory(LineaFactory)
     anio = factory.LazyFunction(lambda: date.today().year)
     mes = factory.LazyFunction(lambda: date.today().month)
-    estado = "BORRADOR"
+    aprobado = False
 
 
 class ActividadFactory(factory.django.DjangoModelFactory):

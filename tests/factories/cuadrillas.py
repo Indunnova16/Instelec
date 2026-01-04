@@ -14,11 +14,11 @@ class VehiculoFactory(factory.django.DjangoModelFactory):
         model = Vehiculo
 
     placa = factory.Sequence(lambda n: f"ABC{n:03d}")
-    tipo = factory.Iterator(["CAMIONETA", "CAMION", "MOTO"])
+    tipo = factory.Iterator(["CAMIONETA", "CAMION", "GRUA"])
     marca = factory.Iterator(["Toyota", "Chevrolet", "Ford", "Nissan"])
     modelo = factory.Faker("year")
-    capacidad_pasajeros = factory.LazyAttribute(
-        lambda obj: 5 if obj.tipo == "CAMIONETA" else 2 if obj.tipo == "MOTO" else 10
+    capacidad_personas = factory.LazyAttribute(
+        lambda obj: 5 if obj.tipo == "CAMIONETA" else 2 if obj.tipo == "GRUA" else 10
     )
     costo_dia = factory.LazyFunction(
         lambda: Decimal(f"{factory.Faker._get_faker().random_int(150000, 500000)}.00")
@@ -47,5 +47,6 @@ class CuadrillaMiembroFactory(factory.django.DjangoModelFactory):
 
     cuadrilla = factory.SubFactory(CuadrillaFactory)
     usuario = factory.SubFactory(LinieroFactory)
-    rol_cuadrilla = "liniero"
+    rol_cuadrilla = "LINIERO"
+    fecha_inicio = factory.Faker("date_this_year")
     activo = True

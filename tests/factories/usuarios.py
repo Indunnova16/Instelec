@@ -14,7 +14,6 @@ class UsuarioFactory(factory.django.DjangoModelFactory):
         skip_postgeneration_save = True
 
     email = factory.Sequence(lambda n: f"usuario{n}@test.com")
-    username = factory.LazyAttribute(lambda obj: obj.email.split("@")[0])
     first_name = factory.Faker("first_name", locale="es_CO")
     last_name = factory.Faker("last_name", locale="es_CO")
     telefono = factory.Faker("phone_number", locale="es_CO")
