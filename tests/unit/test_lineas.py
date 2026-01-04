@@ -130,10 +130,11 @@ class TestPoligonoServidumbreModel:
             linea=linea,
             nombre="Servidumbre test",
             geometria=polygon,
-            area_hectareas=Decimal("1.5000"),
         )
         assert poligono.geometria is not None
-        assert poligono.area_hectareas == Decimal("1.5000")
+        # Area is auto-calculated from geometry in save() method
+        assert poligono.area_hectareas is not None
+        assert poligono.area_hectareas > 0
 
     def test_punto_dentro(self):
         """Test point containment check."""

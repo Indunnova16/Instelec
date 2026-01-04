@@ -147,23 +147,35 @@ class TestCalidadInformacion:
     def test_complete_records(self):
         """Records with complete evidence should count."""
         from tests.factories import (
-            LineaFactory, ActividadFactory, RegistroCampoFactory
+            LineaFactory, ActividadFactory, RegistroCampoFactory,
+            EvidenciaAntesFactory, EvidenciaDuranteFactory, EvidenciaDespuesFactory,
+            TipoActividadFactory,
         )
 
         linea = LineaFactory()
+        # Create activity type that requires all photos
+        tipo = TipoActividadFactory(
+            requiere_fotos_antes=True,
+            requiere_fotos_durante=True,
+            requiere_fotos_despues=True,
+        )
         actividad = ActividadFactory(
             linea=linea,
+            tipo_actividad=tipo,
             fecha_programada=date(2024, 1, 15),
             estado='COMPLETADA'
         )
         # Complete record
-        RegistroCampoFactory(
+        registro = RegistroCampoFactory(
             actividad=actividad,
             fecha_inicio=timezone.make_aware(datetime(2024, 1, 15, 8, 0)),
             sincronizado=True,
-            evidencias_completas=True,
             datos_formulario={'campo1': 'valor1'}
         )
+        # Add all required evidence to make evidencias_completas return True
+        EvidenciaAntesFactory(registro_campo=registro)
+        EvidenciaDuranteFactory(registro_campo=registro)
+        EvidenciaDespuesFactory(registro_campo=registro)
 
         completos, total, valor = calcular_calidad_informacion(
             linea.id, 2024, 1

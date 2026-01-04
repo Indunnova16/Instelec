@@ -43,7 +43,17 @@ class TestUsuarioModel:
             first_name="Test",
             last_name="User",
         )
-        assert str(user) == "test@example.com"
+        # __str__ returns full name if available, otherwise email
+        assert str(user) == "Test User"
+
+    def test_user_str_no_name(self):
+        """Test user string representation when no name set."""
+        user = User.objects.create_user(
+            email="noname@example.com",
+            password="testpass123",
+        )
+        # Falls back to email when no name
+        assert str(user) == "noname@example.com"
 
     def test_user_roles(self):
         """Test different user roles."""
