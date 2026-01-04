@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Registros de Campo - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Registros de Campo</h1>
+            <p class="text-gray-600 dark:text-gray-400">Histórico de trabajos realizados</p>
+        </div>
+        <div class="flex gap-2">
+            <button hx-get="{% url 'campo:exportar' %}"
+                    hx-include="[name='fecha_inicio'], [name='fecha_fin'], [name='linea']"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Exportar
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Total Registros</p>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ stats.total }}</p>
+                </div>
+                <div class="p-3 bg-blue-100 rounded-full">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Sincronizados</p>
+                    <p class="text-2xl font-bold text-green-600">{{ stats.sincronizados }}</p>
+                </div>
+                <div class="p-3 bg-green-100 rounded-full">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Pendientes</p>
+                    <p class="text-2xl font-bold text-yellow-600">{{ stats.pendientes }}</p>
+                </div>
+                <div class="p-3 bg-yellow-100 rounded-full">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Total Evidencias</p>
+                    <p class="text-2xl font-bold text-purple-600">{{ stats.evidencias }}</p>
+                </div>
+                <div class="p-3 bg-purple-100 rounded-full">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <form hx-get="{% url 'campo:registros' %}"
+              hx-target="#registros-container"
+              hx-swap="innerHTML"
+              hx-trigger="change, submit"
+              class="grid grid-cols-1 md:grid-cols-5 gap-4">
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Desde</label>
+                <input type="date" name="fecha_inicio" value="{{ request.GET.fecha_inicio }}"
+                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hasta</label>
+                <input type="date" name="fecha_fin" value="{{ request.GET.fecha_fin }}"
+                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>
+                <select name="linea" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                    <option value="">Todas</option>
+                    {% for linea in lineas %}
+                    <option value="{{ linea.id }}" {% if request.GET.linea == linea.id|stringformat:"s" %}selected{% endif %}>
+                        {{ linea.codigo }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cuadrilla</label>
+                <select name="cuadrilla" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                    <option value="">Todas</option>
+                    {% for cuadrilla in cuadrillas %}
+                    <option value="{{ cuadrilla.id }}">{{ cuadrilla.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+                <select name="sincronizado" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                    <option value="">Todos</option>
+                    <option value="1">Sincronizados</option>
+                    <option value="0">Pendientes</option>
+                </select>
+            </div>
+        </form>
+    </div>
+
+    <!-- Records List -->
+    <div id="registros-container">
+        {% include "campo/partials/lista_registros.html" %}
+    </div>
+</div>
+{% endblock %}

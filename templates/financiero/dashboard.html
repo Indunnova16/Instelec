@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Financiero - TransMaint{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Financiero</h1>
+            <p class="text-gray-600 dark:text-gray-400">Control de costos y presupuesto del contrato</p>
+        </div>
+        <div class="flex gap-2">
+            <select id="periodo-filter" class="rounded-lg border-gray-300"
+                    hx-get="{% url 'financiero:dashboard' %}"
+                    hx-target="#dashboard-content"
+                    hx-trigger="change">
+                {% for p in periodos %}
+                <option value="{{ p.value }}" {% if p.value == periodo_actual %}selected{% endif %}>
+                    {{ p.label }}
+                </option>
+                {% endfor %}
+            </select>
+            <button hx-get="{% url 'financiero:cuadro_costos' %}"
+                    hx-target="#modal-container"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Generar Cuadro de Costos
+            </button>
+        </div>
+    </div>
+
+    <div id="dashboard-content">
+        <!-- Main KPIs -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <!-- Presupuesto Ejecutado -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm text-gray-500">Presupuesto Ejecutado</p>
+                    <span class="text-xs px-2 py-1 rounded-full
+                        {% if porcentaje_ejecutado <= 80 %}bg-green-100 text-green-800
+                        {% elif porcentaje_ejecutado <= 95 %}bg-yellow-100 text-yellow-800
+                        {% else %}bg-red-100 text-red-800{% endif %}">
+                        {{ porcentaje_ejecutado|floatformat:1 }}%
+                    </span>
+                </div>
+                <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                    ${{ ejecutado|floatformat:0|intcomma }}
+                </p>
+                <div class="mt-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full transition-all duration-500
+                            {% if porcentaje_ejecutado <= 80 %}bg-green-500
+                            {% elif porcentaje_ejecutado <= 95 %}bg-yellow-500
+                            {% else %}bg-red-500{% endif %}"
+                             style="width: {{ porcentaje_ejecutado|floatformat:0 }}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">De ${{ presupuesto|floatformat:0|intcomma }}</p>
+                </div>
+            </div>
+
+            <!-- Costo por Actividad -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500 mb-2">Costo Promedio / Actividad</p>
+                <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                    ${{ costo_promedio_actividad|floatformat:0|intcomma }}
+                </p>
+                <p class="text-xs text-gray-500 mt-2">
+                    {% if variacion_costo >= 0 %}
+                    <span class="text-green-600">↓ {{ variacion_costo|floatformat:1 }}%</span>
+                    {% else %}
+                    <span class="text-red-600">↑ {{ variacion_costo|floatformat:1|slice:"1:" }}%</span>
+                    {% endif %}
+                    vs mes anterior
+                </p>
+            </div>
+
+            <!-- Personal -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500 mb-2">Costo Personal</p>
+                <p class="text-2xl font-bold text-blue-600">
+                    ${{ costo_personal|floatformat:0|intcomma }}
+                </p>
+                <p class="text-xs text-gray-500 mt-2">
+                    {{ porcentaje_personal|floatformat:1 }}% del total
+                </p>
+            </div>
+
+            <!-- Equipos y Vehículos -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500 mb-2">Costo Equipos/Vehículos</p>
+                <p class="text-2xl font-bold text-purple-600">
+                    ${{ costo_equipos|floatformat:0|intcomma }}
+                </p>
+                <p class="text-xs text-gray-500 mt-2">
+                    {{ porcentaje_equipos|floatformat:1 }}% del total
+                </p>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Costos por Categoría -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Distribución de Costos</h3>
+                <div id="chart-costos-categoria" class="h-80"></div>
+            </div>
+
+            <!-- Tendencia Mensual -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Tendencia de Ejecución</h3>
+                <div id="chart-tendencia-costos" class="h-80"></div>
+            </div>
+        </div>
+
+        <!-- Costos por Línea -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Costos por Línea</h3>
+            <div id="chart-costos-linea" class="h-64"></div>
+        </div>
+
+        <!-- Detalle de Costos -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
+                <h3 class="font-medium text-gray-900 dark:text-white">Detalle de Ejecución</h3>
+                <button hx-get="{% url 'financiero:exportar_detalle' %}"
+                        class="text-sm text-blue-600 hover:text-blue-800">
+                    Exportar Excel
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoría</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Concepto</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Presupuesto</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ejecutado</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">% Ejecución</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Disponible</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for item in detalle_costos %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-4 py-3 text-sm font-medium">{{ item.categoria }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ item.concepto }}</td>
+                            <td class="px-4 py-3 text-sm text-right">${{ item.presupuesto|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right font-medium">${{ item.ejecutado|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right">
+                                <span class="{% if item.porcentaje > 100 %}text-red-600{% elif item.porcentaje > 90 %}text-yellow-600{% else %}text-green-600{% endif %}">
+                                    {{ item.porcentaje|floatformat:1 }}%
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right
+                                {% if item.disponible < 0 %}text-red-600 font-medium{% endif %}">
+                                ${{ item.disponible|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="bg-gray-100 dark:bg-gray-900 font-medium">
+                        <tr>
+                            <td colspan="2" class="px-4 py-3 text-sm">TOTAL</td>
+                            <td class="px-4 py-3 text-sm text-right">${{ total_presupuesto|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right">${{ total_ejecutado|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right">{{ porcentaje_total|floatformat:1 }}%</td>
+                            <td class="px-4 py-3 text-sm text-right">${{ total_disponible|floatformat:0|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Costos por Categoría (Pie)
+    const chartCategoria = echarts.init(document.getElementById('chart-costos-categoria'));
+    chartCategoria.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: ${c} ({d}%)' },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            avoidLabelOverlap: false,
+            label: { show: true, formatter: '{b}\n{d}%' },
+            data: {{ costos_categoria_data|safe }}
+        }]
+    });
+
+    // Tendencia Mensual (Line)
+    const chartTendencia = echarts.init(document.getElementById('chart-tendencia-costos'));
+    chartTendencia.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['Presupuesto', 'Ejecutado'], bottom: 0 },
+        xAxis: { type: 'category', data: {{ meses_labels|safe }} },
+        yAxis: { type: 'value', axisLabel: { formatter: '${value}' } },
+        series: [
+            {
+                name: 'Presupuesto',
+                type: 'line',
+                data: {{ presupuesto_mensual|safe }},
+                lineStyle: { type: 'dashed' },
+                itemStyle: { color: '#9ca3af' }
+            },
+            {
+                name: 'Ejecutado',
+                type: 'line',
+                data: {{ ejecutado_mensual|safe }},
+                itemStyle: { color: '#3b82f6' },
+                areaStyle: { color: 'rgba(59, 130, 246, 0.1)' }
+            }
+        ],
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
+    });
+
+    // Costos por Línea (Bar)
+    const chartLinea = echarts.init(document.getElementById('chart-costos-linea'));
+    chartLinea.setOption({
+        tooltip: { trigger: 'axis' },
+        xAxis: { type: 'category', data: {{ lineas_labels|safe }} },
+        yAxis: { type: 'value', axisLabel: { formatter: '${value}' } },
+        series: [{
+            type: 'bar',
+            data: {{ costos_linea|safe }},
+            itemStyle: {
+                color: function(params) {
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+                    return colors[params.dataIndex % colors.length];
+                }
+            },
+            label: { show: true, position: 'top', formatter: '${c}' }
+        }],
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true }
+    });
+
+    // Resize
+    window.addEventListener('resize', function() {
+        chartCategoria.resize();
+        chartTendencia.resize();
+        chartLinea.resize();
+    });
+});
+</script>
+{% endblock %}

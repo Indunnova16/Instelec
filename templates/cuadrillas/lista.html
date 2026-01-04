@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Cuadrillas - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Cuadrillas</h1>
+            <p class="text-gray-600 dark:text-gray-400">Gestión de cuadrillas de trabajo</p>
+        </div>
+        {% if perms.cuadrillas.add_cuadrilla %}
+        <button hx-get="{% url 'cuadrillas:crear' %}"
+                hx-target="#modal-container"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nueva Cuadrilla
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Total Cuadrillas</p>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_cuadrillas }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100 dark:bg-green-900">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Activas</p>
+                    <p class="text-2xl font-bold text-green-600">{{ cuadrillas_activas }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100 dark:bg-yellow-900">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">En Campo</p>
+                    <p class="text-2xl font-bold text-yellow-600">{{ cuadrillas_en_campo }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Total Personal</p>
+                    <p class="text-2xl font-bold text-purple-600">{{ total_personal }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content: List + Map -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Cuadrillas List -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div class="p-4 border-b dark:border-gray-700">
+                <h2 class="font-medium text-gray-900 dark:text-white">Lista de Cuadrillas</h2>
+            </div>
+            <div class="divide-y dark:divide-gray-700">
+                {% for cuadrilla in cuadrillas %}
+                <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
+                     x-data="{ expanded: false }"
+                     @click="expanded = !expanded">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="relative">
+                                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                                    <span class="text-blue-600 font-medium">{{ cuadrilla.codigo|slice:":3" }}</span>
+                                </div>
+                                {% if cuadrilla.ultima_ubicacion %}
+                                <span class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"
+                                      title="Ubicación reciente"></span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <h3 class="font-medium text-gray-900 dark:text-white">{{ cuadrilla.nombre }}</h3>
+                                <p class="text-sm text-gray-500">{{ cuadrilla.miembros.count }} miembros</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {% if cuadrilla.activa %}
+                            <span class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Activa</span>
+                            {% else %}
+                            <span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">Inactiva</span>
+                            {% endif %}
+                            <svg class="w-5 h-5 text-gray-400 transform transition" :class="{ 'rotate-180': expanded }"
+                                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Expanded details -->
+                    <div x-show="expanded" x-collapse class="mt-4 pl-13">
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p class="text-gray-500">Supervisor</p>
+                                <p class="font-medium">{{ cuadrilla.supervisor.get_full_name }}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Vehículo</p>
+                                <p class="font-medium">{{ cuadrilla.vehiculo.placa }} - {{ cuadrilla.vehiculo.marca }}</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <p class="text-gray-500 text-sm mb-2">Miembros</p>
+                            <div class="flex flex-wrap gap-2">
+                                {% for miembro in cuadrilla.miembros.all %}
+                                <span class="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm">
+                                    <span class="w-2 h-2 rounded-full {% if miembro.activo %}bg-green-500{% else %}bg-gray-400{% endif %}"></span>
+                                    {{ miembro.usuario.get_full_name }}
+                                </span>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mt-3 flex gap-2">
+                            <a href="{% url 'cuadrillas:detalle' cuadrilla.id %}"
+                               class="text-sm text-blue-600 hover:text-blue-800">Ver detalle</a>
+                            <button @click.stop
+                                    onclick="focusCuadrilla('{{ cuadrilla.id }}')"
+                                    class="text-sm text-green-600 hover:text-green-800">Ver en mapa</button>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-8 text-center text-gray-500">
+                    No hay cuadrillas registradas
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Real-time Map -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
+                <h2 class="font-medium text-gray-900 dark:text-white">Ubicación en Tiempo Real</h2>
+                <div class="flex items-center gap-2 text-sm text-gray-500"
+                     hx-get="{% url 'cuadrillas:ubicaciones_json' %}"
+                     hx-trigger="every 30s"
+                     hx-swap="none"
+                     hx-on::after-request="updateMapMarkers(event.detail.xhr.response)">
+                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    Actualizando cada 30s
+                </div>
+            </div>
+            <div id="mapa-cuadrillas" class="h-96 lg:h-[500px]"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const cuadrillasData = {{ cuadrillas_ubicaciones_json|safe }};
+let map, markers = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize map
+    map = L.map('mapa-cuadrillas').setView([7.0, -75.5], 7);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Add initial markers
+    cuadrillasData.forEach(addOrUpdateMarker);
+
+    // Fit bounds if markers exist
+    if (Object.keys(markers).length > 0) {
+        const group = L.featureGroup(Object.values(markers));
+        map.fitBounds(group.getBounds().pad(0.2));
+    }
+});
+
+function addOrUpdateMarker(data) {
+    if (!data.lat || !data.lon) return;
+
+    const icon = L.divIcon({
+        className: 'custom-marker',
+        html: `<div class="w-8 h-8 bg-blue-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-white text-xs font-bold">${data.codigo.slice(0, 2)}</div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32]
+    });
+
+    if (markers[data.id]) {
+        markers[data.id].setLatLng([data.lat, data.lon]);
+    } else {
+        markers[data.id] = L.marker([data.lat, data.lon], { icon }).addTo(map);
+        markers[data.id].bindPopup(`
+            <div class="p-2">
+                <h3 class="font-bold">${data.nombre}</h3>
+                <p class="text-sm text-gray-600">${data.supervisor}</p>
+                <p class="text-xs text-gray-500 mt-1">Última actualización: ${data.last_update}</p>
+            </div>
+        `);
+    }
+}
+
+function updateMapMarkers(responseText) {
+    try {
+        const data = JSON.parse(responseText);
+        data.forEach(addOrUpdateMarker);
+    } catch (e) {
+        console.error('Error updating markers:', e);
+    }
+}
+
+function focusCuadrilla(id) {
+    if (markers[id]) {
+        map.setView(markers[id].getLatLng(), 15);
+        markers[id].openPopup();
+    }
+}
+</script>
+<style>
+.custom-marker { background: transparent !important; border: none !important; }
+</style>
+{% endblock %}

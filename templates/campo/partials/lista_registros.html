@@ -1,0 +1,150 @@
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actividad</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Evidencias</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for registro in registros %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900 dark:text-white">
+                            {{ registro.fecha_inicio|date:"d/m/Y" }}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            {{ registro.fecha_inicio|time:"H:i" }} -
+                            {% if registro.fecha_fin %}{{ registro.fecha_fin|time:"H:i" }}{% else %}En curso{% endif %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="text-sm font-medium text-gray-900 dark:text-white">
+                            {{ registro.actividad.tipo_actividad.nombre|truncatechars:30 }}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            {{ registro.actividad.linea.codigo }} - Torre {{ registro.actividad.torre.numero }}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <div class="flex items-center gap-1">
+                            {% if registro.dentro_poligono %}
+                            <span class="w-2 h-2 bg-green-500 rounded-full" title="Dentro del polígono"></span>
+                            <span class="text-sm text-green-600">Válida</span>
+                            {% elif registro.dentro_poligono == False %}
+                            <span class="w-2 h-2 bg-red-500 rounded-full" title="Fuera del polígono"></span>
+                            <span class="text-sm text-red-600">Fuera</span>
+                            {% else %}
+                            <span class="w-2 h-2 bg-gray-400 rounded-full" title="Sin validar"></span>
+                            <span class="text-sm text-gray-500">N/A</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">
+                                {{ registro.usuario.first_name.0 }}{{ registro.usuario.last_name.0 }}
+                            </div>
+                            <div class="ml-2">
+                                <div class="text-sm font-medium text-gray-900 dark:text-white">
+                                    {{ registro.usuario.get_full_name }}
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    {{ registro.usuario.get_rol_display }}
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <div class="flex items-center gap-1">
+                            {% with evidencias=registro.evidencias.all %}
+                            {% if evidencias %}
+                            <div class="flex -space-x-2">
+                                {% for ev in evidencias|slice:":3" %}
+                                <img src="{{ ev.url_thumbnail|default:ev.url_original }}"
+                                     alt="{{ ev.get_tipo_display }}"
+                                     class="w-8 h-8 rounded border-2 border-white object-cover"
+                                     title="{{ ev.get_tipo_display }}">
+                                {% endfor %}
+                            </div>
+                            {% if evidencias|length > 3 %}
+                            <span class="text-xs text-gray-500">+{{ evidencias|length|add:"-3" }}</span>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-sm text-gray-400">Sin fotos</span>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        {% if registro.sincronizado %}
+                        <span class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Sincronizado
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            Pendiente
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-right">
+                        <button hx-get="{% url 'campo:detalle_modal' registro.id %}"
+                                hx-target="#modal-container"
+                                class="text-blue-600 hover:text-blue-800 text-sm">
+                            Ver detalle
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="px-4 py-12 text-center text-gray-500">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p class="mt-4">No hay registros de campo</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="px-4 py-3 border-t dark:border-gray-700 flex items-center justify-between">
+        <div class="text-sm text-gray-500">
+            Mostrando {{ page_obj.start_index }} - {{ page_obj.end_index }} de {{ page_obj.paginator.count }}
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <button hx-get="?page={{ page_obj.previous_page_number }}"
+                    hx-target="#registros-container"
+                    class="px-3 py-1 text-sm border rounded hover:bg-gray-50">
+                Anterior
+            </button>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <button hx-get="?page={{ page_obj.next_page_number }}"
+                    hx-target="#registros-container"
+                    class="px-3 py-1 text-sm border rounded hover:bg-gray-50">
+                Siguiente
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
