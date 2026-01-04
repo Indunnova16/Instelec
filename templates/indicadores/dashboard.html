@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard de Indicadores - TransMaint{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard de Indicadores</h1>
+            <p class="text-gray-600 dark:text-gray-400">Métricas de desempeño del contrato</p>
+        </div>
+        <div class="flex gap-2">
+            <select id="periodo-filter"
+                    hx-get="{% url 'indicadores:dashboard' %}"
+                    hx-target="#dashboard-content"
+                    hx-trigger="change"
+                    hx-include="[name='linea']"
+                    name="periodo"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                {% for p in periodos %}
+                <option value="{{ p.value }}" {% if p.value == periodo_actual %}selected{% endif %}>
+                    {{ p.label }}
+                </option>
+                {% endfor %}
+            </select>
+            <select name="linea"
+                    hx-get="{% url 'indicadores:dashboard' %}"
+                    hx-target="#dashboard-content"
+                    hx-trigger="change"
+                    hx-include="[name='periodo']"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                <option value="">Todas las líneas</option>
+                {% for linea in lineas %}
+                <option value="{{ linea.id }}">{{ linea.codigo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div id="dashboard-content">
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <!-- Cumplimiento -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Cumplimiento</p>
+                        <p class="text-3xl font-bold {% if kpis.cumplimiento >= 90 %}text-green-600{% elif kpis.cumplimiento >= 75 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ kpis.cumplimiento|floatformat:1 }}%
+                        </p>
+                    </div>
+                    <div class="p-3 rounded-full {% if kpis.cumplimiento >= 90 %}bg-green-100{% elif kpis.cumplimiento >= 75 %}bg-yellow-100{% else %}bg-red-100{% endif %}">
+                        <svg class="w-6 h-6 {% if kpis.cumplimiento >= 90 %}text-green-600{% elif kpis.cumplimiento >= 75 %}text-yellow-600{% else %}text-red-600{% endif %}"
+                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full {% if kpis.cumplimiento >= 90 %}bg-green-500{% elif kpis.cumplimiento >= 75 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                             style="width: {{ kpis.cumplimiento }}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Meta: 95%</p>
+                </div>
+            </div>
+
+            <!-- Actividades Completadas -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Actividades Completadas</p>
+                        <p class="text-3xl font-bold text-gray-900 dark:text-white">
+                            {{ kpis.actividades_completadas }}
+                        </p>
+                    </div>
+                    <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
+                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                        </svg>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">
+                    De {{ kpis.actividades_programadas }} programadas
+                </p>
+            </div>
+
+            <!-- Días sin Accidentes -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Días sin Accidentes</p>
+                        <p class="text-3xl font-bold text-green-600">{{ kpis.dias_sin_accidentes }}</p>
+                    </div>
+                    <div class="p-3 rounded-full bg-green-100 dark:bg-green-900">
+                        <svg class="w-6 h-6 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Récord: {{ kpis.record_dias_sin_accidentes }} días</p>
+            </div>
+
+            <!-- Informes a Tiempo -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Informes a Tiempo</p>
+                        <p class="text-3xl font-bold {% if kpis.informes_tiempo >= 95 %}text-green-600{% else %}text-yellow-600{% endif %}">
+                            {{ kpis.informes_tiempo|floatformat:1 }}%
+                        </p>
+                    </div>
+                    <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
+                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Meta: 95%</p>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Cumplimiento por Cuadrilla -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Cumplimiento por Cuadrilla</h3>
+                <div id="chart-cuadrillas" class="h-80"></div>
+            </div>
+
+            <!-- Tendencia Mensual -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Tendencia de Cumplimiento</h3>
+                <div id="chart-tendencia" class="h-80"></div>
+            </div>
+        </div>
+
+        <!-- Activities by Type -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- By Activity Type -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Por Tipo de Actividad</h3>
+                <div id="chart-tipo" class="h-64"></div>
+            </div>
+
+            <!-- By Priority -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Por Prioridad</h3>
+                <div id="chart-prioridad" class="h-64"></div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Actividad Reciente</h3>
+                <div class="space-y-3">
+                    {% for act in actividades_recientes %}
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full
+                                {% if act.estado == 'COMPLETADA' %}bg-green-500
+                                {% elif act.estado == 'EN_CURSO' %}bg-yellow-500
+                                {% else %}bg-gray-400{% endif %}"></span>
+                            <span class="text-gray-600 dark:text-gray-400">{{ act.torre.numero }}</span>
+                        </div>
+                        <span class="text-gray-500">{{ act.updated_at|timesince }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Chart colors
+    const colors = {
+        green: '#10b981',
+        yellow: '#f59e0b',
+        red: '#ef4444',
+        blue: '#3b82f6',
+        purple: '#8b5cf6',
+        gray: '#6b7280'
+    };
+
+    // Cumplimiento por Cuadrilla
+    const chartCuadrillas = echarts.init(document.getElementById('chart-cuadrillas'));
+    chartCuadrillas.setOption({
+        tooltip: { trigger: 'axis' },
+        xAxis: {
+            type: 'category',
+            data: {{ cuadrillas_labels|safe }}
+        },
+        yAxis: {
+            type: 'value',
+            max: 100,
+            axisLabel: { formatter: '{value}%' }
+        },
+        series: [{
+            type: 'bar',
+            data: {{ cuadrillas_data|safe }},
+            itemStyle: {
+                color: function(params) {
+                    return params.value >= 90 ? colors.green :
+                           params.value >= 75 ? colors.yellow : colors.red;
+                }
+            },
+            label: {
+                show: true,
+                position: 'top',
+                formatter: '{c}%'
+            }
+        }],
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true }
+    });
+
+    // Tendencia Mensual
+    const chartTendencia = echarts.init(document.getElementById('chart-tendencia'));
+    chartTendencia.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['Planeado', 'Ejecutado'], bottom: 0 },
+        xAxis: {
+            type: 'category',
+            data: {{ meses_labels|safe }}
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { formatter: '{value}' }
+        },
+        series: [
+            {
+                name: 'Planeado',
+                type: 'line',
+                data: {{ planeado_data|safe }},
+                smooth: true,
+                lineStyle: { color: colors.blue },
+                itemStyle: { color: colors.blue }
+            },
+            {
+                name: 'Ejecutado',
+                type: 'line',
+                data: {{ ejecutado_data|safe }},
+                smooth: true,
+                lineStyle: { color: colors.green },
+                itemStyle: { color: colors.green },
+                areaStyle: { color: 'rgba(16, 185, 129, 0.1)' }
+            }
+        ],
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
+    });
+
+    // Por Tipo de Actividad
+    const chartTipo = echarts.init(document.getElementById('chart-tipo'));
+    chartTipo.setOption({
+        tooltip: { trigger: 'item' },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            data: {{ tipo_data|safe }},
+            emphasis: {
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowOffsetX: 0,
+                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                }
+            }
+        }]
+    });
+
+    // Por Prioridad
+    const chartPrioridad = echarts.init(document.getElementById('chart-prioridad'));
+    chartPrioridad.setOption({
+        tooltip: { trigger: 'item' },
+        series: [{
+            type: 'pie',
+            radius: '70%',
+            data: [
+                { value: {{ prioridad_data.urgente }}, name: 'Urgente', itemStyle: { color: colors.red } },
+                { value: {{ prioridad_data.alta }}, name: 'Alta', itemStyle: { color: colors.yellow } },
+                { value: {{ prioridad_data.normal }}, name: 'Normal', itemStyle: { color: colors.blue } },
+                { value: {{ prioridad_data.baja }}, name: 'Baja', itemStyle: { color: colors.gray } }
+            ]
+        }]
+    });
+
+    // Resize charts on window resize
+    window.addEventListener('resize', function() {
+        chartCuadrillas.resize();
+        chartTendencia.resize();
+        chartTipo.resize();
+        chartPrioridad.resize();
+    });
+});
+</script>
+{% endblock %}

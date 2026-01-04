@@ -1,0 +1,132 @@
+<div class="space-y-4">
+    {% for actividad in actividades %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition p-4"
+         x-data="{ expanded: false }">
+
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <!-- Status indicator -->
+                <div class="flex-shrink-0">
+                    {% if actividad.estado == 'COMPLETADA' %}
+                    <span class="flex h-3 w-3 bg-green-500 rounded-full" title="Completada"></span>
+                    {% elif actividad.estado == 'EN_CURSO' %}
+                    <span class="relative flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                        <span class="relative inline-flex h-3 w-3 rounded-full bg-yellow-500"></span>
+                    </span>
+                    {% elif actividad.estado == 'CANCELADA' %}
+                    <span class="flex h-3 w-3 bg-red-500 rounded-full" title="Cancelada"></span>
+                    {% else %}
+                    <span class="flex h-3 w-3 bg-gray-300 rounded-full" title="Pendiente"></span>
+                    {% endif %}
+                </div>
+
+                <!-- Main info -->
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-medium text-gray-900 dark:text-white">
+                            Torre {{ actividad.torre.numero }}
+                        </h3>
+                        <span class="text-sm text-gray-500">{{ actividad.linea.codigo }}</span>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ actividad.tipo_actividad.nombre }}
+                    </p>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <span class="inline-flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            {{ actividad.fecha_programada|date:"d M Y" }}
+                        </span>
+                        {% if actividad.cuadrilla %}
+                        <span class="ml-3 inline-flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            {{ actividad.cuadrilla.nombre }}
+                        </span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Right side -->
+            <div class="flex items-center space-x-3">
+                <!-- Priority badge -->
+                <span class="px-2 py-1 text-xs font-medium rounded-full
+                    {% if actividad.prioridad == 'URGENTE' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
+                    {% elif actividad.prioridad == 'ALTA' %}bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200
+                    {% elif actividad.prioridad == 'NORMAL' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                    {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                    {{ actividad.get_prioridad_display }}
+                </span>
+
+                <!-- Expand button -->
+                <button @click="expanded = !expanded"
+                        class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">
+                    <svg class="w-5 h-5 transform transition-transform" :class="{ 'rotate-180': expanded }"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Expanded details -->
+        <div x-show="expanded" x-collapse class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <div hx-get="{% url 'actividades:detalle_partial' actividad.id %}"
+                 hx-trigger="revealed"
+                 hx-swap="innerHTML"
+                 class="min-h-[100px]">
+                <div class="flex justify-center py-8">
+                    <svg class="animate-spin h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
+        <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">No hay actividades</h3>
+        <p class="mt-2 text-gray-500">No se encontraron actividades con los filtros seleccionados.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="mt-6 flex justify-center">
+    <nav class="flex items-center space-x-2">
+        {% if page_obj.has_previous %}
+        <button hx-get="?page={{ page_obj.previous_page_number }}"
+                hx-target="#actividades-container"
+                hx-swap="innerHTML"
+                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
+            Anterior
+        </button>
+        {% endif %}
+
+        <span class="px-3 py-2 text-sm text-gray-700">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+        <button hx-get="?page={{ page_obj.next_page_number }}"
+                hx-target="#actividades-container"
+                hx-swap="innerHTML"
+                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
+            Siguiente
+        </button>
+        {% endif %}
+    </nav>
+</div>
+{% endif %}

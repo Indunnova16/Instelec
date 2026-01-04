@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Mapa - {{ linea.codigo }} - TransMaint{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+    #map { height: calc(100vh - 200px); min-height: 500px; }
+    .tower-marker { background: transparent; border: none; }
+    .tower-icon { font-size: 24px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'lineas:lista' %}" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ linea.codigo }}</h1>
+            </div>
+            <p class="text-gray-600 dark:text-gray-400">{{ linea.nombre }}</p>
+        </div>
+        <div class="flex gap-2">
+            <span class="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-800">
+                {{ linea.tension_kv }} kV
+            </span>
+            <span class="px-3 py-1 text-sm rounded-full bg-gray-100 text-gray-800">
+                {{ linea.torres.count }} torres
+            </span>
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div id="map"></div>
+    </div>
+
+    <!-- Tower List (collapsible) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow" x-data="{ open: false }">
+        <button @click="open = !open"
+                class="w-full px-4 py-3 flex items-center justify-between text-left">
+            <span class="font-medium text-gray-900 dark:text-white">
+                Lista de Torres ({{ linea.torres.count }})
+            </span>
+            <svg class="w-5 h-5 transform transition-transform" :class="{ 'rotate-180': open }"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+        <div x-show="open" x-collapse class="border-t dark:border-gray-700">
+            <div class="max-h-64 overflow-y-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Torre</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Coordenadas</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Altitud</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for torre in torres %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                            onclick="focusTower({{ torre.latitud }}, {{ torre.longitud }})">
+                            <td class="px-4 py-2 font-medium">{{ torre.numero }}</td>
+                            <td class="px-4 py-2 text-sm text-gray-600">{{ torre.get_tipo_display }}</td>
+                            <td class="px-4 py-2 text-sm text-gray-600">{{ torre.latitud }}, {{ torre.longitud }}</td>
+                            <td class="px-4 py-2 text-sm text-gray-600">{{ torre.altitud|default:"-" }} m</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const torres = {{ torres_json|safe }};
+const linea = {
+    codigo: "{{ linea.codigo }}",
+    nombre: "{{ linea.nombre }}"
+};
+
+// Initialize map
+const map = L.map('map').setView([{{ center_lat }}, {{ center_lon }}], 10);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+// Tower icons
+const towerIcons = {
+    SUSPENSION: L.divIcon({
+        className: 'tower-marker',
+        html: '<span class="tower-icon">🗼</span>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 24]
+    }),
+    ANCLAJE: L.divIcon({
+        className: 'tower-marker',
+        html: '<span class="tower-icon">⚡</span>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 24]
+    }),
+    TERMINAL: L.divIcon({
+        className: 'tower-marker',
+        html: '<span class="tower-icon">🏭</span>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 24]
+    })
+};
+
+// Add towers to map
+const markers = [];
+torres.forEach(torre => {
+    const marker = L.marker([torre.lat, torre.lon], {
+        icon: towerIcons[torre.tipo] || towerIcons.SUSPENSION
+    }).addTo(map);
+
+    marker.bindPopup(`
+        <div class="p-2">
+            <h3 class="font-bold">Torre ${torre.numero}</h3>
+            <p class="text-sm text-gray-600">${torre.tipo}</p>
+            <p class="text-xs mt-1">Lat: ${torre.lat.toFixed(6)}<br>Lon: ${torre.lon.toFixed(6)}</p>
+            ${torre.altitud ? `<p class="text-xs">Altitud: ${torre.altitud} m</p>` : ''}
+        </div>
+    `);
+
+    markers.push(marker);
+});
+
+// Draw line between towers
+if (torres.length > 1) {
+    const lineCoords = torres.map(t => [t.lat, t.lon]);
+    L.polyline(lineCoords, {
+        color: '#3b82f6',
+        weight: 3,
+        opacity: 0.7
+    }).addTo(map);
+}
+
+// Fit map to show all towers
+if (markers.length > 0) {
+    const group = L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.1));
+}
+
+// Focus on specific tower
+function focusTower(lat, lon) {
+    map.setView([lat, lon], 15);
+}
+</script>
+{% endblock %}
