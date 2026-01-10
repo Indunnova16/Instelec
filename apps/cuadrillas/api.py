@@ -1,11 +1,13 @@
 """
 API endpoints for crews (Django Ninja).
 """
-from ninja import Router, Schema
-from typing import List, Optional
+from typing import Any, Optional, Union
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
+
+from ninja import Router, Schema
+from django.http import HttpRequest
 
 from apps.api.auth import JWTAuth
 from .models import Cuadrilla, CuadrillaMiembro, TrackingUbicacion
@@ -32,7 +34,7 @@ class CuadrillaOut(Schema):
 
 
 class CuadrillaDetailOut(CuadrillaOut):
-    miembros: List[MiembroOut]
+    miembros: list[MiembroOut]
 
 
 class UbicacionIn(Schema):
@@ -51,8 +53,8 @@ class UbicacionOut(Schema):
     timestamp: datetime
 
 
-@router.get('/cuadrillas', response=List[CuadrillaOut])
-def listar_cuadrillas(request, activa: bool = True):
+@router.get('/cuadrillas', response=list[CuadrillaOut])
+def listar_cuadrillas(request: HttpRequest, activa: bool = True) -> list[CuadrillaOut]:
     """List all crews."""
     cuadrillas = Cuadrilla.objects.filter(activa=activa).select_related(
         'supervisor', 'vehiculo', 'linea_asignada'
@@ -73,7 +75,7 @@ def listar_cuadrillas(request, activa: bool = True):
 
 
 @router.get('/cuadrillas/{cuadrilla_id}', response=CuadrillaDetailOut)
-def obtener_cuadrilla(request, cuadrilla_id: UUID):
+def obtener_cuadrilla(request: HttpRequest, cuadrilla_id: UUID) -> CuadrillaDetailOut:
     """Get crew details with members."""
     cuadrilla = Cuadrilla.objects.select_related(
         'supervisor', 'vehiculo', 'linea_asignada'
@@ -103,7 +105,10 @@ def obtener_cuadrilla(request, cuadrilla_id: UUID):
 
 
 @router.post('/ubicacion')
-def registrar_ubicacion(request, data: UbicacionIn):
+def registrar_ubicacion(
+    request: HttpRequest,
+    data: UbicacionIn
+) -> Union[dict[str, str], tuple[int, dict[str, str]]]:
     """Register current location (from mobile app)."""
     usuario = request.auth
     cuadrilla = usuario.cuadrilla_actual
@@ -124,11 +129,11 @@ def registrar_ubicacion(request, data: UbicacionIn):
     return {'status': 'ok', 'id': str(ubicacion.id)}
 
 
-@router.get('/ubicaciones', response=List[UbicacionOut])
-def obtener_ubicaciones(request):
+@router.get('/ubicaciones', response=list[UbicacionOut])
+def obtener_ubicaciones(request: HttpRequest) -> list[UbicacionOut]:
     """Get latest location for all active crews."""
     cuadrillas = Cuadrilla.objects.filter(activa=True)
-    ubicaciones = []
+    ubicaciones: list[UbicacionOut] = []
 
     for cuadrilla in cuadrillas:
         ultima = TrackingUbicacion.objects.filter(

@@ -9,57 +9,62 @@
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<main class="space-y-6" role="main" aria-label="Calendario de actividades">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Calendario de Actividades</h1>
+            <h1 id="calendario-title" class="text-2xl font-bold text-gray-900 dark:text-white">Calendario de Actividades</h1>
             <p class="text-gray-600 dark:text-gray-400">Vista mensual de actividades programadas</p>
         </div>
         <div class="flex gap-2">
-            <select id="linea-filter" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                <option value="">Todas las líneas</option>
+            <label for="linea-filter" class="sr-only">Filtrar por linea</label>
+            <select id="linea-filter" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700" aria-label="Filtrar actividades por linea de transmision">
+                <option value="">Todas las lineas</option>
                 {% for linea in lineas %}
                 <option value="{{ linea.id }}">{{ linea.codigo }}</option>
                 {% endfor %}
             </select>
         </div>
-    </div>
+    </header>
 
     <!-- Legend -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div class="flex flex-wrap gap-4 text-sm">
-            <div class="flex items-center gap-2">
-                <span class="w-3 h-3 bg-gray-400 rounded"></span>
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="legend-title">
+        <h2 id="legend-title" class="sr-only">Leyenda de estados</h2>
+        <div class="flex flex-wrap gap-4 text-sm" role="list" aria-label="Estados de las actividades">
+            <div class="flex items-center gap-2" role="listitem">
+                <span class="w-3 h-3 bg-gray-400 rounded" aria-hidden="true"></span>
                 <span class="text-gray-600 dark:text-gray-400">Pendiente</span>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="w-3 h-3 bg-yellow-500 rounded"></span>
+            <div class="flex items-center gap-2" role="listitem">
+                <span class="w-3 h-3 bg-yellow-500 rounded" aria-hidden="true"></span>
                 <span class="text-gray-600 dark:text-gray-400">En Curso</span>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="w-3 h-3 bg-green-500 rounded"></span>
+            <div class="flex items-center gap-2" role="listitem">
+                <span class="w-3 h-3 bg-green-500 rounded" aria-hidden="true"></span>
                 <span class="text-gray-600 dark:text-gray-400">Completada</span>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="w-3 h-3 bg-red-500 rounded"></span>
+            <div class="flex items-center gap-2" role="listitem">
+                <span class="w-3 h-3 bg-red-500 rounded" aria-hidden="true"></span>
                 <span class="text-gray-600 dark:text-gray-400">Urgente</span>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Calendar -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div id="calendar" class="min-h-[600px]"></div>
-    </div>
-</div>
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="calendar-section-title">
+        <h2 id="calendar-section-title" class="sr-only">Vista del calendario</h2>
+        <div id="calendar" class="min-h-[600px]" role="application" aria-label="Calendario interactivo de actividades" aria-live="polite"></div>
+    </section>
+</main>
 
 <!-- Activity Detail Modal -->
-<div id="activity-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" x-data="{ open: false }">
+<div id="activity-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" x-data="{ open: false }" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="flex items-center justify-center min-h-screen px-4">
-        <div class="fixed inset-0 bg-black opacity-50" @click="open = false"></div>
-        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6">
-            <div id="modal-content"></div>
+        <div class="fixed inset-0 bg-black opacity-50" @click="open = false" aria-hidden="true"></div>
+        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6" role="document">
+            <h2 id="modal-title" class="sr-only">Detalle de actividad</h2>
+            <button class="sr-only" onclick="document.getElementById('activity-modal').classList.add('hidden')">Cerrar modal</button>
+            <div id="modal-content" aria-live="polite"></div>
         </div>
     </div>
 </div>
@@ -95,11 +100,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(html => {
                     document.getElementById('modal-content').innerHTML = html;
                     document.getElementById('activity-modal').classList.remove('hidden');
+                    // Set focus to modal for accessibility
+                    document.getElementById('modal-content').focus();
                 });
         },
         eventDidMount: function(info) {
-            // Add tooltips
+            // Add tooltips and accessibility attributes
             info.el.title = `${info.event.title}\n${info.event.extendedProps.tipo}`;
+            info.el.setAttribute('role', 'button');
+            info.el.setAttribute('tabindex', '0');
+            info.el.setAttribute('aria-label', `Actividad: ${info.event.title}, Tipo: ${info.event.extendedProps.tipo}`);
         }
     });
 
@@ -108,12 +118,27 @@ document.addEventListener('DOMContentLoaded', function() {
     // Refresh on filter change
     lineaFilter.addEventListener('change', function() {
         calendar.refetchEvents();
+        // Announce change to screen readers
+        const announcement = document.createElement('div');
+        announcement.setAttribute('role', 'status');
+        announcement.setAttribute('aria-live', 'polite');
+        announcement.className = 'sr-only';
+        announcement.textContent = 'Calendario actualizado';
+        document.body.appendChild(announcement);
+        setTimeout(() => announcement.remove(), 1000);
     });
 
     // Close modal
     document.getElementById('activity-modal').addEventListener('click', function(e) {
         if (e.target === this) {
             this.classList.add('hidden');
+        }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.getElementById('activity-modal').classList.add('hidden');
         }
     });
 });

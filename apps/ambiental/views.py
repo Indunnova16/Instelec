@@ -79,20 +79,30 @@ class ConsolidadoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         from apps.campo.models import RegistroCampo
         from django.db.models import Count
 
-        mes = self.request.GET.get('mes')
-        anio = self.request.GET.get('anio')
+        mes_param = self.request.GET.get('mes')
+        anio_param = self.request.GET.get('anio')
         linea = self.request.GET.get('linea')
 
         registros = RegistroCampo.objects.filter(sincronizado=True)
 
-        if mes and anio:
-            registros = registros.filter(
-                fecha_inicio__year=anio,
-                fecha_inicio__month=mes
-            )
+        if mes_param and anio_param:
+            try:
+                mes = int(mes_param)
+                anio = int(anio_param)
+                registros = registros.filter(
+                    fecha_inicio__year=anio,
+                    fecha_inicio__month=mes
+                )
+            except (ValueError, TypeError):
+                pass  # Invalid month/year, ignore filter
 
         if linea:
-            registros = registros.filter(actividad__linea_id=linea)
+            from uuid import UUID
+            try:
+                UUID(linea)
+                registros = registros.filter(actividad__linea_id=linea)
+            except ValueError:
+                pass  # Invalid UUID, ignore filter
 
         context['registros'] = registros.select_related(
             'actividad__linea',

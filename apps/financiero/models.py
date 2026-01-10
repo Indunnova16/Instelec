@@ -222,6 +222,12 @@ class EjecucionCosto(BaseModel):
         verbose_name = 'Ejecución de Costo'
         verbose_name_plural = 'Ejecución de Costos'
         ordering = ['-fecha']
+        indexes = [
+            models.Index(fields=['presupuesto'], name='idx_ejecucion_presupuesto'),
+            models.Index(fields=['actividad'], name='idx_ejecucion_actividad'),
+            models.Index(fields=['fecha'], name='idx_ejecucion_fecha'),
+            models.Index(fields=['tipo_recurso'], name='idx_ejecucion_tipo'),
+        ]
 
     def __str__(self):
         return f"{self.concepto} - {self.fecha}"
@@ -296,6 +302,10 @@ class CicloFacturacion(BaseModel):
         verbose_name = 'Ciclo de Facturación'
         verbose_name_plural = 'Ciclos de Facturación'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['presupuesto'], name='idx_ciclo_presupuesto'),
+            models.Index(fields=['estado'], name='idx_ciclo_estado'),
+        ]
 
     def __str__(self):
         return f"Facturación {self.presupuesto} - {self.estado}"

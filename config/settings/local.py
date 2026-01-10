@@ -31,9 +31,13 @@ AUTH_PASSWORD_VALIDATORS = []
 
 # Logging
 LOGGING['loggers']['apps']['level'] = 'DEBUG'
+
+# Database query logging for N+1 detection
+# Enable with SQL_DEBUG=True in .env file
 LOGGING['loggers']['django.db.backends'] = {
     'handlers': ['console'],
     'level': 'DEBUG' if config('SQL_DEBUG', default=False, cast=bool) else 'INFO',
+    'propagate': False,
 }
 
 # Try to use Redis, fallback to database sessions if unavailable

@@ -1,9 +1,11 @@
 """
 Main API router configuration.
 """
+from typing import Any
+
 from ninja import NinjaAPI
 from ninja.errors import ValidationError, HttpError
-from django.http import Http404
+from django.http import Http404, HttpRequest, HttpResponse
 from .auth import JWTAuth
 
 # Create main API instance
@@ -32,7 +34,7 @@ api = NinjaAPI(
 
 # Exception handlers
 @api.exception_handler(ValidationError)
-def validation_error_handler(request, exc):
+def validation_error_handler(request: HttpRequest, exc: ValidationError) -> HttpResponse:
     return api.create_response(
         request,
         {"detail": exc.errors},
@@ -41,7 +43,7 @@ def validation_error_handler(request, exc):
 
 
 @api.exception_handler(Http404)
-def not_found_handler(request, exc):
+def not_found_handler(request: HttpRequest, exc: Http404) -> HttpResponse:
     return api.create_response(
         request,
         {"detail": "Recurso no encontrado"},
@@ -50,7 +52,7 @@ def not_found_handler(request, exc):
 
 
 @api.exception_handler(HttpError)
-def http_error_handler(request, exc):
+def http_error_handler(request: HttpRequest, exc: HttpError) -> HttpResponse:
     return api.create_response(
         request,
         {"detail": str(exc.message)},
@@ -60,7 +62,7 @@ def http_error_handler(request, exc):
 
 # Health check (no auth required)
 @api.get("/health", auth=None, tags=["System"])
-def health_check(request):
+def health_check(request: HttpRequest) -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "healthy", "service": "transmaint-api"}
 

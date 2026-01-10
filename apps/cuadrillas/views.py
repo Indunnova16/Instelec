@@ -4,16 +4,17 @@ Views for crew management.
 from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
-from apps.core.mixins import HTMXMixin
+from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Cuadrilla, TrackingUbicacion
 
 
-class CuadrillaListView(LoginRequiredMixin, HTMXMixin, ListView):
+class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
     """List all crews."""
     model = Cuadrilla
     template_name = 'cuadrillas/lista.html'
     partial_template_name = 'cuadrillas/partials/lista_cuadrillas.html'
     context_object_name = 'cuadrillas'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
     def get_queryset(self):
         return Cuadrilla.objects.filter(activa=True).select_related(
@@ -21,11 +22,12 @@ class CuadrillaListView(LoginRequiredMixin, HTMXMixin, ListView):
         ).prefetch_related('miembros__usuario')
 
 
-class CuadrillaDetailView(LoginRequiredMixin, HTMXMixin, DetailView):
+class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
     """Detail view for a crew."""
     model = Cuadrilla
     template_name = 'cuadrillas/detalle.html'
     context_object_name = 'cuadrilla'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -40,14 +42,16 @@ class CuadrillaDetailView(LoginRequiredMixin, HTMXMixin, DetailView):
         return context
 
 
-class MapaCuadrillasView(LoginRequiredMixin, TemplateView):
+class MapaCuadrillasView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Real-time map of all crews."""
     template_name = 'cuadrillas/mapa.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
 
-class MapaCuadrillasPartialView(LoginRequiredMixin, TemplateView):
+class MapaCuadrillasPartialView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Partial view for HTMX polling of crew locations."""
     template_name = 'cuadrillas/partials/mapa_cuadrillas.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

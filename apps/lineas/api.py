@@ -1,10 +1,12 @@
 """
 API endpoints for transmission lines (Django Ninja).
 """
-from ninja import Router, Schema
-from typing import List, Optional
+from typing import Any, Optional, Union
 from uuid import UUID
 from decimal import Decimal
+
+from ninja import Router, Schema
+from django.http import HttpRequest
 
 from apps.api.auth import JWTAuth
 from .models import Linea, Torre, PoligonoServidumbre
@@ -49,7 +51,7 @@ class PoligonoOut(Schema):
     area_hectareas: Optional[Decimal]
     ancho_franja: Optional[Decimal]
     # GeoJSON geometry
-    geometria: dict
+    geometria: dict[str, Any]
 
 
 class ValidarUbicacionIn(Schema):
@@ -65,8 +67,12 @@ class ValidarUbicacionOut(Schema):
     mensaje: str
 
 
-@router.get('/lineas', response=List[LineaOut])
-def listar_lineas(request, cliente: str = None, activa: bool = True):
+@router.get('/lineas', response=list[LineaOut])
+def listar_lineas(
+    request: HttpRequest,
+    cliente: Optional[str] = None,
+    activa: bool = True
+) -> list[Linea]:
     """List all transmission lines."""
     qs = Linea.objects.filter(activa=activa)
     if cliente:
@@ -74,8 +80,8 @@ def listar_lineas(request, cliente: str = None, activa: bool = True):
     return list(qs)
 
 
-@router.get('/lineas/{linea_id}/torres', response=List[TorreOut])
-def listar_torres_linea(request, linea_id: UUID):
+@router.get('/lineas/{linea_id}/torres', response=list[TorreOut])
+def listar_torres_linea(request: HttpRequest, linea_id: UUID) -> list[TorreOut]:
     """List all towers for a specific line."""
     torres = Torre.objects.filter(linea_id=linea_id).select_related('linea')
     return [
@@ -96,7 +102,7 @@ def listar_torres_linea(request, linea_id: UUID):
 
 
 @router.get('/torres/{torre_id}', response=TorreDetailOut)
-def obtener_torre(request, torre_id: UUID):
+def obtener_torre(request: HttpRequest, torre_id: UUID) -> TorreDetailOut:
     """Get tower details."""
     torre = Torre.objects.select_related('linea').get(id=torre_id)
     return TorreDetailOut(
@@ -119,7 +125,10 @@ def obtener_torre(request, torre_id: UUID):
 
 
 @router.get('/torres/{torre_id}/poligono', response=PoligonoOut)
-def obtener_poligono_torre(request, torre_id: UUID):
+def obtener_poligono_torre(
+    request: HttpRequest,
+    torre_id: UUID
+) -> Union[PoligonoOut, tuple[int, dict[str, str]]]:
     """Get easement polygon for a tower."""
     poligono = PoligonoServidumbre.objects.filter(torre_id=torre_id).first()
     if not poligono:
@@ -139,7 +148,7 @@ def obtener_poligono_torre(request, torre_id: UUID):
 
 
 @router.post('/validar-ubicacion', response=ValidarUbicacionOut)
-def validar_ubicacion(request, data: ValidarUbicacionIn):
+def validar_ubicacion(request: HttpRequest, data: ValidarUbicacionIn) -> ValidarUbicacionOut:
     """
     Validate if GPS coordinates are within the tower's easement polygon.
     Used by mobile app before allowing field data capture.

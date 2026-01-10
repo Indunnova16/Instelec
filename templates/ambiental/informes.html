@@ -3,48 +3,52 @@
 {% block title %}Informes Ambientales - TransMaint{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<main class="space-y-6" role="main" aria-label="Gestion de informes ambientales">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Informes Ambientales</h1>
+            <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">Informes Ambientales</h1>
             <p class="text-gray-600 dark:text-gray-400">Consolidados mensuales para entrega a clientes</p>
         </div>
         <div class="flex gap-2">
             <button hx-get="{% url 'ambiental:generar_informe' %}"
                     hx-target="#modal-container"
-                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+                    aria-label="Generar nuevo informe ambiental">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 Generar Informe
             </button>
         </div>
-    </div>
+    </header>
 
     <!-- Period Selector -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div class="flex flex-wrap items-center gap-4">
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="filters-title">
+        <h2 id="filters-title" class="sr-only">Filtros de periodo</h2>
+        <div class="flex flex-wrap items-center gap-4" role="search" aria-label="Filtrar informes por periodo">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Año</label>
+                <label for="anio-filter" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ano</label>
                 <select name="anio" id="anio-filter"
                         hx-get="{% url 'ambiental:informes' %}"
                         hx-target="#informes-container"
                         hx-include="[name='mes'], [name='linea']"
-                        class="rounded-lg border-gray-300">
+                        class="rounded-lg border-gray-300"
+                        aria-label="Seleccionar ano">
                     {% for a in anios %}
                     <option value="{{ a }}" {% if a == anio_actual %}selected{% endif %}>{{ a }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mes</label>
+                <label for="mes-filter" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mes</label>
                 <select name="mes" id="mes-filter"
                         hx-get="{% url 'ambiental:informes' %}"
                         hx-target="#informes-container"
                         hx-include="[name='anio'], [name='linea']"
-                        class="rounded-lg border-gray-300">
+                        class="rounded-lg border-gray-300"
+                        aria-label="Seleccionar mes">
                     <option value="">Todos</option>
                     {% for m in meses %}
                     <option value="{{ m.value }}" {% if m.value == mes_actual %}selected{% endif %}>{{ m.label }}</option>
@@ -52,12 +56,13 @@
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>
-                <select name="linea"
+                <label for="linea-filter" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Linea</label>
+                <select name="linea" id="linea-filter"
                         hx-get="{% url 'ambiental:informes' %}"
                         hx-target="#informes-container"
                         hx-include="[name='anio'], [name='mes']"
-                        class="rounded-lg border-gray-300">
+                        class="rounded-lg border-gray-300"
+                        aria-label="Seleccionar linea de transmision">
                     <option value="">Todas</option>
                     {% for linea in lineas %}
                     <option value="{{ linea.id }}">{{ linea.codigo }}</option>
@@ -65,76 +70,81 @@
                 </select>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <section class="grid grid-cols-1 md:grid-cols-4 gap-4" aria-labelledby="stats-title">
+        <h2 id="stats-title" class="sr-only">Estadisticas de informes</h2>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" role="status" aria-label="Informes generados">
             <p class="text-sm text-gray-500">Informes Generados</p>
-            <p class="text-2xl font-bold text-blue-600">{{ stats.generados }}</p>
+            <p class="text-2xl font-bold text-blue-600" aria-live="polite">{{ stats.generados }}</p>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" role="status" aria-label="Informes pendientes">
             <p class="text-sm text-gray-500">Pendientes</p>
-            <p class="text-2xl font-bold text-yellow-600">{{ stats.pendientes }}</p>
+            <p class="text-2xl font-bold text-yellow-600" aria-live="polite">{{ stats.pendientes }}</p>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" role="status" aria-label="Informes entregados a cliente">
             <p class="text-sm text-gray-500">Entregados a Cliente</p>
-            <p class="text-2xl font-bold text-green-600">{{ stats.entregados }}</p>
+            <p class="text-2xl font-bold text-green-600" aria-live="polite">{{ stats.entregados }}</p>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" role="status" aria-label="Permisos vigentes">
             <p class="text-sm text-gray-500">Permisos Vigentes</p>
-            <p class="text-2xl font-bold text-purple-600">{{ stats.permisos_vigentes }}</p>
+            <p class="text-2xl font-bold text-purple-600" aria-live="polite">{{ stats.permisos_vigentes }}</p>
         </div>
-    </div>
+    </section>
 
     <!-- Informes Grid -->
-    <div id="informes-container">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <section id="informes-container" aria-labelledby="informes-title" aria-live="polite">
+        <h2 id="informes-title" class="sr-only">Lista de informes ambientales</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" role="list">
             {% for informe in informes %}
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" role="listitem" aria-labelledby="informe-{{ informe.id }}-title">
                 <div class="p-4 border-b dark:border-gray-700">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h3 class="font-medium text-gray-900 dark:text-white">{{ informe.linea.codigo }}</h3>
+                            <h3 id="informe-{{ informe.id }}-title" class="font-medium text-gray-900 dark:text-white">{{ informe.linea.codigo }}</h3>
                             <p class="text-sm text-gray-500">{{ informe.get_periodo_display }}</p>
                         </div>
                         <span class="px-2 py-1 text-xs rounded-full
                             {% if informe.estado == 'ENTREGADO' %}bg-green-100 text-green-800
                             {% elif informe.estado == 'GENERADO' %}bg-blue-100 text-blue-800
                             {% elif informe.estado == 'EN_PROCESO' %}bg-yellow-100 text-yellow-800
-                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {% else %}bg-gray-100 text-gray-800{% endif %}"
+                            role="status"
+                            aria-label="Estado: {{ informe.get_estado_display }}">
                             {{ informe.get_estado_display }}
                         </span>
                     </div>
                 </div>
 
                 <div class="p-4">
-                    <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+                    <dl class="grid grid-cols-2 gap-4 text-sm mb-4">
                         <div>
-                            <p class="text-gray-500">Actividades</p>
-                            <p class="font-medium">{{ informe.actividades_count }}</p>
+                            <dt class="text-gray-500">Actividades</dt>
+                            <dd class="font-medium">{{ informe.actividades_count }}</dd>
                         </div>
                         <div>
-                            <p class="text-gray-500">Área intervenida</p>
-                            <p class="font-medium">{{ informe.area_intervenida|floatformat:2 }} ha</p>
+                            <dt class="text-gray-500">Area intervenida</dt>
+                            <dd class="font-medium">{{ informe.area_intervenida|floatformat:2 }} ha</dd>
                         </div>
                         <div>
-                            <p class="text-gray-500">Residuos</p>
-                            <p class="font-medium">{{ informe.residuos_kg|floatformat:0 }} kg</p>
+                            <dt class="text-gray-500">Residuos</dt>
+                            <dd class="font-medium">{{ informe.residuos_kg|floatformat:0 }} kg</dd>
                         </div>
                         <div>
-                            <p class="text-gray-500">Incidentes</p>
-                            <p class="font-medium {% if informe.incidentes > 0 %}text-red-600{% endif %}">
+                            <dt class="text-gray-500">Incidentes</dt>
+                            <dd class="font-medium {% if informe.incidentes > 0 %}text-red-600{% endif %}">
                                 {{ informe.incidentes }}
-                            </p>
+                            </dd>
                         </div>
-                    </div>
+                    </dl>
 
-                    <div class="flex gap-2">
+                    <nav class="flex gap-2" aria-label="Acciones del informe {{ informe.linea.codigo }}">
                         {% if informe.url_pdf %}
                         <a href="{{ informe.url_pdf }}" target="_blank"
-                           class="flex-1 text-center px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition">
-                            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                           class="flex-1 text-center px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
+                           aria-label="Descargar informe {{ informe.linea.codigo }} en formato PDF">
+                            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
                             </svg>
                             PDF
@@ -142,8 +152,9 @@
                         {% endif %}
                         {% if informe.url_excel %}
                         <a href="{{ informe.url_excel }}" target="_blank"
-                           class="flex-1 text-center px-3 py-2 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition">
-                            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                           class="flex-1 text-center px-3 py-2 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition"
+                           aria-label="Descargar informe {{ informe.linea.codigo }} en formato Excel">
+                            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
                             </svg>
                             Excel
@@ -151,23 +162,24 @@
                         {% endif %}
                         <button hx-get="{% url 'ambiental:detalle_informe' informe.id %}"
                                 hx-target="#modal-container"
-                                class="flex-1 text-center px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition">
+                                class="flex-1 text-center px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
+                                aria-label="Ver detalle del informe {{ informe.linea.codigo }}">
                             Ver detalle
                         </button>
-                    </div>
+                    </nav>
                 </div>
-            </div>
+            </article>
             {% empty %}
-            <div class="col-span-full bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="col-span-full bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center" role="status">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">No hay informes</h3>
-                <p class="mt-2 text-gray-500">No se encontraron informes para el período seleccionado.</p>
+                <p class="mt-2 text-gray-500">No se encontraron informes para el periodo seleccionado.</p>
             </div>
             {% endfor %}
         </div>
-    </div>
-</div>
+    </section>
+</main>
 {% endblock %}

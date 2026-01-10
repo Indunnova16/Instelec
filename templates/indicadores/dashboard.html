@@ -7,81 +7,88 @@
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<main class="space-y-6" role="main" aria-label="Dashboard de indicadores de desempeno">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard de Indicadores</h1>
-            <p class="text-gray-600 dark:text-gray-400">Métricas de desempeño del contrato</p>
+            <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard de Indicadores</h1>
+            <p class="text-gray-600 dark:text-gray-400">Metricas de desempeno del contrato</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2" role="search" aria-label="Filtros de indicadores">
+            <label for="periodo-filter" class="sr-only">Filtrar por periodo</label>
             <select id="periodo-filter"
                     hx-get="{% url 'indicadores:dashboard' %}"
                     hx-target="#dashboard-content"
                     hx-trigger="change"
                     hx-include="[name='linea']"
                     name="periodo"
-                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                    aria-label="Seleccionar periodo de tiempo">
                 {% for p in periodos %}
                 <option value="{{ p.value }}" {% if p.value == periodo_actual %}selected{% endif %}>
                     {{ p.label }}
                 </option>
                 {% endfor %}
             </select>
-            <select name="linea"
+            <label for="linea-filter" class="sr-only">Filtrar por linea</label>
+            <select name="linea" id="linea-filter"
                     hx-get="{% url 'indicadores:dashboard' %}"
                     hx-target="#dashboard-content"
                     hx-trigger="change"
                     hx-include="[name='periodo']"
-                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                <option value="">Todas las líneas</option>
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                    aria-label="Seleccionar linea de transmision">
+                <option value="">Todas las lineas</option>
                 {% for linea in lineas %}
                 <option value="{{ linea.id }}">{{ linea.codigo }}</option>
                 {% endfor %}
             </select>
         </div>
-    </div>
+    </header>
 
-    <div id="dashboard-content">
+    <div id="dashboard-content" aria-live="polite">
         <!-- KPI Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" aria-labelledby="kpi-section-title">
+            <h2 id="kpi-section-title" class="sr-only">Indicadores clave de rendimiento</h2>
+
             <!-- Cumplimiento -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-cumplimiento-title">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Cumplimiento</p>
-                        <p class="text-3xl font-bold {% if kpis.cumplimiento >= 90 %}text-green-600{% elif kpis.cumplimiento >= 75 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                        <h3 id="kpi-cumplimiento-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Cumplimiento</h3>
+                        <p class="text-3xl font-bold {% if kpis.cumplimiento >= 90 %}text-green-600{% elif kpis.cumplimiento >= 75 %}text-yellow-600{% else %}text-red-600{% endif %}"
+                           aria-live="polite">
                             {{ kpis.cumplimiento|floatformat:1 }}%
                         </p>
                     </div>
-                    <div class="p-3 rounded-full {% if kpis.cumplimiento >= 90 %}bg-green-100{% elif kpis.cumplimiento >= 75 %}bg-yellow-100{% else %}bg-red-100{% endif %}">
+                    <div class="p-3 rounded-full {% if kpis.cumplimiento >= 90 %}bg-green-100{% elif kpis.cumplimiento >= 75 %}bg-yellow-100{% else %}bg-red-100{% endif %}" aria-hidden="true">
                         <svg class="w-6 h-6 {% if kpis.cumplimiento >= 90 %}text-green-600{% elif kpis.cumplimiento >= 75 %}text-yellow-600{% else %}text-red-600{% endif %}"
-                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                   d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                     </div>
                 </div>
                 <div class="mt-2">
-                    <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2" role="progressbar" aria-valuenow="{{ kpis.cumplimiento }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de cumplimiento">
                         <div class="h-2 rounded-full {% if kpis.cumplimiento >= 90 %}bg-green-500{% elif kpis.cumplimiento >= 75 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
                              style="width: {{ kpis.cumplimiento }}%"></div>
                     </div>
                     <p class="text-xs text-gray-500 mt-1">Meta: 95%</p>
                 </div>
-            </div>
+            </article>
 
             <!-- Actividades Completadas -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-actividades-title">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Actividades Completadas</p>
-                        <p class="text-3xl font-bold text-gray-900 dark:text-white">
+                        <h3 id="kpi-actividades-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Actividades Completadas</h3>
+                        <p class="text-3xl font-bold text-gray-900 dark:text-white" aria-live="polite">
                             {{ kpis.actividades_completadas }}
                         </p>
                     </div>
-                    <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
-                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900" aria-hidden="true">
+                        <svg class="w-6 h-6 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                         </svg>
@@ -90,95 +97,108 @@
                 <p class="text-xs text-gray-500 mt-2">
                     De {{ kpis.actividades_programadas }} programadas
                 </p>
-            </div>
+            </article>
 
-            <!-- Días sin Accidentes -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <!-- Dias sin Accidentes -->
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-seguridad-title">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Días sin Accidentes</p>
-                        <p class="text-3xl font-bold text-green-600">{{ kpis.dias_sin_accidentes }}</p>
+                        <h3 id="kpi-seguridad-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Dias sin Accidentes</h3>
+                        <p class="text-3xl font-bold text-green-600" aria-live="polite">{{ kpis.dias_sin_accidentes }}</p>
                     </div>
-                    <div class="p-3 rounded-full bg-green-100 dark:bg-green-900">
-                        <svg class="w-6 h-6 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="p-3 rounded-full bg-green-100 dark:bg-green-900" aria-hidden="true">
+                        <svg class="w-6 h-6 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                   d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                         </svg>
                     </div>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Récord: {{ kpis.record_dias_sin_accidentes }} días</p>
-            </div>
+                <p class="text-xs text-gray-500 mt-2">Record: {{ kpis.record_dias_sin_accidentes }} dias</p>
+            </article>
 
             <!-- Informes a Tiempo -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-informes-title">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Informes a Tiempo</p>
-                        <p class="text-3xl font-bold {% if kpis.informes_tiempo >= 95 %}text-green-600{% else %}text-yellow-600{% endif %}">
+                        <h3 id="kpi-informes-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Informes a Tiempo</h3>
+                        <p class="text-3xl font-bold {% if kpis.informes_tiempo >= 95 %}text-green-600{% else %}text-yellow-600{% endif %}"
+                           aria-live="polite">
                             {{ kpis.informes_tiempo|floatformat:1 }}%
                         </p>
                     </div>
-                    <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
-                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900" aria-hidden="true">
+                        <svg class="w-6 h-6 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                   d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                     </div>
                 </div>
                 <p class="text-xs text-gray-500 mt-2">Meta: 95%</p>
-            </div>
-        </div>
+            </article>
+        </section>
 
         <!-- Charts Row -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6" aria-labelledby="charts-section-title">
+            <h2 id="charts-section-title" class="sr-only">Graficos de desempeno</h2>
+
             <!-- Cumplimiento por Cuadrilla -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Cumplimiento por Cuadrilla</h3>
-                <div id="chart-cuadrillas" class="h-80"></div>
-            </div>
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="chart-cuadrillas-title">
+                <h3 id="chart-cuadrillas-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Cumplimiento por Cuadrilla</h3>
+                <div id="chart-cuadrillas" class="h-80" role="img" aria-label="Grafico de barras mostrando el cumplimiento porcentual de cada cuadrilla"></div>
+            </article>
 
             <!-- Tendencia Mensual -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Tendencia de Cumplimiento</h3>
-                <div id="chart-tendencia" class="h-80"></div>
-            </div>
-        </div>
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="chart-tendencia-title">
+                <h3 id="chart-tendencia-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Tendencia de Cumplimiento</h3>
+                <div id="chart-tendencia" class="h-80" role="img" aria-label="Grafico de lineas mostrando la tendencia de cumplimiento planeado vs ejecutado"></div>
+            </article>
+        </section>
 
         <!-- Activities by Type -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6" aria-labelledby="distribution-section-title">
+            <h2 id="distribution-section-title" class="sr-only">Distribucion de actividades</h2>
+
             <!-- By Activity Type -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Por Tipo de Actividad</h3>
-                <div id="chart-tipo" class="h-64"></div>
-            </div>
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="chart-tipo-title">
+                <h3 id="chart-tipo-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Por Tipo de Actividad</h3>
+                <div id="chart-tipo" class="h-64" role="img" aria-label="Grafico circular mostrando distribucion de actividades por tipo"></div>
+            </article>
 
             <!-- By Priority -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Por Prioridad</h3>
-                <div id="chart-prioridad" class="h-64"></div>
-            </div>
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="chart-prioridad-title">
+                <h3 id="chart-prioridad-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Por Prioridad</h3>
+                <div id="chart-prioridad" class="h-64" role="img" aria-label="Grafico circular mostrando distribucion de actividades por prioridad"></div>
+            </article>
 
             <!-- Recent Activity -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Actividad Reciente</h3>
-                <div class="space-y-3">
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="recent-activity-title">
+                <h3 id="recent-activity-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Actividad Reciente</h3>
+                <ul class="space-y-3" aria-label="Lista de actividades recientes">
                     {% for act in actividades_recientes %}
-                    <div class="flex items-center justify-between text-sm">
+                    <li class="flex items-center justify-between text-sm">
                         <div class="flex items-center gap-2">
                             <span class="w-2 h-2 rounded-full
                                 {% if act.estado == 'COMPLETADA' %}bg-green-500
                                 {% elif act.estado == 'EN_CURSO' %}bg-yellow-500
-                                {% else %}bg-gray-400{% endif %}"></span>
+                                {% else %}bg-gray-400{% endif %}"
+                                aria-hidden="true"></span>
                             <span class="text-gray-600 dark:text-gray-400">{{ act.torre.numero }}</span>
+                            <span class="sr-only">
+                                {% if act.estado == 'COMPLETADA' %}completada
+                                {% elif act.estado == 'EN_CURSO' %}en curso
+                                {% else %}pendiente{% endif %}
+                            </span>
                         </div>
-                        <span class="text-gray-500">{{ act.updated_at|timesince }}</span>
-                    </div>
+                        <span class="text-gray-500">
+                            <time datetime="{{ act.updated_at|date:'c' }}">{{ act.updated_at|timesince }}</time>
+                        </span>
+                    </li>
                     {% endfor %}
-                </div>
-            </div>
-        </div>
+                </ul>
+            </article>
+        </section>
     </div>
-</div>
+</main>
 {% endblock %}
 
 {% block extra_js %}

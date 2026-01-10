@@ -1,11 +1,13 @@
 """
 API endpoints for activities (Django Ninja).
 """
-from ninja import Router, Schema
-from typing import List, Optional
+from typing import Any, Optional
 from uuid import UUID
 from datetime import date, time
 from decimal import Decimal
+
+from ninja import Router, Schema
+from django.http import HttpRequest
 
 from apps.api.auth import JWTAuth
 from .models import Actividad, TipoActividad
@@ -22,7 +24,7 @@ class TipoActividadOut(Schema):
     requiere_fotos_durante: bool
     requiere_fotos_despues: bool
     min_fotos: int
-    campos_formulario: list
+    campos_formulario: list[Any]
     tiempo_estimado_horas: Decimal
 
 
@@ -41,7 +43,7 @@ class ActividadOut(Schema):
     fecha_programada: date
     estado: str
     prioridad: str
-    campos_formulario: list
+    campos_formulario: list[Any]
 
 
 class ActividadDetailOut(ActividadOut):
@@ -54,15 +56,19 @@ class ActividadDetailOut(ActividadOut):
     min_fotos: int
 
 
-@router.get('/tipos', response=List[TipoActividadOut])
-def listar_tipos_actividad(request, activo: bool = True):
+@router.get('/tipos', response=list[TipoActividadOut])
+def listar_tipos_actividad(request: HttpRequest, activo: bool = True) -> list[TipoActividad]:
     """List all activity types."""
     tipos = TipoActividad.objects.filter(activo=activo)
     return list(tipos)
 
 
-@router.get('/mis-actividades', response=List[ActividadOut])
-def listar_mis_actividades(request, fecha: date = None, estado: str = None):
+@router.get('/mis-actividades', response=list[ActividadOut])
+def listar_mis_actividades(
+    request: HttpRequest,
+    fecha: Optional[date] = None,
+    estado: Optional[str] = None
+) -> list[ActividadOut]:
     """
     List activities assigned to the current user's crew.
     Used by mobile app to show pending work.
@@ -109,7 +115,7 @@ def listar_mis_actividades(request, fecha: date = None, estado: str = None):
 
 
 @router.get('/{actividad_id}', response=ActividadDetailOut)
-def obtener_actividad(request, actividad_id: UUID):
+def obtener_actividad(request: HttpRequest, actividad_id: UUID) -> ActividadDetailOut:
     """Get activity details."""
     actividad = Actividad.objects.select_related(
         'linea', 'torre', 'tipo_actividad', 'cuadrilla'
@@ -142,7 +148,12 @@ def obtener_actividad(request, actividad_id: UUID):
 
 
 @router.post('/{actividad_id}/iniciar')
-def iniciar_actividad(request, actividad_id: UUID, latitud: Decimal, longitud: Decimal):
+def iniciar_actividad(
+    request: HttpRequest,
+    actividad_id: UUID,
+    latitud: Decimal,
+    longitud: Decimal
+) -> dict[str, Any]:
     """
     Mark activity as started and create field record.
     Returns the created record ID for further updates.

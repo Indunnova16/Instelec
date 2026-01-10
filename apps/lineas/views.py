@@ -3,17 +3,18 @@ Views for transmission lines.
 """
 from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
-from apps.core.mixins import HTMXMixin
+from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Linea, Torre
 
 
-class LineaListView(LoginRequiredMixin, HTMXMixin, ListView):
+class LineaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
     """List all transmission lines."""
     model = Linea
     template_name = 'lineas/lista.html'
     partial_template_name = 'lineas/partials/lista_lineas.html'
     context_object_name = 'lineas'
     paginate_by = 20
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor', 'liniero']
 
     def get_queryset(self):
         qs = super().get_queryset().filter(activa=True)
@@ -30,12 +31,13 @@ class LineaListView(LoginRequiredMixin, HTMXMixin, ListView):
         return qs.prefetch_related('torres')
 
 
-class LineaDetailView(LoginRequiredMixin, HTMXMixin, DetailView):
+class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
     """Detail view for a transmission line."""
     model = Linea
     template_name = 'lineas/detalle.html'
     partial_template_name = 'lineas/partials/detalle_linea.html'
     context_object_name = 'linea'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor', 'liniero']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -44,13 +46,14 @@ class LineaDetailView(LoginRequiredMixin, HTMXMixin, DetailView):
         return context
 
 
-class TorresLineaView(LoginRequiredMixin, HTMXMixin, ListView):
+class TorresLineaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
     """List towers for a specific line."""
     model = Torre
     template_name = 'lineas/torres.html'
     partial_template_name = 'lineas/partials/lista_torres.html'
     context_object_name = 'torres'
     paginate_by = 50
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor', 'liniero']
 
     def get_queryset(self):
         return Torre.objects.filter(linea_id=self.kwargs['pk']).order_by('numero')
@@ -61,12 +64,13 @@ class TorresLineaView(LoginRequiredMixin, HTMXMixin, ListView):
         return context
 
 
-class TorreDetailView(LoginRequiredMixin, HTMXMixin, DetailView):
+class TorreDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
     """Detail view for a tower."""
     model = Torre
     template_name = 'lineas/torre_detalle.html'
     partial_template_name = 'lineas/partials/detalle_torre.html'
     context_object_name = 'torre'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor', 'liniero']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -76,9 +80,10 @@ class TorreDetailView(LoginRequiredMixin, HTMXMixin, DetailView):
         return context
 
 
-class MapaLineasView(LoginRequiredMixin, TemplateView):
+class MapaLineasView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Map view showing all lines and towers."""
     template_name = 'lineas/mapa.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

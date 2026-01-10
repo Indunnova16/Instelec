@@ -1,98 +1,102 @@
 {% extends "base.html" %}
 
-{% block title %}Líneas de Transmisión - TransMaint{% endblock %}
+{% block title %}Lineas de Transmision - TransMaint{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<main class="space-y-6" role="main" aria-label="Gestion de lineas de transmision">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Líneas de Transmisión</h1>
-            <p class="text-gray-600 dark:text-gray-400">Gestión de líneas y torres</p>
+            <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">Lineas de Transmision</h1>
+            <p class="text-gray-600 dark:text-gray-400">Gestion de lineas y torres</p>
         </div>
         {% if perms.lineas.add_linea %}
         <button hx-get="{% url 'lineas:crear' %}"
                 hx-target="#modal-container"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                aria-label="Crear nueva linea de transmision">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
-            Nueva Línea
+            Nueva Linea
         </button>
         {% endif %}
-    </div>
+    </header>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <section class="grid grid-cols-1 md:grid-cols-4 gap-4" aria-labelledby="stats-title">
+        <h2 id="stats-title" class="sr-only">Estadisticas de lineas</h2>
+
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-total-title">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
-                    <svg class="w-6 h-6 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Líneas</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_lineas }}</p>
+                    <h3 id="stat-total-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Lineas</h3>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white" aria-live="polite">{{ total_lineas }}</p>
                 </div>
             </div>
-        </div>
+        </article>
 
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-activas-title">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-green-100 dark:bg-green-900">
-                    <svg class="w-6 h-6 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-green-100 dark:bg-green-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Líneas Activas</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ lineas_activas }}</p>
+                    <h3 id="stat-activas-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Lineas Activas</h3>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white" aria-live="polite">{{ lineas_activas }}</p>
                 </div>
             </div>
-        </div>
+        </article>
 
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-torres-title">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
-                    <svg class="w-6 h-6 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Torres</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_torres }}</p>
+                    <h3 id="stat-torres-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Torres</h3>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white" aria-live="polite">{{ total_torres }}</p>
                 </div>
             </div>
-        </div>
+        </article>
 
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-km-title">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-orange-100 dark:bg-orange-900">
-                    <svg class="w-6 h-6 text-orange-600 dark:text-orange-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-orange-100 dark:bg-orange-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-orange-600 dark:text-orange-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Km Totales</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ km_totales|floatformat:0 }}</p>
+                    <h3 id="stat-km-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Km Totales</h3>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white" aria-live="polite">{{ km_totales|floatformat:0 }}</p>
                 </div>
             </div>
-        </div>
-    </div>
+        </article>
+    </section>
 
     <!-- Lines Table -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" aria-labelledby="table-title">
+        <h2 id="table-title" class="sr-only">Tabla de lineas de transmision</h2>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" aria-describedby="table-title">
                 <thead class="bg-gray-50 dark:bg-gray-900">
                     <tr>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Código
+                            Codigo
                         </th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Nombre
@@ -101,7 +105,7 @@
                             Cliente
                         </th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Tensión
+                            Tension
                         </th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Longitud
@@ -144,34 +148,36 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             {% if linea.activa %}
-                            <span class="flex items-center text-green-600">
-                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                            <span class="flex items-center text-green-600" role="status" aria-label="Linea activa">
+                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2" aria-hidden="true"></span>
                                 Activa
                             </span>
                             {% else %}
-                            <span class="flex items-center text-gray-500">
-                                <span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
+                            <span class="flex items-center text-gray-500" role="status" aria-label="Linea inactiva">
+                                <span class="w-2 h-2 bg-gray-400 rounded-full mr-2" aria-hidden="true"></span>
                                 Inactiva
                             </span>
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <a href="{% url 'lineas:detalle' linea.id %}"
-                               class="text-blue-600 hover:text-blue-900 mr-3">Ver</a>
+                               class="text-blue-600 hover:text-blue-900 mr-3"
+                               aria-label="Ver detalle de linea {{ linea.codigo }}">Ver</a>
                             <a href="{% url 'lineas:mapa' linea.id %}"
-                               class="text-green-600 hover:text-green-900">Mapa</a>
+                               class="text-green-600 hover:text-green-900"
+                               aria-label="Ver mapa de linea {{ linea.codigo }}">Mapa</a>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="px-6 py-12 text-center text-gray-500">
-                            No hay líneas registradas
+                        <td colspan="8" class="px-6 py-12 text-center text-gray-500" role="status">
+                            No hay lineas registradas
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-    </div>
-</div>
+    </section>
+</main>
 {% endblock %}

@@ -26,17 +26,17 @@ import functools
 import hashlib
 import logging
 import time
-from typing import Callable, Optional
+from typing import Any, Callable
 
 from django.conf import settings
 from django.core.cache import cache
-from django.http import JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 
 logger = logging.getLogger(__name__)
 
 
 # Rate limit configuration defaults
-RATELIMIT_CONFIG = getattr(settings, 'RATELIMIT_CONFIG', {
+RATELIMIT_CONFIG: dict[str, dict[str, str]] = getattr(settings, 'RATELIMIT_CONFIG', {
     'login': {
         'rate': '5/m',  # 5 requests per minute
         'key': 'ip',
@@ -68,10 +68,10 @@ def parse_rate(rate_string: str) -> tuple[int, int]:
         "100/h" -> (100, 3600)
         "1000/d" -> (1000, 86400)
     """
-    count, period = rate_string.split('/')
-    count = int(count)
+    count_str, period = rate_string.split('/')
+    count = int(count_str)
 
-    period_map = {
+    period_map: dict[str, int] = {
         's': 1,
         'm': 60,
         'h': 3600,
@@ -94,7 +94,7 @@ def parse_rate(rate_string: str) -> tuple[int, int]:
     return count, seconds
 
 
-def get_client_ip(request) -> str:
+def get_client_ip(request: HttpRequest) -> str:
     """
     Get the client's IP address from the request.
     Handles X-Forwarded-For header for reverse proxies.
@@ -108,7 +108,7 @@ def get_client_ip(request) -> str:
     return ip
 
 
-def get_rate_limit_key(request, key_type: str, group: str) -> str:
+def get_rate_limit_key(request: HttpRequest, key_type: str, group: str) -> str:
     """
     Generate a unique cache key for rate limiting.
 
@@ -138,7 +138,7 @@ def get_rate_limit_key(request, key_type: str, group: str) -> str:
     return hashlib.md5(key_data.encode()).hexdigest()
 
 
-def check_rate_limit(request, group: str) -> tuple[bool, dict]:
+def check_rate_limit(request: HttpRequest, group: str) -> tuple[bool, dict[str, Any]]:
     """
     Check if the request exceeds the rate limit.
 
@@ -169,7 +169,7 @@ def check_rate_limit(request, group: str) -> tuple[bool, dict]:
         reset_time = int(window_start + period)
         remaining = max(0, max_requests - current_count - 1)
 
-        info = {
+        info: dict[str, Any] = {
             'limit': max_requests,
             'remaining': remaining,
             'reset': reset_time,
@@ -194,7 +194,7 @@ def check_rate_limit(request, group: str) -> tuple[bool, dict]:
         return True, {'limit': max_requests, 'remaining': max_requests, 'reset': 0, 'period': period}
 
 
-def ratelimit(group: str) -> Callable:
+def ratelimit(group: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Rate limiting decorator for Django Ninja endpoints.
 
@@ -204,13 +204,13 @@ def ratelimit(group: str) -> Callable:
     Returns:
         Decorated function that checks rate limits
     """
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
-        def wrapper(request, *args, **kwargs):
+        def wrapper(request: HttpRequest, *args: Any, **kwargs: Any) -> Any:
             is_allowed, info = check_rate_limit(request, group)
 
             # Add rate limit headers to response
-            def add_headers(response):
+            def add_headers(response: HttpResponse) -> HttpResponse:
                 response['X-RateLimit-Limit'] = str(info['limit'])
                 response['X-RateLimit-Remaining'] = str(info['remaining'])
                 response['X-RateLimit-Reset'] = str(info['reset'])
@@ -242,7 +242,7 @@ def ratelimit(group: str) -> Callable:
 
 # Pre-configured decorators for common use cases
 
-def ratelimit_login(func: Callable) -> Callable:
+def ratelimit_login(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Rate limit decorator for login endpoints.
     Default: 5 requests per minute per IP.
@@ -250,7 +250,7 @@ def ratelimit_login(func: Callable) -> Callable:
     return ratelimit('login')(func)
 
 
-def ratelimit_api(func: Callable) -> Callable:
+def ratelimit_api(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Rate limit decorator for general API endpoints.
     Default: 100 requests per minute per user.
@@ -258,7 +258,7 @@ def ratelimit_api(func: Callable) -> Callable:
     return ratelimit('api')(func)
 
 
-def ratelimit_upload(func: Callable) -> Callable:
+def ratelimit_upload(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Rate limit decorator for upload endpoints.
     Default: 20 requests per minute per user.
@@ -277,16 +277,16 @@ class RateLimitMiddleware:
         'apps.api.ratelimit.RateLimitMiddleware',
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
-        self.enabled = getattr(settings, 'RATELIMIT_ENABLE', True)
-        self.api_prefix = getattr(settings, 'RATELIMIT_API_PREFIX', '/api/')
+        self.enabled: bool = getattr(settings, 'RATELIMIT_ENABLE', True)
+        self.api_prefix: str = getattr(settings, 'RATELIMIT_API_PREFIX', '/api/')
 
-    def __call__(self, request):
+    def __call__(self, request: HttpRequest) -> HttpResponse:
         # Only apply to API endpoints
         if self.enabled and request.path.startswith(self.api_prefix):
             # Skip rate limiting for certain paths
-            skip_paths = getattr(settings, 'RATELIMIT_SKIP_PATHS', ['/api/health'])
+            skip_paths: list[str] = getattr(settings, 'RATELIMIT_SKIP_PATHS', ['/api/health'])
             if any(request.path.startswith(path) for path in skip_paths):
                 return self.get_response(request)
 

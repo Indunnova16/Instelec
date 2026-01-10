@@ -2,15 +2,15 @@
 API endpoints for field records (Django Ninja).
 """
 import logging
-
-from ninja import Router, Schema, File, UploadedFile
-from typing import List, Optional
+from typing import Any, Optional, Union
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
-from django.db import DatabaseError, IntegrityError
 
+from ninja import Router, Schema, File, UploadedFile
+from django.db import DatabaseError, IntegrityError
 from django.core.exceptions import ValidationError
+from django.http import HttpRequest
 from ninja.errors import HttpError
 
 from apps.api.auth import JWTAuth
@@ -25,14 +25,14 @@ router = Router(auth=JWTAuth())
 
 class RegistroIn(Schema):
     actividad_id: UUID
-    datos_formulario: dict
+    datos_formulario: dict[str, Any]
     observaciones: str = ""
     latitud_fin: Decimal
     longitud_fin: Decimal
 
 
 class RegistroSyncIn(Schema):
-    registros: List[RegistroIn]
+    registros: list[RegistroIn]
 
 
 class EvidenciaOut(Schema):
@@ -57,9 +57,9 @@ class RegistroOut(Schema):
 
 
 class RegistroDetailOut(RegistroOut):
-    datos_formulario: dict
+    datos_formulario: dict[str, Any]
     observaciones: str
-    evidencias: List[EvidenciaOut]
+    evidencias: list[EvidenciaOut]
 
 
 class SyncResultOut(Schema):
@@ -72,9 +72,12 @@ class ErrorOut(Schema):
     detail: str
 
 
-@router.get('/registros', response={200: List[RegistroOut], 429: ErrorOut})
+@router.get('/registros', response={200: list[RegistroOut], 429: ErrorOut})
 @ratelimit_api
-def listar_registros(request, actividad_id: UUID = None):
+def listar_registros(
+    request: HttpRequest,
+    actividad_id: Optional[UUID] = None
+) -> list[RegistroOut]:
     """
     List field records, optionally filtered by activity.
 
@@ -101,7 +104,7 @@ def listar_registros(request, actividad_id: UUID = None):
 
 @router.get('/registros/{registro_id}', response={200: RegistroDetailOut, 429: ErrorOut})
 @ratelimit_api
-def obtener_registro(request, registro_id: UUID):
+def obtener_registro(request: HttpRequest, registro_id: UUID) -> RegistroDetailOut:
     """
     Get field record details.
 
@@ -137,9 +140,9 @@ def obtener_registro(request, registro_id: UUID):
     )
 
 
-@router.post('/registros/sync', response={200: List[SyncResultOut], 429: ErrorOut})
+@router.post('/registros/sync', response={200: list[SyncResultOut], 429: ErrorOut})
 @ratelimit_api
-def sincronizar_registros(request, data: RegistroSyncIn):
+def sincronizar_registros(request: HttpRequest, data: RegistroSyncIn) -> list[SyncResultOut]:
     """
     Sync multiple field records from mobile app.
     Used when device comes back online.
@@ -149,7 +152,7 @@ def sincronizar_registros(request, data: RegistroSyncIn):
     from django.utils import timezone
     from apps.actividades.models import Actividad
 
-    resultados = []
+    resultados: list[SyncResultOut] = []
 
     for reg in data.registros:
         try:
@@ -203,14 +206,14 @@ def sincronizar_registros(request, data: RegistroSyncIn):
 @router.post('/evidencias/upload', response={200: dict, 429: ErrorOut})
 @ratelimit_upload
 def subir_evidencia(
-    request,
+    request: HttpRequest,
     registro_id: UUID,
     tipo: str,
     latitud: Decimal,
     longitud: Decimal,
     fecha_captura: datetime,
     archivo: UploadedFile = File(...)
-):
+) -> dict[str, str]:
     """
     Upload a photo evidence.
     Triggers async processing for thumbnail and AI validation.
@@ -222,6 +225,8 @@ def subir_evidencia(
     """
     from apps.core.utils import upload_to_gcs
     from django.utils import timezone
+    import uuid as uuid_module
+    import magic
 
     # Read file content for validation
     file_content = archivo.read()
@@ -239,17 +244,15 @@ def subir_evidencia(
     registro = RegistroCampo.objects.get(id=registro_id)
 
     # Generate unique filename with validated extension
-    import uuid
     # Map MIME types to extensions (we know the file is valid at this point)
-    import magic
     detected_mime = magic.from_buffer(file_content, mime=True)
-    mime_to_ext = {
+    mime_to_ext: dict[str, str] = {
         'image/jpeg': 'jpg',
         'image/png': 'png',
         'image/webp': 'webp',
     }
     extension = mime_to_ext.get(detected_mime, 'jpg')
-    filename = f"{uuid.uuid4()}.{extension}"
+    filename = f"{uuid_module.uuid4()}.{extension}"
     path = f"evidencias/{registro_id}/{tipo}/{filename}"
 
     # Upload to cloud storage
@@ -278,10 +281,10 @@ def subir_evidencia(
 @router.post('/registros/{registro_id}/firma', response={200: dict, 429: ErrorOut})
 @ratelimit_upload
 def subir_firma(
-    request,
+    request: HttpRequest,
     registro_id: UUID,
     archivo: UploadedFile = File(...)
-):
+) -> dict[str, str]:
     """
     Upload signature for a field record.
 

@@ -1,4 +1,20 @@
-"""Management command to seed the database with initial data."""
+"""
+Management command to seed the database with initial data.
+
+This command populates the database with development/testing data including:
+- Users with various roles (admin, supervisors, linieros, etc.)
+- Transmission lines and towers with GPS coordinates
+- Activity types with dynamic form definitions
+- Vehicles and work crews
+
+Usage:
+    python manage.py seed_data          # Add seed data
+    python manage.py seed_data --clear  # Clear existing data first
+
+Configuration:
+    All seed data is defined in apps/core/seed_config.py
+    Modify that file to customize the initial data.
+"""
 
 from decimal import Decimal
 from datetime import date, timedelta
@@ -6,13 +22,37 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
+# Import seed data configuration
+from apps.core.seed_config import (
+    USERS_DATA,
+    DEFAULT_USER_PASSWORD,
+    LINEAS_DATA,
+    BASE_COORDINATES,
+    TOWERS_PER_LINE,
+    TOWER_LAT_INCREMENT,
+    TOWER_LON_INCREMENT,
+    TIPOS_ACTIVIDAD_DATA,
+    VEHICULOS_DATA,
+    CUADRILLAS_DATA,
+    FORM_OPTIONS,
+)
+
 User = get_user_model()
 
 
 class Command(BaseCommand):
+    """
+    Django management command to seed the database with initial data.
+
+    The seed data is loaded from apps/core/seed_config.py which contains
+    all configurable data for users, lines, towers, activity types,
+    vehicles, and crews.
+    """
+
     help = "Seed the database with initial data for development/testing"
 
     def add_arguments(self, parser):
+        """Add command line arguments."""
         parser.add_argument(
             "--clear",
             action="store_true",
@@ -21,12 +61,21 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        """
+        Main command handler.
+
+        Executes all seed operations within a database transaction
+        to ensure atomicity - if any operation fails, all changes
+        are rolled back.
+        """
         if options["clear"]:
             self.stdout.write("Clearing existing data...")
             self._clear_data()
 
         self.stdout.write("Seeding database...")
+        self.stdout.write(f"  Using configuration from: apps/core/seed_config.py")
 
+        # Execute seed operations in dependency order
         self._create_users()
         self._create_lineas()
         self._create_tipos_actividad()
@@ -37,12 +86,19 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Database seeded successfully!"))
 
     def _clear_data(self):
-        """Clear all data from the database."""
+        """
+        Clear all seeded data from the database.
+
+        Deletes data in reverse dependency order to avoid
+        foreign key constraint violations. Preserves superuser
+        accounts created outside of seeding.
+        """
         from apps.campo.models import Evidencia, RegistroCampo
         from apps.actividades.models import Actividad, ProgramacionMensual, TipoActividad
         from apps.cuadrillas.models import CuadrillaMiembro, Cuadrilla, Vehiculo
         from apps.lineas.models import PoligonoServidumbre, Torre, Linea
 
+        # Delete in reverse dependency order
         Evidencia.objects.all().delete()
         RegistroCampo.objects.all().delete()
         Actividad.objects.all().delete()
@@ -54,29 +110,24 @@ class Command(BaseCommand):
         PoligonoServidumbre.objects.all().delete()
         Torre.objects.all().delete()
         Linea.objects.all().delete()
+        # Preserve manually created superusers
         User.objects.exclude(is_superuser=True).delete()
 
     def _create_users(self):
-        """Create initial users."""
+        """
+        Create initial users from USERS_DATA configuration.
+
+        Each user is created with:
+        - Email as the primary identifier
+        - Username derived from email
+        - Role-based permissions
+        - Auto-generated phone number
+        - Default password (configurable in seed_config.py)
+        """
         self.stdout.write("  Creating users...")
 
-        users_data = [
-            {"email": "admin@transmaint.com", "first_name": "Admin", "last_name": "Sistema", "rol": "admin", "is_staff": True, "is_superuser": True},
-            {"email": "director@transmaint.com", "first_name": "Carlos", "last_name": "Mendoza", "rol": "director"},
-            {"email": "coordinador@transmaint.com", "first_name": "Ana", "last_name": "Rodríguez", "rol": "coordinador"},
-            {"email": "residente1@transmaint.com", "first_name": "Juan", "last_name": "Pérez", "rol": "ing_residente"},
-            {"email": "ambiental@transmaint.com", "first_name": "María", "last_name": "García", "rol": "ing_ambiental"},
-            {"email": "supervisor1@transmaint.com", "first_name": "Pedro", "last_name": "López", "rol": "supervisor"},
-            {"email": "supervisor2@transmaint.com", "first_name": "Luis", "last_name": "Martínez", "rol": "supervisor"},
-            {"email": "liniero1@transmaint.com", "first_name": "Andrés", "last_name": "Gómez", "rol": "liniero"},
-            {"email": "liniero2@transmaint.com", "first_name": "Jorge", "last_name": "Díaz", "rol": "liniero"},
-            {"email": "liniero3@transmaint.com", "first_name": "Miguel", "last_name": "Torres", "rol": "liniero"},
-            {"email": "liniero4@transmaint.com", "first_name": "Diego", "last_name": "Ramírez", "rol": "liniero"},
-            {"email": "auxiliar1@transmaint.com", "first_name": "Camilo", "last_name": "Hernández", "rol": "auxiliar"},
-        ]
-
         self.users = {}
-        for data in users_data:
+        for data in USERS_DATA:
             user, created = User.objects.get_or_create(
                 email=data["email"],
                 defaults={
@@ -86,37 +137,37 @@ class Command(BaseCommand):
                     "rol": data["rol"],
                     "is_staff": data.get("is_staff", False),
                     "is_superuser": data.get("is_superuser", False),
+                    # Generate a deterministic phone number based on email hash
                     "telefono": f"3{hash(data['email']) % 100000000:09d}",
                 }
             )
             if created:
-                user.set_password("TransMaint2026!")
+                user.set_password(DEFAULT_USER_PASSWORD)
                 user.save()
             self.users[data["rol"]] = user
 
+        self.stdout.write(f"    Created {len(USERS_DATA)} users")
+
     def _create_lineas(self):
-        """Create transmission lines and towers."""
+        """
+        Create transmission lines and towers from LINEAS_DATA configuration.
+
+        For each line:
+        - Creates the line record with technical specifications
+        - Generates TOWERS_PER_LINE towers with GPS coordinates
+        - Tower positions are calculated from BASE_COORDINATES
+        - Tower types cycle through SUSPENSION, ANCLAJE, TERMINAL
+        """
         from apps.lineas.models import Linea, Torre
         from django.contrib.gis.geos import Point
 
         self.stdout.write("  Creating lines and towers...")
 
-        lineas_data = [
-            {"codigo": "LT-001", "nombre": "Línea Barranquilla - Cartagena", "cliente": "TRANSELCA", "longitud_km": 120.5, "tension_kv": 220},
-            {"codigo": "LT-002", "nombre": "Línea Medellín - Bogotá", "cliente": "INTERCOLOMBIA", "longitud_km": 380.2, "tension_kv": 500},
-            {"codigo": "LT-003", "nombre": "Línea Cali - Buenaventura", "cliente": "TRANSELCA", "longitud_km": 145.8, "tension_kv": 110},
-            {"codigo": "LT-004", "nombre": "Línea Santa Marta - Valledupar", "cliente": "TRANSELCA", "longitud_km": 200.3, "tension_kv": 220},
-        ]
-
         self.lineas = {}
-        base_coords = [
-            (10.9878, -74.7889),  # Barranquilla
-            (6.2442, -75.5812),   # Medellín
-            (3.4516, -76.5320),   # Cali
-            (11.2404, -74.2110),  # Santa Marta
-        ]
+        total_towers = 0
 
-        for idx, data in enumerate(lineas_data):
+        for idx, data in enumerate(LINEAS_DATA):
+            # Create or get the transmission line
             linea, _ = Linea.objects.get_or_create(
                 codigo=data["codigo"],
                 defaults={
@@ -128,93 +179,53 @@ class Command(BaseCommand):
             )
             self.lineas[data["codigo"]] = linea
 
-            # Create towers
-            base_lat, base_lon = base_coords[idx]
-            for i in range(1, 21):  # 20 towers per line
-                lat = Decimal(str(base_lat + (i * 0.01)))
-                lon = Decimal(str(base_lon + (i * 0.005)))
+            # Create towers along the line
+            # Get base coordinates for this line
+            base_lat, base_lon = BASE_COORDINATES[idx]
+
+            for i in range(1, TOWERS_PER_LINE + 1):
+                # Calculate tower position with incremental offset
+                lat = Decimal(str(base_lat)) + (Decimal(i) * TOWER_LAT_INCREMENT)
+                lon = Decimal(str(base_lon)) + (Decimal(i) * TOWER_LON_INCREMENT)
+
+                # Cycle through tower types from FORM_OPTIONS
+                tower_types = FORM_OPTIONS["tipo_torre"]
+                tower_type = tower_types[i % len(tower_types)]
+
                 Torre.objects.get_or_create(
                     linea=linea,
                     numero=f"T-{i:03d}",
                     defaults={
-                        "tipo": ["SUSPENSION", "ANCLAJE", "TERMINAL"][i % 3],
+                        "tipo": tower_type,
                         "latitud": lat,
                         "longitud": lon,
                         "altitud": Decimal(str(100 + (i * 10))),
                         "geometria": Point(float(lon), float(lat), srid=4326),
                     }
                 )
+                total_towers += 1
+
+        self.stdout.write(f"    Created {len(LINEAS_DATA)} lines with {total_towers} towers")
 
     def _create_tipos_actividad(self):
-        """Create activity types."""
+        """
+        Create activity types from TIPOS_ACTIVIDAD_DATA configuration.
+
+        Each activity type includes:
+        - Unique code and descriptive name
+        - Category classification (PODA, HERRAJES, INSPECCION, etc.)
+        - Dynamic form definition (campos_formulario) that determines
+          what data the mobile app collects in the field
+
+        Form fields support types: text, number, select, textarea, boolean
+        Select options are defined in FORM_OPTIONS for easy customization.
+        """
         from apps.actividades.models import TipoActividad
 
         self.stdout.write("  Creating activity types...")
 
-        tipos_data = [
-            {
-                "codigo": "PODA-001",
-                "nombre": "Poda de vegetación en franja de servidumbre",
-                "categoria": "PODA",
-                "campos_formulario": {
-                    "fields": [
-                        {"name": "altura_poda", "type": "number", "label": "Altura de poda (m)", "required": True},
-                        {"name": "tipo_vegetacion", "type": "select", "label": "Tipo de vegetación", "options": ["Arbórea", "Arbustiva", "Herbácea"]},
-                        {"name": "area_intervenida", "type": "number", "label": "Área intervenida (m²)"},
-                    ]
-                }
-            },
-            {
-                "codigo": "HER-001",
-                "nombre": "Cambio de herrajes y accesorios",
-                "categoria": "HERRAJES",
-                "campos_formulario": {
-                    "fields": [
-                        {"name": "herraje_retirado", "type": "text", "label": "Herraje retirado", "required": True},
-                        {"name": "herraje_instalado", "type": "text", "label": "Herraje instalado", "required": True},
-                        {"name": "cantidad", "type": "number", "label": "Cantidad"},
-                    ]
-                }
-            },
-            {
-                "codigo": "INS-001",
-                "nombre": "Inspección visual de estructuras",
-                "categoria": "INSPECCION",
-                "campos_formulario": {
-                    "fields": [
-                        {"name": "estado_estructura", "type": "select", "label": "Estado de estructura", "options": ["Bueno", "Regular", "Malo", "Crítico"], "required": True},
-                        {"name": "hallazgos", "type": "textarea", "label": "Hallazgos"},
-                        {"name": "requiere_intervencion", "type": "boolean", "label": "Requiere intervención"},
-                    ]
-                }
-            },
-            {
-                "codigo": "LIM-001",
-                "nombre": "Limpieza de aisladores",
-                "categoria": "LIMPIEZA",
-                "campos_formulario": {
-                    "fields": [
-                        {"name": "metodo_limpieza", "type": "select", "label": "Método de limpieza", "options": ["Manual", "Hidrolavado", "Químico"]},
-                        {"name": "aisladores_limpiados", "type": "number", "label": "Cantidad de aisladores"},
-                    ]
-                }
-            },
-            {
-                "codigo": "MED-001",
-                "nombre": "Medición de resistencia de puesta a tierra",
-                "categoria": "OTRO",
-                "campos_formulario": {
-                    "fields": [
-                        {"name": "valor_resistencia", "type": "number", "label": "Valor de resistencia (Ω)", "required": True},
-                        {"name": "cumple_norma", "type": "boolean", "label": "Cumple norma (<10Ω)"},
-                        {"name": "equipo_utilizado", "type": "text", "label": "Equipo utilizado"},
-                    ]
-                }
-            },
-        ]
-
         self.tipos_actividad = {}
-        for data in tipos_data:
+        for data in TIPOS_ACTIVIDAD_DATA:
             tipo, _ = TipoActividad.objects.get_or_create(
                 codigo=data["codigo"],
                 defaults={
@@ -225,21 +236,25 @@ class Command(BaseCommand):
             )
             self.tipos_actividad[data["codigo"]] = tipo
 
+        self.stdout.write(f"    Created {len(TIPOS_ACTIVIDAD_DATA)} activity types")
+
     def _create_vehiculos(self):
-        """Create vehicles."""
+        """
+        Create vehicles from VEHICULOS_DATA configuration.
+
+        Vehicles can be assigned to crews and include:
+        - License plate (unique identifier)
+        - Type (CAMIONETA, CAMION, MOTO)
+        - Make and model
+        - Passenger capacity
+        - Daily cost rate
+        """
         from apps.cuadrillas.models import Vehiculo
 
         self.stdout.write("  Creating vehicles...")
 
-        vehiculos_data = [
-            {"placa": "ABC123", "tipo": "CAMIONETA", "marca": "Toyota", "modelo": "Hilux 2024", "capacidad": 5, "costo": 350000},
-            {"placa": "DEF456", "tipo": "CAMIONETA", "marca": "Chevrolet", "modelo": "D-Max 2023", "capacidad": 5, "costo": 320000},
-            {"placa": "GHI789", "tipo": "CAMION", "marca": "Hino", "modelo": "FC 2022", "capacidad": 10, "costo": 500000},
-            {"placa": "JKL012", "tipo": "MOTO", "marca": "Honda", "modelo": "XRE 300", "capacidad": 2, "costo": 80000},
-        ]
-
         self.vehiculos = {}
-        for data in vehiculos_data:
+        for data in VEHICULOS_DATA:
             vehiculo, _ = Vehiculo.objects.get_or_create(
                 placa=data["placa"],
                 defaults={
@@ -252,20 +267,28 @@ class Command(BaseCommand):
             )
             self.vehiculos[data["placa"]] = vehiculo
 
+        self.stdout.write(f"    Created {len(VEHICULOS_DATA)} vehicles")
+
     def _create_cuadrillas(self):
-        """Create work crews."""
+        """
+        Create work crews from CUADRILLAS_DATA configuration.
+
+        Each crew includes:
+        - Unique code and name
+        - Supervisor assignment (must exist in USERS_DATA)
+        - Vehicle assignment (must exist in VEHICULOS_DATA)
+        - Crew members (linieros are distributed across crews)
+        """
         from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro
 
         self.stdout.write("  Creating work crews...")
 
-        cuadrillas_data = [
-            {"codigo": "CUA-001", "nombre": "Cuadrilla Norte", "supervisor_email": "supervisor1@transmaint.com", "placa": "ABC123"},
-            {"codigo": "CUA-002", "nombre": "Cuadrilla Sur", "supervisor_email": "supervisor2@transmaint.com", "placa": "DEF456"},
-        ]
-
         self.cuadrillas = {}
-        for data in cuadrillas_data:
+        for data in CUADRILLAS_DATA:
+            # Get supervisor user
             supervisor = User.objects.get(email=data["supervisor_email"])
+
+            # Create or get crew
             cuadrilla, _ = Cuadrilla.objects.get_or_create(
                 codigo=data["codigo"],
                 defaults={
@@ -276,34 +299,47 @@ class Command(BaseCommand):
             )
             self.cuadrillas[data["codigo"]] = cuadrilla
 
-            # Add supervisor as member
+            # Add supervisor as crew member
             CuadrillaMiembro.objects.get_or_create(
                 cuadrilla=cuadrilla,
                 usuario=supervisor,
                 defaults={"rol_cuadrilla": "supervisor"}
             )
 
-        # Add linieros to crews
+        # Distribute linieros across crews evenly
         linieros = User.objects.filter(rol="liniero")
+        cuadrilla_list = list(self.cuadrillas.values())
         for i, liniero in enumerate(linieros):
-            cuadrilla = list(self.cuadrillas.values())[i % 2]
+            cuadrilla = cuadrilla_list[i % len(cuadrilla_list)]
             CuadrillaMiembro.objects.get_or_create(
                 cuadrilla=cuadrilla,
                 usuario=liniero,
                 defaults={"rol_cuadrilla": "liniero"}
             )
 
+        self.stdout.write(f"    Created {len(CUADRILLAS_DATA)} work crews")
+
     def _create_actividades(self):
-        """Create scheduled activities."""
+        """
+        Create scheduled activities for demonstration purposes.
+
+        Generates activities for the current month by:
+        - Creating monthly programming for each line
+        - Assigning activities to the first 10 towers of each line
+        - Distributing activity types and crews
+        - Setting varied states and priorities for realistic data
+        """
         from apps.actividades.models import Actividad, ProgramacionMensual
         from apps.lineas.models import Torre
 
         self.stdout.write("  Creating activities...")
 
         today = date.today()
+        total_activities = 0
 
-        # Create monthly programming
+        # Create monthly programming and activities for each line
         for linea in self.lineas.values():
+            # Create or get monthly programming
             prog, _ = ProgramacionMensual.objects.get_or_create(
                 linea=linea,
                 anio=today.year,
@@ -311,10 +347,14 @@ class Command(BaseCommand):
                 defaults={"estado": "APROBADA"}
             )
 
-            # Create activities for each tower
-            torres = Torre.objects.filter(linea=linea)[:10]  # First 10 towers
+            # Get first 10 towers for this line
+            torres = Torre.objects.filter(linea=linea)[:10]
             tipos = list(self.tipos_actividad.values())
             cuadrillas = list(self.cuadrillas.values())
+
+            # Create activities with varied states and priorities
+            estados = FORM_OPTIONS["estado_actividad"]
+            prioridades = FORM_OPTIONS["prioridad"]
 
             for i, torre in enumerate(torres):
                 Actividad.objects.get_or_create(
@@ -325,7 +365,10 @@ class Command(BaseCommand):
                     defaults={
                         "programacion": prog,
                         "cuadrilla": cuadrillas[i % len(cuadrillas)],
-                        "estado": ["PENDIENTE", "EN_CURSO", "COMPLETADA"][i % 3],
-                        "prioridad": ["NORMAL", "ALTA", "URGENTE"][i % 3],
+                        "estado": estados[i % len(estados)],
+                        "prioridad": prioridades[i % len(prioridades)],
                     }
                 )
+                total_activities += 1
+
+        self.stdout.write(f"    Created {total_activities} activities")

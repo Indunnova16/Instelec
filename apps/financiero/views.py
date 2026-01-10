@@ -63,8 +63,17 @@ class PresupuestoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     context_object_name = 'presupuesto'
     allowed_roles = ['admin', 'director', 'coordinador']
 
+    def get_queryset(self):
+        return super().get_queryset().select_related('linea').prefetch_related(
+            'ejecuciones',
+            'ejecuciones__actividad',
+            'ejecuciones__actividad__torre',
+            'ejecuciones__actividad__tipo_actividad'
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # ejecuciones already prefetched via get_queryset
         context['ejecuciones'] = self.object.ejecuciones.all()
         return context
 

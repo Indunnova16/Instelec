@@ -3,188 +3,212 @@
 {% block title %}Cuadrillas - TransMaint{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<main class="space-y-6" role="main" aria-label="Gestion de cuadrillas de trabajo">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Cuadrillas</h1>
-            <p class="text-gray-600 dark:text-gray-400">Gestión de cuadrillas de trabajo</p>
+            <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">Cuadrillas</h1>
+            <p class="text-gray-600 dark:text-gray-400">Gestion de cuadrillas de trabajo</p>
         </div>
         {% if perms.cuadrillas.add_cuadrilla %}
         <button hx-get="{% url 'cuadrillas:crear' %}"
                 hx-target="#modal-container"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                aria-label="Crear nueva cuadrilla">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
             Nueva Cuadrilla
         </button>
         {% endif %}
-    </div>
+    </header>
 
     <!-- Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <section class="grid grid-cols-1 md:grid-cols-4 gap-4" aria-labelledby="stats-title">
+        <h2 id="stats-title" class="sr-only">Estadisticas de cuadrillas</h2>
+
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-total-cuadrillas">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
-                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-blue-100 dark:bg-blue-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Total Cuadrillas</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_cuadrillas }}</p>
+                    <h3 id="stat-total-cuadrillas" class="text-sm font-medium text-gray-500">Total Cuadrillas</h3>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white" aria-live="polite">{{ total_cuadrillas }}</p>
                 </div>
             </div>
-        </div>
+        </article>
 
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-activas">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-green-100 dark:bg-green-900">
-                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-green-100 dark:bg-green-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Activas</p>
-                    <p class="text-2xl font-bold text-green-600">{{ cuadrillas_activas }}</p>
+                    <h3 id="stat-activas" class="text-sm font-medium text-gray-500">Activas</h3>
+                    <p class="text-2xl font-bold text-green-600" aria-live="polite">{{ cuadrillas_activas }}</p>
                 </div>
             </div>
-        </div>
+        </article>
 
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-en-campo">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-yellow-100 dark:bg-yellow-900">
-                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-yellow-100 dark:bg-yellow-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">En Campo</p>
-                    <p class="text-2xl font-bold text-yellow-600">{{ cuadrillas_en_campo }}</p>
+                    <h3 id="stat-en-campo" class="text-sm font-medium text-gray-500">En Campo</h3>
+                    <p class="text-2xl font-bold text-yellow-600" aria-live="polite">{{ cuadrillas_en_campo }}</p>
                 </div>
             </div>
-        </div>
+        </article>
 
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="stat-personal">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
-                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="p-3 rounded-full bg-purple-100 dark:bg-purple-900" aria-hidden="true">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
                     </svg>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Total Personal</p>
-                    <p class="text-2xl font-bold text-purple-600">{{ total_personal }}</p>
+                    <h3 id="stat-personal" class="text-sm font-medium text-gray-500">Total Personal</h3>
+                    <p class="text-2xl font-bold text-purple-600" aria-live="polite">{{ total_personal }}</p>
                 </div>
             </div>
-        </div>
-    </div>
+        </article>
+    </section>
 
     <!-- Main Content: List + Map -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Cuadrillas List -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow" aria-labelledby="cuadrillas-list-title">
             <div class="p-4 border-b dark:border-gray-700">
-                <h2 class="font-medium text-gray-900 dark:text-white">Lista de Cuadrillas</h2>
+                <h2 id="cuadrillas-list-title" class="font-medium text-gray-900 dark:text-white">Lista de Cuadrillas</h2>
             </div>
-            <div class="divide-y dark:divide-gray-700">
+            <div class="divide-y dark:divide-gray-700" role="list" aria-label="Cuadrillas disponibles">
                 {% for cuadrilla in cuadrillas %}
-                <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
+                <article class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
                      x-data="{ expanded: false }"
-                     @click="expanded = !expanded">
+                     @click="expanded = !expanded"
+                     role="listitem"
+                     aria-labelledby="cuadrilla-{{ cuadrilla.id }}-name">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
                             <div class="relative">
-                                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center" aria-hidden="true">
                                     <span class="text-blue-600 font-medium">{{ cuadrilla.codigo|slice:":3" }}</span>
                                 </div>
                                 {% if cuadrilla.ultima_ubicacion %}
                                 <span class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"
-                                      title="Ubicación reciente"></span>
+                                      aria-label="Tiene ubicacion reciente"
+                                      title="Ubicacion reciente"></span>
                                 {% endif %}
                             </div>
                             <div>
-                                <h3 class="font-medium text-gray-900 dark:text-white">{{ cuadrilla.nombre }}</h3>
+                                <h3 id="cuadrilla-{{ cuadrilla.id }}-name" class="font-medium text-gray-900 dark:text-white">{{ cuadrilla.nombre }}</h3>
                                 <p class="text-sm text-gray-500">{{ cuadrilla.miembros.count }} miembros</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
                             {% if cuadrilla.activa %}
-                            <span class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Activa</span>
+                            <span class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full" role="status">Activa</span>
                             {% else %}
-                            <span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">Inactiva</span>
+                            <span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full" role="status">Inactiva</span>
                             {% endif %}
-                            <svg class="w-5 h-5 text-gray-400 transform transition" :class="{ 'rotate-180': expanded }"
-                                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                            </svg>
+                            <button class="p-1"
+                                    aria-expanded="false"
+                                    :aria-expanded="expanded.toString()"
+                                    aria-label="Expandir detalles de cuadrilla {{ cuadrilla.nombre }}">
+                                <svg class="w-5 h-5 text-gray-400 transform transition" :class="{ 'rotate-180': expanded }"
+                                     fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
                         </div>
                     </div>
 
                     <!-- Expanded details -->
-                    <div x-show="expanded" x-collapse class="mt-4 pl-13">
-                        <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div x-show="expanded" x-collapse class="mt-4 pl-13" role="region" aria-label="Detalles de {{ cuadrilla.nombre }}">
+                        <dl class="grid grid-cols-2 gap-4 text-sm">
                             <div>
-                                <p class="text-gray-500">Supervisor</p>
-                                <p class="font-medium">{{ cuadrilla.supervisor.get_full_name }}</p>
+                                <dt class="text-gray-500">Supervisor</dt>
+                                <dd class="font-medium">{{ cuadrilla.supervisor.get_full_name }}</dd>
                             </div>
                             <div>
-                                <p class="text-gray-500">Vehículo</p>
-                                <p class="font-medium">{{ cuadrilla.vehiculo.placa }} - {{ cuadrilla.vehiculo.marca }}</p>
+                                <dt class="text-gray-500">Vehiculo</dt>
+                                <dd class="font-medium">{{ cuadrilla.vehiculo.placa }} - {{ cuadrilla.vehiculo.marca }}</dd>
                             </div>
-                        </div>
+                        </dl>
 
                         <div class="mt-3">
                             <p class="text-gray-500 text-sm mb-2">Miembros</p>
-                            <div class="flex flex-wrap gap-2">
+                            <ul class="flex flex-wrap gap-2" aria-label="Lista de miembros de la cuadrilla">
                                 {% for miembro in cuadrilla.miembros.all %}
-                                <span class="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm">
-                                    <span class="w-2 h-2 rounded-full {% if miembro.activo %}bg-green-500{% else %}bg-gray-400{% endif %}"></span>
-                                    {{ miembro.usuario.get_full_name }}
-                                </span>
+                                <li class="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm">
+                                    <span class="w-2 h-2 rounded-full {% if miembro.activo %}bg-green-500{% else %}bg-gray-400{% endif %}"
+                                          aria-hidden="true"></span>
+                                    <span>{{ miembro.usuario.get_full_name }}</span>
+                                    {% if miembro.activo %}
+                                    <span class="sr-only">(activo)</span>
+                                    {% else %}
+                                    <span class="sr-only">(inactivo)</span>
+                                    {% endif %}
+                                </li>
                                 {% endfor %}
-                            </div>
+                            </ul>
                         </div>
 
-                        <div class="mt-3 flex gap-2">
+                        <nav class="mt-3 flex gap-2" aria-label="Acciones de cuadrilla {{ cuadrilla.nombre }}">
                             <a href="{% url 'cuadrillas:detalle' cuadrilla.id %}"
-                               class="text-sm text-blue-600 hover:text-blue-800">Ver detalle</a>
+                               class="text-sm text-blue-600 hover:text-blue-800"
+                               aria-label="Ver detalle completo de {{ cuadrilla.nombre }}">Ver detalle</a>
                             <button @click.stop
                                     onclick="focusCuadrilla('{{ cuadrilla.id }}')"
-                                    class="text-sm text-green-600 hover:text-green-800">Ver en mapa</button>
-                        </div>
+                                    class="text-sm text-green-600 hover:text-green-800"
+                                    aria-label="Mostrar ubicacion de {{ cuadrilla.nombre }} en el mapa">Ver en mapa</button>
+                        </nav>
                     </div>
-                </div>
+                </article>
                 {% empty %}
-                <div class="p-8 text-center text-gray-500">
+                <div class="p-8 text-center text-gray-500" role="status">
                     No hay cuadrillas registradas
                 </div>
                 {% endfor %}
             </div>
-        </div>
+        </section>
 
         <!-- Real-time Map -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow" aria-labelledby="map-title">
             <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
-                <h2 class="font-medium text-gray-900 dark:text-white">Ubicación en Tiempo Real</h2>
+                <h2 id="map-title" class="font-medium text-gray-900 dark:text-white">Ubicacion en Tiempo Real</h2>
                 <div class="flex items-center gap-2 text-sm text-gray-500"
                      hx-get="{% url 'cuadrillas:ubicaciones_json' %}"
                      hx-trigger="every 30s"
                      hx-swap="none"
-                     hx-on::after-request="updateMapMarkers(event.detail.xhr.response)">
-                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                    Actualizando cada 30s
+                     hx-on::after-request="updateMapMarkers(event.detail.xhr.response)"
+                     role="status"
+                     aria-live="polite">
+                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse" aria-hidden="true"></span>
+                    <span>Actualizando cada 30s</span>
                 </div>
             </div>
-            <div id="mapa-cuadrillas" class="h-96 lg:h-[500px]"></div>
-        </div>
+            <div id="mapa-cuadrillas" class="h-96 lg:h-[500px]" role="application" aria-label="Mapa interactivo con ubicacion de cuadrillas en tiempo real"></div>
+        </section>
     </div>
-</div>
+</main>
+
+<!-- Screen reader announcements -->
+<div id="map-announcements" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 {% endblock %}
 
 {% block extra_head %}
@@ -220,7 +244,7 @@ function addOrUpdateMarker(data) {
 
     const icon = L.divIcon({
         className: 'custom-marker',
-        html: `<div class="w-8 h-8 bg-blue-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-white text-xs font-bold">${data.codigo.slice(0, 2)}</div>`,
+        html: `<div class="w-8 h-8 bg-blue-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-white text-xs font-bold" role="img" aria-label="Cuadrilla ${data.nombre}">${data.codigo.slice(0, 2)}</div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 32]
     });
@@ -228,12 +252,16 @@ function addOrUpdateMarker(data) {
     if (markers[data.id]) {
         markers[data.id].setLatLng([data.lat, data.lon]);
     } else {
-        markers[data.id] = L.marker([data.lat, data.lon], { icon }).addTo(map);
+        markers[data.id] = L.marker([data.lat, data.lon], {
+            icon,
+            alt: `Cuadrilla ${data.nombre}`,
+            keyboard: true
+        }).addTo(map);
         markers[data.id].bindPopup(`
-            <div class="p-2">
+            <div class="p-2" role="dialog" aria-label="Informacion de cuadrilla ${data.nombre}">
                 <h3 class="font-bold">${data.nombre}</h3>
                 <p class="text-sm text-gray-600">${data.supervisor}</p>
-                <p class="text-xs text-gray-500 mt-1">Última actualización: ${data.last_update}</p>
+                <p class="text-xs text-gray-500 mt-1">Ultima actualizacion: ${data.last_update}</p>
             </div>
         `);
     }
@@ -243,8 +271,16 @@ function updateMapMarkers(responseText) {
     try {
         const data = JSON.parse(responseText);
         data.forEach(addOrUpdateMarker);
+        announceToScreenReader('Ubicaciones de cuadrillas actualizadas');
     } catch (e) {
         console.error('Error updating markers:', e);
+    }
+}
+
+function announceToScreenReader(message) {
+    const announcer = document.getElementById('map-announcements');
+    if (announcer) {
+        announcer.textContent = message;
     }
 }
 
@@ -252,6 +288,7 @@ function focusCuadrilla(id) {
     if (markers[id]) {
         map.setView(markers[id].getLatLng(), 15);
         markers[id].openPopup();
+        announceToScreenReader('Mapa centrado en la cuadrilla seleccionada');
     }
 }
 </script>

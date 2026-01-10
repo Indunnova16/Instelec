@@ -120,6 +120,12 @@ class RegistroCampo(BaseModel):
         verbose_name = 'Registro de Campo'
         verbose_name_plural = 'Registros de Campo'
         ordering = ['-fecha_inicio']
+        indexes = [
+            models.Index(fields=['actividad'], name='idx_registro_actividad'),
+            models.Index(fields=['usuario'], name='idx_registro_usuario'),
+            models.Index(fields=['fecha_inicio'], name='idx_registro_fecha'),
+            models.Index(fields=['sincronizado'], name='idx_registro_sincronizado'),
+        ]
 
     def __str__(self):
         return f"Registro {self.actividad} - {self.fecha_inicio.date()}"
@@ -230,6 +236,11 @@ class Evidencia(BaseModel):
         verbose_name = 'Evidencia'
         verbose_name_plural = 'Evidencias'
         ordering = ['tipo', 'fecha_captura']
+        indexes = [
+            models.Index(fields=['registro_campo'], name='idx_evidencia_registro'),
+            models.Index(fields=['tipo'], name='idx_evidencia_tipo'),
+            models.Index(fields=['fecha_captura'], name='idx_evidencia_fecha'),
+        ]
 
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.registro_campo.actividad.torre.numero}"

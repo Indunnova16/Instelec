@@ -94,9 +94,17 @@ show_missing = true
 [tool.mypy]
 python_version = "3.12"
 plugins = ["mypy_django_plugin.main"]
-ignore_missing_imports = true
-strict = false
+strict = false  # Keep false but add specific checks
+warn_return_any = true
 warn_unused_ignores = true
+disallow_untyped_defs = false  # Gradual typing
+check_untyped_defs = true
+ignore_missing_imports = true
+
+# Strict for new code in API module
+[[tool.mypy.overrides]]
+module = "apps.api.*"
+disallow_untyped_defs = true
 
 [tool.django-stubs]
 django_settings_module = "config.settings.local"

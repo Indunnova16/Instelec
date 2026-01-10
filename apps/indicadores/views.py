@@ -18,8 +18,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         from django.db.models import Avg
 
         hoy = timezone.now()
-        mes = int(self.request.GET.get('mes', hoy.month))
-        anio = int(self.request.GET.get('anio', hoy.year))
+        try:
+            mes = int(self.request.GET.get('mes', hoy.month))
+        except (ValueError, TypeError):
+            mes = hoy.month
+        try:
+            anio = int(self.request.GET.get('anio', hoy.year))
+        except (ValueError, TypeError):
+            anio = hoy.year
 
         # Get all active indicators
         indicadores = Indicador.objects.filter(activo=True)

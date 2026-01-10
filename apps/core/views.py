@@ -2,9 +2,10 @@
 Core views.
 """
 import logging
+from typing import Any
 
 from django.views.generic import TemplateView
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.contrib.auth.mixins import LoginRequiredMixin
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ class HomeView(LoginRequiredMixin, TemplateView):
     """Home page / Dashboard."""
     template_name = 'core/home.html'
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
@@ -27,7 +28,7 @@ class HomeView(LoginRequiredMixin, TemplateView):
         return context
 
 
-def health_check(request):
+def health_check(request: HttpRequest) -> JsonResponse:
     """
     Health check endpoint for Cloud Run.
 
@@ -49,10 +50,10 @@ def health_check(request):
     class HealthCheckTimeoutError(Exception):
         pass
 
-    def timeout_handler(signum, frame):
+    def timeout_handler(signum: int, frame: Any) -> None:
         raise HealthCheckTimeoutError("Operation timed out")
 
-    checks = {
+    checks: dict[str, str] = {
         'database': 'unknown',
         'cache': 'unknown',
         'storage': 'unknown',
@@ -134,7 +135,7 @@ def health_check(request):
         checks['storage'] = 'local'
 
     # Build response
-    response_data = {
+    response_data: dict[str, Any] = {
         'status': 'healthy' if healthy else 'unhealthy',
         'service': 'transmaint',
         'version': os.environ.get('K_REVISION', 'local'),
@@ -145,6 +146,6 @@ def health_check(request):
     return JsonResponse(response_data, status=status_code)
 
 
-def health_check_simple(request):
+def health_check_simple(request: HttpRequest) -> JsonResponse:
     """Simple health check for load balancer (fast)."""
     return JsonResponse({'status': 'ok'})
