@@ -66,7 +66,7 @@ GS_FILE_OVERWRITE = False
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # =============================================================================
-# Cache - Redis (Memorystore)
+# Cache Configuration
 # =============================================================================
 REDIS_URL = config('REDIS_URL', default='')
 if REDIS_URL:
@@ -82,13 +82,22 @@ if REDIS_URL:
     # Session backend using Redis
     SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
     SESSION_CACHE_ALIAS = 'default'
-
-# =============================================================================
-# Celery Configuration
-# =============================================================================
-if REDIS_URL:
+    # Celery with Redis
     CELERY_BROKER_URL = REDIS_URL
     CELERY_RESULT_BACKEND = REDIS_URL
+else:
+    # Low-cost mode: Use local memory cache (no Redis)
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }
+    # Session backend using database
+    SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+    # Disable Celery when no Redis
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
 
 # =============================================================================
 # CORS Configuration

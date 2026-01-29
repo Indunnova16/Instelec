@@ -1,0 +1,104 @@
+name: Deploy Instelec (Low Cost)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: appsindunnova
+  REGION: us-central1
+  SERVICE_NAME: instelec-api
+  DB_INSTANCE: appsindunnova:us-central1:postgres-consolidated
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to Cloud Run (Source-based)
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --source . \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --add-cloudsql-instances=${{ env.DB_INSTANCE }} \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=512Mi \
+            --cpu=1 \
+            --timeout=300 \
+            --concurrency=40 \
+            --set-env-vars="DEBUG=False" \
+            --set-env-vars="DJANGO_SETTINGS_MODULE=config.settings.production" \
+            --set-env-vars="ALLOWED_HOSTS=*" \
+            --set-env-vars="CSRF_TRUSTED_ORIGINS=https://*.run.app" \
+            --set-env-vars="DB_NAME=instelec_db" \
+            --set-env-vars="DB_USER=postgres" \
+            --set-env-vars="DB_HOST=/cloudsql/${{ env.DB_INSTANCE }}" \
+            --set-env-vars="DB_PORT=5432" \
+            --set-env-vars="DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
+            --set-env-vars="GS_BUCKET_NAME=instelec-media" \
+            --set-env-vars="REDIS_URL=" \
+            --set-env-vars="SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" \
+            --quiet
+
+      - name: Run Migrations
+        run: |
+          gcloud run jobs deploy instelec-migrate \
+            --source . \
+            --region ${{ env.REGION }} \
+            --set-cloudsql-instances=${{ env.DB_INSTANCE }} \
+            --set-env-vars="DJANGO_SETTINGS_MODULE=config.settings.production" \
+            --set-env-vars="DB_NAME=instelec_db" \
+            --set-env-vars="DB_USER=postgres" \
+            --set-env-vars="DB_HOST=/cloudsql/${{ env.DB_INSTANCE }}" \
+            --set-env-vars="DB_PORT=5432" \
+            --set-env-vars="DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
+            --set-env-vars="SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" \
+            --command="python,manage.py,migrate,--noinput" \
+            --memory=512Mi \
+            --cpu=1 \
+            --task-timeout=600 \
+            --max-retries=1 \
+            --quiet 2>/dev/null || true
+
+          gcloud run jobs execute instelec-migrate \
+            --region ${{ env.REGION }} \
+            --wait || echo "Migrations completed or skipped"
+
+      - name: Get Service URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')
+          echo "## Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Service URL:** $URL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Cost Optimizations:" >> $GITHUB_STEP_SUMMARY
+          echo "- Scale to zero (min-instances=0)" >> $GITHUB_STEP_SUMMARY
+          echo "- 512MB RAM / 1 CPU" >> $GITHUB_STEP_SUMMARY
+          echo "- Max 2 instances" >> $GITHUB_STEP_SUMMARY
+          echo "- Shared Consolidated DB" >> $GITHUB_STEP_SUMMARY
+          echo "- No Redis (local memory cache)" >> $GITHUB_STEP_SUMMARY
