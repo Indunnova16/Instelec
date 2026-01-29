@@ -8,8 +8,8 @@ django-extensions>=3.2
 django-filter>=23.5
 django-widget-tweaks>=1.5
 
-# GeoDjango
-GDAL>=3.6
+# GeoDjango - version must match system libgdal
+GDAL==3.10.3
 
 # REST API
 djangorestframework>=3.15
