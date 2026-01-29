@@ -32,9 +32,9 @@ WORKDIR /build
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY requirements/production.txt requirements.txt
+COPY requirements/ requirements/
 RUN pip install --upgrade pip wheel && \
-    pip install -r requirements.txt
+    pip install -r requirements/production.txt
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime - Production image
