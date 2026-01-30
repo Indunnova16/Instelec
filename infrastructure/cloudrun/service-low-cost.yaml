@@ -1,0 +1,100 @@
+# =============================================================================
+# Cloud Run Service - LOW COST Configuration for TransMaint
+# Deploy: gcloud run services replace service-low-cost.yaml --region=us-central1
+# =============================================================================
+# COST OPTIMIZATIONS:
+# - Scale to zero (minScale: 0) - No cost when idle
+# - CPU throttling enabled - Cheaper CPU billing
+# - Smaller instance (512MB RAM, 1 CPU)
+# - No startup CPU boost
+# =============================================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: instelec-api
+  labels:
+    app: instelec
+    tier: backend
+    environment: production
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        # COST OPTIMIZATION: Scale to zero when no traffic
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        # COST OPTIMIZATION: CPU throttled = cheaper billing
+        run.googleapis.com/cpu-throttling: "true"
+        # Disable startup boost to save costs
+        run.googleapis.com/startup-cpu-boost: "false"
+        # Cloud SQL connection (using existing Consolidated instance)
+        run.googleapis.com/cloudsql-instances: appsindunnova:us-central1:consolidated
+    spec:
+      # Lower concurrency for smaller instances
+      containerConcurrency: 40
+      timeoutSeconds: 300
+      serviceAccountName: instelec-api@appsindunnova.iam.gserviceaccount.com
+      containers:
+        - image: us-central1-docker.pkg.dev/appsindunnova/instelec/instelec-api:latest
+          ports:
+            - containerPort: 8080
+              name: http1
+          resources:
+            limits:
+              # COST OPTIMIZATION: Minimum viable resources
+              cpu: "1"
+              memory: 512Mi
+          env:
+            # Django settings
+            - name: DJANGO_SETTINGS_MODULE
+              value: config.settings.production
+            - name: ALLOWED_HOSTS
+              value: ".run.app,instelec.indunnova.com"
+            # GCP Project
+            - name: GOOGLE_CLOUD_PROJECT
+              value: appsindunnova
+            - name: GS_PROJECT_ID
+              value: appsindunnova
+            # Cloud SQL Connection Name
+            - name: CLOUD_SQL_CONNECTION_NAME
+              value: appsindunnova:us-central1:consolidated
+            # Cloud Storage
+            - name: GS_BUCKET_NAME
+              value: instelec-media
+            # Database (from Secret Manager)
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: instelec-database-url
+            # Django Secret Key
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: instelec-secret-key
+            # Redis URL (optional - can use in-memory cache)
+            - name: REDIS_URL
+              value: ""
+          startupProbe:
+            httpGet:
+              path: /api/health/
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8080
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+  traffic:
+    - percent: 100
+      latestRevision: true
