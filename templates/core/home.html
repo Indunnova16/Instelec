@@ -12,8 +12,9 @@
 
     {% if show_full_dashboard %}
     <!-- KPI Cards -->
-    <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" aria-labelledby="kpi-section-title">
+    <section aria-labelledby="kpi-section-title">
         <h2 id="kpi-section-title" class="sr-only">Indicadores clave de rendimiento</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
         <!-- Actividades Hoy -->
         <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="kpi-actividades-title">
@@ -85,11 +86,13 @@
                 </div>
             </div>
         </article>
+        </div>
     </section>
 
     <!-- Charts Row -->
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6" aria-labelledby="charts-section-title">
+    <section aria-labelledby="charts-section-title">
         <h2 id="charts-section-title" class="sr-only">Graficos de rendimiento</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         <!-- Actividades por Estado -->
         <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="chart-actividades-title">
@@ -118,6 +121,7 @@
                 </div>
             </div>
         </article>
+        </div>
     </section>
 
     <!-- Recent Activity -->
