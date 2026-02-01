@@ -21,6 +21,28 @@ class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVi
             'supervisor', 'vehiculo', 'linea_asignada'
         ).prefetch_related('miembros__usuario')
 
+    def get_context_data(self, **kwargs):
+        import json
+        context = super().get_context_data(**kwargs)
+
+        # Get latest location for each active crew for the mini-map
+        ubicaciones = []
+        for cuadrilla in context['cuadrillas']:
+            ultima = TrackingUbicacion.objects.filter(
+                cuadrilla=cuadrilla
+            ).order_by('-created_at').first()
+
+            if ultima:
+                ubicaciones.append({
+                    'cuadrilla_id': str(cuadrilla.id),
+                    'cuadrilla_codigo': cuadrilla.codigo,
+                    'lat': float(ultima.latitud),
+                    'lng': float(ultima.longitud),
+                })
+
+        context['cuadrillas_ubicaciones_json'] = json.dumps(ubicaciones)
+        return context
+
 
 class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
     """Detail view for a crew."""
