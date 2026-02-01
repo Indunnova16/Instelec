@@ -2,12 +2,11 @@
 Exporters for activity programming to Excel files.
 """
 import logging
-from io import BytesIO
 from datetime import date, timedelta
-from decimal import Decimal
+from io import BytesIO
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
@@ -50,8 +49,8 @@ class ProgramacionSemanalExporter:
         Returns:
             BytesIO with Excel file content
         """
+
         from .models import Actividad
-        from apps.cuadrillas.models import Cuadrilla
 
         if semana_fin is None:
             semana_fin = semana_inicio + timedelta(days=6)
@@ -270,17 +269,16 @@ class ReporteAvanceExporter:
         Returns:
             BytesIO with Excel file content
         """
-        from apps.lineas.models import Linea, Torre, Tramo
-        from .models import Actividad
-        from apps.campo.models import RegistroCampo
+        from apps.lineas.models import Linea
+
 
         if fecha_corte is None:
             fecha_corte = date.today()
 
         try:
             linea = Linea.objects.get(id=linea_id)
-        except Linea.DoesNotExist:
-            raise ValueError(f'Línea no encontrada: {linea_id}')
+        except Linea.DoesNotExist as e:
+            raise ValueError(f'Línea no encontrada: {linea_id}') from e
 
         self.workbook = Workbook()
 
@@ -302,6 +300,7 @@ class ReporteAvanceExporter:
     def _generar_hoja_torres(self, linea, fecha_corte):
         """Genera hoja con estado de torres."""
         from apps.lineas.models import Torre
+
         from .models import Actividad
 
         sheet = self.workbook.active
@@ -427,6 +426,7 @@ class ReporteAvanceExporter:
     def _generar_hoja_resumen(self, linea, fecha_corte):
         """Genera hoja con resumen de avance."""
         from apps.lineas.models import Torre
+
         from .models import Actividad
 
         sheet = self.workbook.create_sheet(title='Resumen')
@@ -503,16 +503,14 @@ class InformeDiarioPDFExporter:
         """
         try:
             from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
             from reportlab.lib.pagesizes import letter
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
             from reportlab.lib.units import inch
-            from reportlab.platypus import (
-                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-            )
-            from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-        except ImportError:
+            from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        except ImportError as e:
             logger.error("ReportLab not installed. Install with: pip install reportlab")
-            raise ImportError("ReportLab is required for PDF generation")
+            raise ImportError("ReportLab is required for PDF generation") from e
 
         doc = SimpleDocTemplate(
             self.buffer,
@@ -755,15 +753,19 @@ class InformeDiarioPDFExporter:
 
         try:
             from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER
             from reportlab.lib.pagesizes import letter
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
             from reportlab.lib.units import inch
             from reportlab.platypus import (
-                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+                Paragraph,
+                SimpleDocTemplate,
+                Spacer,
+                Table,
+                TableStyle,
             )
-            from reportlab.lib.enums import TA_CENTER
-        except ImportError:
-            raise ImportError("ReportLab is required for PDF generation")
+        except ImportError as e:
+            raise ImportError("ReportLab is required for PDF generation") from e
 
         doc = SimpleDocTemplate(
             self.buffer,

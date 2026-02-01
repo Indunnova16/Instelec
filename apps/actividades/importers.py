@@ -2,12 +2,11 @@
 Importers for activity programming from Excel files.
 """
 import logging
-from typing import Any
-from decimal import Decimal
 from datetime import date
+from decimal import Decimal
 
-from openpyxl import load_workbook
 from django.db import transaction
+from openpyxl import load_workbook
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +61,8 @@ class ProgramaTranselcaImporter:
         Returns:
             Dict with import summary
         """
-        from .models import Actividad, TipoActividad
-        from apps.lineas.models import Linea, Torre, Tramo
+
+        from .models import Actividad
 
         opciones = opciones or {}
         actualizar_existentes = opciones.get('actualizar_existentes', False)
@@ -172,8 +171,9 @@ class ProgramaTranselcaImporter:
 
     def _procesar_fila(self, row, row_num, programacion_mensual, linea_asociada, actualizar_existentes):
         """Procesa una fila del Excel y crea/actualiza la actividad."""
-        from .models import Actividad, TipoActividad
         from apps.lineas.models import Linea, Torre, Tramo
+
+        from .models import Actividad, TipoActividad
 
         # Obtener valores de la fila
         aviso_sap = self._get_cell_value(row, 'aviso_sap')
@@ -181,7 +181,7 @@ class ProgramaTranselcaImporter:
         tipo_actividad_nombre = self._get_cell_value(row, 'tipo_actividad')
         tramo_codigo = self._get_cell_value(row, 'tramo')
         torre_inicio_num = self._get_cell_value(row, 'torre_inicio')
-        torre_fin_num = self._get_cell_value(row, 'torre_fin')
+        _torre_fin_num = self._get_cell_value(row, 'torre_fin')  # noqa: F841
         valor_facturacion = self._get_cell_value(row, 'valor_facturacion')
         observaciones = self._get_cell_value(row, 'observaciones')
 
@@ -305,7 +305,7 @@ class ProgramaTranselcaImporter:
                 return 'omitida'
 
         # Crear nueva actividad
-        actividad = Actividad.objects.create(
+        Actividad.objects.create(
             linea=linea,
             torre=torre,
             tipo_actividad=tipo_actividad,
@@ -400,8 +400,9 @@ class AvisosTranselcaImporter:
         Returns:
             Dict with import summary
         """
-        from .models import Actividad, TipoActividad, ProgramacionMensual
-        from apps.lineas.models import Linea, Torre, Tramo
+        from apps.lineas.models import Linea
+
+        from .models import TipoActividad
 
         opciones = opciones or {}
         actualizar_existentes = opciones.get('actualizar_existentes', False)
@@ -433,7 +434,7 @@ class AvisosTranselcaImporter:
             }
 
         # Cache de líneas y tipos de actividad
-        lineas_cache = {l.codigo: l for l in Linea.objects.all()}
+        lineas_cache = {linea_obj.codigo: linea_obj for linea_obj in Linea.objects.all()}
         tipos_cache = {t.categoria: t for t in TipoActividad.objects.filter(activo=True)}
 
         # También crear cache por nombre
@@ -500,8 +501,8 @@ class AvisosTranselcaImporter:
     def _procesar_fila(self, row, row_num, anio, mes, lineas_cache, tipos_cache,
                        tipos_nombre_cache, actualizar_existentes, crear_lineas):
         """Procesa una fila del Excel."""
-        from .models import Actividad, TipoActividad, ProgramacionMensual
-        from apps.lineas.models import Linea, Torre
+
+        from .models import Actividad, ProgramacionMensual
 
         aviso_sap = self._get_cell(row, 'aviso')
         if not aviso_sap:
@@ -512,8 +513,9 @@ class AvisosTranselcaImporter:
         linea_codigo = self._get_cell(row, 'linea')
         tipo_str = self._get_cell(row, 'tipo')
         pt_sap = self._get_cell(row, 'pt_sap')
-        centro_empl = self._get_cell(row, 'centro_empl')
-        circuito = self._get_cell(row, 'circuito')
+        # centro_empl and circuito read for future use
+        _centro_empl = self._get_cell(row, 'centro_empl')  # noqa: F841
+        _circuito = self._get_cell(row, 'circuito')  # noqa: F841
         descripcion = self._get_cell(row, 'descripcion')
 
         # Buscar línea
@@ -523,9 +525,9 @@ class AvisosTranselcaImporter:
             linea = lineas_cache.get(linea_codigo_str)
             if not linea:
                 # Intentar búsqueda flexible
-                for codigo, l in lineas_cache.items():
+                for codigo, linea_obj in lineas_cache.items():
                     if linea_codigo_str in codigo or codigo in linea_codigo_str:
-                        linea = l
+                        linea = linea_obj
                         break
 
             if not linea:

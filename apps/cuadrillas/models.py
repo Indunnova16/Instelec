@@ -2,6 +2,7 @@
 Models for work crews (cuadrillas) management.
 """
 from django.db import models
+
 from apps.core.models import BaseModel
 
 
