@@ -2,6 +2,7 @@
 Models for financial management and billing.
 """
 from django.db import models
+
 from apps.core.models import BaseModel
 
 
@@ -316,3 +317,65 @@ class CicloFacturacion(BaseModel):
         if self.fecha_pago and self.fecha_informe:
             return (self.fecha_pago - self.fecha_informe).days
         return None
+
+
+class CostoActividad(BaseModel):
+    """
+    Cost tracking per activity for cost vs production analysis.
+    """
+
+    actividad = models.OneToOneField(
+        'actividades.Actividad',
+        on_delete=models.CASCADE,
+        related_name='costo_actividad',
+        verbose_name='Actividad'
+    )
+    costo_personal = models.DecimalField(
+        'Costo personal',
+        max_digits=14,
+        decimal_places=2,
+        default=0
+    )
+    costo_vehiculos = models.DecimalField(
+        'Costo vehículos',
+        max_digits=14,
+        decimal_places=2,
+        default=0
+    )
+    costo_viaticos = models.DecimalField(
+        'Costo viáticos',
+        max_digits=14,
+        decimal_places=2,
+        default=0
+    )
+    costo_materiales = models.DecimalField(
+        'Costo materiales',
+        max_digits=14,
+        decimal_places=2,
+        default=0
+    )
+    otros_costos = models.DecimalField(
+        'Otros costos',
+        max_digits=14,
+        decimal_places=2,
+        default=0
+    )
+
+    class Meta:
+        db_table = 'costos_actividad'
+        verbose_name = 'Costo de Actividad'
+        verbose_name_plural = 'Costos de Actividades'
+
+    def __str__(self):
+        return f"Costos - {self.actividad}"
+
+    @property
+    def costo_total(self):
+        """Total cost for this activity."""
+        return (
+            self.costo_personal +
+            self.costo_vehiculos +
+            self.costo_viaticos +
+            self.costo_materiales +
+            self.otros_costos
+        )

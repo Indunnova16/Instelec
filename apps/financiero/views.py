@@ -1,15 +1,17 @@
 """
 Views for financial management.
 """
-from decimal import Decimal
 from datetime import date
+from decimal import Decimal
 
-from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Sum
 from django.http import JsonResponse
-from apps.core.mixins import RoleRequiredMixin, HTMXMixin
-from .models import Presupuesto, EjecucionCosto, CicloFacturacion
+from django.views.generic import DetailView, ListView, TemplateView
+
+from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+
+from .models import CicloFacturacion, EjecucionCosto, Presupuesto
 
 
 class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
@@ -20,7 +22,13 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
+        import json
+
         from django.utils import timezone
+
+        from apps.actividades.models import Actividad
+        from apps.lineas.models import Linea
+
         hoy = timezone.now()
 
         # Current month budgets
@@ -29,13 +37,24 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
             mes=hoy.month
         )
 
-        context['total_presupuestado'] = presupuestos.aggregate(
+        total_presupuestado = presupuestos.aggregate(
             total=Sum('total_presupuestado')
-        )['total'] or 0
+        )['total'] or Decimal('0')
 
-        context['total_ejecutado'] = presupuestos.aggregate(
+        total_ejecutado = presupuestos.aggregate(
             total=Sum('total_ejecutado')
-        )['total'] or 0
+        )['total'] or Decimal('0')
+
+        context['total_presupuestado'] = total_presupuestado
+        context['total_ejecutado'] = total_ejecutado
+        context['presupuesto'] = total_presupuestado
+        context['ejecutado'] = total_ejecutado
+
+        # Percentage executed
+        if total_presupuestado > 0:
+            context['porcentaje_ejecutado'] = float(total_ejecutado / total_presupuestado * 100)
+        else:
+            context['porcentaje_ejecutado'] = 0
 
         context['facturacion_esperada'] = presupuestos.aggregate(
             total=Sum('facturacion_esperada')
@@ -45,6 +64,111 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         context['ciclos_pendientes'] = CicloFacturacion.objects.exclude(
             estado='PAGO_RECIBIDO'
         ).count()
+
+        # Cost breakdown
+        costo_personal = presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or Decimal('0')
+        costo_equipos = presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or Decimal('0')
+
+        context['costo_personal'] = costo_personal
+        context['costo_equipos'] = costo_equipos
+
+        if total_ejecutado > 0:
+            context['porcentaje_personal'] = float(costo_personal / total_ejecutado * 100)
+            context['porcentaje_equipos'] = float(costo_equipos / total_ejecutado * 100)
+        else:
+            context['porcentaje_personal'] = 0
+            context['porcentaje_equipos'] = 0
+
+        # Cost per activity
+        actividades_completadas = Actividad.objects.filter(
+            fecha_programada__year=hoy.year,
+            fecha_programada__month=hoy.month,
+            estado='COMPLETADA'
+        ).count()
+
+        if actividades_completadas > 0:
+            context['costo_promedio_actividad'] = float(total_ejecutado / actividades_completadas)
+        else:
+            context['costo_promedio_actividad'] = 0
+
+        context['variacion_costo'] = 0  # Placeholder for month-over-month variation
+
+        # Period filters
+        context['periodos'] = [
+            {'value': 'mes', 'label': 'Este mes'},
+            {'value': 'trimestre', 'label': 'Este trimestre'},
+            {'value': 'anio', 'label': 'Este año'},
+        ]
+        context['periodo_actual'] = self.request.GET.get('periodo', 'mes')
+
+        # Chart data - Costs by category
+        context['costos_categoria_data'] = json.dumps([
+            {'value': float(costo_personal), 'name': 'Personal'},
+            {'value': float(costo_equipos), 'name': 'Equipos/Vehículos'},
+            {'value': float(presupuestos.aggregate(total=Sum('viaticos_planeados'))['total'] or 0), 'name': 'Viáticos'},
+            {'value': float(presupuestos.aggregate(total=Sum('otros_costos'))['total'] or 0), 'name': 'Otros'},
+        ])
+
+        # Monthly trend (last 6 months)
+        meses_labels = []
+        presupuesto_mensual = []
+        ejecutado_mensual = []
+        meses_nombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+        for i in range(5, -1, -1):
+            m = hoy.month - i
+            a = hoy.year
+            if m <= 0:
+                m += 12
+                a -= 1
+            meses_labels.append(meses_nombres[m-1])
+            pres_mes = Presupuesto.objects.filter(anio=a, mes=m)
+            presupuesto_mensual.append(float(pres_mes.aggregate(total=Sum('total_presupuestado'))['total'] or 0))
+            ejecutado_mensual.append(float(pres_mes.aggregate(total=Sum('total_ejecutado'))['total'] or 0))
+
+        context['meses_labels'] = json.dumps(meses_labels)
+        context['presupuesto_mensual'] = json.dumps(presupuesto_mensual)
+        context['ejecutado_mensual'] = json.dumps(ejecutado_mensual)
+
+        # Costs by line
+        lineas = Linea.objects.filter(activa=True)[:10]
+        lineas_labels = []
+        costos_linea = []
+        for linea in lineas:
+            lineas_labels.append(linea.codigo)
+            pres_linea = Presupuesto.objects.filter(
+                linea=linea,
+                anio=hoy.year,
+                mes=hoy.month
+            )
+            costos_linea.append(float(pres_linea.aggregate(total=Sum('total_ejecutado'))['total'] or 0))
+
+        context['lineas_labels'] = json.dumps(lineas_labels)
+        context['costos_linea'] = json.dumps(costos_linea)
+
+        # Cost detail table
+        context['detalle_costos'] = [
+            {
+                'categoria': 'Personal',
+                'concepto': 'Días hombre',
+                'presupuesto': float(presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or 0),
+                'ejecutado': float(costo_personal),
+                'porcentaje': float(costo_personal / (presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or 1) * 100),
+                'disponible': float((presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or 0) - costo_personal),
+            },
+            {
+                'categoria': 'Equipos',
+                'concepto': 'Vehículos',
+                'presupuesto': float(presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or 0),
+                'ejecutado': float(costo_equipos),
+                'porcentaje': float(costo_equipos / (presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or 1) * 100),
+                'disponible': float((presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or 0) - costo_equipos),
+            },
+        ]
+
+        context['total_presupuesto'] = total_presupuestado
+        context['porcentaje_total'] = context['porcentaje_ejecutado']
+        context['total_disponible'] = float(total_presupuestado - total_ejecutado)
 
         return context
 
@@ -131,6 +255,7 @@ class CostosVsProduccionDashboardView(LoginRequiredMixin, RoleRequiredMixin, HTM
         context = super().get_context_data(**kwargs)
         from apps.actividades.models import Actividad
         from apps.lineas.models import Linea
+
         from .models import CostoActividad
 
         # Filtros
@@ -226,6 +351,7 @@ class CostosVsProduccionAPIView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
 
     def get(self, request, *args, **kwargs):
         from apps.actividades.models import Actividad
+
         from .models import CostoActividad
 
         linea_id = request.GET.get('linea')

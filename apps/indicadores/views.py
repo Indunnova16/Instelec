@@ -1,11 +1,12 @@
 """
 Views for KPIs and SLA dashboard.
 """
-from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse
-from apps.core.mixins import RoleRequiredMixin, HTMXMixin
-from .models import Indicador, MedicionIndicador, ActaSeguimiento
+from django.views.generic import DetailView, ListView, TemplateView
+
+from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+
+from .models import ActaSeguimiento, Indicador, MedicionIndicador
 
 
 class DashboardView(LoginRequiredMixin, HTMXMixin, TemplateView):
@@ -23,8 +24,14 @@ class DashboardView(LoginRequiredMixin, HTMXMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
+        import json
+
+        from django.db.models import Avg
         from django.utils import timezone
-        from django.db.models import Avg, Count
+
+        from apps.actividades.models import Actividad
+        from apps.cuadrillas.models import Cuadrilla
+        from apps.lineas.models import Linea
 
         hoy = timezone.now()
         try:
@@ -59,6 +66,94 @@ class DashboardView(LoginRequiredMixin, HTMXMixin, TemplateView):
         context['mes'] = mes
         context['anio'] = anio
 
+        # Get activities for KPIs
+        actividades = Actividad.objects.filter(
+            fecha_programada__year=anio,
+            fecha_programada__month=mes
+        )
+        total_actividades = actividades.count()
+        completadas = actividades.filter(estado='COMPLETADA').count()
+
+        # KPIs
+        cumplimiento = (completadas / total_actividades * 100) if total_actividades > 0 else 0
+        context['kpis'] = {
+            'cumplimiento': cumplimiento,
+            'actividades_completadas': completadas,
+            'actividades_programadas': total_actividades,
+            'dias_sin_accidentes': 45,  # Placeholder - should come from safety model
+            'record_dias_sin_accidentes': 120,
+            'informes_tiempo': 92.5,  # Placeholder
+        }
+
+        # Period filters
+        context['periodos'] = [
+            {'value': 'mes', 'label': 'Este mes'},
+            {'value': 'semana', 'label': 'Esta semana'},
+            {'value': 'trimestre', 'label': 'Este trimestre'},
+        ]
+        context['periodo_actual'] = self.request.GET.get('periodo', 'mes')
+
+        # Lines for filter
+        context['lineas'] = Linea.objects.filter(activa=True)
+
+        # Cumplimiento por cuadrilla
+        cuadrillas = Cuadrilla.objects.filter(activa=True)
+        cuadrillas_labels = []
+        cuadrillas_data = []
+        for cuadrilla in cuadrillas[:10]:
+            cuadrillas_labels.append(cuadrilla.codigo)
+            acts = actividades.filter(cuadrilla=cuadrilla)
+            total = acts.count()
+            comp = acts.filter(estado='COMPLETADA').count()
+            pct = (comp / total * 100) if total > 0 else 0
+            cuadrillas_data.append(round(pct, 1))
+
+        context['cuadrillas_labels'] = json.dumps(cuadrillas_labels)
+        context['cuadrillas_data'] = json.dumps(cuadrillas_data)
+
+        # Tendencia mensual (últimos 6 meses)
+        meses_labels = []
+        planeado_data = []
+        ejecutado_data = []
+        meses_nombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+        for i in range(5, -1, -1):
+            m = mes - i
+            a = anio
+            if m <= 0:
+                m += 12
+                a -= 1
+            meses_labels.append(f"{meses_nombres[m-1]}")
+            acts_mes = Actividad.objects.filter(fecha_programada__year=a, fecha_programada__month=m)
+            planeado_data.append(acts_mes.count())
+            ejecutado_data.append(acts_mes.filter(estado='COMPLETADA').count())
+
+        context['meses_labels'] = json.dumps(meses_labels)
+        context['planeado_data'] = json.dumps(planeado_data)
+        context['ejecutado_data'] = json.dumps(ejecutado_data)
+
+        # Por tipo de actividad
+        from apps.actividades.models import TipoActividad
+        tipos = TipoActividad.objects.filter(activo=True)
+        tipo_data = []
+        for tipo in tipos[:8]:
+            count = actividades.filter(tipo_actividad=tipo).count()
+            if count > 0:
+                tipo_data.append({'value': count, 'name': tipo.nombre})
+        context['tipo_data'] = json.dumps(tipo_data)
+
+        # Por prioridad
+        context['prioridad_data'] = {
+            'urgente': actividades.filter(prioridad='URGENTE').count(),
+            'alta': actividades.filter(prioridad='ALTA').count(),
+            'normal': actividades.filter(prioridad='NORMAL').count(),
+            'baja': actividades.filter(prioridad='BAJA').count(),
+        }
+
+        # Actividades recientes
+        context['actividades_recientes'] = Actividad.objects.select_related(
+            'torre'
+        ).order_by('-updated_at')[:5]
+
         # Data for charts
         context['indicadores_data'] = [
             {
@@ -68,31 +163,6 @@ class DashboardView(LoginRequiredMixin, HTMXMixin, TemplateView):
             }
             for m in mediciones
         ]
-
-        # Chart-specific data for HTMX partial requests
-        chart = self.request.GET.get('chart')
-        if chart == 'actividades':
-            from apps.actividades.models import Actividad
-            # Get activity stats for the current month
-            actividades = Actividad.objects.filter(
-                fecha_programada__year=anio,
-                fecha_programada__month=mes
-            )
-            context['actividades_stats'] = {
-                'total': actividades.count(),
-                'completadas': actividades.filter(estado='COMPLETADA').count(),
-                'en_curso': actividades.filter(estado='EN_CURSO').count(),
-                'pendientes': actividades.filter(estado='PENDIENTE').count(),
-                'canceladas': actividades.filter(estado='CANCELADA').count(),
-            }
-            # Calculate percentage
-            total = context['actividades_stats']['total']
-            if total > 0:
-                context['actividades_stats']['pct_completadas'] = round(
-                    context['actividades_stats']['completadas'] / total * 100, 1
-                )
-            else:
-                context['actividades_stats']['pct_completadas'] = 0
 
         return context
 
