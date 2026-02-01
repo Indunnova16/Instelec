@@ -1,0 +1,69 @@
+<!-- Grafico de actividades del mes (cargado via HTMX) -->
+<div class="space-y-4">
+    <!-- Stats summary -->
+    <div class="grid grid-cols-4 gap-2 text-center">
+        <div class="p-2 bg-gray-100 dark:bg-gray-700 rounded">
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ actividades_stats.total }}</p>
+            <p class="text-xs text-gray-500">Total</p>
+        </div>
+        <div class="p-2 bg-green-100 dark:bg-green-900 rounded">
+            <p class="text-2xl font-bold text-green-600 dark:text-green-400">{{ actividades_stats.completadas }}</p>
+            <p class="text-xs text-gray-500">Completadas</p>
+        </div>
+        <div class="p-2 bg-yellow-100 dark:bg-yellow-900 rounded">
+            <p class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{{ actividades_stats.en_curso }}</p>
+            <p class="text-xs text-gray-500">En Curso</p>
+        </div>
+        <div class="p-2 bg-gray-100 dark:bg-gray-700 rounded">
+            <p class="text-2xl font-bold text-gray-600 dark:text-gray-400">{{ actividades_stats.pendientes }}</p>
+            <p class="text-xs text-gray-500">Pendientes</p>
+        </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div>
+        <div class="flex justify-between text-sm mb-1">
+            <span class="text-gray-600 dark:text-gray-400">Avance del mes</span>
+            <span class="font-medium text-gray-900 dark:text-white">{{ actividades_stats.pct_completadas }}%</span>
+        </div>
+        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+            <div class="h-3 rounded-full transition-all duration-500
+                {% if actividades_stats.pct_completadas >= 80 %}bg-green-500
+                {% elif actividades_stats.pct_completadas >= 50 %}bg-yellow-500
+                {% else %}bg-red-500{% endif %}"
+                 style="width: {{ actividades_stats.pct_completadas }}%"></div>
+        </div>
+    </div>
+
+    <!-- Visual chart (bar representation) -->
+    <div class="flex items-end justify-center gap-2 h-32 pt-4">
+        {% if actividades_stats.total > 0 %}
+        <div class="flex flex-col items-center">
+            <div class="w-12 bg-green-500 rounded-t transition-all duration-500"
+                 style="height: {% widthratio actividades_stats.completadas actividades_stats.total 100 %}px;"></div>
+            <span class="text-xs text-gray-500 mt-1">Compl.</span>
+        </div>
+        <div class="flex flex-col items-center">
+            <div class="w-12 bg-yellow-500 rounded-t transition-all duration-500"
+                 style="height: {% widthratio actividades_stats.en_curso actividades_stats.total 100 %}px;"></div>
+            <span class="text-xs text-gray-500 mt-1">En curso</span>
+        </div>
+        <div class="flex flex-col items-center">
+            <div class="w-12 bg-gray-400 rounded-t transition-all duration-500"
+                 style="height: {% widthratio actividades_stats.pendientes actividades_stats.total 100 %}px;"></div>
+            <span class="text-xs text-gray-500 mt-1">Pend.</span>
+        </div>
+        {% if actividades_stats.canceladas > 0 %}
+        <div class="flex flex-col items-center">
+            <div class="w-12 bg-red-500 rounded-t transition-all duration-500"
+                 style="height: {% widthratio actividades_stats.canceladas actividades_stats.total 100 %}px;"></div>
+            <span class="text-xs text-gray-500 mt-1">Canc.</span>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="text-center text-gray-500 py-8">
+            <p>No hay actividades programadas para este mes</p>
+        </div>
+        {% endif %}
+    </div>
+</div>

@@ -380,3 +380,88 @@ class ExportarAvanceView(LoginRequiredMixin, RoleRequiredMixin, View):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
         return response
+
+
+class EventosAPIView(LoginRequiredMixin, View):
+    """API endpoint for FullCalendar events."""
+
+    def get(self, request, *args, **kwargs):
+        """Return events in FullCalendar format."""
+        from datetime import datetime
+
+        # Parse date range from FullCalendar
+        start_str = request.GET.get('start', '')
+        end_str = request.GET.get('end', '')
+        linea_id = request.GET.get('linea')
+
+        # Build queryset
+        qs = Actividad.objects.select_related(
+            'linea', 'torre', 'tipo_actividad', 'cuadrilla'
+        )
+
+        # Filter by date range
+        if start_str:
+            try:
+                start_date = datetime.fromisoformat(start_str.replace('Z', '+00:00')).date()
+                qs = qs.filter(fecha_programada__gte=start_date)
+            except ValueError:
+                pass
+
+        if end_str:
+            try:
+                end_date = datetime.fromisoformat(end_str.replace('Z', '+00:00')).date()
+                qs = qs.filter(fecha_programada__lte=end_date)
+            except ValueError:
+                pass
+
+        # Filter by linea
+        if linea_id:
+            from uuid import UUID
+            try:
+                UUID(linea_id)
+                qs = qs.filter(linea_id=linea_id)
+            except ValueError:
+                pass
+
+        # Build events list for FullCalendar
+        events = []
+        for actividad in qs:
+            # Determine color based on status and priority
+            if actividad.prioridad == 'URGENTE':
+                color = '#EF4444'  # red-500
+            elif actividad.estado == 'COMPLETADA':
+                color = '#22C55E'  # green-500
+            elif actividad.estado == 'EN_CURSO':
+                color = '#EAB308'  # yellow-500
+            elif actividad.estado == 'CANCELADA':
+                color = '#6B7280'  # gray-500
+            else:
+                color = '#9CA3AF'  # gray-400
+
+            events.append({
+                'id': str(actividad.id),
+                'title': f"T{actividad.torre.numero} - {actividad.linea.codigo}",
+                'start': actividad.fecha_programada.isoformat(),
+                'backgroundColor': color,
+                'borderColor': color,
+                'extendedProps': {
+                    'tipo': actividad.tipo_actividad.nombre,
+                    'cuadrilla': actividad.cuadrilla.nombre if actividad.cuadrilla else None,
+                    'estado': actividad.get_estado_display(),
+                    'prioridad': actividad.get_prioridad_display(),
+                }
+            })
+
+        return JsonResponse(events, safe=False)
+
+
+class ActividadDetalleModalView(LoginRequiredMixin, DetailView):
+    """Partial view for activity detail in modal."""
+    model = Actividad
+    template_name = 'actividades/partials/detalle_modal.html'
+    context_object_name = 'actividad'
+
+    def get_queryset(self):
+        return super().get_queryset().select_related(
+            'linea', 'torre', 'tipo_actividad', 'cuadrilla'
+        )
