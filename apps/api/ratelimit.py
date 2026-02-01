@@ -134,8 +134,9 @@ def get_rate_limit_key(request: HttpRequest, key_type: str, group: str) -> str:
         identifier = get_client_ip(request)
 
     # Create a hash for the key to ensure it's a valid cache key
+    # MD5 is used only for key generation, not security purposes
     key_data = f"ratelimit:{group}:{identifier}"
-    return hashlib.md5(key_data.encode()).hexdigest()
+    return hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
 
 
 def check_rate_limit(request: HttpRequest, group: str) -> tuple[bool, dict[str, Any]]:
