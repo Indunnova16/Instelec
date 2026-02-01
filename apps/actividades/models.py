@@ -15,13 +15,24 @@ class TipoActividad(BaseModel):
     """
 
     class Categoria(models.TextChoices):
+        # Categorías existentes
         PODA = 'PODA', 'Poda de Vegetación'
         HERRAJES = 'HERRAJES', 'Cambio de Herrajes'
         AISLADORES = 'AISLADORES', 'Cambio de Aisladores'
-        INSPECCION = 'INSPECCION', 'Inspección'
+        INSPECCION = 'INSPECCION', 'Inspección General'
         LIMPIEZA = 'LIMPIEZA', 'Limpieza'
         SEÑALIZACION = 'SEÑALIZACION', 'Señalización'
         MEDICION = 'MEDICION', 'Medición'
+        # Categorías Transelca
+        LAVADO = 'LAVADO', 'Lavado Tradicional'
+        SERVIDUMBRE = 'SERVIDUMBRE', 'Servidumbre'
+        PERMISO = 'PERMISO', 'Gestionar Permiso'
+        CORREDOR = 'CORREDOR', 'Corredor Eléctrico'
+        INSPECCION_PED = 'INSPECCION_PED', 'Inspección Pedestre'
+        TERMOGRAFIA = 'TERMOGRAFIA', 'Termografía'
+        DESCARGAS = 'DESCARGAS', 'Descargas Parciales'
+        ELECTROMEC = 'ELECTROMEC', 'Mtto Electromecánico'
+        MEDICION_PT = 'MEDICION_PT', 'Medida Puesta Tierra'
         OTRO = 'OTRO', 'Otro'
 
     codigo = models.CharField(
@@ -219,6 +230,29 @@ class Actividad(BaseModel):
         blank=True,
         help_text='Número de aviso en el sistema SAP de Transelca'
     )
+    orden_sap = models.CharField(
+        'Número Orden SAP',
+        max_length=20,
+        blank=True,
+        help_text='Número de orden de trabajo en SAP'
+    )
+    pt_sap = models.CharField(
+        'Puesto Trabajo SAP',
+        max_length=20,
+        blank=True,
+        help_text='Código del puesto de trabajo SAP'
+    )
+    requiere_consignacion = models.BooleanField(
+        'Requiere consignación',
+        default=False,
+        help_text='Indica si la actividad requiere consignación del circuito'
+    )
+    numero_consignacion = models.CharField(
+        'Número de consignación',
+        max_length=30,
+        blank=True,
+        help_text='Número de consignación asignado por el operador'
+    )
 
     # Progress and billing
     porcentaje_avance = models.DecimalField(
@@ -346,3 +380,215 @@ class Actividad(BaseModel):
         self.fecha_reprogramada = nueva_fecha
         self.motivo_reprogramacion = motivo
         self.save(update_fields=['estado', 'fecha_reprogramada', 'motivo_reprogramacion', 'updated_at'])
+
+
+class InformeDiario(BaseModel):
+    """
+    Daily activity report for crews.
+    Captures daily work summary, personnel, conditions, and performance.
+    """
+
+    class CondicionClimatica(models.TextChoices):
+        SOLEADO = 'SOLEADO', 'Soleado'
+        NUBLADO = 'NUBLADO', 'Nublado'
+        LLUVIOSO = 'LLUVIOSO', 'Lluvioso'
+        TORMENTA = 'TORMENTA', 'Tormenta Eléctrica'
+
+    class EstadoInforme(models.TextChoices):
+        BORRADOR = 'BORRADOR', 'Borrador'
+        ENVIADO = 'ENVIADO', 'Enviado'
+        APROBADO = 'APROBADO', 'Aprobado'
+        RECHAZADO = 'RECHAZADO', 'Rechazado'
+
+    # Core relationships
+    fecha = models.DateField(
+        'Fecha',
+        help_text='Fecha del informe'
+    )
+    cuadrilla = models.ForeignKey(
+        'cuadrillas.Cuadrilla',
+        on_delete=models.CASCADE,
+        related_name='informes_diarios',
+        verbose_name='Cuadrilla'
+    )
+    linea = models.ForeignKey(
+        'lineas.Linea',
+        on_delete=models.CASCADE,
+        related_name='informes_diarios',
+        verbose_name='Línea'
+    )
+    tramo = models.ForeignKey(
+        'lineas.Tramo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='informes_diarios',
+        verbose_name='Tramo'
+    )
+
+    # Work tracking
+    torre_inicio = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='informes_inicio',
+        verbose_name='Torre inicio del día'
+    )
+    torre_fin = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='informes_fin',
+        verbose_name='Torre fin del día'
+    )
+    vanos_ejecutados = models.PositiveIntegerField(
+        'Vanos ejecutados',
+        default=0,
+        help_text='Número de vanos completados en el día'
+    )
+
+    # Personnel (JSON array with member details)
+    personal_presente = models.JSONField(
+        'Personal presente',
+        default=list,
+        blank=True,
+        help_text='Lista de personal presente con roles [{usuario_id, nombre, rol, cargo}]'
+    )
+    total_personas = models.PositiveIntegerField(
+        'Total personas',
+        default=0
+    )
+
+    # Conditions
+    condicion_climatica = models.CharField(
+        'Condición climática',
+        max_length=20,
+        choices=CondicionClimatica.choices,
+        default=CondicionClimatica.SOLEADO
+    )
+    hora_inicio_jornada = models.TimeField(
+        'Hora inicio jornada',
+        null=True,
+        blank=True
+    )
+    hora_fin_jornada = models.TimeField(
+        'Hora fin jornada',
+        null=True,
+        blank=True
+    )
+
+    # Activities summary
+    actividades_realizadas = models.ManyToManyField(
+        Actividad,
+        related_name='informes_diarios',
+        blank=True,
+        verbose_name='Actividades realizadas'
+    )
+    resumen_trabajo = models.TextField(
+        'Resumen del trabajo',
+        blank=True,
+        help_text='Descripción detallada del trabajo realizado'
+    )
+    novedades = models.TextField(
+        'Novedades',
+        blank=True,
+        help_text='Novedades o incidentes del día'
+    )
+    observaciones = models.TextField(
+        'Observaciones',
+        blank=True
+    )
+
+    # Status and approval
+    estado = models.CharField(
+        'Estado',
+        max_length=20,
+        choices=EstadoInforme.choices,
+        default=EstadoInforme.BORRADOR
+    )
+    enviado_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='informes_enviados',
+        verbose_name='Enviado por'
+    )
+    fecha_envio = models.DateTimeField(
+        'Fecha de envío',
+        null=True,
+        blank=True
+    )
+    aprobado_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='informes_aprobados',
+        verbose_name='Aprobado por'
+    )
+    fecha_aprobacion = models.DateTimeField(
+        'Fecha de aprobación',
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'informes_diarios'
+        verbose_name = 'Informe Diario'
+        verbose_name_plural = 'Informes Diarios'
+        unique_together = ['fecha', 'cuadrilla']
+        ordering = ['-fecha', 'cuadrilla']
+        indexes = [
+            models.Index(fields=['fecha']),
+            models.Index(fields=['cuadrilla', 'fecha']),
+            models.Index(fields=['linea', 'fecha']),
+            models.Index(fields=['estado']),
+        ]
+
+    def __str__(self):
+        return f"Informe {self.cuadrilla.codigo} - {self.fecha}"
+
+    @property
+    def rendimiento(self):
+        """Calcula el rendimiento: vanos por persona."""
+        if self.total_personas > 0:
+            return round(self.vanos_ejecutados / self.total_personas, 2)
+        return 0
+
+    @property
+    def horas_jornada(self):
+        """Calcula las horas de jornada trabajadas."""
+        if self.hora_inicio_jornada and self.hora_fin_jornada:
+            from datetime import datetime, timedelta
+            inicio = datetime.combine(self.fecha, self.hora_inicio_jornada)
+            fin = datetime.combine(self.fecha, self.hora_fin_jornada)
+            if fin < inicio:
+                fin += timedelta(days=1)
+            delta = fin - inicio
+            return round(delta.total_seconds() / 3600, 2)
+        return None
+
+    def enviar(self, usuario):
+        """Mark report as sent."""
+        from django.utils import timezone
+        self.estado = self.EstadoInforme.ENVIADO
+        self.enviado_por = usuario
+        self.fecha_envio = timezone.now()
+        self.save(update_fields=['estado', 'enviado_por', 'fecha_envio', 'updated_at'])
+
+    def aprobar(self, usuario):
+        """Approve the report."""
+        from django.utils import timezone
+        self.estado = self.EstadoInforme.APROBADO
+        self.aprobado_por = usuario
+        self.fecha_aprobacion = timezone.now()
+        self.save(update_fields=['estado', 'aprobado_por', 'fecha_aprobacion', 'updated_at'])
+
+    def rechazar(self, usuario, motivo: str):
+        """Reject the report."""
+        self.estado = self.EstadoInforme.RECHAZADO
+        self.observaciones = f"Rechazado: {motivo}"
+        self.save(update_fields=['estado', 'observaciones', 'updated_at'])

@@ -145,8 +145,14 @@ class CuadrillaMiembro(BaseModel):
 
     class RolCuadrilla(models.TextChoices):
         SUPERVISOR = 'SUPERVISOR', 'Supervisor'
-        LINIERO = 'LINIERO', 'Liniero'
+        LINIERO_I = 'LINIERO_I', 'Liniero I'
+        LINIERO_II = 'LINIERO_II', 'Liniero II'
         AYUDANTE = 'AYUDANTE', 'Ayudante'
+        CONDUCTOR = 'CONDUCTOR', 'Conductor'
+
+    class CargoJerarquico(models.TextChoices):
+        JT_CTA = 'JT_CTA', 'Jefe de Trabajo / Capacitado'
+        MIEMBRO = 'MIEMBRO', 'Miembro'
 
     cuadrilla = models.ForeignKey(
         Cuadrilla,
@@ -164,7 +170,14 @@ class CuadrillaMiembro(BaseModel):
         'Rol en cuadrilla',
         max_length=20,
         choices=RolCuadrilla.choices,
-        default=RolCuadrilla.LINIERO
+        default=RolCuadrilla.LINIERO_I
+    )
+    cargo = models.CharField(
+        'Cargo jerárquico',
+        max_length=20,
+        choices=CargoJerarquico.choices,
+        default=CargoJerarquico.MIEMBRO,
+        help_text='Define si el miembro es Jefe de Trabajo/Capacitado o Miembro regular'
     )
     fecha_inicio = models.DateField(
         'Fecha de inicio'

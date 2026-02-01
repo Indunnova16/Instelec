@@ -15,11 +15,28 @@ class Linea(BaseModel):
         TRANSELCA = 'TRANSELCA', 'Transelca'
         INTERCOLOMBIA = 'INTERCOLOMBIA', 'Intercolombia'
 
+    class Contratista(models.TextChoices):
+        CTE_NORTE = 'CTE_NORTE', 'CTE Norte'
+        OUTSOURCING = 'OUTSOURCING', 'Outsourcing'
+        CONVENIO = 'CONVENIO', 'Convenio'
+
     codigo = models.CharField(
         'Código',
         max_length=20,
         unique=True,
         help_text='Código único de la línea (ej: L-838)'
+    )
+    codigo_transelca = models.CharField(
+        'Código Transelca',
+        max_length=30,
+        blank=True,
+        help_text='Código en formato Transelca (ej: 801/802, 5156/5157)'
+    )
+    circuito = models.CharField(
+        'Circuito',
+        max_length=20,
+        blank=True,
+        help_text='Número de circuito (ej: 801, 802)'
     )
     nombre = models.CharField(
         'Nombre',
@@ -31,6 +48,25 @@ class Linea(BaseModel):
         max_length=20,
         choices=Cliente.choices,
         default=Cliente.TRANSELCA
+    )
+    contratista = models.CharField(
+        'Contratista asignado',
+        max_length=20,
+        choices=Contratista.choices,
+        blank=True,
+        help_text='Contratista responsable del mantenimiento'
+    )
+    centro_emplazamiento = models.CharField(
+        'Centro de emplazamiento',
+        max_length=20,
+        blank=True,
+        help_text='Código SAP del centro de emplazamiento (ej: TR01)'
+    )
+    puesto_trabajo = models.CharField(
+        'Puesto de trabajo',
+        max_length=20,
+        blank=True,
+        help_text='Código SAP del puesto de trabajo'
     )
     longitud_km = models.DecimalField(
         'Longitud (km)',

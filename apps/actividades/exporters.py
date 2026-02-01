@@ -474,3 +474,362 @@ class ReporteAvanceExporter:
         # Ajustar anchos
         sheet.column_dimensions['A'].width = 20
         sheet.column_dimensions['B'].width = 40
+
+
+class InformeDiarioPDFExporter:
+    """
+    Genera PDF de informe diario de actividades.
+
+    Formato basado en el documento "Informe de Actividades Diarias" de Transelca:
+    - Encabezado con logo e información de la cuadrilla
+    - Tabla de personal presente con roles
+    - Descripción del trabajo realizado
+    - Avance por torres/vanos
+    - Observaciones y novedades
+    """
+
+    def __init__(self):
+        self.buffer = BytesIO()
+
+    def generar_pdf(self, informe_diario):
+        """
+        Genera PDF del informe diario.
+
+        Args:
+            informe_diario: InformeDiario instance
+
+        Returns:
+            BytesIO with PDF content
+        """
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import (
+                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            )
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        except ImportError:
+            logger.error("ReportLab not installed. Install with: pip install reportlab")
+            raise ImportError("ReportLab is required for PDF generation")
+
+        doc = SimpleDocTemplate(
+            self.buffer,
+            pagesize=letter,
+            rightMargin=0.5*inch,
+            leftMargin=0.5*inch,
+            topMargin=0.5*inch,
+            bottomMargin=0.5*inch
+        )
+
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            alignment=TA_CENTER,
+            spaceAfter=20
+        )
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=12,
+            alignment=TA_LEFT,
+            spaceBefore=15,
+            spaceAfter=10,
+            textColor=colors.HexColor('#1F4E79')
+        )
+        normal_style = styles['Normal']
+
+        elements = []
+
+        # Título principal
+        elements.append(Paragraph('INFORME DIARIO DE ACTIVIDADES', title_style))
+        elements.append(Spacer(1, 10))
+
+        # Información general
+        info_data = [
+            ['Fecha:', informe_diario.fecha.strftime('%d/%m/%Y'),
+             'Cuadrilla:', informe_diario.cuadrilla.codigo],
+            ['Línea:', f'{informe_diario.linea.codigo} - {informe_diario.linea.nombre}',
+             'Condición:', informe_diario.get_condicion_climatica_display()],
+            ['Tramo:', informe_diario.tramo.nombre if informe_diario.tramo else '-',
+             'Estado:', informe_diario.get_estado_display()],
+        ]
+
+        info_table = Table(info_data, colWidths=[1.2*inch, 2.5*inch, 1.2*inch, 2.5*inch])
+        info_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E8E8E8')),
+            ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#E8E8E8')),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 15))
+
+        # Horario de jornada
+        if informe_diario.hora_inicio_jornada or informe_diario.hora_fin_jornada:
+            horario_text = f"Jornada: {informe_diario.hora_inicio_jornada or '-'} - {informe_diario.hora_fin_jornada or '-'}"
+            if informe_diario.horas_jornada:
+                horario_text += f" ({informe_diario.horas_jornada} horas)"
+            elements.append(Paragraph(horario_text, normal_style))
+            elements.append(Spacer(1, 10))
+
+        # Sección: Personal Presente
+        elements.append(Paragraph('PERSONAL PRESENTE', subtitle_style))
+
+        personal_headers = ['#', 'Nombre', 'Rol', 'Cargo']
+        personal_rows = [personal_headers]
+
+        if informe_diario.personal_presente:
+            for idx, persona in enumerate(informe_diario.personal_presente, start=1):
+                personal_rows.append([
+                    str(idx),
+                    persona.get('nombre', '-'),
+                    persona.get('rol', '-'),
+                    persona.get('cargo', '-')
+                ])
+        else:
+            personal_rows.append(['-', 'Sin personal registrado', '-', '-'])
+
+        personal_table = Table(personal_rows, colWidths=[0.5*inch, 3*inch, 1.5*inch, 2*inch])
+        personal_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1F4E79')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
+        ]))
+        elements.append(personal_table)
+        elements.append(Paragraph(f'Total personal: {informe_diario.total_personas}', normal_style))
+        elements.append(Spacer(1, 15))
+
+        # Sección: Trabajo Realizado
+        elements.append(Paragraph('TRABAJO REALIZADO', subtitle_style))
+
+        trabajo_data = [
+            ['Torre Inicio:', informe_diario.torre_inicio.numero if informe_diario.torre_inicio else '-',
+             'Torre Fin:', informe_diario.torre_fin.numero if informe_diario.torre_fin else '-'],
+            ['Vanos Ejecutados:', str(informe_diario.vanos_ejecutados),
+             'Rendimiento:', f'{informe_diario.rendimiento} vanos/persona' if informe_diario.rendimiento else '-'],
+        ]
+
+        trabajo_table = Table(trabajo_data, colWidths=[1.5*inch, 2*inch, 1.5*inch, 2.5*inch])
+        trabajo_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        elements.append(trabajo_table)
+        elements.append(Spacer(1, 10))
+
+        # Resumen del trabajo
+        if informe_diario.resumen_trabajo:
+            elements.append(Paragraph('<b>Resumen:</b>', normal_style))
+            elements.append(Paragraph(informe_diario.resumen_trabajo, normal_style))
+            elements.append(Spacer(1, 10))
+
+        # Sección: Actividades
+        if informe_diario.actividades_realizadas.exists():
+            elements.append(Paragraph('ACTIVIDADES REALIZADAS', subtitle_style))
+
+            act_headers = ['Tipo', 'Torre', 'Aviso SAP', 'Avance']
+            act_rows = [act_headers]
+
+            for act in informe_diario.actividades_realizadas.all():
+                act_rows.append([
+                    act.tipo_actividad.nombre,
+                    act.torre.numero if act.torre else '-',
+                    act.aviso_sap or '-',
+                    f'{act.porcentaje_avance}%'
+                ])
+
+            act_table = Table(act_rows, colWidths=[2.5*inch, 1*inch, 1.5*inch, 1*inch])
+            act_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1F4E79')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.append(act_table)
+            elements.append(Spacer(1, 15))
+
+        # Sección: Novedades
+        if informe_diario.novedades:
+            elements.append(Paragraph('NOVEDADES', subtitle_style))
+            elements.append(Paragraph(informe_diario.novedades, normal_style))
+            elements.append(Spacer(1, 10))
+
+        # Sección: Observaciones
+        if informe_diario.observaciones:
+            elements.append(Paragraph('OBSERVACIONES', subtitle_style))
+            elements.append(Paragraph(informe_diario.observaciones, normal_style))
+            elements.append(Spacer(1, 10))
+
+        # Pie de página con información de envío/aprobación
+        elements.append(Spacer(1, 20))
+        footer_data = []
+        if informe_diario.enviado_por:
+            footer_data.append([
+                'Enviado por:',
+                informe_diario.enviado_por.get_full_name(),
+                informe_diario.fecha_envio.strftime('%d/%m/%Y %H:%M') if informe_diario.fecha_envio else '-'
+            ])
+        if informe_diario.aprobado_por:
+            footer_data.append([
+                'Aprobado por:',
+                informe_diario.aprobado_por.get_full_name(),
+                informe_diario.fecha_aprobacion.strftime('%d/%m/%Y %H:%M') if informe_diario.fecha_aprobacion else '-'
+            ])
+
+        if footer_data:
+            footer_table = Table(footer_data, colWidths=[1.5*inch, 3*inch, 2*inch])
+            footer_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.grey),
+            ]))
+            elements.append(footer_table)
+
+        # Generar documento
+        doc.build(elements)
+        self.buffer.seek(0)
+
+        return self.buffer
+
+    def generar_pdf_semanal(self, cuadrilla, fecha_inicio, fecha_fin=None):
+        """
+        Genera PDF consolidado de informes de una semana.
+
+        Args:
+            cuadrilla: Cuadrilla instance
+            fecha_inicio: Date inicio de la semana
+            fecha_fin: Date fin de la semana (default: inicio + 6 días)
+
+        Returns:
+            BytesIO with PDF content
+        """
+        from .models import InformeDiario
+
+        if fecha_fin is None:
+            fecha_fin = fecha_inicio + timedelta(days=6)
+
+        informes = InformeDiario.objects.filter(
+            cuadrilla=cuadrilla,
+            fecha__gte=fecha_inicio,
+            fecha__lte=fecha_fin
+        ).order_by('fecha')
+
+        if not informes.exists():
+            raise ValueError('No hay informes para el período especificado')
+
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import (
+                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+            )
+            from reportlab.lib.enums import TA_CENTER
+        except ImportError:
+            raise ImportError("ReportLab is required for PDF generation")
+
+        doc = SimpleDocTemplate(
+            self.buffer,
+            pagesize=letter,
+            rightMargin=0.5*inch,
+            leftMargin=0.5*inch,
+            topMargin=0.5*inch,
+            bottomMargin=0.5*inch
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            alignment=TA_CENTER,
+            spaceAfter=20
+        )
+
+        elements = []
+
+        # Título del resumen semanal
+        elements.append(Paragraph(
+            f'RESUMEN SEMANAL - {cuadrilla.codigo}',
+            title_style
+        ))
+        elements.append(Paragraph(
+            f'{fecha_inicio.strftime("%d/%m/%Y")} al {fecha_fin.strftime("%d/%m/%Y")}',
+            styles['Normal']
+        ))
+        elements.append(Spacer(1, 20))
+
+        # Tabla resumen
+        resumen_headers = ['Fecha', 'Línea', 'Vanos', 'Personal', 'Condición']
+        resumen_rows = [resumen_headers]
+
+        total_vanos = 0
+        for informe in informes:
+            resumen_rows.append([
+                informe.fecha.strftime('%d/%m'),
+                informe.linea.codigo,
+                str(informe.vanos_ejecutados),
+                str(informe.total_personas),
+                informe.get_condicion_climatica_display()
+            ])
+            total_vanos += informe.vanos_ejecutados
+
+        # Fila de totales
+        resumen_rows.append(['TOTAL', '', str(total_vanos), '', ''])
+
+        resumen_table = Table(resumen_rows, colWidths=[1*inch, 2*inch, 1*inch, 1*inch, 1.5*inch])
+        resumen_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1F4E79')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#D9D9D9')),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(resumen_table)
+
+        doc.build(elements)
+        self.buffer.seek(0)
+
+        return self.buffer
