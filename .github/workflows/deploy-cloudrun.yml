@@ -1,0 +1,130 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: appsindunnova
+  REGION: us-central1
+  SERVICE_NAME: instelec-api
+  JOB_NAME: instelec-migrate
+  REGISTRY: us-central1-docker.pkg.dev
+  IMAGE_NAME: us-central1-docker.pkg.dev/appsindunnova/cloud-run-source-deploy/instelec-api
+  CLOUD_SQL_INSTANCE: appsindunnova:us-central1:postgres-consolidated
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.filter.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'apps/**'
+              - 'config/**'
+              - 'templates/**'
+              - 'static/**'
+              - 'Dockerfile'
+              - 'requirements/**'
+              - '.github/workflows/deploy-cloudrun.yml'
+
+  build-and-deploy:
+    needs: changes
+    if: ${{ needs.changes.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
+    name: Build, Migrate & Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }},${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create env-vars file
+        run: |
+          cat > /tmp/env-vars.yaml << EOF
+          DEBUG: "False"
+          DJANGO_SETTINGS_MODULE: "config.settings.production"
+          ALLOWED_HOSTS: "*"
+          CSRF_TRUSTED_ORIGINS: "https://instelec-api-rvfp6uj2va-uc.a.run.app,https://*.run.app"
+          DB_NAME: "instelec_db"
+          DB_USER: "postgres"
+          DB_HOST: "/cloudsql/${{ env.CLOUD_SQL_INSTANCE }}"
+          DB_PORT: "5432"
+          DB_PASSWORD: "${{ secrets.DB_PASSWORD }}"
+          GS_BUCKET_NAME: "instelec-media"
+          SECRET_KEY: "${{ secrets.DJANGO_SECRET_KEY }}"
+          EOF
+
+      - name: Run Migrations
+        run: |
+          gcloud run jobs deploy ${{ env.JOB_NAME }} \
+            --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --tasks 1 \
+            --env-vars-file=/tmp/env-vars.yaml \
+            --set-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
+            --command "python" \
+            --args "manage.py,migrate,--noinput" \
+            --quiet
+
+          gcloud run jobs execute ${{ env.JOB_NAME }} \
+            --region ${{ env.REGION }} \
+            --wait
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --add-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
+            --env-vars-file=/tmp/env-vars.yaml \
+            --memory 512Mi \
+            --cpu 1 \
+            --timeout 300 \
+            --concurrency 40 \
+            --port 8080 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --quiet
+
+      - name: Get Service URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')
+          echo "## Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Service URL:** $URL" >> $GITHUB_STEP_SUMMARY
