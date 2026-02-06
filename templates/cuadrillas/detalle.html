@@ -50,6 +50,10 @@
                     <dd class="font-medium text-gray-900 dark:text-white">{{ cuadrilla.nombre }}</dd>
                 </div>
                 <div>
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Fecha</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">{{ cuadrilla.fecha|date:"d/m/Y"|default:"-" }}</dd>
+                </div>
+                <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Supervisor</dt>
                     <dd class="font-medium text-gray-900 dark:text-white">
                         {% if cuadrilla.supervisor %}
@@ -107,6 +111,10 @@
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Total Miembros</dt>
                     <dd class="font-medium text-gray-900 dark:text-white">{{ miembros.count }} personas</dd>
+                </div>
+                <div>
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Costo Diario Total</dt>
+                    <dd class="font-medium text-green-600 dark:text-green-400">${{ costo_total_dia|floatformat:0 }}</dd>
                 </div>
             </dl>
         </div>
@@ -167,6 +175,56 @@
     </div>
     {% endif %}
 
+    <!-- Add Member Form -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Agregar Miembro</h2>
+        <form method="post" action="{% url 'cuadrillas:miembro_agregar' cuadrilla.pk %}" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            {% csrf_token %}
+            <div>
+                <label for="usuario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Personal</label>
+                <select name="usuario" id="usuario" required
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    <option value="">Seleccionar...</option>
+                    {% for user in usuarios_disponibles %}
+                    <option value="{{ user.id }}">{{ user.get_full_name }} {% if user.documento %}({{ user.documento }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="rol_cuadrilla" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rol</label>
+                <select name="rol_cuadrilla" id="rol_cuadrilla"
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    {% for value, label in roles_cuadrilla %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cargo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cargo</label>
+                <select name="cargo" id="cargo"
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    {% for value, label in cargos_jerarquicos %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="costo_dia" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Costo/Dia ($)</label>
+                <input type="number" name="costo_dia" id="costo_dia" step="100" min="0" value="0"
+                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            </div>
+            <div>
+                <button type="submit"
+                        class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Agregar
+                </button>
+            </div>
+        </form>
+    </div>
+
     <!-- Members Table -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div class="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -177,10 +235,12 @@
                 <thead class="bg-gray-50 dark:bg-gray-900">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cedula</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Documento</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cargo</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Costo/Dia</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha Inicio</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -199,41 +259,60 @@
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
-                            {{ miembro.usuario.cedula|default:"-" }}
+                            {{ miembro.usuario.documento|default:"-" }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="px-2 py-1 text-xs rounded-full
-                                {% if miembro.rol_cuadrilla == 'SUPERVISOR' %}bg-purple-100 text-purple-800
-                                {% elif miembro.rol_cuadrilla == 'LINIERO' %}bg-blue-100 text-blue-800
-                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {% if miembro.rol_cuadrilla == 'SUPERVISOR' %}bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200
+                                {% elif miembro.rol_cuadrilla == 'LINIERO_I' or miembro.rol_cuadrilla == 'LINIERO_II' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                                {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
                                 {{ miembro.get_rol_cuadrilla_display }}
                             </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if miembro.cargo == 'JT_CTA' %}bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200
+                                {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                {{ miembro.get_cargo_display }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-gray-900 dark:text-white">
+                            ${{ miembro.costo_dia|floatformat:0 }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                             {{ miembro.fecha_inicio|date:"d/m/Y" }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            {% if miembro.activo %}
-                            <span class="flex items-center text-green-600">
-                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                                Activo
-                            </span>
-                            {% else %}
-                            <span class="flex items-center text-gray-500">
-                                <span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
-                                Inactivo
-                            </span>
-                            {% endif %}
+                        <td class="px-6 py-4 whitespace-nowrap text-right">
+                            <form method="post" action="{% url 'cuadrillas:miembro_eliminar' cuadrilla.pk miembro.pk %}"
+                                  class="inline" onsubmit="return confirm('Remover a {{ miembro.usuario.get_full_name }}?')">
+                                {% csrf_token %}
+                                <button type="submit" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm">
+                                    Remover
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                        <td colspan="7" class="px-6 py-12 text-center text-gray-500">
                             No hay miembros registrados
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
+                {% if miembros %}
+                <tfoot class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <td colspan="4" class="px-6 py-3 text-right text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Total Costo Diario
+                        </td>
+                        <td class="px-6 py-3 text-right text-sm font-bold text-green-600 dark:text-green-400">
+                            ${{ costo_total_dia|floatformat:0 }}
+                        </td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
             </table>
         </div>
     </div>

@@ -242,6 +242,142 @@ class FacturacionView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         return super().get_queryset().select_related('presupuesto__linea')
 
 
+class CostosCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
+    """View for crew costs filtered by day or week."""
+    template_name = 'financiero/costos_cuadrilla.html'
+    partial_template_name = 'financiero/partials/costos_cuadrilla_tabla.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_context_data(self, **kwargs):
+        import json
+        from collections import OrderedDict
+
+        from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro
+
+        context = super().get_context_data(**kwargs)
+
+        filtro = self.request.GET.get('filtro', 'semana')  # 'dia' or 'semana'
+        semana_param = self.request.GET.get('semana', '').strip()
+        fecha_param = self.request.GET.get('fecha', '').strip()
+
+        context['filtro'] = filtro
+        context['semana_param'] = semana_param
+        context['fecha_param'] = fecha_param
+
+        cuadrillas_data = []
+        gran_total_personal = Decimal('0')
+        gran_total_vehiculo = Decimal('0')
+        gran_total = Decimal('0')
+
+        if filtro == 'dia' and fecha_param:
+            # Filter cuadrillas by fecha field
+            try:
+                fecha_filtro = date.fromisoformat(fecha_param)
+            except ValueError:
+                fecha_filtro = None
+
+            if fecha_filtro:
+                cuadrillas = Cuadrilla.objects.filter(
+                    activa=True, fecha=fecha_filtro
+                ).select_related('supervisor', 'vehiculo').prefetch_related(
+                    'miembros__usuario'
+                )
+
+                for cuadrilla in cuadrillas:
+                    miembros = cuadrilla.miembros.filter(activo=True).select_related('usuario')
+                    costo_personal = sum((m.costo_dia for m in miembros), Decimal('0'))
+                    costo_vehiculo = cuadrilla.vehiculo.costo_dia if cuadrilla.vehiculo else Decimal('0')
+                    total = costo_personal + costo_vehiculo
+
+                    gran_total_personal += costo_personal
+                    gran_total_vehiculo += costo_vehiculo
+                    gran_total += total
+
+                    miembros_list = [{
+                        'nombre': m.usuario.get_full_name(),
+                        'rol': m.get_rol_cuadrilla_display(),
+                        'cargo': m.get_cargo_display(),
+                        'costo_dia': m.costo_dia,
+                    } for m in miembros]
+
+                    cuadrillas_data.append({
+                        'cuadrilla': cuadrilla,
+                        'miembros': miembros_list,
+                        'costo_personal': costo_personal,
+                        'costo_vehiculo': costo_vehiculo,
+                        'total': total,
+                    })
+
+        elif filtro == 'semana' and semana_param:
+            # Filter by week code prefix (WW-YYYY)
+            try:
+                parts = semana_param.split('-')
+                sem = parts[0].zfill(2)
+                ano = parts[1]
+                prefix = f'{sem}-{ano}-'
+            except (IndexError, ValueError):
+                prefix = None
+
+            if prefix:
+                cuadrillas = Cuadrilla.objects.filter(
+                    activa=True, codigo__startswith=prefix
+                ).select_related('supervisor', 'vehiculo').prefetch_related(
+                    'miembros__usuario'
+                )
+
+                for cuadrilla in cuadrillas:
+                    miembros = cuadrilla.miembros.filter(activo=True).select_related('usuario')
+                    costo_personal = sum((m.costo_dia for m in miembros), Decimal('0'))
+                    costo_vehiculo = cuadrilla.vehiculo.costo_dia if cuadrilla.vehiculo else Decimal('0')
+                    total = costo_personal + costo_vehiculo
+
+                    gran_total_personal += costo_personal
+                    gran_total_vehiculo += costo_vehiculo
+                    gran_total += total
+
+                    miembros_list = [{
+                        'nombre': m.usuario.get_full_name(),
+                        'rol': m.get_rol_cuadrilla_display(),
+                        'cargo': m.get_cargo_display(),
+                        'costo_dia': m.costo_dia,
+                    } for m in miembros]
+
+                    cuadrillas_data.append({
+                        'cuadrilla': cuadrilla,
+                        'miembros': miembros_list,
+                        'costo_personal': costo_personal,
+                        'costo_vehiculo': costo_vehiculo,
+                        'total': total,
+                    })
+
+        context['cuadrillas_data'] = cuadrillas_data
+        context['gran_total_personal'] = gran_total_personal
+        context['gran_total_vehiculo'] = gran_total_vehiculo
+        context['gran_total'] = gran_total
+
+        # Build list of available weeks for the filter
+        todas = Cuadrilla.objects.filter(activa=True).values_list('codigo', flat=True)
+        semanas_set = set()
+        for codigo in todas:
+            try:
+                parts = codigo.split('-')
+                if len(parts) >= 2:
+                    semana = int(parts[0])
+                    ano = int(parts[1])
+                    if 1 <= semana <= 53 and 2000 <= ano <= 2100:
+                        semanas_set.add((ano, semana))
+            except (ValueError, IndexError):
+                pass
+
+        semanas_disponibles = sorted(semanas_set, reverse=True)
+        context['semanas_disponibles'] = [
+            {'value': f'{s[1]}-{s[0]}', 'label': f'Semana {s[1]} - {s[0]}'}
+            for s in semanas_disponibles
+        ]
+
+        return context
+
+
 class CostosVsProduccionDashboardView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
     """
     Dashboard de costos vs producción en tiempo real.

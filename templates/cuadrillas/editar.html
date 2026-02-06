@@ -46,9 +46,19 @@
                 </div>
             </div>
 
-            <!-- Asignacion -->
+            <!-- Fecha y Asignacion -->
             <div>
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Asignacion</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label for="fecha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Fecha de Operacion
+                        </label>
+                        <input type="date" name="fecha" id="fecha"
+                               value="{{ cuadrilla.fecha|date:'Y-m-d' }}"
+                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                         <label for="supervisor" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

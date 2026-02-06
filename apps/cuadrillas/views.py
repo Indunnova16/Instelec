@@ -7,7 +7,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import Cuadrilla, Vehiculo, TrackingUbicacion
+from .models import Cuadrilla, CuadrillaMiembro, Vehiculo, TrackingUbicacion
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -124,8 +124,27 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
     def get_context_data(self, **kwargs):
+        from decimal import Decimal
+        from apps.usuarios.models import Usuario
+
         context = super().get_context_data(**kwargs)
-        context['miembros'] = self.object.miembros.filter(activo=True).select_related('usuario')
+        miembros = self.object.miembros.filter(activo=True).select_related('usuario')
+        context['miembros'] = miembros
+
+        # Total daily cost
+        context['costo_total_dia'] = sum(
+            (m.costo_dia for m in miembros), Decimal('0')
+        )
+
+        # Available users for add member form
+        miembros_ids = miembros.values_list('usuario_id', flat=True)
+        context['usuarios_disponibles'] = Usuario.objects.filter(
+            is_active=True
+        ).exclude(id__in=miembros_ids).order_by('first_name', 'last_name')
+
+        # Choices for form selects
+        context['roles_cuadrilla'] = CuadrillaMiembro.RolCuadrilla.choices
+        context['cargos_jerarquicos'] = CuadrillaMiembro.CargoJerarquico.choices
 
         # Last known location
         ultima_ubicacion = TrackingUbicacion.objects.filter(
@@ -182,6 +201,13 @@ class CuadrillaEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Detail
 
             linea_id = request.POST.get('linea_asignada') or None
             cuadrilla.linea_asignada = Linea.objects.get(pk=linea_id) if linea_id else None
+
+            fecha_str = request.POST.get('fecha', '').strip()
+            if fecha_str:
+                from datetime import date as date_cls
+                cuadrilla.fecha = date_cls.fromisoformat(fecha_str)
+            else:
+                cuadrilla.fecha = None
 
             cuadrilla.activa = request.POST.get('activa') == 'on'
             cuadrilla.observaciones = request.POST.get('observaciones', '').strip()
@@ -302,3 +328,74 @@ class CuadrillaCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
         except Exception as e:
             messages.error(request, f'Error al crear la cuadrilla: {str(e)}')
             return self.get(request, *args, **kwargs)
+
+
+class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Add a member to a cuadrilla."""
+    model = Cuadrilla
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+    def post(self, request, *args, **kwargs):
+        from apps.usuarios.models import Usuario
+        from datetime import date
+
+        cuadrilla = self.get_object()
+        usuario_id = request.POST.get('usuario')
+        rol = request.POST.get('rol_cuadrilla', 'LINIERO_I')
+        cargo = request.POST.get('cargo', 'MIEMBRO')
+        costo_dia = request.POST.get('costo_dia', '0') or '0'
+
+        if not usuario_id:
+            messages.error(request, 'Debe seleccionar un usuario.')
+            return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+        try:
+            usuario = Usuario.objects.get(pk=usuario_id)
+        except Usuario.DoesNotExist:
+            messages.error(request, 'Usuario no encontrado.')
+            return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+        if CuadrillaMiembro.objects.filter(
+            cuadrilla=cuadrilla, usuario=usuario, activo=True
+        ).exists():
+            messages.error(request, f'{usuario.get_full_name()} ya es miembro activo.')
+            return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+        try:
+            CuadrillaMiembro.objects.create(
+                cuadrilla=cuadrilla,
+                usuario=usuario,
+                rol_cuadrilla=rol if rol in dict(CuadrillaMiembro.RolCuadrilla.choices) else 'LINIERO_I',
+                cargo=cargo if cargo in dict(CuadrillaMiembro.CargoJerarquico.choices) else 'MIEMBRO',
+                costo_dia=float(costo_dia),
+                fecha_inicio=date.today(),
+            )
+            messages.success(request, f'{usuario.get_full_name()} agregado a la cuadrilla.')
+        except Exception as e:
+            messages.error(request, f'Error al agregar miembro: {str(e)}')
+
+        return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+
+class CuadrillaMiembroRemoveView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Remove a member from a cuadrilla (soft delete)."""
+    model = Cuadrilla
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        from datetime import date
+
+        cuadrilla = self.get_object()
+        miembro_pk = self.kwargs['miembro_pk']
+
+        try:
+            miembro = CuadrillaMiembro.objects.get(pk=miembro_pk, cuadrilla=cuadrilla)
+            nombre = miembro.usuario.get_full_name()
+            miembro.activo = False
+            miembro.fecha_fin = date.today()
+            miembro.save(update_fields=['activo', 'fecha_fin', 'updated_at'])
+            messages.success(request, f'{nombre} removido de la cuadrilla.')
+        except CuadrillaMiembro.DoesNotExist:
+            messages.error(request, 'Miembro no encontrado.')
+
+        return redirect('cuadrillas:detalle', pk=cuadrilla.pk)

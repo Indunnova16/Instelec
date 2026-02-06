@@ -120,6 +120,12 @@ class Cuadrilla(BaseModel):
         'Observaciones',
         blank=True
     )
+    fecha = models.DateField(
+        'Fecha',
+        null=True,
+        blank=True,
+        help_text='Fecha de operacion de la cuadrilla'
+    )
 
     class Meta:
         db_table = 'cuadrillas'
@@ -191,6 +197,13 @@ class CuadrillaMiembro(BaseModel):
     activo = models.BooleanField(
         'Activo',
         default=True
+    )
+    costo_dia = models.DecimalField(
+        'Costo por dia',
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Costo diario del miembro segun su rol/cargo'
     )
 
     class Meta:
