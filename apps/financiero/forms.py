@@ -36,7 +36,7 @@ class ArchivoChecklistForm(forms.Form):
 
     archivos = forms.FileField(
         label='Archivos',
-        widget=forms.ClearableFileInput(attrs={
+        widget=forms.FileInput(attrs={
             'class': TAILWIND_INPUT,
             'multiple': True,
             'accept': '.pdf,.xlsx,.xls,.jpg,.jpeg,.png,.webp',
@@ -49,7 +49,7 @@ class ArchivoPeriodoForm(forms.Form):
 
     archivos = forms.FileField(
         label='Archivos del periodo',
-        widget=forms.ClearableFileInput(attrs={
+        widget=forms.FileInput(attrs={
             'class': TAILWIND_INPUT,
             'multiple': True,
             'accept': '.pdf,.xlsx,.xls,.jpg,.jpeg,.png,.webp',
