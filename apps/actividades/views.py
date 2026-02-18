@@ -336,25 +336,72 @@ class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
         cuadrilla_id = request.POST.get('cuadrilla') or None
         fecha_programada = request.POST.get('fecha_programada')
         aviso_sap = request.POST.get('aviso_sap', '').strip()
+        orden_sap = request.POST.get('orden_sap', '').strip()
         observaciones = request.POST.get('observaciones_programacion', '').strip()
 
-        # Validation
-        if not all([tipo_actividad_id, linea_id, torre_id, fecha_programada]):
-            messages.error(request, 'Tipo de actividad, linea, torre y fecha son obligatorios.')
+        # If aviso_sap provided but missing other fields, try to fill from existing activity
+        tipo_actividad = None
+        linea = None
+        torre = None
+
+        if aviso_sap and not all([tipo_actividad_id, linea_id, torre_id]):
+            existing = Actividad.objects.filter(aviso_sap__iexact=aviso_sap).select_related(
+                'linea', 'torre', 'tipo_actividad'
+            ).first()
+            if existing:
+                if not tipo_actividad_id:
+                    tipo_actividad = existing.tipo_actividad
+                if not linea_id:
+                    linea = existing.linea
+                if not torre_id:
+                    torre = existing.torre
+                if not orden_sap:
+                    orden_sap = existing.orden_sap or ''
+
+        # Resolve from IDs if not already set from lookup
+        if not tipo_actividad and tipo_actividad_id:
+            try:
+                tipo_actividad = TipoActividad.objects.get(id=tipo_actividad_id)
+            except TipoActividad.DoesNotExist:
+                pass
+
+        if not linea and linea_id:
+            try:
+                linea = Linea.objects.get(id=linea_id)
+            except Linea.DoesNotExist:
+                pass
+
+        if not torre and torre_id:
+            try:
+                torre = Torre.objects.get(id=torre_id)
+            except Torre.DoesNotExist:
+                pass
+
+        # Validation - only tipo_actividad and linea are strictly required
+        if not tipo_actividad:
+            messages.error(request, 'Debe seleccionar un tipo de actividad.')
             return self.get(request, *args, **kwargs)
 
-        try:
-            tipo_actividad = TipoActividad.objects.get(id=tipo_actividad_id)
-            linea = Linea.objects.get(id=linea_id)
-            torre = Torre.objects.get(id=torre_id)
-        except (TipoActividad.DoesNotExist, Linea.DoesNotExist, Torre.DoesNotExist):
-            messages.error(request, 'Tipo de actividad, linea o torre no validos.')
+        if not linea:
+            messages.error(request, 'Debe seleccionar una linea.')
             return self.get(request, *args, **kwargs)
+
+        # If no torre, use the first torre of the linea
+        if not torre:
+            torre = linea.torres.first()
+            if not torre:
+                messages.error(request, 'No se encontro una torre para la linea seleccionada.')
+                return self.get(request, *args, **kwargs)
 
         # Validate torre belongs to linea
         if torre.linea_id != linea.id:
             messages.error(request, 'La torre seleccionada no pertenece a la linea.')
             return self.get(request, *args, **kwargs)
+
+        # Default fecha_programada to today if not provided
+        if not fecha_programada:
+            from datetime import date as date_cls
+            fecha_programada = date_cls.today()
 
         cuadrilla = None
         if cuadrilla_id:
@@ -371,6 +418,7 @@ class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
                 cuadrilla=cuadrilla,
                 fecha_programada=fecha_programada,
                 aviso_sap=aviso_sap,
+                orden_sap=orden_sap,
                 observaciones_programacion=observaciones,
                 estado=Actividad.Estado.PENDIENTE,
                 prioridad=Actividad.Prioridad.NORMAL,
@@ -626,6 +674,44 @@ class EventosAPIView(LoginRequiredMixin, View):
             })
 
         return JsonResponse(events, safe=False)
+
+
+class BuscarAvisoSAPView(LoginRequiredMixin, View):
+    """API endpoint to search activities by Aviso SAP number."""
+
+    def get(self, request, *args, **kwargs):
+        aviso = request.GET.get('aviso', '').strip()
+        if not aviso:
+            return JsonResponse({'found': False})
+
+        actividad = Actividad.objects.filter(
+            aviso_sap__iexact=aviso
+        ).select_related('linea', 'torre', 'tipo_actividad', 'cuadrilla').first()
+
+        if not actividad:
+            # Try partial match
+            actividad = Actividad.objects.filter(
+                aviso_sap__icontains=aviso
+            ).select_related('linea', 'torre', 'tipo_actividad', 'cuadrilla').first()
+
+        if not actividad:
+            return JsonResponse({'found': False})
+
+        data = {
+            'found': True,
+            'tipo_actividad_id': str(actividad.tipo_actividad_id),
+            'tipo_actividad_nombre': actividad.tipo_actividad.nombre,
+            'linea_id': str(actividad.linea_id),
+            'linea_nombre': f"{actividad.linea.codigo} - {actividad.linea.nombre}",
+            'torre_id': str(actividad.torre_id) if actividad.torre_id else '',
+            'torre_numero': actividad.torre.numero if actividad.torre else '',
+            'cuadrilla_id': str(actividad.cuadrilla_id) if actividad.cuadrilla_id else '',
+            'orden_sap': actividad.orden_sap or '',
+            'pt_sap': actividad.pt_sap or '',
+            'observaciones': actividad.observaciones_programacion or '',
+            'descripcion': str(actividad),
+        }
+        return JsonResponse(data)
 
 
 class ActividadDetalleModalView(LoginRequiredMixin, DetailView):

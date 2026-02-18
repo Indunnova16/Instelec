@@ -23,12 +23,39 @@
         <form method="post" class="space-y-4">
             {% csrf_token %}
 
+            <!-- Aviso SAP - Campo principal con auto-llenado -->
+            <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <label for="aviso_sap" class="block text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                    Aviso SAP
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" name="aviso_sap" id="aviso_sap" maxlength="20"
+                           placeholder="Ingrese el numero de aviso SAP..."
+                           class="flex-1 rounded-lg border-blue-300 dark:border-blue-600 dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500">
+                    <button type="button" id="btn_buscar_aviso"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                        Buscar
+                    </button>
+                </div>
+                <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Ingrese el aviso SAP para autocompletar los datos de la actividad
+                </p>
+                <!-- Feedback de busqueda -->
+                <div id="aviso_feedback" class="hidden mt-2 p-2 rounded text-sm"></div>
+            </div>
+
+            <!-- Info auto-llenada (visible solo cuando se encuentra) -->
+            <div id="info_sap" class="hidden p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <p class="text-sm font-medium text-green-800 dark:text-green-300 mb-1">Datos encontrados:</p>
+                <p id="info_sap_text" class="text-sm text-green-700 dark:text-green-400"></p>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label for="tipo_actividad" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Tipo de Actividad <span class="text-red-500">*</span>
+                        Tipo de Actividad
                     </label>
-                    <select name="tipo_actividad" id="tipo_actividad" required
+                    <select name="tipo_actividad" id="tipo_actividad"
                             class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         <option value="">Seleccionar...</option>
                         {% for tipo in tipos %}
@@ -39,9 +66,9 @@
 
                 <div>
                     <label for="linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Linea <span class="text-red-500">*</span>
+                        Linea
                     </label>
-                    <select name="linea" id="linea" required
+                    <select name="linea" id="linea"
                             class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"
                             hx-get=""
                             hx-trigger="change"
@@ -61,6 +88,11 @@
                                             opt.textContent = `Torre ${t.numero}`;
                                             torreSelect.appendChild(opt);
                                         });
+                                        // Auto-select torre if pending
+                                        if (window._pendingTorreId) {
+                                            torreSelect.value = window._pendingTorreId;
+                                            window._pendingTorreId = null;
+                                        }
                                     });
                             ">
                         <option value="">Seleccionar...</option>
@@ -72,9 +104,9 @@
 
                 <div>
                     <label for="torre" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Torre <span class="text-red-500">*</span>
+                        Torre
                     </label>
-                    <select name="torre" id="torre" required
+                    <select name="torre" id="torre"
                             class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         <option value="">Seleccione una linea primero</option>
                     </select>
@@ -95,18 +127,18 @@
 
                 <div>
                     <label for="fecha_programada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Fecha Programada <span class="text-red-500">*</span>
+                        Fecha Programada
                     </label>
-                    <input type="date" name="fecha_programada" id="fecha_programada" required
+                    <input type="date" name="fecha_programada" id="fecha_programada"
                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                 </div>
 
                 <div>
-                    <label for="aviso_sap" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Aviso SAP
+                    <label for="orden_sap" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Orden SAP
                     </label>
-                    <input type="text" name="aviso_sap" id="aviso_sap" maxlength="20"
-                           placeholder="Numero de aviso SAP"
+                    <input type="text" name="orden_sap" id="orden_sap" maxlength="20"
+                           placeholder="Numero de orden SAP"
                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                 </div>
             </div>
@@ -133,4 +165,123 @@
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const avisoInput = document.getElementById('aviso_sap');
+    const btnBuscar = document.getElementById('btn_buscar_aviso');
+    const feedback = document.getElementById('aviso_feedback');
+    const infoSap = document.getElementById('info_sap');
+    const infoSapText = document.getElementById('info_sap_text');
+
+    function buscarAviso() {
+        const aviso = avisoInput.value.trim();
+        if (!aviso) {
+            feedback.className = 'hidden mt-2 p-2 rounded text-sm';
+            infoSap.classList.add('hidden');
+            return;
+        }
+
+        btnBuscar.disabled = true;
+        btnBuscar.textContent = 'Buscando...';
+
+        fetch(`/actividades/api/buscar-aviso-sap/?aviso=${encodeURIComponent(aviso)}`)
+            .then(r => r.json())
+            .then(data => {
+                btnBuscar.disabled = false;
+                btnBuscar.textContent = 'Buscar';
+
+                if (data.found) {
+                    // Show success feedback
+                    feedback.className = 'mt-2 p-2 rounded text-sm bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+                    feedback.textContent = 'Aviso encontrado - datos autocompletados';
+                    feedback.classList.remove('hidden');
+
+                    // Show info box
+                    infoSap.classList.remove('hidden');
+                    let infoLines = [];
+                    if (data.tipo_actividad_nombre) infoLines.push(`Tipo: ${data.tipo_actividad_nombre}`);
+                    if (data.linea_nombre) infoLines.push(`Linea: ${data.linea_nombre}`);
+                    if (data.torre_numero) infoLines.push(`Torre: ${data.torre_numero}`);
+                    if (data.orden_sap) infoLines.push(`Orden SAP: ${data.orden_sap}`);
+                    if (data.observaciones) infoLines.push(`Obs: ${data.observaciones}`);
+                    infoSapText.textContent = infoLines.join(' | ');
+
+                    // Auto-fill tipo_actividad
+                    if (data.tipo_actividad_id) {
+                        document.getElementById('tipo_actividad').value = data.tipo_actividad_id;
+                    }
+
+                    // Auto-fill linea and trigger torre load
+                    if (data.linea_id) {
+                        const lineaSelect = document.getElementById('linea');
+                        lineaSelect.value = data.linea_id;
+
+                        // Store pending torre selection
+                        if (data.torre_id) {
+                            window._pendingTorreId = data.torre_id;
+                        }
+
+                        // Trigger torre loading
+                        fetch(`/actividades/api/torres-por-linea/${data.linea_id}/`)
+                            .then(r => r.json())
+                            .then(torres => {
+                                const torreSelect = document.getElementById('torre');
+                                torreSelect.innerHTML = '<option value="">Seleccionar torre...</option>';
+                                torres.forEach(t => {
+                                    const opt = document.createElement('option');
+                                    opt.value = t.id;
+                                    opt.textContent = `Torre ${t.numero}`;
+                                    torreSelect.appendChild(opt);
+                                });
+                                // Auto-select torre
+                                if (data.torre_id) {
+                                    torreSelect.value = data.torre_id;
+                                }
+                            });
+                    }
+
+                    // Auto-fill cuadrilla
+                    if (data.cuadrilla_id) {
+                        document.getElementById('cuadrilla').value = data.cuadrilla_id;
+                    }
+
+                    // Auto-fill orden SAP
+                    if (data.orden_sap) {
+                        document.getElementById('orden_sap').value = data.orden_sap;
+                    }
+
+                    // Auto-fill observaciones if empty
+                    const obsField = document.getElementById('observaciones_programacion');
+                    if (!obsField.value && data.observaciones) {
+                        obsField.value = data.observaciones;
+                    }
+                } else {
+                    feedback.className = 'mt-2 p-2 rounded text-sm bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
+                    feedback.textContent = 'No se encontro un aviso con ese numero. Puede llenar los campos manualmente.';
+                    feedback.classList.remove('hidden');
+                    infoSap.classList.add('hidden');
+                }
+            })
+            .catch(() => {
+                btnBuscar.disabled = false;
+                btnBuscar.textContent = 'Buscar';
+                feedback.className = 'mt-2 p-2 rounded text-sm bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+                feedback.textContent = 'Error al buscar. Intente de nuevo.';
+                feedback.classList.remove('hidden');
+            });
+    }
+
+    // Search on button click
+    btnBuscar.addEventListener('click', buscarAviso);
+
+    // Search on Enter key in aviso input
+    avisoInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            buscarAviso();
+        }
+    });
+});
+</script>
 {% endblock %}

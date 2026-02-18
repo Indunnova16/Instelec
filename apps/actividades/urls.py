@@ -12,6 +12,7 @@ urlpatterns = [
     path('calendario/', views.CalendarioView.as_view(), name='calendario'),
     path('api/eventos/', views.EventosAPIView.as_view(), name='api_eventos'),
     path('api/torres-por-linea/<uuid:linea_id>/', views.TorresParaLineaView.as_view(), name='torres_por_linea'),
+    path('api/buscar-aviso-sap/', views.BuscarAvisoSAPView.as_view(), name='buscar_aviso_sap'),
     path('<uuid:pk>/', views.ActividadDetailView.as_view(), name='detalle'),
     path('<uuid:pk>/partial/', views.ActividadDetailPartialView.as_view(), name='detalle_partial'),
     path('<uuid:pk>/detalle-modal/', views.ActividadDetalleModalView.as_view(), name='detalle_modal'),
