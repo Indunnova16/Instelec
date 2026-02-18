@@ -156,6 +156,13 @@ class CuadrillaMiembro(BaseModel):
         LINIERO_II = 'LINIERO_II', 'Liniero II'
         AYUDANTE = 'AYUDANTE', 'Ayudante'
         CONDUCTOR = 'CONDUCTOR', 'Conductor'
+        ADMINISTRADOR_OBRA = 'ADMINISTRADOR_OBRA', 'Administrador de Obra'
+        PROFESIONAL_SST = 'PROFESIONAL_SST', 'Profesional SST'
+        INGENIERO_RESIDENTE = 'ING_RESIDENTE', 'Ingeniero Residente'
+        SERVICIO_GENERAL = 'SERVICIO_GENERAL', 'Servicio General'
+        ALMACENISTA = 'ALMACENISTA', 'Almacenista'
+        SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
+        ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
 
     class CargoJerarquico(models.TextChoices):
         JT_CTA = 'JT_CTA', 'Jefe de Trabajo / Capacitado'

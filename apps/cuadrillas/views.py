@@ -822,32 +822,27 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 
 class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """API endpoint to get cost by role from CostoRecurso."""
+    """API endpoint to get cost by role."""
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
     def get(self, request, *args, **kwargs):
-        from apps.financiero.models import CostoRecurso
-
         rol = request.GET.get('rol', '').strip()
         if not rol:
             return JsonResponse({'costo_dia': 0})
 
-        # Map rol names for lookup
-        rol_map = {
-            'SUPERVISOR': 'supervisor',
-            'LINIERO_I': 'liniero i',
-            'LINIERO_II': 'liniero ii',
-            'AYUDANTE': 'ayudante',
-            'CONDUCTOR': 'conductor',
+        # Costos fijos por rol
+        costos = {
+            'SUPERVISOR': 0,
+            'LINIERO_I': 3176095,
+            'LINIERO_II': 2804856,
+            'AYUDANTE': 1750905,
+            'CONDUCTOR': 0,
+            'ADMINISTRADOR_OBRA': 2522400,
+            'PROFESIONAL_SST': 4204000,
+            'ING_RESIDENTE': 7357000,
+            'SERVICIO_GENERAL': 1750905,
+            'ALMACENISTA': 1800000,
+            'SUPERVISOR_FOREST': 2969427,
+            'ASISTENTE_FOREST': 4204000,
         }
-        busqueda = rol_map.get(rol, rol.lower())
-
-        costo = CostoRecurso.objects.filter(
-            tipo='DIA_HOMBRE',
-            activo=True,
-            descripcion__icontains=busqueda,
-        ).order_by('-vigencia_desde').first()
-
-        if costo:
-            return JsonResponse({'costo_dia': float(costo.costo_unitario)})
-        return JsonResponse({'costo_dia': 0})
+        return JsonResponse({'costo_dia': costos.get(rol, 0)})

@@ -193,19 +193,7 @@
             <div>
                 <label for="rol_cuadrilla" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cargo</label>
                 <select name="rol_cuadrilla" id="rol_cuadrilla"
-                        hx-get="{% url 'cuadrillas:costo_rol_api' %}"
-                        hx-trigger="change"
-                        hx-vals='js:{"rol": document.getElementById("rol_cuadrilla").value}'
-                        hx-target="#costo_dia"
-                        hx-swap="none"
-                        x-on:htmx:after-request.window="
-                            if ($event.detail.elt === $el) {
-                                try {
-                                    let data = JSON.parse($event.detail.xhr.responseText);
-                                    if (data.costo_dia) document.getElementById('costo_dia').value = data.costo_dia;
-                                } catch(e) {}
-                            }
-                        "
+                        onchange="actualizarCostoDia()"
                         class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
                     {% for value, label in roles_cuadrilla %}
                     <option value="{{ value }}">{{ label }}</option>
@@ -462,4 +450,34 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const COSTO_POR_ROL = {
+        'SUPERVISOR': 0,
+        'LINIERO_I': 3176095,
+        'LINIERO_II': 2804856,
+        'AYUDANTE': 1750905,
+        'CONDUCTOR': 0,
+        'ADMINISTRADOR_OBRA': 2522400,
+        'PROFESIONAL_SST': 4204000,
+        'ING_RESIDENTE': 7357000,
+        'SERVICIO_GENERAL': 1750905,
+        'ALMACENISTA': 1800000,
+        'SUPERVISOR_FOREST': 2969427,
+        'ASISTENTE_FOREST': 4204000,
+    };
+
+    function actualizarCostoDia() {
+        const rol = document.getElementById('rol_cuadrilla').value;
+        const costoInput = document.getElementById('costo_dia');
+        if (COSTO_POR_ROL.hasOwnProperty(rol)) {
+            costoInput.value = COSTO_POR_ROL[rol];
+        }
+    }
+
+    // Auto-fill on page load based on default selection
+    document.addEventListener('DOMContentLoaded', actualizarCostoDia);
+</script>
 {% endblock %}
