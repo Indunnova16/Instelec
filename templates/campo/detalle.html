@@ -126,6 +126,237 @@
                 </div>
             </div>
 
+            <!-- REM Tipo A Data -->
+            {% with datos=registro.datos_formulario %}
+            {% if datos.tipo_formulario == "REM_TIPO_A" %}
+
+            <!-- REM Header -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                    REM Tipo A - Formato de Campo
+                </h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Vano de Torre</p>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ datos.vano_torre_desde }} a {{ datos.vano_torre_hasta }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Fecha</p>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ datos.fecha }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Diligenciado por</p>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ datos.diligenciado_por }}</p>
+                    </div>
+                    {% if datos.ahuyentamiento_fauna %}
+                    <div class="col-span-2 md:col-span-3">
+                        <p class="text-gray-500 dark:text-gray-400">Ahuyentamiento de fauna</p>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ datos.ahuyentamiento_fauna }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Limpieza, Vegetacion, Marcacion -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                    <!-- Limpieza -->
+                    <div>
+                        <h3 class="font-semibold text-gray-900 dark:text-white mb-2">Actividades de Limpieza</h3>
+                        <div class="space-y-1">
+                            <p class="text-gray-700 dark:text-gray-300">
+                                Rastrojo:
+                                {% if datos.limpieza.rastrojo %}
+                                <span class="text-green-600 font-medium">Si</span>
+                                {% else %}
+                                <span class="text-gray-400">No</span>
+                                {% endif %}
+                            </p>
+                            <p class="text-gray-700 dark:text-gray-300">
+                                Cunetas:
+                                {% if datos.limpieza.cunetas %}
+                                <span class="text-green-600 font-medium">Si</span>
+                                {% else %}
+                                <span class="text-gray-400">No</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Tipo de Vegetacion -->
+                    <div>
+                        <h3 class="font-semibold text-gray-900 dark:text-white mb-2">Tipo de Vegetacion</h3>
+                        <div class="space-y-1">
+                            {% for key, label in tipos_vegetacion %}
+                            {% with veg_val=datos.vegetacion_tipo|default_if_none:"" %}
+                            <p class="text-gray-700 dark:text-gray-300">
+                                {{ label }}:
+                                {% if key in veg_val and veg_val|length > 0 %}
+                                <span class="font-medium">{{ veg_val }}</span>
+                                {% else %}
+                                <span class="text-gray-400">N/A</span>
+                                {% endif %}
+                            </p>
+                            {% endwith %}
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Marcacion -->
+                    <div>
+                        <h3 class="font-semibold text-gray-900 dark:text-white mb-2">Marcacion de Arboles</h3>
+                        <div class="space-y-1">
+                            <p class="text-gray-700 dark:text-gray-300">
+                                Amarillo poda:
+                                {% if datos.marcacion_arboles.amarillo_poda %}
+                                <span class="text-green-600 font-medium">Si</span>
+                                {% else %}
+                                <span class="text-gray-400">No</span>
+                                {% endif %}
+                            </p>
+                            <p class="text-gray-700 dark:text-gray-300">
+                                Blanco tala:
+                                {% if datos.marcacion_arboles.blanco_tala %}
+                                <span class="text-green-600 font-medium">Si</span>
+                                {% else %}
+                                <span class="text-gray-400">No</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trabajo ejecutado -->
+            {% if datos.trabajo_ejecutado %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-2">Informacion de trabajo ejecutado</h3>
+                <p class="text-sm text-gray-700 dark:text-gray-300">{{ datos.trabajo_ejecutado }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Contacto Permiso -->
+            {% with cp=datos.contacto_permiso %}
+            {% if cp.vereda or cp.municipio or cp.propietario or cp.finca or cp.cedula or cp.telefono %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Datos de contacto para tramitar permiso</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    {% if cp.vereda %}
+                    <div><p class="text-gray-500 dark:text-gray-400">Vereda</p><p class="font-medium text-gray-900 dark:text-white">{{ cp.vereda }}</p></div>
+                    {% endif %}
+                    {% if cp.municipio %}
+                    <div><p class="text-gray-500 dark:text-gray-400">Municipio</p><p class="font-medium text-gray-900 dark:text-white">{{ cp.municipio }}</p></div>
+                    {% endif %}
+                    {% if cp.propietario %}
+                    <div><p class="text-gray-500 dark:text-gray-400">Propietario</p><p class="font-medium text-gray-900 dark:text-white">{{ cp.propietario }}</p></div>
+                    {% endif %}
+                    {% if cp.finca %}
+                    <div><p class="text-gray-500 dark:text-gray-400">Finca</p><p class="font-medium text-gray-900 dark:text-white">{{ cp.finca }}</p></div>
+                    {% endif %}
+                    {% if cp.cedula %}
+                    <div><p class="text-gray-500 dark:text-gray-400">Cedula</p><p class="font-medium text-gray-900 dark:text-white">{{ cp.cedula }}</p></div>
+                    {% endif %}
+                    {% if cp.telefono %}
+                    <div><p class="text-gray-500 dark:text-gray-400">Telefono</p><p class="font-medium text-gray-900 dark:text-white">{{ cp.telefono }}</p></div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            <!-- Reporte de Vegetacion -->
+            {% if datos.reporte_vegetacion %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Reporte de Vegetacion</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="bg-gray-50 dark:bg-gray-700">
+                                <th class="px-2 py-2 text-left text-gray-700 dark:text-gray-300">Especie</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Tala</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Poda</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Altura (m)</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Abarcadura (cm)</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Copa Antes</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Copa Despues</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Dist. Eje (m)</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Largo</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">Ancho</th>
+                                <th class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">GPS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in datos.reporte_vegetacion %}
+                            <tr class="border-b border-gray-200 dark:border-gray-700">
+                                <td class="px-2 py-2 text-gray-900 dark:text-white">{{ row.especie }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.cantidad_tala|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.cantidad_poda|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.altura_m|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.abarcadura_cm|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.dist_copa_antes|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.dist_copa_despues|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.dist_eje_m|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.area_largo|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.area_ancho|default:"-" }}</td>
+                                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ row.coordenadas_gps|default:"-" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Inspecciones -->
+            {% with insp=datos.inspecciones %}
+            {% if insp.electromecanica or insp.sitio_torre or insp.senalizacion or insp.desviadores_vuelo or insp.cauces_naturales or insp.residuos %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-3">Inspecciones</h3>
+                <div class="space-y-3 text-sm">
+                    {% if insp.electromecanica %}
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Inspeccion electromecanica desde piso</p>
+                        <p class="text-gray-900 dark:text-white">{{ insp.electromecanica }}</p>
+                    </div>
+                    {% endif %}
+                    {% if insp.sitio_torre %}
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Inspeccion sitio de torre, obras civiles</p>
+                        <p class="text-gray-900 dark:text-white">{{ insp.sitio_torre }}</p>
+                    </div>
+                    {% endif %}
+                    {% if insp.senalizacion %}
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Inspeccion de senalizacion</p>
+                        <p class="text-gray-900 dark:text-white">{{ insp.senalizacion }}</p>
+                    </div>
+                    {% endif %}
+                    {% if insp.desviadores_vuelo %}
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Verificacion desviadores de vuelo</p>
+                        <p class="text-gray-900 dark:text-white">{{ insp.desviadores_vuelo }}</p>
+                    </div>
+                    {% endif %}
+                    {% if insp.cauces_naturales %}
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Cauces naturales, nacimientos de agua, lagos artificiales</p>
+                        <p class="text-gray-900 dark:text-white">{{ insp.cauces_naturales }}</p>
+                    </div>
+                    {% endif %}
+                    {% if insp.residuos %}
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Inspeccion de residuos</p>
+                        <p class="text-gray-900 dark:text-white">{{ insp.residuos }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            {% endif %}
+            {% endwith %}
+
             <!-- Observations -->
             {% if registro.observaciones %}
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">

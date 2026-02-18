@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Nuevo Registro de Campo - TransMaint{% endblock %}
+{% block title %}Formato de Campo REM Tipo A - TransMaint{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-6" x-data="remFormData()">
     <!-- Header -->
     <div class="flex items-center gap-4">
-        <a href="{% url 'campo:lista' %}" class="text-gray-500 hover:text-gray-700">
+        <a href="{% url 'campo:lista' %}" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
         </a>
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Nuevo Registro de Campo</h1>
-            <p class="text-gray-600 dark:text-gray-400">Registrar ejecucion de actividad</p>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">REM Tipo A - Formato de Campo</h1>
+            <p class="text-gray-600 dark:text-gray-400">Mantenimiento de Servidumbre de Lineas de Transmision - Anexo 1</p>
         </div>
     </div>
 
@@ -23,90 +23,472 @@
     </div>
     {% endif %}
 
-    <!-- Form -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <form method="post" class="space-y-6">
-            {% csrf_token %}
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
 
-            <!-- Actividad -->
-            <div>
-                <label for="actividad" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Actividad *
-                </label>
-                <select name="actividad" id="actividad" required
-                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                    <option value="">Seleccionar actividad...</option>
-                    {% for actividad in actividades %}
-                    <option value="{{ actividad.id }}" {% if actividad_seleccionada == actividad.id|stringformat:"s" %}selected{% endif %}>
-                        {{ actividad.linea.codigo }} - Torre {{ actividad.torre.numero }} - {{ actividad.tipo_actividad.nombre }}
-                        ({{ actividad.fecha_programada|date:"d/m/Y" }})
-                    </option>
-                    {% endfor %}
-                </select>
-                <p class="mt-1 text-sm text-gray-500">Solo se muestran actividades pendientes, programadas o en curso</p>
-            </div>
+        <!-- ============================================================ -->
+        <!-- SECCION 1: ENCABEZADO / IDENTIFICACION -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Identificacion
+            </h2>
 
-            <!-- Info de la actividad seleccionada -->
-            <div id="actividad-info" class="hidden bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                <h3 class="font-medium text-blue-800 dark:text-blue-200 mb-2">Informacion de la Actividad</h3>
-                <div id="actividad-detalles" class="text-sm text-blue-700 dark:text-blue-300">
-                    <!-- Se llena con JavaScript -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Linea -->
+                <div>
+                    <label for="linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Linea <span class="text-red-500">*</span>
+                    </label>
+                    <select name="linea" id="linea" required
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            @change="fetchTorres($el.value)">
+                        <option value="">Seleccionar linea...</option>
+                        {% for linea in lineas %}
+                        <option value="{{ linea.id }}">{{ linea.codigo }} - {{ linea.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Vano de torre DESDE -->
+                <div>
+                    <label for="torre_desde" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Vano de Torre (desde) <span class="text-red-500">*</span>
+                    </label>
+                    <select name="torre_desde" id="torre_desde" required
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            :disabled="torres.length === 0">
+                        <option value="">Seleccione una linea primero</option>
+                        <template x-for="torre in torres" :key="torre.id">
+                            <option :value="torre.id" x-text="'Torre ' + torre.numero"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <!-- Vano de torre HASTA -->
+                <div>
+                    <label for="torre_hasta" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Vano de Torre (hasta) <span class="text-red-500">*</span>
+                    </label>
+                    <select name="torre_hasta" id="torre_hasta" required
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            :disabled="torres.length === 0">
+                        <option value="">Seleccione una linea primero</option>
+                        <template x-for="torre in torres" :key="torre.id">
+                            <option :value="torre.id" x-text="'Torre ' + torre.numero"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <!-- Fecha -->
+                <div>
+                    <label for="fecha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Fecha <span class="text-red-500">*</span>
+                    </label>
+                    <input type="date" name="fecha" id="fecha" required
+                           value="{{ fecha_hoy }}"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+
+                <!-- Diligenciado por -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Diligenciado por
+                    </label>
+                    <input type="text" readonly
+                           value="{{ request.user.get_full_name }}"
+                           class="w-full rounded-lg border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-600 dark:text-gray-300 cursor-not-allowed">
+                </div>
+
+                <!-- Ahuyentamiento de fauna -->
+                <div>
+                    <label for="ahuyentamiento_fauna" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Ahuyentamiento de fauna
+                    </label>
+                    <input type="text" name="ahuyentamiento_fauna" id="ahuyentamiento_fauna"
+                           placeholder="Describir ahuyentamiento..."
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                 </div>
             </div>
+        </div>
 
-            <!-- Observaciones -->
-            <div>
-                <label for="observaciones" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Observaciones
-                </label>
-                <textarea name="observaciones" id="observaciones" rows="4"
-                          placeholder="Notas adicionales sobre la ejecucion de la actividad..."
-                          class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"></textarea>
-            </div>
+        <!-- ============================================================ -->
+        <!-- SECCION 2 y 3: ACTIVIDADES Y TIPO DE VEGETACION -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            <!-- Nota informativa -->
-            <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <div class="flex">
-                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200">Nota</h3>
-                        <p class="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
-                            Este formulario es para registros manuales. Los registros de campo normalmente se crean
-                            desde la aplicacion movil con geolocalizacion y evidencias fotograficas.
-                        </p>
+                <!-- Actividades de limpieza (MARCAR SI O NO) -->
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                        Actividades de Limpieza
+                        <span class="text-sm font-normal text-gray-500 dark:text-gray-400">(Marcar Si o No)</span>
+                    </h2>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3">
+                            <input type="checkbox" name="limpieza_rastrojo" value="true"
+                                   class="rounded border-gray-300 text-blue-600 dark:border-gray-600 dark:bg-gray-700">
+                            <span class="text-sm text-gray-700 dark:text-gray-300">Limpieza de rastrojo</span>
+                        </label>
+                        <label class="flex items-center gap-3">
+                            <input type="checkbox" name="limpieza_cunetas" value="true"
+                                   class="rounded border-gray-300 text-blue-600 dark:border-gray-600 dark:bg-gray-700">
+                            <span class="text-sm text-gray-700 dark:text-gray-300">Limpieza de cunetas</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Tipo de vegetacion (MARCAR TALA o PODA) -->
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                        Tipo de Vegetacion
+                        <span class="text-sm font-normal text-gray-500 dark:text-gray-400">(Marcar Tala (T) o Poda (P))</span>
+                    </h2>
+                    <div class="space-y-3">
+                        {% for veg_key, veg_label in tipos_vegetacion %}
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-700 dark:text-gray-300">{{ veg_label }}</span>
+                            <div class="flex items-center gap-4">
+                                <label class="flex items-center gap-1">
+                                    <input type="radio" name="veg_{{ veg_key }}" value="TALA"
+                                           class="border-gray-300 text-blue-600 dark:border-gray-600 dark:bg-gray-700">
+                                    <span class="text-xs text-gray-600 dark:text-gray-400">T</span>
+                                </label>
+                                <label class="flex items-center gap-1">
+                                    <input type="radio" name="veg_{{ veg_key }}" value="PODA"
+                                           class="border-gray-300 text-blue-600 dark:border-gray-600 dark:bg-gray-700">
+                                    <span class="text-xs text-gray-600 dark:text-gray-400">P</span>
+                                </label>
+                                <label class="flex items-center gap-1">
+                                    <input type="radio" name="veg_{{ veg_key }}" value="" checked
+                                           class="border-gray-300 text-gray-400 dark:border-gray-600 dark:bg-gray-700">
+                                    <span class="text-xs text-gray-600 dark:text-gray-400">N/A</span>
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
 
-            <!-- Buttons -->
-            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <a href="{% url 'campo:lista' %}"
-                   class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    Cancelar
-                </a>
-                <button type="submit"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Crear Registro
+            <!-- Marcacion de arboles con pintura -->
+            <div class="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 class="text-md font-semibold text-gray-900 dark:text-white mb-3">
+                    Marcacion de arboles con pintura
+                    <span class="text-sm font-normal text-gray-500 dark:text-gray-400">(Marcar Si o No)</span>
+                </h3>
+                <div class="flex flex-wrap gap-6">
+                    <label class="flex items-center gap-3">
+                        <input type="checkbox" name="marcacion_amarillo_poda" value="true"
+                               class="rounded border-gray-300 text-yellow-500 dark:border-gray-600 dark:bg-gray-700">
+                        <span class="text-sm text-gray-700 dark:text-gray-300">Amarillo poda</span>
+                    </label>
+                    <label class="flex items-center gap-3">
+                        <input type="checkbox" name="marcacion_blanco_tala" value="true"
+                               class="rounded border-gray-300 text-blue-600 dark:border-gray-600 dark:bg-gray-700">
+                        <span class="text-sm text-gray-700 dark:text-gray-300">Blanco Tala</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECCION 4: INFORMACION DE TRABAJO EJECUTADO -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Informacion de trabajo ejecutado
+            </h2>
+            <textarea name="trabajo_ejecutado" rows="4"
+                      placeholder="Describir el trabajo ejecutado en campo..."
+                      class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECCION 5: DATOS DE CONTACTO PARA TRAMITAR PERMISO -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Datos de contacto para tramitar permiso
+            </h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                Para gestionar permisos de vegetacion pendiente, diligenciar formato aparte por cada propietario
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <label for="contacto_vereda" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vereda</label>
+                    <input type="text" name="contacto_vereda" id="contacto_vereda"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label for="contacto_municipio" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Municipio</label>
+                    <input type="text" name="contacto_municipio" id="contacto_municipio"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label for="contacto_propietario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Propietario o responsable del predio</label>
+                    <input type="text" name="contacto_propietario" id="contacto_propietario"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label for="contacto_finca" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Finca</label>
+                    <input type="text" name="contacto_finca" id="contacto_finca"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label for="contacto_cedula" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cedula</label>
+                    <input type="text" name="contacto_cedula" id="contacto_cedula"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label for="contacto_telefono" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telefono</label>
+                    <input type="text" name="contacto_telefono" id="contacto_telefono"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECCION 6: REPORTE DE VEGETACION (TABLA DINAMICA) -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                    Reporte de Vegetacion (*)
+                </h2>
+                <button type="button" @click="addVegetacion()"
+                        class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Agregar fila
                 </button>
             </div>
-        </form>
-    </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700">
+                            <th class="px-2 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300" rowspan="2">Especie</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300" colspan="2">Cantidad</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300" rowspan="2">Altura (m)</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300" rowspan="2">Abarcadura (cm)</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300" colspan="2">Dist. Copa-Linea</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300" rowspan="2">Dist. Eje (m)</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300" colspan="2">Area</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300" rowspan="2">GPS (WGS84)</th>
+                            <th class="px-2 py-2" rowspan="2"></th>
+                        </tr>
+                        <tr class="bg-gray-50 dark:bg-gray-700">
+                            <th class="px-2 py-1 text-center text-xs font-medium text-gray-600 dark:text-gray-400">Tala</th>
+                            <th class="px-2 py-1 text-center text-xs font-medium text-gray-600 dark:text-gray-400">Poda</th>
+                            <th class="px-2 py-1 text-center text-xs font-medium text-gray-600 dark:text-gray-400">Antes</th>
+                            <th class="px-2 py-1 text-center text-xs font-medium text-gray-600 dark:text-gray-400">Despues</th>
+                            <th class="px-2 py-1 text-center text-xs font-medium text-gray-600 dark:text-gray-400">Largo</th>
+                            <th class="px-2 py-1 text-center text-xs font-medium text-gray-600 dark:text-gray-400">Ancho</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(row, index) in vegetacion" :key="index">
+                            <tr class="border-b border-gray-200 dark:border-gray-700">
+                                <td class="px-1 py-1">
+                                    <input type="text" :name="'veg_especie_' + index" x-model="row.especie"
+                                           class="w-full min-w-[100px] rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_cant_tala_' + index" x-model="row.cantidad_tala" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_cant_poda_' + index" x-model="row.cantidad_poda" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_altura_' + index" x-model="row.altura_m" step="0.1" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_abarcadura_' + index" x-model="row.abarcadura_cm" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_copa_antes_' + index" x-model="row.dist_copa_antes" step="0.1" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_copa_despues_' + index" x-model="row.dist_copa_despues" step="0.1" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_dist_eje_' + index" x-model="row.dist_eje_m" step="0.1" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_area_largo_' + index" x-model="row.area_largo" step="0.1" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="number" :name="'veg_area_ancho_' + index" x-model="row.area_ancho" step="0.1" min="0"
+                                           class="w-16 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1 text-center">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <input type="text" :name="'veg_gps_' + index" x-model="row.coordenadas_gps"
+                                           placeholder="Lat, Lon"
+                                           class="w-28 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs px-2 py-1">
+                                </td>
+                                <td class="px-1 py-1">
+                                    <button type="button" @click="removeVegetacion(index)" x-show="vegetacion.length > 1"
+                                            class="text-red-500 hover:text-red-700 p-1" title="Eliminar fila">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Hidden field to send vegetacion JSON -->
+            <input type="hidden" name="reporte_vegetacion_json" :value="JSON.stringify(vegetacion)">
+
+            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                (*) En caso de identificar la presencia de guaduales, tomar las medidas de distancia COPA-FASE considerando los tallos individuales y el riesgo de cortocircuito por posible balanceo y acercamiento hacia la linea.
+            </p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECCION 7: INSPECCIONES -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Inspecciones
+            </h2>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="insp_electromecanica" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Inspeccion electromecanica desde piso
+                    </label>
+                    <textarea name="insp_electromecanica" id="insp_electromecanica" rows="2"
+                              class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+
+                <div>
+                    <label for="insp_sitio_torre" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Inspeccion sitio de torre, obras civiles
+                    </label>
+                    <textarea name="insp_sitio_torre" id="insp_sitio_torre" rows="2"
+                              class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+
+                <div>
+                    <label for="insp_senalizacion" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Inspeccion de senalizacion: placas de numeracion, peligro, aereas
+                    </label>
+                    <textarea name="insp_senalizacion" id="insp_senalizacion" rows="2"
+                              class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+
+                <div>
+                    <label for="insp_desviadores" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Verificacion presencia de desviadores de vuelo
+                    </label>
+                    <textarea name="insp_desviadores" id="insp_desviadores" rows="2"
+                              class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+
+                <div>
+                    <label for="insp_cauces" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Cauces naturales, nacimientos de agua, lagos artificiales en el vano
+                    </label>
+                    <textarea name="insp_cauces" id="insp_cauces" rows="2"
+                              class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+
+                <div>
+                    <label for="insp_residuos" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Inspeccion de residuos (describir los residuos generados de las actividades y su gestion)
+                    </label>
+                    <textarea name="insp_residuos" id="insp_residuos" rows="2"
+                              class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECCION 8: OBSERVACIONES -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Observaciones
+            </h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                Documentar riesgos, justificacion del permiso, condiciones ambientales especiales
+            </p>
+            <textarea name="observaciones" id="observaciones" rows="4"
+                      placeholder="Observaciones generales del formato de campo..."
+                      class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- BOTONES -->
+        <!-- ============================================================ -->
+        <div class="flex justify-end gap-3 pt-2">
+            <a href="{% url 'campo:lista' %}"
+               class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                Cancelar
+            </a>
+            <button type="submit"
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                Crear Registro de Campo
+            </button>
+        </div>
+    </form>
 </div>
 
 <script>
-document.getElementById('actividad').addEventListener('change', function() {
-    const info = document.getElementById('actividad-info');
-    const detalles = document.getElementById('actividad-detalles');
+function remFormData() {
+    return {
+        torres: [],
+        vegetacion: [
+            { especie: '', cantidad_tala: '', cantidad_poda: '', altura_m: '', abarcadura_cm: '', dist_copa_antes: '', dist_copa_despues: '', dist_eje_m: '', area_largo: '', area_ancho: '', coordenadas_gps: '' }
+        ],
 
-    if (this.value) {
-        const selectedOption = this.options[this.selectedIndex];
-        info.classList.remove('hidden');
-        detalles.innerHTML = '<p>Actividad seleccionada: <strong>' + selectedOption.text + '</strong></p>';
-    } else {
-        info.classList.add('hidden');
+        fetchTorres(lineaId) {
+            const desdeSelect = document.getElementById('torre_desde');
+            const hastaSelect = document.getElementById('torre_hasta');
+
+            if (!lineaId) {
+                this.torres = [];
+                return;
+            }
+
+            fetch(`/actividades/api/torres-por-linea/${lineaId}/`)
+                .then(r => r.json())
+                .then(data => {
+                    this.torres = data;
+                })
+                .catch(() => {
+                    this.torres = [];
+                });
+        },
+
+        addVegetacion() {
+            this.vegetacion.push({
+                especie: '', cantidad_tala: '', cantidad_poda: '', altura_m: '', abarcadura_cm: '',
+                dist_copa_antes: '', dist_copa_despues: '', dist_eje_m: '', area_largo: '', area_ancho: '', coordenadas_gps: ''
+            });
+        },
+
+        removeVegetacion(index) {
+            if (this.vegetacion.length > 1) {
+                this.vegetacion.splice(index, 1);
+            }
+        }
     }
-});
+}
 </script>
 {% endblock %}

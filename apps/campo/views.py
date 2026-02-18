@@ -59,6 +59,7 @@ class RegistroDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Detai
         context['evidencias_antes'] = self.object.evidencias.filter(tipo='ANTES')
         context['evidencias_durante'] = self.object.evidencias.filter(tipo='DURANTE')
         context['evidencias_despues'] = self.object.evidencias.filter(tipo='DESPUES')
+        context['tipos_vegetacion'] = RegistroCreateView.TIPOS_VEGETACION
         return context
 
 
@@ -81,55 +82,148 @@ class EvidenciasView(LoginRequiredMixin, RoleRequiredMixin, ListView):
 
 
 class RegistroCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
-    """View for creating a new field record."""
+    """View for creating a new REM Tipo A field record."""
     template_name = 'campo/crear.html'
     partial_template_name = 'campo/partials/form_registro.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
 
+    TIPOS_VEGETACION = [
+        ('arboles_aislados', 'Arboles aislados'),
+        ('bosque_plantado', 'Bosque plantado'),
+        ('bosque_natural', 'Bosque natural'),
+        ('cerca_viva', 'Cerca viva'),
+        ('cultivo_agricola', 'Cultivo agricola'),
+    ]
+
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        from apps.actividades.models import Actividad
         from apps.lineas.models import Linea
 
-        # Get activities that can have records (not completed/cancelled)
-        context['actividades'] = Actividad.objects.filter(
-            estado__in=['PENDIENTE', 'PROGRAMADA', 'EN_CURSO']
-        ).select_related('linea', 'torre', 'tipo_actividad')
         context['lineas'] = Linea.objects.filter(activa=True)
-
-        # Pre-select activity if passed in URL
-        actividad_id = self.request.GET.get('actividad')
-        if actividad_id:
-            context['actividad_seleccionada'] = actividad_id
+        context['tipos_vegetacion'] = self.TIPOS_VEGETACION
+        context['fecha_hoy'] = timezone.now().strftime('%Y-%m-%d')
 
         return context
 
     def post(self, request, *args, **kwargs):
+        import json
         from django.http import HttpResponseRedirect
-        from apps.actividades.models import Actividad
+        from apps.actividades.models import Actividad, TipoActividad
+        from apps.lineas.models import Linea, Torre
 
-        actividad_id = request.POST.get('actividad')
+        linea_id = request.POST.get('linea')
+        torre_desde_id = request.POST.get('torre_desde')
+        torre_hasta_id = request.POST.get('torre_hasta')
+        fecha = request.POST.get('fecha')
         observaciones = request.POST.get('observaciones', '')
 
-        try:
-            actividad = Actividad.objects.get(pk=actividad_id)
-
-            registro = RegistroCampo.objects.create(
-                actividad=actividad,
-                usuario=request.user,
-                fecha_inicio=timezone.now(),
-                observaciones=observaciones,
-                sincronizado=True,
-                fecha_sincronizacion=timezone.now()
-            )
-
-            # Update activity status to EN_CURSO if it was PENDIENTE
-            if actividad.estado == 'PENDIENTE':
-                actividad.estado = 'EN_CURSO'
-                actividad.save(update_fields=['estado', 'updated_at'])
-
-            return HttpResponseRedirect(reverse_lazy('campo:detalle', kwargs={'pk': registro.pk}))
-        except Actividad.DoesNotExist:
+        if not linea_id or not torre_desde_id or not torre_hasta_id or not fecha:
             context = self.get_context_data(**kwargs)
-            context['error'] = 'Actividad no encontrada'
+            context['error'] = 'Debe seleccionar linea, torres y fecha'
             return self.render_to_response(context)
+
+        try:
+            linea = Linea.objects.get(pk=linea_id)
+            torre_desde = Torre.objects.get(pk=torre_desde_id)
+            torre_hasta = Torre.objects.get(pk=torre_hasta_id)
+        except (Linea.DoesNotExist, Torre.DoesNotExist):
+            context = self.get_context_data(**kwargs)
+            context['error'] = 'Linea o torre no encontrada'
+            return self.render_to_response(context)
+
+        # Find or create SERVIDUMBRE activity type
+        tipo_servidumbre, _ = TipoActividad.objects.get_or_create(
+            categoria='SERVIDUMBRE',
+            defaults={
+                'codigo': 'REM-SERV',
+                'nombre': 'Mantenimiento Servidumbre REM',
+                'activo': True,
+            }
+        )
+
+        # Find existing active activity or create a new one
+        actividad = Actividad.objects.filter(
+            linea=linea,
+            torre=torre_desde,
+            tipo_actividad=tipo_servidumbre,
+            estado__in=['PENDIENTE', 'PROGRAMADA', 'EN_CURSO'],
+        ).first()
+
+        if not actividad:
+            actividad = Actividad.objects.create(
+                linea=linea,
+                torre=torre_desde,
+                tipo_actividad=tipo_servidumbre,
+                fecha_programada=fecha,
+                estado='EN_CURSO',
+            )
+        elif actividad.estado == 'PENDIENTE':
+            actividad.estado = 'EN_CURSO'
+            actividad.save(update_fields=['estado', 'updated_at'])
+
+        # Build vegetation type data
+        vegetacion_tipo = {}
+        for veg_key, _ in self.TIPOS_VEGETACION:
+            vegetacion_tipo[veg_key] = request.POST.get(f'veg_{veg_key}', '')
+
+        # Parse vegetation report JSON
+        reporte_vegetacion = []
+        try:
+            reporte_raw = request.POST.get('reporte_vegetacion_json', '[]')
+            reporte_vegetacion = json.loads(reporte_raw)
+            # Filter out empty rows
+            reporte_vegetacion = [
+                row for row in reporte_vegetacion
+                if row.get('especie', '').strip()
+            ]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # Build datos_formulario JSON
+        datos_formulario = {
+            'tipo_formulario': 'REM_TIPO_A',
+            'vano_torre_desde': torre_desde.numero,
+            'vano_torre_hasta': torre_hasta.numero,
+            'fecha': fecha,
+            'diligenciado_por': request.user.get_full_name(),
+            'ahuyentamiento_fauna': request.POST.get('ahuyentamiento_fauna', ''),
+            'limpieza': {
+                'rastrojo': request.POST.get('limpieza_rastrojo') == 'true',
+                'cunetas': request.POST.get('limpieza_cunetas') == 'true',
+            },
+            'vegetacion_tipo': vegetacion_tipo,
+            'marcacion_arboles': {
+                'amarillo_poda': request.POST.get('marcacion_amarillo_poda') == 'true',
+                'blanco_tala': request.POST.get('marcacion_blanco_tala') == 'true',
+            },
+            'trabajo_ejecutado': request.POST.get('trabajo_ejecutado', ''),
+            'contacto_permiso': {
+                'vereda': request.POST.get('contacto_vereda', ''),
+                'municipio': request.POST.get('contacto_municipio', ''),
+                'propietario': request.POST.get('contacto_propietario', ''),
+                'finca': request.POST.get('contacto_finca', ''),
+                'cedula': request.POST.get('contacto_cedula', ''),
+                'telefono': request.POST.get('contacto_telefono', ''),
+            },
+            'reporte_vegetacion': reporte_vegetacion,
+            'inspecciones': {
+                'electromecanica': request.POST.get('insp_electromecanica', ''),
+                'sitio_torre': request.POST.get('insp_sitio_torre', ''),
+                'senalizacion': request.POST.get('insp_senalizacion', ''),
+                'desviadores_vuelo': request.POST.get('insp_desviadores', ''),
+                'cauces_naturales': request.POST.get('insp_cauces', ''),
+                'residuos': request.POST.get('insp_residuos', ''),
+            },
+        }
+
+        registro = RegistroCampo.objects.create(
+            actividad=actividad,
+            usuario=request.user,
+            fecha_inicio=timezone.now(),
+            observaciones=observaciones,
+            datos_formulario=datos_formulario,
+            sincronizado=True,
+            fecha_sincronizacion=timezone.now()
+        )
+
+        return HttpResponseRedirect(reverse_lazy('campo:detalle', kwargs={'pk': registro.pk}))
