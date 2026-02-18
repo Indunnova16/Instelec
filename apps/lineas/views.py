@@ -1,12 +1,17 @@
 """
 Views for transmission lines.
 """
+import logging
+
 from django.shortcuts import redirect
 from django.contrib import messages
+from django.views import View
 from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Linea, Torre
+
+logger = logging.getLogger(__name__)
 
 
 class LineaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -42,9 +47,12 @@ class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailVi
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor', 'liniero']
 
     def get_context_data(self, **kwargs):
+        import json
         context = super().get_context_data(**kwargs)
         context['torres'] = self.object.torres.all()[:50]
         context['total_torres'] = self.object.torres.count()
+        if self.object.kmz_geojson:
+            context['kmz_geojson_json'] = json.dumps(self.object.kmz_geojson)
         return context
 
 
@@ -311,3 +319,80 @@ class LineaCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Template
         except Exception as e:
             messages.error(request, f'Error al crear la línea: {str(e)}')
             return self.get(request, *args, **kwargs)
+
+
+class LineaUploadKMZView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Upload a KMZ/KML file for a specific transmission line and convert to GeoJSON."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def post(self, request, pk):
+        from .importers import kmz_to_geojson
+
+        try:
+            linea = Linea.objects.get(pk=pk)
+        except Linea.DoesNotExist:
+            messages.error(request, 'Línea no encontrada.')
+            return redirect('lineas:lista')
+
+        archivo = request.FILES.get('archivo_kmz')
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo KMZ o KML.')
+            return redirect('lineas:detalle', pk=pk)
+
+        if not archivo.name.lower().endswith(('.kmz', '.kml')):
+            messages.error(request, 'El archivo debe ser un KMZ o KML.')
+            return redirect('lineas:detalle', pk=pk)
+
+        if archivo.size > 50 * 1024 * 1024:
+            messages.error(request, 'El archivo no debe superar los 50 MB.')
+            return redirect('lineas:detalle', pk=pk)
+
+        try:
+            geojson_data = kmz_to_geojson(archivo)
+            archivo.seek(0)  # Reset file pointer for FileField save
+
+            if not geojson_data or not geojson_data.get('features'):
+                messages.error(request, 'El archivo no contiene datos geográficos válidos.')
+                return redirect('lineas:detalle', pk=pk)
+
+            # Delete old file if replacing
+            if linea.archivo_kmz:
+                linea.archivo_kmz.delete(save=False)
+
+            linea.archivo_kmz = archivo
+            linea.kmz_geojson = geojson_data
+            linea.save(update_fields=['archivo_kmz', 'kmz_geojson'])
+
+            num_features = len(geojson_data['features'])
+            messages.success(
+                request,
+                f'Archivo KMZ cargado exitosamente. Se encontraron {num_features} elementos geográficos.'
+            )
+        except ValueError as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            logger.exception('Error processing KMZ upload')
+            messages.error(request, f'Error al procesar el archivo: {str(e)}')
+
+        return redirect('lineas:detalle', pk=pk)
+
+
+class LineaDeleteKMZView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Delete the KMZ file and GeoJSON data from a transmission line."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, pk):
+        try:
+            linea = Linea.objects.get(pk=pk)
+        except Linea.DoesNotExist:
+            messages.error(request, 'Línea no encontrada.')
+            return redirect('lineas:lista')
+
+        if linea.archivo_kmz:
+            linea.archivo_kmz.delete(save=False)
+
+        linea.kmz_geojson = None
+        linea.save(update_fields=['archivo_kmz', 'kmz_geojson'])
+
+        messages.success(request, 'Archivo KMZ eliminado exitosamente.')
+        return redirect('lineas:detalle', pk=pk)

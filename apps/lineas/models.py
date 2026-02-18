@@ -101,6 +101,19 @@ class Linea(BaseModel):
         'Observaciones',
         blank=True
     )
+    archivo_kmz = models.FileField(
+        'Archivo KMZ/KML',
+        upload_to='lineas/kmz/',
+        blank=True,
+        null=True,
+        help_text='Archivo KMZ o KML con datos geográficos de la línea'
+    )
+    kmz_geojson = models.JSONField(
+        'GeoJSON del KMZ',
+        blank=True,
+        null=True,
+        help_text='Contenido del KMZ convertido a GeoJSON para visualización en mapa'
+    )
 
     class Meta:
         db_table = 'lineas'

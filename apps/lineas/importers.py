@@ -188,3 +188,81 @@ class KMZImporter:
                 return match.group(1)
 
         return None
+
+
+def kmz_to_geojson(archivo):
+    """
+    Convert a KMZ/KML uploaded file to a GeoJSON FeatureCollection dict.
+
+    Preserves all feature types (points, lines, polygons) for map visualization.
+
+    Args:
+        archivo: Django UploadedFile (KMZ or KML)
+
+    Returns:
+        dict: GeoJSON FeatureCollection
+
+    Raises:
+        ValueError: If the file cannot be read or parsed
+    """
+    import json
+    from osgeo import ogr, osr
+
+    suffix = '.kmz' if archivo.name.lower().endswith('.kmz') else '.kml'
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            for chunk in archivo.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+
+        ds = ogr.Open(tmp_path)
+        if ds is None:
+            raise ValueError('No se pudo leer el archivo. Verifique que sea un KMZ/KML válido.')
+
+        features = []
+        target_srs = osr.SpatialReference()
+        target_srs.ImportFromEPSG(4326)
+
+        for layer_idx in range(ds.GetLayerCount()):
+            layer = ds.GetLayer(layer_idx)
+            if layer is None:
+                continue
+
+            layer.ResetReading()
+            for feature in layer:
+                geom = feature.GetGeometryRef()
+                if geom is None:
+                    continue
+
+                # Ensure geometry is in WGS84
+                source_srs = geom.GetSpatialReference()
+                if source_srs and not source_srs.IsSame(target_srs):
+                    geom.TransformTo(target_srs)
+
+                geom_json = json.loads(geom.ExportToJson())
+
+                # Extract properties
+                properties = {}
+                for field_idx in range(feature.GetFieldCount()):
+                    field_name = feature.GetFieldDefnRef(field_idx).GetName()
+                    field_value = feature.GetField(field_idx)
+                    if field_value is not None:
+                        properties[field_name] = field_value
+
+                features.append({
+                    'type': 'Feature',
+                    'geometry': geom_json,
+                    'properties': properties,
+                })
+
+        ds = None  # Close datasource
+
+        return {
+            'type': 'FeatureCollection',
+            'features': features,
+        }
+
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
