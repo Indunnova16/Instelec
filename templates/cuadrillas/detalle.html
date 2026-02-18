@@ -498,5 +498,14 @@
 
     // Auto-fill on page load based on default selection
     document.addEventListener('DOMContentLoaded', actualizarCostoDia);
+
+    // Update total viaticos when HTMX triggers the event
+    document.body.addEventListener('updateTotalViaticos', function(evt) {
+        const data = evt.detail;
+        const span = document.getElementById('total-viaticos-' + data.usuario_id);
+        if (span) {
+            span.textContent = '$' + Number(data.total).toLocaleString('es-CO');
+        }
+    });
 </script>
 {% endblock %}

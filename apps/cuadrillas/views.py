@@ -646,13 +646,16 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             f'<input type="hidden" name="usuario_id" value="{usuario_id}">'
             f'<input type="hidden" name="fecha" value="{fecha_str}">'
             f'<input type="hidden" name="viaticos" value="{float(viaticos)}">'
-            # OOB swap: update the total viaticos span for this user
-            f'<span id="total-viaticos-{usuario_id}" hx-swap-oob="true" '
-            f'class="text-sm font-bold text-green-600 dark:text-green-400">'
-            f'${total_viaticos_fmt}'
-            f'</span>'
         )
-        return HttpResponse(html)
+        import json
+        response = HttpResponse(html)
+        response['HX-Trigger'] = json.dumps({
+            'updateTotalViaticos': {
+                'usuario_id': str(usuario_id),
+                'total': total_viaticos_fmt,
+            }
+        })
+        return response
 
 
 class CuadrillaMiembroRemoveView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
