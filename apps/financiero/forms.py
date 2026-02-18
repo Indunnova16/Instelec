@@ -31,30 +31,9 @@ class ChecklistEditForm(forms.ModelForm):
         }
 
 
-class ArchivoChecklistForm(forms.Form):
-    """File upload form for per-activity attachments."""
-
-    archivos = forms.FileField(
-        label='Archivos',
-        widget=forms.FileInput(attrs={
-            'class': TAILWIND_INPUT,
-            'multiple': True,
-            'accept': '.pdf,.xlsx,.xls,.jpg,.jpeg,.png,.webp',
-        }),
-    )
-
-
 class ArchivoPeriodoForm(forms.Form):
     """File upload form for period-level attachments."""
 
-    archivos = forms.FileField(
-        label='Archivos del periodo',
-        widget=forms.FileInput(attrs={
-            'class': TAILWIND_INPUT,
-            'multiple': True,
-            'accept': '.pdf,.xlsx,.xls,.jpg,.jpeg,.png,.webp',
-        }),
-    )
     descripcion = forms.CharField(
         label='Descripcion',
         max_length=200,

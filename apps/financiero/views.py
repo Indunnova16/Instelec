@@ -757,11 +757,10 @@ class ChecklistDetallePartialView(LoginRequiredMixin, RoleRequiredMixin, DetailV
         ).prefetch_related('archivos')
 
     def get_context_data(self, **kwargs):
-        from .forms import ArchivoChecklistForm, ChecklistEditForm
+        from .forms import ChecklistEditForm
 
         context = super().get_context_data(**kwargs)
         context['edit_form'] = ChecklistEditForm(instance=self.object)
-        context['upload_form'] = ArchivoChecklistForm()
         context['archivos'] = self.object.archivos.all()
         return context
 
