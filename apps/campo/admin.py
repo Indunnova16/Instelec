@@ -4,7 +4,7 @@ Admin configuration for field records.
 from django.contrib import admin
 from django.utils.html import format_html
 from apps.core.admin import BaseModelAdmin
-from .models import RegistroCampo, Evidencia
+from .models import RegistroCampo, Evidencia, ReporteDano
 
 
 class EvidenciaInline(admin.TabularInline):
@@ -93,3 +93,18 @@ class EvidenciaAdmin(BaseModelAdmin):
         return obj.es_valida
     es_valida.boolean = True
     es_valida.short_description = 'Válida'
+
+
+@admin.register(ReporteDano)
+class ReporteDanoAdmin(BaseModelAdmin):
+    list_display = ('usuario', 'descripcion_corta', 'latitud', 'longitud', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('descripcion', 'usuario__email', 'usuario__first_name', 'usuario__last_name')
+    raw_id_fields = ('usuario',)
+    readonly_fields = ('latitud', 'longitud')
+
+    def descripcion_corta(self, obj):
+        if len(obj.descripcion) > 80:
+            return obj.descripcion[:80] + '...'
+        return obj.descripcion
+    descripcion_corta.short_description = 'Descripción'

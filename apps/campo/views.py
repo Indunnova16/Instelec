@@ -9,7 +9,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.utils import timezone
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import RegistroCampo, Evidencia
+from .models import RegistroCampo, Evidencia, ReporteDano
 
 
 class RegistroListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -227,3 +227,60 @@ class RegistroCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Templ
         )
 
         return HttpResponseRedirect(reverse_lazy('campo:detalle', kwargs={'pk': registro.pk}))
+
+
+class ReportarDanoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """View for creating a damage report with geolocation."""
+    template_name = 'campo/reportar_dano.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+
+    def post(self, request, *args, **kwargs):
+        from decimal import Decimal, InvalidOperation
+        from django.http import HttpResponseRedirect
+
+        descripcion = request.POST.get('descripcion', '').strip()
+        latitud_raw = request.POST.get('latitud', '').strip()
+        longitud_raw = request.POST.get('longitud', '').strip()
+
+        if not descripcion:
+            context = self.get_context_data(**kwargs)
+            context['error'] = 'Debe ingresar una descripción del daño'
+            return self.render_to_response(context)
+
+        latitud = None
+        longitud = None
+        if latitud_raw and longitud_raw:
+            try:
+                latitud = Decimal(latitud_raw)
+                longitud = Decimal(longitud_raw)
+            except InvalidOperation:
+                pass
+
+        reporte = ReporteDano.objects.create(
+            usuario=request.user,
+            descripcion=descripcion,
+            latitud=latitud,
+            longitud=longitud,
+        )
+
+        return HttpResponseRedirect(reverse_lazy('campo:detalle_dano', kwargs={'pk': reporte.pk}))
+
+
+class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
+    """List damage reports."""
+    model = ReporteDano
+    template_name = 'campo/lista_danos.html'
+    context_object_name = 'reportes'
+    paginate_by = 20
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+
+    def get_queryset(self) -> QuerySet[ReporteDano]:
+        return super().get_queryset().select_related('usuario')
+
+
+class ReporteDanoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Detail view for a damage report."""
+    model = ReporteDano
+    template_name = 'campo/detalle_dano.html'
+    context_object_name = 'reporte'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']

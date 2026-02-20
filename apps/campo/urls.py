@@ -12,4 +12,7 @@ urlpatterns = [
     path('crear/', views.RegistroCreateView.as_view(), name='crear'),
     path('<uuid:pk>/', views.RegistroDetailView.as_view(), name='detalle'),
     path('<uuid:pk>/evidencias/', views.EvidenciasView.as_view(), name='evidencias'),
+    path('reportar-dano/', views.ReportarDanoCreateView.as_view(), name='reportar_dano'),
+    path('reportes-dano/', views.ReportesDanoListView.as_view(), name='reportes_dano'),
+    path('reportes-dano/<uuid:pk>/', views.ReporteDanoDetailView.as_view(), name='detalle_dano'),
 ]

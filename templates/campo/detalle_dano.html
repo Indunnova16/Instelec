@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de Daño - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <a href="{% url 'campo:reportes_dano' %}" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+        </a>
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Reporte de Daño</h1>
+            <p class="text-gray-600 dark:text-gray-400">
+                Reportado el {{ reporte.created_at|date:"d/m/Y H:i" }}
+            </p>
+        </div>
+        <span class="px-3 py-1 text-sm font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+            Daño Reportado
+        </span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Info -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Description -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Descripción del Daño</h2>
+                <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ reporte.descripcion }}</p>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Reporter Info -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Información</h2>
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Reportado por</p>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ reporte.usuario.get_full_name }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Fecha y hora</p>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ reporte.created_at|date:"d/m/Y H:i:s" }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Location -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Ubicación</h2>
+                {% if reporte.latitud and reporte.longitud %}
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Latitud</p>
+                        <p class="font-medium text-gray-900 dark:text-white font-mono">{{ reporte.latitud }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 dark:text-gray-400">Longitud</p>
+                        <p class="font-medium text-gray-900 dark:text-white font-mono">{{ reporte.longitud }}</p>
+                    </div>
+                    <a href="https://www.google.com/maps?q={{ reporte.latitud }},{{ reporte.longitud }}"
+                       target="_blank"
+                       class="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Ver en Google Maps
+                    </a>
+                </div>
+                {% else %}
+                <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3"/>
+                    </svg>
+                    <p class="text-sm">Ubicación no disponible</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

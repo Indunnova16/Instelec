@@ -310,3 +310,44 @@ class Evidencia(BaseModel):
     @property
     def puntaje_iluminacion(self):
         return self.validacion_ia.get('iluminacion', 1.0)
+
+
+class ReporteDano(BaseModel):
+    """
+    Damage report with geolocation.
+    Allows field workers to report damages found on site.
+    """
+
+    usuario = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        related_name='reportes_dano',
+        verbose_name='Reportado por'
+    )
+    descripcion = models.TextField(
+        'Descripción del daño',
+        help_text='Descripción detallada del daño encontrado'
+    )
+    latitud = models.DecimalField(
+        'Latitud',
+        max_digits=10,
+        decimal_places=8,
+        null=True,
+        blank=True
+    )
+    longitud = models.DecimalField(
+        'Longitud',
+        max_digits=11,
+        decimal_places=8,
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'reportes_dano'
+        verbose_name = 'Reporte de Daño'
+        verbose_name_plural = 'Reportes de Daño'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Daño reportado por {self.usuario.get_full_name()} - {self.created_at.strftime('%d/%m/%Y %H:%M')}"
