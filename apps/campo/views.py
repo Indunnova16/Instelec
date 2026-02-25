@@ -226,7 +226,41 @@ class RegistroCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Templ
             fecha_sincronizacion=timezone.now()
         )
 
+        # Handle photo uploads (Antes / Durante / Despues)
+        self._save_evidencias(request, registro)
+
         return HttpResponseRedirect(reverse_lazy('campo:detalle', kwargs={'pk': registro.pk}))
+
+
+    @staticmethod
+    def _save_evidencias(request, registro):
+        """Save uploaded photos as Evidencia records."""
+        from django.core.files.storage import default_storage
+        import os
+
+        TIPO_MAP = {
+            'fotos_antes': 'ANTES',
+            'fotos_durante': 'DURANTE',
+            'fotos_despues': 'DESPUES',
+        }
+
+        for field_name, tipo in TIPO_MAP.items():
+            fotos = request.FILES.getlist(field_name)
+            for foto in fotos:
+                if not foto.content_type.startswith('image/'):
+                    continue
+                # Save file to storage (GCS in production, local in dev)
+                ext = os.path.splitext(foto.name)[1].lower() or '.jpg'
+                path = f'campo/evidencias/{registro.pk}/{tipo.lower()}/{foto.name}'
+                saved_path = default_storage.save(path, foto)
+                url = default_storage.url(saved_path)
+
+                Evidencia.objects.create(
+                    registro_campo=registro,
+                    tipo=tipo,
+                    url_original=url,
+                    fecha_captura=timezone.now(),
+                )
 
 
 class ReportarDanoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):

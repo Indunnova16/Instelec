@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Costos vs Produccion - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{% url 'financiero:dashboard' %}" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Costos vs Produccion</h1>
+                <p class="text-gray-600 dark:text-gray-400">Analisis de rentabilidad por actividad</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <form method="get" class="flex flex-wrap gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Linea</label>
+                <select name="linea"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    <option value="">Todas</option>
+                    {% for linea in lineas %}
+                    <option value="{{ linea.pk }}" {% if filtro_linea == linea.pk|slugify %}selected{% endif %}>
+                        {{ linea.codigo }} - {{ linea.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha inicio</label>
+                <input type="date" name="fecha_inicio" value="{{ filtro_fecha_inicio|default:'' }}"
+                       class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha fin</label>
+                <input type="date" name="fecha_fin" value="{{ filtro_fecha_fin|default:'' }}"
+                       class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+                Filtrar
+            </button>
+        </form>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Produccion Estimada</p>
+            <p class="text-2xl font-bold text-green-600 dark:text-green-400">${{ totales.produccion|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Costo Acumulado</p>
+            <p class="text-2xl font-bold text-red-600 dark:text-red-400">${{ totales.costo|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Desviacion</p>
+            <p class="text-2xl font-bold {% if totales.estado == 'positivo' %}text-green-600{% else %}text-red-600{% endif %}">
+                ${{ totales.desviacion|floatformat:0|intcomma }}
+            </p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Margen</p>
+            <p class="text-2xl font-bold {% if totales.estado == 'positivo' %}text-green-600{% else %}text-red-600{% endif %}">
+                {{ totales.margen|floatformat:1 }}%
+            </p>
+        </div>
+    </div>
+
+    <!-- Activities Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="p-4 border-b dark:border-gray-700">
+            <h3 class="font-medium text-gray-900 dark:text-white">Detalle por Actividad</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Linea</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cuadrilla</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tramo</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Avance</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produccion</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Costo</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Desviacion</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Margen</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for act in actividades %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{{ act.linea }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ act.tipo }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ act.cuadrilla }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 max-w-[200px] truncate">{{ act.tramo }}</td>
+                        <td class="px-4 py-3 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <div class="w-16 h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
+                                    <div class="h-full bg-blue-500 rounded-full" style="width: {{ act.avance }}%"></div>
+                                </div>
+                                <span class="text-xs text-gray-600 dark:text-gray-400">{{ act.avance|floatformat:0 }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-right text-green-600 dark:text-green-400">
+                            ${{ act.produccion|floatformat:0|intcomma }}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                            ${{ act.costo|floatformat:0|intcomma }}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-right font-medium
+                            {% if act.estado == 'positivo' %}text-green-600{% else %}text-red-600{% endif %}">
+                            ${{ act.desviacion|floatformat:0|intcomma }}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-right">
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if act.estado == 'positivo' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                                {% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+                                {{ act.margen|floatformat:1 }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
+                            No hay actividades en el periodo seleccionado
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if actividades %}
+                <tfoot class="bg-gray-100 dark:bg-gray-900 font-medium">
+                    <tr>
+                        <td colspan="5" class="px-4 py-3 text-sm">TOTAL</td>
+                        <td class="px-4 py-3 text-sm text-right text-green-600">${{ totales.produccion|floatformat:0|intcomma }}</td>
+                        <td class="px-4 py-3 text-sm text-right">${{ totales.costo|floatformat:0|intcomma }}</td>
+                        <td class="px-4 py-3 text-sm text-right font-bold
+                            {% if totales.estado == 'positivo' %}text-green-600{% else %}text-red-600{% endif %}">
+                            ${{ totales.desviacion|floatformat:0|intcomma }}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-right">
+                            <span class="px-2 py-1 text-xs rounded-full font-bold
+                                {% if totales.estado == 'positivo' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ totales.margen|floatformat:1 }}%
+                            </span>
+                        </td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

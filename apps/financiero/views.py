@@ -7,7 +7,8 @@ from decimal import Decimal
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Sum
 from django.http import JsonResponse
-from django.views.generic import DetailView, ListView, TemplateView
+from django.urls import reverse_lazy
+from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 
@@ -26,22 +27,38 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
     template_name = 'financiero/dashboard.html'
     allowed_roles = ['admin', 'director', 'coordinador']
 
+    def _get_period_filter(self, hoy):
+        """Return (anio_filter, mes_filter_start, mes_filter_end) based on periodo param."""
+        periodo = self.request.GET.get('periodo', 'mes')
+        if periodo == 'trimestre':
+            q = (hoy.month - 1) // 3
+            mes_inicio = q * 3 + 1
+            mes_fin = mes_inicio + 2
+            return hoy.year, mes_inicio, mes_fin, periodo
+        elif periodo == 'anio':
+            return hoy.year, 1, 12, periodo
+        else:
+            return hoy.year, hoy.month, hoy.month, periodo
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
         import json
 
+        from django.db.models import Q
         from django.utils import timezone
 
         from apps.actividades.models import Actividad
         from apps.lineas.models import Linea
 
         hoy = timezone.now()
+        anio, mes_inicio, mes_fin, periodo_actual = self._get_period_filter(hoy)
 
-        # Current month budgets
+        # Budgets for the selected period
         presupuestos = Presupuesto.objects.filter(
-            anio=hoy.year,
-            mes=hoy.month
+            anio=anio,
+            mes__gte=mes_inicio,
+            mes__lte=mes_fin,
         )
 
         total_presupuestado = presupuestos.aggregate(
@@ -72,9 +89,29 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
             estado='PAGO_RECIBIDO'
         ).count()
 
-        # Cost breakdown
-        costo_personal = presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or Decimal('0')
-        costo_equipos = presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or Decimal('0')
+        # Cost breakdown - all pillar aggregations in a single query
+        pillar_aggs = presupuestos.aggregate(
+            personal=Sum('costo_dias_hombre'),
+            vehiculos=Sum('costo_vehiculos'),
+            viaticos=Sum('viaticos_planeados'),
+            herramientas=Sum('costo_herramientas'),
+            ambientales=Sum('costo_ambientales'),
+            subcontratistas=Sum('costo_subcontratistas'),
+            transporte=Sum('costo_transporte'),
+            materiales=Sum('costo_materiales'),
+            garantia=Sum('costo_garantia'),
+            otros=Sum('otros_costos'),
+        )
+        costo_personal = pillar_aggs['personal'] or Decimal('0')
+        costo_equipos = pillar_aggs['vehiculos'] or Decimal('0')
+        costo_viaticos = pillar_aggs['viaticos'] or Decimal('0')
+        costo_herramientas = pillar_aggs['herramientas'] or Decimal('0')
+        costo_ambientales = pillar_aggs['ambientales'] or Decimal('0')
+        costo_subcontratistas = pillar_aggs['subcontratistas'] or Decimal('0')
+        costo_transporte = pillar_aggs['transporte'] or Decimal('0')
+        costo_materiales = pillar_aggs['materiales'] or Decimal('0')
+        costo_garantia = pillar_aggs['garantia'] or Decimal('0')
+        costo_otros = pillar_aggs['otros'] or Decimal('0')
 
         context['costo_personal'] = costo_personal
         context['costo_equipos'] = costo_equipos
@@ -88,8 +125,9 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
 
         # Cost per activity
         actividades_completadas = Actividad.objects.filter(
-            fecha_programada__year=hoy.year,
-            fecha_programada__month=hoy.month,
+            fecha_programada__year=anio,
+            fecha_programada__month__gte=mes_inicio,
+            fecha_programada__month__lte=mes_fin,
             estado='COMPLETADA'
         ).count()
 
@@ -98,7 +136,29 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         else:
             context['costo_promedio_actividad'] = 0
 
-        context['variacion_costo'] = 0  # Placeholder for month-over-month variation
+        # Month-over-month variation for cost per activity
+        if periodo_actual == 'mes':
+            prev_m = hoy.month - 1
+            prev_y = hoy.year
+            if prev_m <= 0:
+                prev_m += 12
+                prev_y -= 1
+            prev_pres = Presupuesto.objects.filter(anio=prev_y, mes=prev_m)
+            prev_ejecutado = prev_pres.aggregate(total=Sum('total_ejecutado'))['total'] or Decimal('0')
+            prev_actividades = Actividad.objects.filter(
+                fecha_programada__year=prev_y,
+                fecha_programada__month=prev_m,
+                estado='COMPLETADA'
+            ).count()
+            prev_costo_prom = float(prev_ejecutado / prev_actividades) if prev_actividades else 0
+            if prev_costo_prom > 0 and context['costo_promedio_actividad'] > 0:
+                context['variacion_costo'] = float(
+                    (context['costo_promedio_actividad'] - prev_costo_prom) / prev_costo_prom * 100
+                )
+            else:
+                context['variacion_costo'] = 0
+        else:
+            context['variacion_costo'] = 0
 
         # Period filters
         context['periodos'] = [
@@ -106,17 +166,7 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
             {'value': 'trimestre', 'label': 'Este trimestre'},
             {'value': 'anio', 'label': 'Este año'},
         ]
-        context['periodo_actual'] = self.request.GET.get('periodo', 'mes')
-
-        # Additional budget pillars
-        costo_herramientas = presupuestos.aggregate(total=Sum('costo_herramientas'))['total'] or Decimal('0')
-        costo_ambientales = presupuestos.aggregate(total=Sum('costo_ambientales'))['total'] or Decimal('0')
-        costo_subcontratistas = presupuestos.aggregate(total=Sum('costo_subcontratistas'))['total'] or Decimal('0')
-        costo_transporte = presupuestos.aggregate(total=Sum('costo_transporte'))['total'] or Decimal('0')
-        costo_garantia = presupuestos.aggregate(total=Sum('costo_garantia'))['total'] or Decimal('0')
-        costo_materiales = presupuestos.aggregate(total=Sum('costo_materiales'))['total'] or Decimal('0')
-        costo_viaticos = presupuestos.aggregate(total=Sum('viaticos_planeados'))['total'] or Decimal('0')
-        costo_otros = presupuestos.aggregate(total=Sum('otros_costos'))['total'] or Decimal('0')
+        context['periodo_actual'] = periodo_actual
 
         context['costo_herramientas'] = costo_herramientas
         context['costo_ambientales'] = costo_ambientales
@@ -160,41 +210,122 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         context['presupuesto_mensual'] = json.dumps(presupuesto_mensual)
         context['ejecutado_mensual'] = json.dumps(ejecutado_mensual)
 
-        # Costs by line
+        # Costs by line (uses the same period filter)
         lineas = Linea.objects.filter(activa=True)[:10]
         lineas_labels = []
         costos_linea = []
+        presupuestos_linea = []
         for linea in lineas:
             lineas_labels.append(linea.codigo)
             pres_linea = Presupuesto.objects.filter(
-                linea=linea,
-                anio=hoy.year,
-                mes=hoy.month
+                linea=linea, anio=anio,
+                mes__gte=mes_inicio, mes__lte=mes_fin,
             )
             costos_linea.append(float(pres_linea.aggregate(total=Sum('total_ejecutado'))['total'] or 0))
+            presupuestos_linea.append(float(pres_linea.aggregate(total=Sum('total_presupuestado'))['total'] or 0))
 
         context['lineas_labels'] = json.dumps(lineas_labels)
         context['costos_linea'] = json.dumps(costos_linea)
+        context['presupuestos_linea'] = json.dumps(presupuestos_linea)
 
-        # Cost detail table
+        # Cost detail table - all 6 budget pillars
+        def _build_row(cat, concepto, valor):
+            """Build a detail row. valor is the presupuestado amount (same as ejecutado for now)."""
+            pres = float(valor)
+            ejec = float(valor)  # until EjecucionCosto is linked per pillar
+            return {
+                'categoria': cat,
+                'concepto': concepto,
+                'presupuesto': pres,
+                'ejecutado': ejec,
+                'porcentaje': (ejec / pres * 100) if pres > 0 else 0,
+                'disponible': pres - ejec,
+            }
+
         context['detalle_costos'] = [
             {
-                'categoria': 'Personal',
+                'categoria': 'Mano de Obra',
                 'concepto': 'Días hombre',
-                'presupuesto': float(presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or 0),
+                'presupuesto': float(costo_personal),
                 'ejecutado': float(costo_personal),
-                'porcentaje': float(costo_personal / (presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or 1) * 100),
-                'disponible': float((presupuestos.aggregate(total=Sum('costo_dias_hombre'))['total'] or 0) - costo_personal),
+                'porcentaje': 100 if costo_personal > 0 else 0,
+                'disponible': 0,
             },
             {
-                'categoria': 'Equipos',
-                'concepto': 'Vehículos',
-                'presupuesto': float(presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or 0),
+                'categoria': 'Vehículos',
+                'concepto': 'Equipos y vehículos',
+                'presupuesto': float(costo_equipos),
                 'ejecutado': float(costo_equipos),
-                'porcentaje': float(costo_equipos / (presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or 1) * 100),
-                'disponible': float((presupuestos.aggregate(total=Sum('costo_vehiculos'))['total'] or 0) - costo_equipos),
+                'porcentaje': 100 if costo_equipos > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Viáticos',
+                'concepto': 'Viáticos del personal',
+                'presupuesto': float(costo_viaticos),
+                'ejecutado': float(costo_viaticos),
+                'porcentaje': 100 if costo_viaticos > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Herramientas',
+                'concepto': 'Herramientas y equipos menores',
+                'presupuesto': float(costo_herramientas),
+                'ejecutado': float(costo_herramientas),
+                'porcentaje': 100 if costo_herramientas > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Ambientales',
+                'concepto': 'Gestión ambiental y permisos',
+                'presupuesto': float(costo_ambientales),
+                'ejecutado': float(costo_ambientales),
+                'porcentaje': 100 if costo_ambientales > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Subcontratistas',
+                'concepto': 'Subcontratistas y terceros',
+                'presupuesto': float(costo_subcontratistas),
+                'ejecutado': float(costo_subcontratistas),
+                'porcentaje': 100 if costo_subcontratistas > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Transporte',
+                'concepto': 'Transporte adicional',
+                'presupuesto': float(costo_transporte),
+                'ejecutado': float(costo_transporte),
+                'porcentaje': 100 if costo_transporte > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Materiales',
+                'concepto': 'Materiales e insumos',
+                'presupuesto': float(costo_materiales),
+                'ejecutado': float(costo_materiales),
+                'porcentaje': 100 if costo_materiales > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Garantía',
+                'concepto': 'Garantías y pólizas',
+                'presupuesto': float(costo_garantia),
+                'ejecutado': float(costo_garantia),
+                'porcentaje': 100 if costo_garantia > 0 else 0,
+                'disponible': 0,
+            },
+            {
+                'categoria': 'Otros',
+                'concepto': 'Otros costos',
+                'presupuesto': float(costo_otros),
+                'ejecutado': float(costo_otros),
+                'porcentaje': 100 if costo_otros > 0 else 0,
+                'disponible': 0,
             },
         ]
+        # Filter out zero rows
+        context['detalle_costos'] = [r for r in context['detalle_costos'] if r['presupuesto'] > 0]
 
         context['total_presupuesto'] = total_presupuestado
         context['porcentaje_total'] = context['porcentaje_ejecutado']
@@ -223,8 +354,9 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         # Check facturacion esperada vs real
         facturacion_esperada = context['facturacion_esperada'] or Decimal('0')
         ciclos_facturados = CicloFacturacion.objects.filter(
-            presupuesto__anio=hoy.year,
-            presupuesto__mes=hoy.month,
+            presupuesto__anio=anio,
+            presupuesto__mes__gte=mes_inicio,
+            presupuesto__mes__lte=mes_fin,
         )
         facturacion_real = ciclos_facturados.aggregate(
             total=Sum('monto_facturado')
@@ -263,6 +395,234 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         return context
 
 
+class ExportarDashboardExcelView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Export the financial dashboard detail as an Excel file."""
+    template_name = 'financiero/dashboard.html'  # fallback, never rendered
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get(self, request, *args, **kwargs):
+        import io
+        from django.http import HttpResponse
+        from django.utils import timezone
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+
+        hoy = timezone.now()
+        periodo = request.GET.get('periodo', 'mes')
+
+        # Reuse dashboard logic for period
+        if periodo == 'trimestre':
+            q = (hoy.month - 1) // 3
+            mes_inicio = q * 3 + 1
+            mes_fin = mes_inicio + 2
+        elif periodo == 'anio':
+            mes_inicio, mes_fin = 1, 12
+        else:
+            mes_inicio = mes_fin = hoy.month
+
+        anio = hoy.year
+        presupuestos = Presupuesto.objects.filter(
+            anio=anio, mes__gte=mes_inicio, mes__lte=mes_fin,
+        )
+
+        pillar_aggs = presupuestos.aggregate(
+            personal=Sum('costo_dias_hombre'),
+            vehiculos=Sum('costo_vehiculos'),
+            viaticos=Sum('viaticos_planeados'),
+            herramientas=Sum('costo_herramientas'),
+            ambientales=Sum('costo_ambientales'),
+            subcontratistas=Sum('costo_subcontratistas'),
+            transporte=Sum('costo_transporte'),
+            materiales=Sum('costo_materiales'),
+            garantia=Sum('costo_garantia'),
+            otros=Sum('otros_costos'),
+        )
+
+        rows = [
+            ('Mano de Obra', 'Días hombre', pillar_aggs['personal']),
+            ('Vehículos', 'Equipos y vehículos', pillar_aggs['vehiculos']),
+            ('Viáticos', 'Viáticos del personal', pillar_aggs['viaticos']),
+            ('Herramientas', 'Herramientas y equipos menores', pillar_aggs['herramientas']),
+            ('Ambientales', 'Gestión ambiental y permisos', pillar_aggs['ambientales']),
+            ('Subcontratistas', 'Subcontratistas y terceros', pillar_aggs['subcontratistas']),
+            ('Transporte', 'Transporte adicional', pillar_aggs['transporte']),
+            ('Materiales', 'Materiales e insumos', pillar_aggs['materiales']),
+            ('Garantía', 'Garantías y pólizas', pillar_aggs['garantia']),
+            ('Otros', 'Otros costos', pillar_aggs['otros']),
+        ]
+        rows = [(cat, conc, float(val or 0)) for cat, conc, val in rows if val]
+
+        total_pres = float(presupuestos.aggregate(t=Sum('total_presupuestado'))['t'] or 0)
+        total_ejec = float(presupuestos.aggregate(t=Sum('total_ejecutado'))['t'] or 0)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Detalle Costos'
+
+        # Styles
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
+        total_fill = PatternFill(start_color='D6E4F0', end_color='D6E4F0', fill_type='solid')
+        total_font = Font(bold=True, size=11)
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'),
+        )
+        money_fmt = '#,##0'
+        pct_fmt = '0.0"%"'
+
+        # Title
+        meses_nombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        if mes_inicio == mes_fin:
+            titulo_periodo = f'{meses_nombres[mes_inicio - 1]} {anio}'
+        else:
+            titulo_periodo = f'{meses_nombres[mes_inicio - 1]} - {meses_nombres[mes_fin - 1]} {anio}'
+
+        ws.merge_cells('A1:F1')
+        title_cell = ws['A1']
+        title_cell.value = f'Detalle de Ejecucion Presupuestal - {titulo_periodo}'
+        title_cell.font = Font(bold=True, size=14)
+        title_cell.alignment = Alignment(horizontal='center')
+
+        ws.merge_cells('A2:F2')
+        ws['A2'].value = f'Generado: {hoy.strftime("%d/%m/%Y %H:%M")}'
+        ws['A2'].alignment = Alignment(horizontal='center')
+        ws['A2'].font = Font(italic=True, color='666666')
+
+        # Headers (row 4)
+        headers = ['Categoría', 'Concepto', 'Presupuesto ($)', 'Ejecutado ($)', '% Ejecución', 'Disponible ($)']
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='right' if col > 2 else 'left')
+
+        # Data rows
+        for i, (cat, conc, val) in enumerate(rows, 5):
+            pres = val
+            ejec = val
+            pct = 100.0 if pres > 0 else 0.0
+            disp = pres - ejec
+
+            ws.cell(row=i, column=1, value=cat).border = thin_border
+            ws.cell(row=i, column=2, value=conc).border = thin_border
+            c = ws.cell(row=i, column=3, value=pres)
+            c.number_format = money_fmt
+            c.border = thin_border
+            c.alignment = Alignment(horizontal='right')
+            c = ws.cell(row=i, column=4, value=ejec)
+            c.number_format = money_fmt
+            c.border = thin_border
+            c.alignment = Alignment(horizontal='right')
+            c = ws.cell(row=i, column=5, value=pct)
+            c.number_format = pct_fmt
+            c.border = thin_border
+            c.alignment = Alignment(horizontal='right')
+            c = ws.cell(row=i, column=6, value=disp)
+            c.number_format = money_fmt
+            c.border = thin_border
+            c.alignment = Alignment(horizontal='right')
+
+        # Total row
+        total_row = 5 + len(rows)
+        pct_total = (total_ejec / total_pres * 100) if total_pres > 0 else 0
+
+        for col in range(1, 7):
+            cell = ws.cell(row=total_row, column=col)
+            cell.fill = total_fill
+            cell.font = total_font
+            cell.border = thin_border
+
+        ws.cell(row=total_row, column=1, value='TOTAL')
+        ws.cell(row=total_row, column=2, value='')
+        c = ws.cell(row=total_row, column=3, value=total_pres)
+        c.number_format = money_fmt
+        c.alignment = Alignment(horizontal='right')
+        c = ws.cell(row=total_row, column=4, value=total_ejec)
+        c.number_format = money_fmt
+        c.alignment = Alignment(horizontal='right')
+        c = ws.cell(row=total_row, column=5, value=pct_total)
+        c.number_format = pct_fmt
+        c.alignment = Alignment(horizontal='right')
+        c = ws.cell(row=total_row, column=6, value=total_pres - total_ejec)
+        c.number_format = money_fmt
+        c.alignment = Alignment(horizontal='right')
+
+        # ---- Sheet 2: Detalle por Linea ----
+        ws2 = wb.create_sheet('Por Linea')
+        from apps.lineas.models import Linea
+        lineas = Linea.objects.filter(activa=True)
+
+        ws2.merge_cells('A1:G1')
+        ws2['A1'].value = f'Presupuesto vs Ejecutado por Línea - {titulo_periodo}'
+        ws2['A1'].font = Font(bold=True, size=14)
+        ws2['A1'].alignment = Alignment(horizontal='center')
+
+        headers2 = ['Línea', 'Código', 'Presupuestado ($)', 'Ejecutado ($)', '% Ejecución', 'Disponible ($)', 'Estado']
+        for col, h in enumerate(headers2, 1):
+            cell = ws2.cell(row=3, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = thin_border
+
+        row_num = 4
+        for linea in lineas:
+            pres_linea = Presupuesto.objects.filter(
+                linea=linea, anio=anio,
+                mes__gte=mes_inicio, mes__lte=mes_fin,
+            )
+            pres_val = float(pres_linea.aggregate(t=Sum('total_presupuestado'))['t'] or 0)
+            ejec_val = float(pres_linea.aggregate(t=Sum('total_ejecutado'))['t'] or 0)
+            if pres_val == 0 and ejec_val == 0:
+                continue
+            pct = (ejec_val / pres_val * 100) if pres_val > 0 else 0
+            estado = 'OK' if pct <= 90 else ('Alerta' if pct <= 100 else 'Sobrecosto')
+
+            ws2.cell(row=row_num, column=1, value=linea.nombre).border = thin_border
+            ws2.cell(row=row_num, column=2, value=linea.codigo).border = thin_border
+            c = ws2.cell(row=row_num, column=3, value=pres_val)
+            c.number_format = money_fmt
+            c.border = thin_border
+            c = ws2.cell(row=row_num, column=4, value=ejec_val)
+            c.number_format = money_fmt
+            c.border = thin_border
+            c = ws2.cell(row=row_num, column=5, value=pct)
+            c.number_format = pct_fmt
+            c.border = thin_border
+            c = ws2.cell(row=row_num, column=6, value=pres_val - ejec_val)
+            c.number_format = money_fmt
+            c.border = thin_border
+            ws2.cell(row=row_num, column=7, value=estado).border = thin_border
+            row_num += 1
+
+        # Auto-width for both sheets
+        for sheet in [ws, ws2]:
+            for col_idx in range(1, sheet.max_column + 1):
+                max_len = 0
+                col_letter = get_column_letter(col_idx)
+                for row in sheet.iter_rows(min_col=col_idx, max_col=col_idx, values_only=False):
+                    for cell in row:
+                        if cell.value:
+                            max_len = max(max_len, len(str(cell.value)))
+                sheet.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+        # Write to response
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f'detalle_costos_{anio}_{mes_inicio:02d}.xlsx'
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
 class PresupuestoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     """List budgets."""
     model = Presupuesto
@@ -294,6 +654,32 @@ class PresupuestoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         # ejecuciones already prefetched via get_queryset
         context['ejecuciones'] = self.object.ejecuciones.all()
         return context
+
+
+class PresupuestoCreateView(LoginRequiredMixin, RoleRequiredMixin, CreateView):
+    """Create a new budget."""
+    model = Presupuesto
+    template_name = 'financiero/presupuesto_form.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+    success_url = reverse_lazy('financiero:presupuestos')
+
+    def get_form_class(self):
+        from .forms import PresupuestoForm
+        return PresupuestoForm
+
+
+class PresupuestoUpdateView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Edit an existing budget."""
+    model = Presupuesto
+    template_name = 'financiero/presupuesto_form.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_form_class(self):
+        from .forms import PresupuestoForm
+        return PresupuestoForm
+
+    def get_success_url(self):
+        return reverse_lazy('financiero:presupuesto_detalle', kwargs={'pk': self.object.pk})
 
 
 class CuadroCostosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):

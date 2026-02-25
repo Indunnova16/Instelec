@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{% if form.instance.pk %}Editar{% else %}Crear{% endif %} Presupuesto - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="presupuestoForm()">
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <a href="{% url 'financiero:presupuestos' %}" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                {% if form.instance.pk %}Editar Presupuesto{% else %}Nuevo Presupuesto{% endif %}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400">Complete los datos del presupuesto mensual</p>
+        </div>
+    </div>
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <h3 class="text-sm font-medium text-red-800 dark:text-red-300">Errores en el formulario:</h3>
+            <ul class="mt-2 text-sm text-red-700 dark:text-red-400 list-disc list-inside">
+                {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <li>{{ field }}: {{ error }}</li>
+                {% endfor %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- Period & Line -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Periodo y Linea</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ano</label>
+                    {{ form.anio }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mes</label>
+                    {{ form.mes }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Linea</label>
+                    {{ form.linea }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+                    {{ form.estado }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Mano de Obra -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                <span class="inline-flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                    Mano de Obra
+                </span>
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dias hombre planeados</label>
+                    {{ form.dias_hombre_planeados }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Costo dias hombre ($)</label>
+                    <div x-on:input="calcTotal()">{{ form.costo_dias_hombre }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vehiculos -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                <span class="inline-flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+                    Vehiculos y Equipos
+                </span>
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dias vehiculo planeados</label>
+                    {{ form.dias_vehiculo_planeados }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Costo vehiculos ($)</label>
+                    <div x-on:input="calcTotal()">{{ form.costo_vehiculos }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6 Budget Pillars -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Pilares Presupuestales</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-500"></span> Viaticos ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.viaticos_planeados }}</div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-500"></span> Herramientas ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.costo_herramientas }}</div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Ambientales ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.costo_ambientales }}</div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> Subcontratistas ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.costo_subcontratistas }}</div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-500"></span> Transporte ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.costo_transporte }}</div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-indigo-500"></span> Materiales ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.costo_materiales }}</div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-pink-500"></span> Garantia ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.costo_garantia }}</div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gray-500"></span> Otros costos ($)</span>
+                    </label>
+                    <div x-on:input="calcTotal()">{{ form.otros_costos }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Totals & Billing -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Totales y Facturacion</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Total presupuestado ($)</label>
+                    {{ form.total_presupuestado }}
+                    <p class="text-xs text-gray-400 mt-1">Calculado automaticamente</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Total ejecutado ($)</label>
+                    {{ form.total_ejecutado }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Facturacion esperada ($)</label>
+                    {{ form.facturacion_esperada }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Observations -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Observaciones</h2>
+            {{ form.observaciones }}
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-3">
+            <a href="{% url 'financiero:presupuestos' %}"
+               class="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Cancelar
+            </a>
+            <button type="submit"
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                {% if form.instance.pk %}Guardar cambios{% else %}Crear presupuesto{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function presupuestoForm() {
+    return {
+        calcTotal() {
+            const fields = [
+                'id_costo_dias_hombre', 'id_costo_vehiculos', 'id_viaticos_planeados',
+                'id_costo_herramientas', 'id_costo_ambientales', 'id_costo_subcontratistas',
+                'id_costo_transporte', 'id_costo_materiales', 'id_costo_garantia', 'id_otros_costos'
+            ];
+            let total = 0;
+            fields.forEach(f => {
+                const el = document.getElementById(f);
+                if (el) total += parseFloat(el.value) || 0;
+            });
+            const totalEl = document.getElementById('id_total_presupuestado');
+            if (totalEl) totalEl.value = total.toFixed(2);
+        }
+    };
+}
+</script>
+{% endblock %}

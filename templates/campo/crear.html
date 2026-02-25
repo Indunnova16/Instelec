@@ -23,7 +23,7 @@
     </div>
     {% endif %}
 
-    <form method="post" class="space-y-6">
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
         {% csrf_token %}
 
         <!-- ============================================================ -->
@@ -434,6 +434,122 @@
         </div>
 
         <!-- ============================================================ -->
+        <!-- SECCION 9: EVIDENCIA FOTOGRAFICA -->
+        <!-- ============================================================ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Evidencia Fotografica
+            </h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                Adjunte fotos del antes, durante y despues de las actividades realizadas. Puede seleccionar multiples fotos por categoria.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Antes -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <span class="inline-flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                            Antes
+                        </span>
+                    </label>
+                    <div class="relative">
+                        <input type="file" name="fotos_antes" multiple accept="image/*"
+                               class="hidden" id="fotos_antes"
+                               @change="previewPhotos($event, 'antes')">
+                        <label for="fotos_antes"
+                               class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            <span class="mt-1 text-xs text-gray-500 dark:text-gray-400">Seleccionar fotos</span>
+                        </label>
+                    </div>
+                    <div class="mt-2 grid grid-cols-3 gap-1" id="preview_antes">
+                        <template x-for="(src, i) in previews.antes" :key="i">
+                            <div class="relative aspect-square">
+                                <img :src="src" class="w-full h-full object-cover rounded">
+                                <button type="button" @click="removePhoto('antes', i)"
+                                        class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600">
+                                    &times;
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Durante -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <span class="inline-flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                            Durante
+                        </span>
+                    </label>
+                    <div class="relative">
+                        <input type="file" name="fotos_durante" multiple accept="image/*"
+                               class="hidden" id="fotos_durante"
+                               @change="previewPhotos($event, 'durante')">
+                        <label for="fotos_durante"
+                               class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            <span class="mt-1 text-xs text-gray-500 dark:text-gray-400">Seleccionar fotos</span>
+                        </label>
+                    </div>
+                    <div class="mt-2 grid grid-cols-3 gap-1" id="preview_durante">
+                        <template x-for="(src, i) in previews.durante" :key="i">
+                            <div class="relative aspect-square">
+                                <img :src="src" class="w-full h-full object-cover rounded">
+                                <button type="button" @click="removePhoto('durante', i)"
+                                        class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600">
+                                    &times;
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Despues -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <span class="inline-flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                            Despues
+                        </span>
+                    </label>
+                    <div class="relative">
+                        <input type="file" name="fotos_despues" multiple accept="image/*"
+                               class="hidden" id="fotos_despues"
+                               @change="previewPhotos($event, 'despues')">
+                        <label for="fotos_despues"
+                               class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            <span class="mt-1 text-xs text-gray-500 dark:text-gray-400">Seleccionar fotos</span>
+                        </label>
+                    </div>
+                    <div class="mt-2 grid grid-cols-3 gap-1" id="preview_despues">
+                        <template x-for="(src, i) in previews.despues" :key="i">
+                            <div class="relative aspect-square">
+                                <img :src="src" class="w-full h-full object-cover rounded">
+                                <button type="button" @click="removePhoto('despues', i)"
+                                        class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600">
+                                    &times;
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
         <!-- BOTONES -->
         <!-- ============================================================ -->
         <div class="flex justify-end gap-3 pt-2">
@@ -456,11 +572,10 @@ function remFormData() {
         vegetacion: [
             { especie: '', cantidad_tala: '', cantidad_poda: '', altura_m: '', abarcadura_cm: '', dist_copa_antes: '', dist_copa_despues: '', dist_eje_m: '', area_largo: '', area_ancho: '', coordenadas_gps: '' }
         ],
+        previews: { antes: [], durante: [], despues: [] },
+        files: { antes: [], durante: [], despues: [] },
 
         fetchTorres(lineaId) {
-            const desdeSelect = document.getElementById('torre_desde');
-            const hastaSelect = document.getElementById('torre_hasta');
-
             if (!lineaId) {
                 this.torres = [];
                 return;
@@ -487,6 +602,35 @@ function remFormData() {
             if (this.vegetacion.length > 1) {
                 this.vegetacion.splice(index, 1);
             }
+        },
+
+        previewPhotos(event, tipo) {
+            const input = event.target;
+            const newFiles = Array.from(input.files);
+            newFiles.forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+                this.files[tipo].push(file);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.previews[tipo].push(e.target.result);
+                };
+                reader.readAsDataURL(file);
+            });
+            // Rebuild the native file input with a DataTransfer
+            this._syncFileInput(tipo);
+        },
+
+        removePhoto(tipo, index) {
+            this.previews[tipo].splice(index, 1);
+            this.files[tipo].splice(index, 1);
+            this._syncFileInput(tipo);
+        },
+
+        _syncFileInput(tipo) {
+            const input = document.getElementById('fotos_' + tipo);
+            const dt = new DataTransfer();
+            this.files[tipo].forEach(f => dt.items.add(f));
+            input.files = dt.files;
         }
     }
 }

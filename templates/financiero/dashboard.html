@@ -224,19 +224,22 @@
 
         <!-- Costos por Linea -->
         <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6" aria-labelledby="chart-linea-title">
-            <h3 id="chart-linea-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Costos por Linea</h3>
-            <div id="chart-costos-linea" class="h-64" role="img" aria-label="Grafico de barras mostrando los costos por linea de transmision"></div>
+            <h3 id="chart-linea-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Presupuesto vs Ejecutado por Linea</h3>
+            <div id="chart-costos-linea" class="h-80" role="img" aria-label="Grafico de barras mostrando presupuesto versus ejecutado por linea de transmision"></div>
         </section>
 
         <!-- Detalle de Costos -->
         <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" aria-labelledby="detalle-costos-title">
             <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
                 <h3 id="detalle-costos-title" class="font-medium text-gray-900 dark:text-white">Detalle de Ejecucion</h3>
-                <button onclick="alert('Función de exportación en desarrollo')"
-                        class="text-sm text-blue-600 hover:text-blue-800"
-                        aria-label="Exportar detalle de ejecucion a archivo Excel">
+                <a href="{% url 'financiero:exportar_excel' %}?periodo={{ periodo_actual }}"
+                   class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                   aria-label="Exportar detalle de ejecucion a archivo Excel">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
                     Exportar Excel
-                </button>
+                </a>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" aria-describedby="detalle-costos-title">
@@ -329,24 +332,28 @@ document.addEventListener('DOMContentLoaded', function() {
         grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
     });
 
-    // Costos por Linea (Bar)
+    // Costos por Linea (Grouped Bar: presupuesto vs ejecutado)
     const chartLinea = echarts.init(document.getElementById('chart-costos-linea'));
     chartLinea.setOption({
         tooltip: { trigger: 'axis' },
+        legend: { data: ['Presupuesto', 'Ejecutado'], bottom: 0 },
         xAxis: { type: 'category', data: {{ lineas_labels|safe }} },
         yAxis: { type: 'value', axisLabel: { formatter: '${value}' } },
-        series: [{
-            type: 'bar',
-            data: {{ costos_linea|safe }},
-            itemStyle: {
-                color: function(params) {
-                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-                    return colors[params.dataIndex % colors.length];
-                }
+        series: [
+            {
+                name: 'Presupuesto',
+                type: 'bar',
+                data: {{ presupuestos_linea|safe }},
+                itemStyle: { color: '#9ca3af' }
             },
-            label: { show: true, position: 'top', formatter: '${c}' }
-        }],
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true }
+            {
+                name: 'Ejecutado',
+                type: 'bar',
+                data: {{ costos_linea|safe }},
+                itemStyle: { color: '#3b82f6' }
+            }
+        ],
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
     });
 
     // Resize

@@ -8,8 +8,11 @@ app_name = 'financiero'
 
 urlpatterns = [
     path('', views.DashboardFinancieroView.as_view(), name='dashboard'),
+    path('exportar-excel/', views.ExportarDashboardExcelView.as_view(), name='exportar_excel'),
     path('presupuestos/', views.PresupuestoListView.as_view(), name='presupuestos'),
+    path('presupuestos/crear/', views.PresupuestoCreateView.as_view(), name='presupuesto_crear'),
     path('presupuesto/<uuid:pk>/', views.PresupuestoDetailView.as_view(), name='presupuesto_detalle'),
+    path('presupuesto/<uuid:pk>/editar/', views.PresupuestoUpdateView.as_view(), name='presupuesto_editar'),
     path('cuadro-costos/', views.CuadroCostosView.as_view(), name='cuadro_costos'),
     path('facturacion/', views.FacturacionView.as_view(), name='facturacion'),
     path('costos-cuadrilla/', views.CostosCuadrillaView.as_view(), name='costos_cuadrilla'),
