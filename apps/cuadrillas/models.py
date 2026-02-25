@@ -212,6 +212,11 @@ class CuadrillaMiembro(BaseModel):
         default=0,
         help_text='Costo diario del miembro segun su rol/cargo'
     )
+    es_conductor_interno = models.BooleanField(
+        'Conductor interno',
+        default=True,
+        help_text='Si es conductor: True=empleado Instelec, False=externo/subcontratado'
+    )
 
     class Meta:
         db_table = 'cuadrilla_miembros'

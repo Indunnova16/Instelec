@@ -111,12 +111,6 @@
                     <dd class="font-medium text-orange-600">{{ actividad.fecha_reprogramada|date:"d/m/Y" }}</dd>
                 </div>
                 {% endif %}
-                {% if actividad.hora_inicio_estimada %}
-                <div>
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Hora Estimada</dt>
-                    <dd class="font-medium text-gray-900 dark:text-white">{{ actividad.hora_inicio_estimada|time:"H:i" }}</dd>
-                </div>
-                {% endif %}
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Tiempo Estimado</dt>
                     <dd class="font-medium text-gray-900 dark:text-white">{{ actividad.tipo_actividad.tiempo_estimado_horas }} horas</dd>
@@ -173,8 +167,13 @@
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Asignacion</h2>
             <dl class="space-y-3">
                 <div>
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Cuadrilla</dt>
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Cuadrilla(s)</dt>
                     <dd>
+                        {% for c in actividad.cuadrillas.all %}
+                        <a href="{% url 'cuadrillas:detalle' c.id %}" class="text-blue-600 hover:text-blue-800">
+                            {{ c.codigo }} - {{ c.nombre }}
+                        </a>{% if not forloop.last %}<br>{% endif %}
+                        {% empty %}
                         {% if actividad.cuadrilla %}
                         <a href="{% url 'cuadrillas:detalle' actividad.cuadrilla.id %}" class="text-blue-600 hover:text-blue-800">
                             {{ actividad.cuadrilla.codigo }} - {{ actividad.cuadrilla.nombre }}
@@ -182,6 +181,7 @@
                         {% else %}
                         <span class="text-gray-400">Sin asignar</span>
                         {% endif %}
+                        {% endfor %}
                     </dd>
                 </div>
                 {% if actividad.cuadrilla and actividad.cuadrilla.supervisor %}
@@ -258,7 +258,7 @@
         <div class="space-y-4">
             {% if actividad.observaciones_programacion %}
             <div>
-                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Observaciones de Programacion</h3>
+                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Actividad</h3>
                 <p class="mt-1 text-gray-600 dark:text-gray-300">{{ actividad.observaciones_programacion }}</p>
             </div>
             {% endif %}

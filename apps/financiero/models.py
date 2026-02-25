@@ -17,6 +17,9 @@ class CostoRecurso(BaseModel):
         VIATICO = 'VIATICO', 'Viático'
         HERRAMIENTA = 'HERRAMIENTA', 'Herramienta'
         MATERIAL = 'MATERIAL', 'Material'
+        TRANSPORTE = 'TRANSPORTE', 'Transporte'
+        COMBUSTIBLE = 'COMBUSTIBLE', 'Combustible'
+        PEAJE = 'PEAJE', 'Peaje'
         OTRO = 'OTRO', 'Otro'
 
     tipo = models.CharField(
@@ -116,6 +119,50 @@ class Presupuesto(BaseModel):
         max_digits=14,
         decimal_places=2,
         default=0
+    )
+
+    # 6 budget pillars (pilares presupuestales)
+    costo_herramientas = models.DecimalField(
+        'Costo herramientas',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Costo de herramientas y equipos menores'
+    )
+    costo_ambientales = models.DecimalField(
+        'Costo ambiental',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Costos ambientales (permisos, gestión, compensación)'
+    )
+    costo_subcontratistas = models.DecimalField(
+        'Costo subcontratistas',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Costos de subcontratistas y terceros'
+    )
+    costo_transporte = models.DecimalField(
+        'Costo transporte',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Costos de transporte adicional (combustible, peajes, etc.)'
+    )
+    costo_garantia = models.DecimalField(
+        'Costo garantía',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Costos de garantía y pólizas'
+    )
+    costo_materiales = models.DecimalField(
+        'Costo materiales',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Costos de materiales e insumos'
     )
 
     # Totals

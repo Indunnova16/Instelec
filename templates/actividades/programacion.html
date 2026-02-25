@@ -132,12 +132,69 @@
     </div>
     {% endif %}
 
+    <!-- Bulk Actions Bar -->
+    <div x-data="bulkActions()" x-cloak>
+        <div x-show="selectedIds.length > 0"
+             x-transition
+             class="bg-blue-600 text-white rounded-lg shadow p-4 flex flex-wrap items-center gap-4">
+            <span class="font-medium" x-text="selectedIds.length + ' aviso(s) seleccionado(s)'"></span>
+
+            <!-- Bulk assign cuadrilla -->
+            <form method="post" action="{% url 'actividades:bulk_asignar_cuadrilla' %}"
+                  hx-post="{% url 'actividades:bulk_asignar_cuadrilla' %}"
+                  hx-swap="none"
+                  class="flex items-center gap-2">
+                {% csrf_token %}
+                <template x-for="id in selectedIds" :key="id">
+                    <input type="hidden" name="actividad_ids" :value="id">
+                </template>
+                <select name="cuadrilla_id" required class="rounded text-sm text-gray-900 border-0 py-1">
+                    <option value="">Cuadrilla...</option>
+                    {% for cuadrilla in cuadrillas %}
+                    <option value="{{ cuadrilla.id }}">{{ cuadrilla.codigo }} - {{ cuadrilla.nombre }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="px-3 py-1 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50">
+                    Asignar
+                </button>
+            </form>
+
+            <!-- Bulk change status -->
+            <form method="post" action="{% url 'actividades:bulk_cambiar_estado' %}"
+                  hx-post="{% url 'actividades:bulk_cambiar_estado' %}"
+                  hx-swap="none"
+                  class="flex items-center gap-2">
+                {% csrf_token %}
+                <template x-for="id in selectedIds" :key="id">
+                    <input type="hidden" name="actividad_ids" :value="id">
+                </template>
+                <select name="estado" required class="rounded text-sm text-gray-900 border-0 py-1">
+                    <option value="">Estado...</option>
+                    {% for value, label in estados %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="px-3 py-1 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50">
+                    Cambiar Estado
+                </button>
+            </form>
+
+            <button @click="selectedIds=[]; document.querySelectorAll('.bulk-check').forEach(c=>c.checked=false)"
+                    class="ml-auto text-blue-200 hover:text-white text-sm">
+                Deseleccionar
+            </button>
+        </div>
+
     <!-- Activities Table -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mt-4">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
+                        <th class="px-2 py-3 text-center">
+                            <input type="checkbox" @change="toggleAll($event)"
+                                   class="rounded border-gray-300 text-blue-600 cursor-pointer">
+                        </th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                             Aviso SAP
                         </th>
@@ -170,6 +227,11 @@
                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% for actividad in actividades %}
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td class="px-2 py-3 text-center">
+                            <input type="checkbox" class="bulk-check rounded border-gray-300 text-blue-600 cursor-pointer"
+                                   value="{{ actividad.pk }}"
+                                   @change="toggleOne('{{ actividad.pk }}', $event)">
+                        </td>
                         <td class="px-4 py-3 whitespace-nowrap">
                             {% if actividad.aviso_sap %}
                             <span class="text-sm font-mono font-semibold text-blue-700 dark:text-blue-400">
@@ -230,7 +292,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="10" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                             <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                             </svg>
@@ -274,5 +336,38 @@
         </nav>
     </div>
     {% endif %}
+
+    </div><!-- close x-data="bulkActions()" -->
 </div>
+
+<script>
+function bulkActions() {
+    return {
+        selectedIds: [],
+        toggleAll(event) {
+            const checked = event.target.checked;
+            document.querySelectorAll('.bulk-check').forEach(cb => {
+                cb.checked = checked;
+            });
+            if (checked) {
+                this.selectedIds = Array.from(document.querySelectorAll('.bulk-check')).map(cb => cb.value);
+            } else {
+                this.selectedIds = [];
+            }
+        },
+        toggleOne(id, event) {
+            if (event.target.checked) {
+                if (!this.selectedIds.includes(id)) this.selectedIds.push(id);
+            } else {
+                this.selectedIds = this.selectedIds.filter(x => x !== id);
+            }
+        }
+    };
+}
+
+// Reload page on bulk action success
+document.body.addEventListener('refreshTable', () => {
+    window.location.reload();
+});
+</script>
 {% endblock %}

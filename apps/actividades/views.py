@@ -253,10 +253,12 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         from apps.lineas.models import Linea
+        from apps.cuadrillas.models import Cuadrilla
 
         context['lineas'] = Linea.objects.filter(activa=True)
         context['tipos'] = TipoActividad.objects.filter(activo=True)
         context['estados'] = Actividad.Estado.choices
+        context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
         context['meses'] = [
             (1, 'Enero'), (2, 'Febrero'), (3, 'Marzo'), (4, 'Abril'),
             (5, 'Mayo'), (6, 'Junio'), (7, 'Julio'), (8, 'Agosto'),
@@ -532,6 +534,9 @@ class ActividadEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Detail
     context_object_name = 'actividad'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
 
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('cuadrillas')
+
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         context['tipos'] = TipoActividad.objects.filter(activo=True)
@@ -552,7 +557,6 @@ class ActividadEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Detail
         prioridad = request.POST.get('prioridad', '').strip()
         cuadrilla_id = request.POST.get('cuadrilla') or None
         fecha_programada = request.POST.get('fecha_programada')
-        hora_inicio = request.POST.get('hora_inicio_estimada') or None
         aviso_sap = request.POST.get('aviso_sap', '').strip()
         observaciones = request.POST.get('observaciones_programacion', '').strip()
 
@@ -570,22 +574,34 @@ class ActividadEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Detail
             if prioridad and prioridad in dict(Actividad.Prioridad.choices):
                 actividad.prioridad = prioridad
 
-            if cuadrilla_id:
-                from apps.cuadrillas.models import Cuadrilla
+            # Handle cuadrilla assignment (supports multiple via M2M)
+            from apps.cuadrillas.models import Cuadrilla
+            cuadrilla_ids = request.POST.getlist('cuadrilla')
+            # Filter empty values
+            cuadrilla_ids = [cid for cid in cuadrilla_ids if cid]
+
+            if cuadrilla_ids:
                 try:
-                    actividad.cuadrilla = Cuadrilla.objects.get(id=cuadrilla_id)
+                    # Set the FK to the first selected cuadrilla (backward compat)
+                    actividad.cuadrilla = Cuadrilla.objects.get(id=cuadrilla_ids[0])
                 except Cuadrilla.DoesNotExist:
-                    pass
+                    actividad.cuadrilla = None
             else:
                 actividad.cuadrilla = None
 
             actividad.fecha_programada = fecha_programada
-            actividad.hora_inicio_estimada = hora_inicio
             actividad.aviso_sap = aviso_sap
             actividad.observaciones_programacion = observaciones
             actividad.comentarios_restricciones = request.POST.get('comentarios_restricciones', '').strip()
 
             actividad.save()
+
+            # Sync M2M cuadrillas
+            if cuadrilla_ids:
+                cuadrillas_qs = Cuadrilla.objects.filter(id__in=cuadrilla_ids)
+                actividad.cuadrillas.set(cuadrillas_qs)
+            else:
+                actividad.cuadrillas.clear()
             messages.success(request, 'Actividad actualizada exitosamente.')
             return redirect('actividades:detalle', pk=actividad.pk)
         except Exception as e:
@@ -606,6 +622,78 @@ class CambiarEstadoView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             actividad.save(update_fields=['estado', 'updated_at'])
             return JsonResponse({'success': True, 'estado': nuevo_estado})
         return JsonResponse({'success': False, 'error': 'Estado inválido'}, status=400)
+
+
+class BulkAsignarCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Bulk assign cuadrilla to multiple activities via HTMX POST."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def post(self, request, *args, **kwargs):
+        import json
+        from apps.cuadrillas.models import Cuadrilla
+
+        actividad_ids = request.POST.getlist('actividad_ids')
+        cuadrilla_id = request.POST.get('cuadrilla_id')
+
+        if not actividad_ids:
+            return JsonResponse({'success': False, 'error': 'No se seleccionaron avisos'}, status=400)
+        if not cuadrilla_id:
+            return JsonResponse({'success': False, 'error': 'Debe seleccionar una cuadrilla'}, status=400)
+
+        try:
+            cuadrilla = Cuadrilla.objects.get(id=cuadrilla_id)
+        except Cuadrilla.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Cuadrilla no encontrada'}, status=404)
+
+        updated = Actividad.objects.filter(id__in=actividad_ids).update(cuadrilla=cuadrilla)
+
+        # Also sync M2M
+        for actividad in Actividad.objects.filter(id__in=actividad_ids):
+            actividad.cuadrillas.add(cuadrilla)
+
+        if request.headers.get('HX-Request'):
+            response = HttpResponse()
+            response['HX-Trigger'] = json.dumps({
+                'showToast': {
+                    'message': f'{updated} aviso(s) asignados a {cuadrilla.codigo}',
+                    'type': 'success',
+                },
+                'refreshTable': True,
+            })
+            return response
+
+        return JsonResponse({'success': True, 'updated': updated})
+
+
+class BulkCambiarEstadoView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Bulk change status of multiple activities via HTMX POST."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+    def post(self, request, *args, **kwargs):
+        import json
+
+        actividad_ids = request.POST.getlist('actividad_ids')
+        nuevo_estado = request.POST.get('estado')
+
+        if not actividad_ids:
+            return JsonResponse({'success': False, 'error': 'No se seleccionaron avisos'}, status=400)
+        if not nuevo_estado or nuevo_estado not in dict(Actividad.Estado.choices):
+            return JsonResponse({'success': False, 'error': 'Estado invalido'}, status=400)
+
+        updated = Actividad.objects.filter(id__in=actividad_ids).update(estado=nuevo_estado)
+
+        if request.headers.get('HX-Request'):
+            response = HttpResponse()
+            response['HX-Trigger'] = json.dumps({
+                'showToast': {
+                    'message': f'{updated} aviso(s) cambiados a {dict(Actividad.Estado.choices)[nuevo_estado]}',
+                    'type': 'success',
+                },
+                'refreshTable': True,
+            })
+            return response
+
+        return JsonResponse({'success': True, 'updated': updated})
 
 
 class ExportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, View):

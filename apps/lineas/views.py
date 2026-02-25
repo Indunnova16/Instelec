@@ -396,3 +396,82 @@ class LineaDeleteKMZView(LoginRequiredMixin, RoleRequiredMixin, View):
 
         messages.success(request, 'Archivo KMZ eliminado exitosamente.')
         return redirect('lineas:detalle', pk=pk)
+
+
+class AvanceLineaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
+    """Tower-by-tower progress tracking for a line."""
+    model = Linea
+    template_name = 'lineas/avance.html'
+    context_object_name = 'linea'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+    def get_context_data(self, **kwargs):
+        from collections import defaultdict
+        from apps.actividades.models import Actividad
+
+        context = super().get_context_data(**kwargs)
+        linea = self.object
+
+        torres = linea.torres.all().order_by('numero')
+
+        # Get all activities for this line grouped by torre
+        actividades = Actividad.objects.filter(
+            linea=linea
+        ).select_related('torre', 'tipo_actividad').order_by('torre__numero')
+
+        actividades_por_torre = defaultdict(list)
+        for act in actividades:
+            actividades_por_torre[str(act.torre_id)].append(act)
+
+        # Build progress data per tower
+        filas_torres = []
+        total_actividades = 0
+        total_completadas = 0
+        for torre in torres:
+            acts = actividades_por_torre.get(str(torre.id), [])
+            completadas = sum(1 for a in acts if a.estado == 'COMPLETADA')
+            en_curso = sum(1 for a in acts if a.estado == 'EN_CURSO')
+            pendientes = sum(1 for a in acts if a.estado in ('PENDIENTE', 'PROGRAMADA'))
+            total = len(acts)
+
+            total_actividades += total
+            total_completadas += completadas
+
+            if total > 0:
+                porcentaje = round(completadas / total * 100)
+            else:
+                porcentaje = 0
+
+            # Determine status color
+            if total == 0:
+                estado_color = 'gray'
+            elif completadas == total:
+                estado_color = 'green'
+            elif en_curso > 0:
+                estado_color = 'blue'
+            elif pendientes > 0:
+                estado_color = 'yellow'
+            else:
+                estado_color = 'gray'
+
+            filas_torres.append({
+                'torre': torre,
+                'total': total,
+                'completadas': completadas,
+                'en_curso': en_curso,
+                'pendientes': pendientes,
+                'porcentaje': porcentaje,
+                'estado_color': estado_color,
+                'actividades': acts,
+            })
+
+        context['filas_torres'] = filas_torres
+        context['total_torres'] = torres.count()
+        context['total_actividades'] = total_actividades
+        context['total_completadas'] = total_completadas
+        context['porcentaje_global'] = (
+            round(total_completadas / total_actividades * 100)
+            if total_actividades > 0 else 0
+        )
+
+        return context

@@ -78,20 +78,21 @@
                     </select>
                 </div>
 
-                <!-- Cuadrilla -->
+                <!-- Cuadrillas (multiple) -->
                 <div>
                     <label for="cuadrilla" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Cuadrilla Asignada
+                        Cuadrillas Asignadas
                     </label>
-                    <select name="cuadrilla" id="cuadrilla"
-                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                        <option value="">Sin asignar</option>
+                    <select name="cuadrilla" id="cuadrilla" multiple
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                            style="min-height: 80px;">
                         {% for cuadrilla in cuadrillas %}
-                        <option value="{{ cuadrilla.id }}" {% if actividad.cuadrilla and cuadrilla.id == actividad.cuadrilla.id %}selected{% endif %}>
+                        <option value="{{ cuadrilla.id }}" {% if cuadrilla in actividad.cuadrillas.all %}selected{% endif %}>
                             {{ cuadrilla.codigo }} - {{ cuadrilla.nombre }}
                         </option>
                         {% endfor %}
                     </select>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Ctrl+click para seleccionar multiples cuadrillas</p>
                 </div>
 
                 <!-- Fecha Programada -->
@@ -101,16 +102,6 @@
                     </label>
                     <input type="date" name="fecha_programada" id="fecha_programada"
                            value="{{ actividad.fecha_programada|date:'Y-m-d' }}" required
-                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                </div>
-
-                <!-- Hora Inicio -->
-                <div>
-                    <label for="hora_inicio_estimada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Hora Inicio Estimada
-                    </label>
-                    <input type="time" name="hora_inicio_estimada" id="hora_inicio_estimada"
-                           value="{{ actividad.hora_inicio_estimada|time:'H:i' }}"
                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                 </div>
 
@@ -126,13 +117,14 @@
                 </div>
             </div>
 
-            <!-- Observaciones -->
+            <!-- Actividad -->
             <div>
                 <label for="observaciones_programacion" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Observaciones
+                    Actividad
                 </label>
                 <textarea name="observaciones_programacion" id="observaciones_programacion" rows="3"
-                          class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">{{ actividad.observaciones_programacion }}</textarea>
+                          class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                          placeholder="Descripcion de la actividad a realizar...">{{ actividad.observaciones_programacion }}</textarea>
             </div>
 
             <!-- Comentarios / Restricciones -->

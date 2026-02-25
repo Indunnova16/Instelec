@@ -9,7 +9,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.utils import timezone
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import RegistroCampo, Evidencia, ReporteDano, Procedimiento
+from .models import RegistroCampo, Evidencia, ReporteDano, FotoDano, Procedimiento
 
 
 class RegistroListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -234,6 +234,14 @@ class ReportarDanoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
     template_name = 'campo/reportar_dano.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from apps.lineas.models import Linea
+        context['lineas'] = Linea.objects.filter(activa=True)
+        context['tipos_dano'] = ReporteDano.TipoDano.choices
+        context['severidades'] = ReporteDano.Severidad.choices
+        return context
+
     def post(self, request, *args, **kwargs):
         from decimal import Decimal, InvalidOperation
         from django.http import HttpResponseRedirect
@@ -241,6 +249,10 @@ class ReportarDanoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
         descripcion = request.POST.get('descripcion', '').strip()
         latitud_raw = request.POST.get('latitud', '').strip()
         longitud_raw = request.POST.get('longitud', '').strip()
+        linea_id = request.POST.get('linea', '').strip() or None
+        torre_id = request.POST.get('torre', '').strip() or None
+        tipo_dano = request.POST.get('tipo_dano', 'OTRO').strip()
+        severidad = request.POST.get('severidad', 'MEDIA').strip()
 
         if not descripcion:
             context = self.get_context_data(**kwargs)
@@ -261,7 +273,19 @@ class ReportarDanoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
             descripcion=descripcion,
             latitud=latitud,
             longitud=longitud,
+            linea_id=linea_id,
+            torre_id=torre_id,
+            tipo_dano=tipo_dano,
+            severidad=severidad,
         )
+
+        # Handle photo uploads
+        fotos = request.FILES.getlist('fotos')
+        for foto in fotos:
+            FotoDano.objects.create(
+                reporte=reporte,
+                imagen=foto,
+            )
 
         return HttpResponseRedirect(reverse_lazy('campo:detalle_dano', kwargs={'pk': reporte.pk}))
 
@@ -275,7 +299,7 @@ class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
 
     def get_queryset(self) -> QuerySet[ReporteDano]:
-        return super().get_queryset().select_related('usuario')
+        return super().get_queryset().select_related('usuario', 'linea', 'torre')
 
 
 class ReporteDanoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
@@ -284,6 +308,9 @@ class ReporteDanoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     template_name = 'campo/detalle_dano.html'
     context_object_name = 'reporte'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('usuario', 'linea', 'torre').prefetch_related('fotos')
 
 
 class ProcedimientoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):

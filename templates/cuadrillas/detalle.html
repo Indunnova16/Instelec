@@ -363,6 +363,7 @@
                             <div class="text-gray-400 font-normal">{{ dia|date:"d/m" }}</div>
                         </th>
                         {% endfor %}
+                        <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase min-w-[70px]">H. Ord.</th>
                         <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase min-w-[90px]">Total Viaticos</th>
                         <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase min-w-[70px]">H. Extra</th>
                     </tr>
@@ -498,6 +499,11 @@
                         </td>
                         {% endfor %}
                         <td class="px-3 py-2 text-center">
+                            <span class="text-sm font-bold text-blue-600 dark:text-blue-400">
+                                {{ fila.total_horas_ordinarias|floatformat:1 }}h
+                            </span>
+                        </td>
+                        <td class="px-3 py-2 text-center">
                             <span id="total-viaticos-{{ fila.miembro.usuario_id }}" class="text-sm font-bold text-green-600 dark:text-green-400">
                                 ${{ fila.total_viaticos|floatformat:0 }}
                             </span>
@@ -524,7 +530,7 @@
         'LINIERO_I': 3176095,
         'LINIERO_II': 2804856,
         'AYUDANTE': 1750905,
-        'CONDUCTOR': 0,
+        'CONDUCTOR': 480000,
         'ADMINISTRADOR_OBRA': 2522400,
         'PROFESIONAL_SST': 4204000,
         'ING_RESIDENTE': 7357000,

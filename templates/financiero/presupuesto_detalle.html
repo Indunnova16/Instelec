@@ -80,6 +80,42 @@
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Otros Costos</dt>
                     <dd class="font-medium text-gray-900 dark:text-white">${{ presupuesto.otros_costos|floatformat:0 }}</dd>
                 </div>
+                {% if presupuesto.costo_herramientas %}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Herramientas</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">${{ presupuesto.costo_herramientas|floatformat:0 }}</dd>
+                </div>
+                {% endif %}
+                {% if presupuesto.costo_ambientales %}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Ambientales</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">${{ presupuesto.costo_ambientales|floatformat:0 }}</dd>
+                </div>
+                {% endif %}
+                {% if presupuesto.costo_subcontratistas %}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Subcontratistas</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">${{ presupuesto.costo_subcontratistas|floatformat:0 }}</dd>
+                </div>
+                {% endif %}
+                {% if presupuesto.costo_transporte %}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Transporte</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">${{ presupuesto.costo_transporte|floatformat:0 }}</dd>
+                </div>
+                {% endif %}
+                {% if presupuesto.costo_materiales %}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Materiales</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">${{ presupuesto.costo_materiales|floatformat:0 }}</dd>
+                </div>
+                {% endif %}
+                {% if presupuesto.costo_garantia %}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Garantia</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">${{ presupuesto.costo_garantia|floatformat:0 }}</dd>
+                </div>
+                {% endif %}
                 <div class="pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-between">
                     <dt class="font-semibold text-gray-900 dark:text-white">TOTAL PRESUPUESTADO</dt>
                     <dd class="font-bold text-gray-900 dark:text-white">${{ presupuesto.total_presupuestado|floatformat:0 }}</dd>

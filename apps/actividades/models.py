@@ -207,6 +207,13 @@ class Actividad(BaseModel):
         related_name='actividades',
         verbose_name='Cuadrilla asignada'
     )
+    cuadrillas = models.ManyToManyField(
+        'cuadrillas.Cuadrilla',
+        blank=True,
+        related_name='actividades_asignadas',
+        verbose_name='Cuadrillas asignadas',
+        help_text='Permite asignar multiples cuadrillas a un aviso'
+    )
     programacion = models.ForeignKey(
         ProgramacionMensual,
         on_delete=models.SET_NULL,

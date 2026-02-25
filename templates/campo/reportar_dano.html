@@ -23,17 +23,74 @@
     </div>
     {% endif %}
 
-    <form method="post" class="space-y-6">
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
         {% csrf_token %}
+
+        <!-- Classification -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Clasificación
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="tipo_dano" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de daño</label>
+                    <select name="tipo_dano" id="tipo_dano"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                        {% for val, lbl in tipos_dano %}
+                        <option value="{{ val }}">{{ lbl }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="severidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Severidad</label>
+                    <select name="severidad" id="severidad"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                        {% for val, lbl in severidades %}
+                        <option value="{{ val }}" {% if val == 'MEDIA' %}selected{% endif %}>{{ lbl }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Line/Tower association -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Ubicación en Línea (opcional)
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>
+                    <select name="linea" id="linea"
+                            @change="lineaChanged($event.target.value)"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                        <option value="">-- Seleccionar línea --</option>
+                        {% for linea in lineas %}
+                        <option value="{{ linea.id }}">{{ linea.codigo }} - {{ linea.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="torre" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Torre</label>
+                    <select name="torre" id="torre"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            :disabled="torres.length === 0">
+                        <option value="">-- Seleccionar torre --</option>
+                        <template x-for="t in torres" :key="t.id">
+                            <option :value="t.id" x-text="t.numero"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+        </div>
 
         <!-- Geolocation -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
-                Ubicación del Daño
+                Ubicación GPS
             </h2>
 
             <div class="space-y-4">
-                <!-- Status indicator -->
                 <div class="flex items-center gap-3 p-4 rounded-lg"
                      :class="{
                          'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800': geoStatus === 'loading',
@@ -41,38 +98,29 @@
                          'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800': geoStatus === 'error',
                          'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600': geoStatus === 'idle'
                      }">
-
-                    <!-- Loading spinner -->
                     <template x-if="geoStatus === 'loading'">
                         <svg class="animate-spin h-6 w-6 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                     </template>
-
-                    <!-- Success icon -->
                     <template x-if="geoStatus === 'success'">
                         <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
                         </svg>
                     </template>
-
-                    <!-- Error icon -->
                     <template x-if="geoStatus === 'error'">
                         <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
                         </svg>
                     </template>
-
-                    <!-- Idle icon -->
                     <template x-if="geoStatus === 'idle'">
                         <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
                         </svg>
                     </template>
-
                     <div>
                         <p class="font-medium text-sm"
                            :class="{
@@ -89,16 +137,12 @@
                         </template>
                     </div>
                 </div>
-
-                <!-- Retry button -->
                 <template x-if="geoStatus === 'error'">
                     <button type="button" @click="obtenerUbicacion()"
                             class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm">
                         Reintentar ubicación
                     </button>
                 </template>
-
-                <!-- Google Maps link -->
                 <template x-if="geoStatus === 'success'">
                     <a :href="'https://www.google.com/maps?q=' + latitud + ',' + longitud"
                        target="_blank"
@@ -109,8 +153,6 @@
                         Ver en Google Maps
                     </a>
                 </template>
-
-                <!-- Hidden inputs -->
                 <input type="hidden" name="latitud" :value="latitud">
                 <input type="hidden" name="longitud" :value="longitud">
             </div>
@@ -121,7 +163,6 @@
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
                 Descripción del Daño
             </h2>
-
             <div>
                 <label for="descripcion" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Describa el daño encontrado <span class="text-red-500">*</span>
@@ -132,9 +173,24 @@
             </div>
         </div>
 
+        <!-- Photos -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                Fotografías del Daño
+            </h2>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Adjunte fotos del daño (opcional, máximo 5)
+                </label>
+                <input type="file" name="fotos" accept="image/*" multiple
+                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-gray-700 dark:file:text-gray-300">
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Formatos: JPG, PNG, WebP</p>
+            </div>
+        </div>
+
         <!-- Submit -->
         <div class="flex justify-end gap-3">
-            <a href="{% url 'campo:lista' %}"
+            <a href="{% url 'campo:reportes_dano' %}"
                class="px-6 py-2 bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition">
                 Cancelar
             </a>
@@ -156,9 +212,22 @@ function reporteDano() {
         longitud: '',
         geoStatus: 'idle',
         geoMessage: 'Iniciando captura de ubicación...',
+        torres: [],
 
         init() {
             this.obtenerUbicacion();
+        },
+
+        async lineaChanged(lineaId) {
+            this.torres = [];
+            if (!lineaId) return;
+            try {
+                const resp = await fetch(`/actividades/api/torres-por-linea/${lineaId}/`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    this.torres = data.torres || [];
+                }
+            } catch(e) { /* ignore */ }
         },
 
         obtenerUbicacion() {

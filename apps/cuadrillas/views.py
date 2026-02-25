@@ -201,6 +201,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
             dias = []
             total_viaticos = Decimal('0')
             total_horas_extra = Decimal('0')
+            total_horas_ordinarias = Decimal('0')
             for dia in dias_semana:
                 fecha_iso = dia.isoformat()
                 info = usuario_asistencia.get(fecha_iso, {})
@@ -209,6 +210,10 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                 if info.get('viatico_aplica', False):
                     total_viaticos += Decimal(str(viaticos_val))
                 total_horas_extra += Decimal(str(horas_extra_val))
+                # Ordinary hours: jornada regular if PRESENTE
+                jornada = Asistencia.JORNADA_POR_DIA.get(dia.weekday(), 0)
+                if info.get('tipo_novedad') == 'PRESENTE':
+                    total_horas_ordinarias += Decimal(str(jornada))
                 dias.append({
                     'fecha': fecha_iso,
                     'fecha_display': dia.strftime('%d/%m'),
@@ -228,6 +233,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                 'dias': dias,
                 'total_viaticos': total_viaticos,
                 'total_horas_extra': total_horas_extra,
+                'total_horas_ordinarias': total_horas_ordinarias,
             })
 
         context['filas_asistencia'] = filas_asistencia
@@ -980,7 +986,7 @@ class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
             'LINIERO_I': 3176095,
             'LINIERO_II': 2804856,
             'AYUDANTE': 1750905,
-            'CONDUCTOR': 0,
+            'CONDUCTOR': 480000,
             'ADMINISTRADOR_OBRA': 2522400,
             'PROFESIONAL_SST': 4204000,
             'ING_RESIDENTE': 7357000,
@@ -989,4 +995,15 @@ class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
             'SUPERVISOR_FOREST': 2969427,
             'ASISTENTE_FOREST': 4204000,
         }
-        return JsonResponse({'costo_dia': costos.get(rol, 0)})
+
+        costo = costos.get(rol, 0)
+
+        # Para conductor, diferenciar interno/externo
+        es_conductor = rol == 'CONDUCTOR'
+        conductor_interno = request.GET.get('conductor_interno', 'true') == 'true'
+
+        return JsonResponse({
+            'costo_dia': costo,
+            'es_conductor': es_conductor,
+            'conductor_interno': conductor_interno if es_conductor else None,
+        })

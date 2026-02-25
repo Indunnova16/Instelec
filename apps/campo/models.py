@@ -318,11 +318,54 @@ class ReporteDano(BaseModel):
     Allows field workers to report damages found on site.
     """
 
+    class TipoDano(models.TextChoices):
+        ESTRUCTURAL = 'ESTRUCTURAL', 'Daño estructural'
+        ELECTRICO = 'ELECTRICO', 'Daño eléctrico'
+        AMBIENTAL = 'AMBIENTAL', 'Daño ambiental'
+        VANDALISMO = 'VANDALISMO', 'Vandalismo'
+        CLIMATICO = 'CLIMATICO', 'Daño por clima'
+        DESGASTE = 'DESGASTE', 'Desgaste natural'
+        OTRO = 'OTRO', 'Otro'
+
+    class Severidad(models.TextChoices):
+        BAJA = 'BAJA', 'Baja'
+        MEDIA = 'MEDIA', 'Media'
+        ALTA = 'ALTA', 'Alta'
+        CRITICA = 'CRITICA', 'Crítica'
+
     usuario = models.ForeignKey(
         'usuarios.Usuario',
         on_delete=models.PROTECT,
         related_name='reportes_dano',
         verbose_name='Reportado por'
+    )
+    linea = models.ForeignKey(
+        'lineas.Linea',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reportes_dano',
+        verbose_name='Línea'
+    )
+    torre = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reportes_dano',
+        verbose_name='Torre'
+    )
+    tipo_dano = models.CharField(
+        'Tipo de daño',
+        max_length=20,
+        choices=TipoDano.choices,
+        default=TipoDano.OTRO
+    )
+    severidad = models.CharField(
+        'Severidad',
+        max_length=10,
+        choices=Severidad.choices,
+        default=Severidad.MEDIA
     )
     descripcion = models.TextField(
         'Descripción del daño',
@@ -351,6 +394,37 @@ class ReporteDano(BaseModel):
 
     def __str__(self):
         return f"Daño reportado por {self.usuario.get_full_name()} - {self.created_at.strftime('%d/%m/%Y %H:%M')}"
+
+
+class FotoDano(BaseModel):
+    """
+    Photo evidence for damage reports.
+    """
+
+    reporte = models.ForeignKey(
+        ReporteDano,
+        on_delete=models.CASCADE,
+        related_name='fotos',
+        verbose_name='Reporte de daño'
+    )
+    imagen = models.ImageField(
+        'Imagen',
+        upload_to='campo/danos/'
+    )
+    descripcion = models.CharField(
+        'Descripción',
+        max_length=200,
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'fotos_dano'
+        verbose_name = 'Foto de Daño'
+        verbose_name_plural = 'Fotos de Daño'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Foto - {self.reporte}"
 
 
 class Procedimiento(BaseModel):

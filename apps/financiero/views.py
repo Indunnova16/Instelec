@@ -108,12 +108,35 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         ]
         context['periodo_actual'] = self.request.GET.get('periodo', 'mes')
 
-        # Chart data - Costs by category
+        # Additional budget pillars
+        costo_herramientas = presupuestos.aggregate(total=Sum('costo_herramientas'))['total'] or Decimal('0')
+        costo_ambientales = presupuestos.aggregate(total=Sum('costo_ambientales'))['total'] or Decimal('0')
+        costo_subcontratistas = presupuestos.aggregate(total=Sum('costo_subcontratistas'))['total'] or Decimal('0')
+        costo_transporte = presupuestos.aggregate(total=Sum('costo_transporte'))['total'] or Decimal('0')
+        costo_garantia = presupuestos.aggregate(total=Sum('costo_garantia'))['total'] or Decimal('0')
+        costo_materiales = presupuestos.aggregate(total=Sum('costo_materiales'))['total'] or Decimal('0')
+        costo_viaticos = presupuestos.aggregate(total=Sum('viaticos_planeados'))['total'] or Decimal('0')
+        costo_otros = presupuestos.aggregate(total=Sum('otros_costos'))['total'] or Decimal('0')
+
+        context['costo_herramientas'] = costo_herramientas
+        context['costo_ambientales'] = costo_ambientales
+        context['costo_subcontratistas'] = costo_subcontratistas
+        context['costo_transporte'] = costo_transporte
+        context['costo_garantia'] = costo_garantia
+        context['costo_materiales'] = costo_materiales
+
+        # Chart data - Costs by category (all pillars)
         context['costos_categoria_data'] = json.dumps([
             {'value': float(costo_personal), 'name': 'Personal'},
             {'value': float(costo_equipos), 'name': 'Equipos/Vehículos'},
-            {'value': float(presupuestos.aggregate(total=Sum('viaticos_planeados'))['total'] or 0), 'name': 'Viáticos'},
-            {'value': float(presupuestos.aggregate(total=Sum('otros_costos'))['total'] or 0), 'name': 'Otros'},
+            {'value': float(costo_viaticos), 'name': 'Viáticos'},
+            {'value': float(costo_herramientas), 'name': 'Herramientas'},
+            {'value': float(costo_ambientales), 'name': 'Ambientales'},
+            {'value': float(costo_subcontratistas), 'name': 'Subcontratistas'},
+            {'value': float(costo_transporte), 'name': 'Transporte'},
+            {'value': float(costo_materiales), 'name': 'Materiales'},
+            {'value': float(costo_garantia), 'name': 'Garantía'},
+            {'value': float(costo_otros), 'name': 'Otros'},
         ])
 
         # Monthly trend (last 6 months)
