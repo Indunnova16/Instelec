@@ -34,8 +34,67 @@
                 <option value="{{ a }}" {% if a == anio %}selected{% endif %}>{{ a }}</option>
                 {% endfor %}
             </select>
+            <!-- Upload Excel button -->
+            <button @click="showUpload = !showUpload"
+                    class="px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                Subir Excel
+            </button>
         </div>
     </header>
+
+    <!-- Excel upload panel -->
+    <section x-show="showUpload" x-transition x-cloak
+             class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-green-200 dark:border-green-800">
+        <form method="post" enctype="multipart/form-data" class="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="import_excel">
+            <input type="hidden" name="anio" value="{{ anio }}">
+            <div class="flex-1 w-full">
+                <label for="archivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Archivo Excel (.xlsx)
+                </label>
+                <input type="file" name="archivo" id="archivo" accept=".xlsx,.xls" required
+                       class="block w-full text-sm text-gray-500 dark:text-gray-400
+                              file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
+                              file:text-sm file:font-semibold
+                              file:bg-green-50 file:text-green-700
+                              hover:file:bg-green-100
+                              dark:file:bg-gray-700 dark:file:text-gray-300">
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Excel con hoja PRESUPUESTO (meses en columnas, items en filas). Max 10 MB.
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit"
+                        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition">
+                    Importar
+                </button>
+                <button type="button" @click="showUpload = false"
+                        class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm transition">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Django messages -->
+    {% if messages %}
+    <div class="space-y-2">
+        {% for message in messages %}
+        <div class="p-3 rounded-lg text-sm flex items-center gap-2
+            {% if message.tags == 'success' %}bg-green-50 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800
+            {% elif message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800
+            {% elif message.tags == 'warning' %}bg-yellow-50 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-800
+            {% else %}bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <!-- Summary cards -->
     <section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -178,6 +237,7 @@ function presupuestoDetallado() {
     const meses = {{ meses|safe }};
     return {
         editing: null,
+        showUpload: false,
 
         editCell(event, seccion, categoria, item, anio, mesIdx) {
             const span = event.currentTarget;

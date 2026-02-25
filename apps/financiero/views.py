@@ -1480,6 +1480,9 @@ ESTRUCTURA_COSTOS = {
                 'items': [
                     'Nómina administración',
                     'Tiempo extra administración',
+                    'Tiempo festivo administración',
+                    'Beneficios administración',
+                    'Aportes y parafiscales administración',
                     'Prestaciones sociales administración',
                     'FIC administración',
                     'Seguro de vida administración',
@@ -1691,8 +1694,14 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
         return context
 
     def post(self, request, *args, **kwargs):
+        """Route POST actions: inline cell edit or Excel import."""
+        action = request.POST.get('action', '')
+        if action == 'import_excel':
+            return self._handle_excel_import(request)
+        return self._handle_cell_edit(request)
+
+    def _handle_cell_edit(self, request):
         """Handle inline cell edits via HTMX."""
-        import json
         from django.http import HttpResponse
         from django.utils import timezone
 
@@ -1703,10 +1712,10 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
             defaults={'datos': _build_empty_datos()},
         )
 
-        seccion = request.POST.get('seccion', '')  # costos_variables / costos_fijos / ingreso_proyectado
-        categoria = request.POST.get('categoria', '')  # MO, SST, etc.
-        item = request.POST.get('item', '')  # Item name
-        mes = request.POST.get('mes', '')  # enero, febrero, etc.
+        seccion = request.POST.get('seccion', '')
+        categoria = request.POST.get('categoria', '')
+        item = request.POST.get('item', '')
+        mes = request.POST.get('mes', '')
         valor_raw = request.POST.get('valor', '0').replace(',', '').replace('.', '').strip()
 
         try:
@@ -1736,6 +1745,59 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
             f'<span class="text-right">{valor:,.0f}</span>',
             content_type='text/html',
         )
+
+    def _handle_excel_import(self, request):
+        """Handle Excel file upload and data import."""
+        from django.contrib import messages
+        from django.shortcuts import redirect
+        from django.utils import timezone
+
+        anio = int(request.POST.get('anio', timezone.now().year))
+        archivo = request.FILES.get('archivo')
+
+        if not archivo:
+            messages.error(request, 'No se seleccionó ningún archivo.')
+            return redirect(request.path + f'?anio={anio}')
+
+        if not archivo.name.lower().endswith(('.xlsx', '.xls')):
+            messages.error(request, 'Formato no soportado. Use archivos .xlsx o .xls')
+            return redirect(request.path + f'?anio={anio}')
+
+        if archivo.size > 10 * 1024 * 1024:
+            messages.error(request, 'El archivo excede el tamaño máximo (10 MB).')
+            return redirect(request.path + f'?anio={anio}')
+
+        from .importers import PresupuestoExcelImporter
+
+        importer = PresupuestoExcelImporter()
+        result = importer.importar(archivo, ESTRUCTURA_COSTOS)
+
+        if not result['exito']:
+            messages.error(request, f'Error al importar: {result.get("error", "Error desconocido")}')
+            return redirect(request.path + f'?anio={anio}')
+
+        obj, created = PresupuestoDetallado.objects.get_or_create(
+            anio=anio,
+            tipo=self.tipo_presupuesto,
+            defaults={'datos': result['datos']},
+        )
+        if not created:
+            obj.datos = result['datos']
+            obj.save(update_fields=['datos', 'updated_at'])
+
+        matched = result['matched']
+        unmatched = result['unmatched']
+        msg = f'Importación exitosa: {matched} items importados.'
+        if unmatched:
+            msg += f' {unmatched} items no reconocidos.'
+        messages.success(request, msg)
+
+        for w in result.get('warnings', [])[:3]:
+            messages.warning(request, w)
+        for item in result.get('unmatched_items', [])[:5]:
+            messages.info(request, f'No reconocido: {item}')
+
+        return redirect(request.path + f'?anio={anio}')
 
 
 class PresupuestoPlaneadoView(PresupuestoDetalladoBaseView):
