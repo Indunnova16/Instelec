@@ -534,6 +534,40 @@ class ArchivoChecklist(BaseModel):
         return self.extension == '.pdf'
 
 
+class PresupuestoDetallado(BaseModel):
+    """
+    Detailed budget with the full cost structure (monthly breakdown).
+    Supports both 'Planeado' (planned) and 'Real' (actual) views.
+    Data is stored as a JSON object with the complete cost hierarchy.
+    """
+
+    class TipoPresupuesto(models.TextChoices):
+        PLANEADO = 'PLANEADO', 'Planeado'
+        REAL = 'REAL', 'Real'
+
+    anio = models.PositiveIntegerField('Año')
+    tipo = models.CharField(
+        'Tipo',
+        max_length=10,
+        choices=TipoPresupuesto.choices,
+    )
+    datos = models.JSONField(
+        'Datos',
+        default=dict,
+        help_text='Estructura completa de costos con valores mensuales',
+    )
+
+    class Meta:
+        db_table = 'presupuestos_detallados'
+        verbose_name = 'Presupuesto Detallado'
+        verbose_name_plural = 'Presupuestos Detallados'
+        unique_together = ['anio', 'tipo']
+        ordering = ['-anio']
+
+    def __str__(self):
+        return f"Presupuesto {self.get_tipo_display()} {self.anio}"
+
+
 class ArchivoPeriodoFacturacion(BaseModel):
     """
     General file attachment for a billing period (month/year/linea).

@@ -19,6 +19,7 @@ from .models import (
     CicloFacturacion,
     EjecucionCosto,
     Presupuesto,
+    PresupuestoDetallado,
 )
 
 
@@ -1388,3 +1389,360 @@ class PeriodoEliminarArchivoView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
             'showToast': {'message': 'Archivo del periodo eliminado', 'type': 'success'},
         })
         return response
+
+
+# ---------------------------------------------------------------------------
+# Cost structure constants (mirrors the Excel PRESUPUESTO sheet)
+# ---------------------------------------------------------------------------
+MESES = [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
+
+ESTRUCTURA_COSTOS = {
+    'costos_variables': {
+        'titulo': 'Costos Variables',
+        'categorias': [
+            {
+                'codigo': 'MO',
+                'nombre': 'Mano de Obra',
+                'items': [
+                    'Nómina operación',
+                    'Tiempo extra operación',
+                    'Tiempo festivo operación',
+                    'Beneficios operación',
+                    'Aportes y parafiscales operación',
+                    'Prestaciones sociales operación',
+                    'FIC operación',
+                    'Seguro de vida operación',
+                    'Viáticos reembolsables operación',
+                    'Viáticos NO reembolsables operación',
+                    'Viáticos descanso operación',
+                    'Auxilio alimentación/alojamiento operación',
+                    'Hidratación operación',
+                    'Campamento operación',
+                    'Alimentación operación',
+                    'Celaduría campo',
+                ],
+            },
+            {
+                'codigo': 'SST',
+                'nombre': 'SST y Ambiental',
+                'items': [
+                    'EPP consumibles',
+                    'EPP alturas',
+                    'EPP servidumbre',
+                    'Seguridad grupal',
+                    'Bioseguridad',
+                    'Dotación operación',
+                    'Examen médico operación',
+                    'Certificación operación',
+                    'Capacitaciones',
+                    'Ambiental',
+                ],
+            },
+            {
+                'codigo': 'TA',
+                'nombre': 'Transporte y Administración',
+                'items': [
+                    'Transporte operación',
+                    'Transporte de materiales y herramientas',
+                    'Transporte reembolsable',
+                ],
+            },
+            {
+                'codigo': 'MH',
+                'nombre': 'Material y Herramientas',
+                'items': [
+                    'Material obra',
+                    'Material fungible',
+                    'Insumos maquinaria y equipos',
+                    'Activos fijos',
+                    'Herramientas menores',
+                    'Gastos reembolsables',
+                ],
+            },
+            {
+                'codigo': 'SC',
+                'nombre': 'Subcontratistas',
+                'items': [
+                    'Subcontratistas',
+                ],
+            },
+        ],
+    },
+    'costos_fijos': {
+        'titulo': 'Costos Fijos',
+        'categorias': [
+            {
+                'codigo': 'MO',
+                'nombre': 'Mano de Obra Administración',
+                'items': [
+                    'Nómina administración',
+                    'Tiempo extra administración',
+                    'Prestaciones sociales administración',
+                    'FIC administración',
+                    'Seguro de vida administración',
+                    'Viáticos reembolsables administración',
+                    'Viáticos NO reembolsables administración',
+                    'Viáticos descanso administración',
+                    'Auxilio alimentación/alojamiento administración',
+                    'Hidratación administración',
+                    'Campamento administración',
+                    'Alimentación administración',
+                ],
+            },
+            {
+                'codigo': 'SST',
+                'nombre': 'SST Administración',
+                'items': [
+                    'Dotación administración',
+                    'Examen médico administración',
+                    'Certificación administración',
+                ],
+            },
+            {
+                'codigo': 'TA',
+                'nombre': 'Transporte y Gastos Administración',
+                'items': [
+                    'Transporte administración',
+                    'Transporte ocasional',
+                    'Arrendamiento oficina',
+                    'Arrendamiento patio',
+                    'Servicios públicos',
+                    'Celular / internet',
+                    'Seguridad privada',
+                    'Gastos menores',
+                    'Insumos oficina',
+                    'Ingreso sitio torre',
+                    'Actividades por garantía / imprevistos',
+                ],
+            },
+            {
+                'codigo': 'PFS',
+                'nombre': 'Garantías, Fianzas y Seguros',
+                'items': [
+                    'Garantías, fianzas y seguros',
+                ],
+            },
+        ],
+    },
+}
+
+
+def _build_empty_datos():
+    """Return an empty datos structure with all zeros."""
+    zero_months = {m: 0 for m in MESES}
+    datos = {'ingreso_proyectado': dict(zero_months)}
+    for seccion_key, seccion in ESTRUCTURA_COSTOS.items():
+        datos[seccion_key] = {}
+        for cat in seccion['categorias']:
+            datos[seccion_key][cat['codigo']] = {}
+            for item in cat['items']:
+                datos[seccion_key][cat['codigo']][item] = dict(zero_months)
+    return datos
+
+
+def _build_display_rows(datos):
+    """Build structured rows for template rendering from stored datos JSON."""
+    rows = []
+
+    # Ingreso proyectado
+    ing = datos.get('ingreso_proyectado', {})
+    valores_ing = [ing.get(m, 0) for m in MESES]
+    rows.append({
+        'tipo': 'ingreso',
+        'nombre': 'INGRESO PROYECTADO',
+        'codigo': '',
+        'valores': valores_ing,
+        'total': sum(valores_ing),
+    })
+
+    gran_total_variables = [0] * 12
+    gran_total_fijos = [0] * 12
+
+    for seccion_key, seccion in ESTRUCTURA_COSTOS.items():
+        is_variable = seccion_key == 'costos_variables'
+        # Section header
+        rows.append({
+            'tipo': 'seccion',
+            'nombre': seccion['titulo'],
+            'codigo': '',
+            'valores': None,
+            'total': None,
+        })
+
+        seccion_totales = [0] * 12
+
+        for cat in seccion['categorias']:
+            # Category header
+            cat_totales = [0] * 12
+            rows.append({
+                'tipo': 'categoria',
+                'nombre': cat['nombre'],
+                'codigo': cat['codigo'],
+                'valores': None,
+                'total': None,
+            })
+
+            cat_data = datos.get(seccion_key, {}).get(cat['codigo'], {})
+            for item_name in cat['items']:
+                item_data = cat_data.get(item_name, {})
+                valores = [item_data.get(m, 0) for m in MESES]
+                for i in range(12):
+                    cat_totales[i] += valores[i]
+                rows.append({
+                    'tipo': 'item',
+                    'nombre': item_name,
+                    'codigo': cat['codigo'],
+                    'seccion': seccion_key,
+                    'valores': valores,
+                    'total': sum(valores),
+                })
+
+            # Category subtotal
+            rows.append({
+                'tipo': 'subtotal',
+                'nombre': f"Subtotal {cat['nombre']}",
+                'codigo': cat['codigo'],
+                'valores': cat_totales,
+                'total': sum(cat_totales),
+            })
+            for i in range(12):
+                seccion_totales[i] += cat_totales[i]
+
+        # Section total
+        rows.append({
+            'tipo': 'total_seccion',
+            'nombre': f"Total {seccion['titulo']}",
+            'codigo': '',
+            'valores': seccion_totales,
+            'total': sum(seccion_totales),
+        })
+
+        if is_variable:
+            gran_total_variables = seccion_totales[:]
+        else:
+            gran_total_fijos = seccion_totales[:]
+
+    # Summary rows
+    ing_vals = [ing.get(m, 0) for m in MESES]
+    total_gastos = [gran_total_variables[i] + gran_total_fijos[i] for i in range(12)]
+    resultado = [ing_vals[i] - total_gastos[i] for i in range(12)]
+
+    rows.append({
+        'tipo': 'total_seccion',
+        'nombre': 'TOTAL GASTOS',
+        'codigo': '',
+        'valores': total_gastos,
+        'total': sum(total_gastos),
+    })
+    rows.append({
+        'tipo': 'resultado',
+        'nombre': 'RESULTADO (Ingreso - Gastos)',
+        'codigo': '',
+        'valores': resultado,
+        'total': sum(resultado),
+    })
+
+    total_ing = sum(ing_vals)
+    total_gasto = sum(total_gastos)
+    utilidad_pct = ((total_ing - total_gasto) / total_ing * 100) if total_ing else 0
+
+    return rows, {
+        'total_ingreso': total_ing,
+        'total_variables': sum(gran_total_variables),
+        'total_fijos': sum(gran_total_fijos),
+        'total_gastos': total_gasto,
+        'resultado': total_ing - total_gasto,
+        'utilidad_pct': utilidad_pct,
+    }
+
+
+class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Base view for detailed budget (Planeado / Real)."""
+    template_name = 'financiero/presupuesto_detallado.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+    tipo_presupuesto = None  # Override in subclass
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from django.utils import timezone
+
+        anio = int(self.request.GET.get('anio', timezone.now().year))
+
+        obj, created = PresupuestoDetallado.objects.get_or_create(
+            anio=anio,
+            tipo=self.tipo_presupuesto,
+            defaults={'datos': _build_empty_datos()},
+        )
+
+        rows, resumen = _build_display_rows(obj.datos)
+
+        context['presupuesto_obj'] = obj
+        context['tipo_presupuesto'] = self.tipo_presupuesto
+        context['tipo_label'] = 'Planeado' if self.tipo_presupuesto == 'PLANEADO' else 'Real'
+        context['anio'] = anio
+        context['meses'] = MESES
+        context['meses_cortos'] = [m[:3].title() for m in MESES]
+        context['rows'] = rows
+        context['resumen'] = resumen
+        context['anios_disponibles'] = list(range(anio - 2, anio + 3))
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Handle inline cell edits via HTMX."""
+        import json
+        from django.http import HttpResponse
+        from django.utils import timezone
+
+        anio = int(request.POST.get('anio', timezone.now().year))
+        obj, _ = PresupuestoDetallado.objects.get_or_create(
+            anio=anio,
+            tipo=self.tipo_presupuesto,
+            defaults={'datos': _build_empty_datos()},
+        )
+
+        seccion = request.POST.get('seccion', '')  # costos_variables / costos_fijos / ingreso_proyectado
+        categoria = request.POST.get('categoria', '')  # MO, SST, etc.
+        item = request.POST.get('item', '')  # Item name
+        mes = request.POST.get('mes', '')  # enero, febrero, etc.
+        valor_raw = request.POST.get('valor', '0').replace(',', '').replace('.', '').strip()
+
+        try:
+            valor = int(valor_raw)
+        except (ValueError, TypeError):
+            valor = 0
+
+        datos = obj.datos or _build_empty_datos()
+
+        if seccion == 'ingreso_proyectado':
+            if 'ingreso_proyectado' not in datos:
+                datos['ingreso_proyectado'] = {m: 0 for m in MESES}
+            datos['ingreso_proyectado'][mes] = valor
+        elif seccion in ('costos_variables', 'costos_fijos') and categoria and item:
+            if seccion not in datos:
+                datos[seccion] = {}
+            if categoria not in datos[seccion]:
+                datos[seccion][categoria] = {}
+            if item not in datos[seccion][categoria]:
+                datos[seccion][categoria][item] = {m: 0 for m in MESES}
+            datos[seccion][categoria][item][mes] = valor
+
+        obj.datos = datos
+        obj.save(update_fields=['datos', 'updated_at'])
+
+        return HttpResponse(
+            f'<span class="text-right">{valor:,.0f}</span>',
+            content_type='text/html',
+        )
+
+
+class PresupuestoPlaneadoView(PresupuestoDetalladoBaseView):
+    """View for the planned budget tab."""
+    tipo_presupuesto = 'PLANEADO'
+
+
+class PresupuestoRealView(PresupuestoDetalladoBaseView):
+    """View for the actual/real budget tab."""
+    tipo_presupuesto = 'REAL'

@@ -26,4 +26,6 @@ urlpatterns = [
     path('checklist-facturacion/archivo/<uuid:pk>/eliminar/', views.ChecklistEliminarArchivoView.as_view(), name='checklist_eliminar_archivo'),
     path('checklist-facturacion/periodo/archivos/subir/', views.PeriodoSubirArchivoView.as_view(), name='periodo_subir_archivo'),
     path('checklist-facturacion/periodo/archivo/<uuid:pk>/eliminar/', views.PeriodoEliminarArchivoView.as_view(), name='periodo_eliminar_archivo'),
+    path('presupuesto-planeado/', views.PresupuestoPlaneadoView.as_view(), name='presupuesto_planeado'),
+    path('presupuesto-real/', views.PresupuestoRealView.as_view(), name='presupuesto_real'),
 ]
