@@ -242,6 +242,18 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         if estado and estado in dict(Actividad.Estado.choices):
             qs = qs.filter(estado=estado)
 
+        # Filter by cuadrilla(s) - multiple selection
+        cuadrilla_ids = self.request.GET.getlist('cuadrilla')
+        valid_cuadrilla_ids = []
+        for cid in cuadrilla_ids:
+            try:
+                UUID(cid)
+                valid_cuadrilla_ids.append(cid)
+            except ValueError:
+                pass
+        if valid_cuadrilla_ids:
+            qs = qs.filter(cuadrilla_id__in=valid_cuadrilla_ids)
+
         # Search by aviso SAP
         buscar_aviso = self.request.GET.get('buscar_aviso', '').strip()
         if buscar_aviso:
@@ -259,6 +271,7 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         context['tipos'] = TipoActividad.objects.filter(activo=True)
         context['estados'] = Actividad.Estado.choices
         context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
+        context['selected_cuadrillas'] = self.request.GET.getlist('cuadrilla')
         context['meses'] = [
             (1, 'Enero'), (2, 'Febrero'), (3, 'Marzo'), (4, 'Abril'),
             (5, 'Mayo'), (6, 'Junio'), (7, 'Julio'), (8, 'Agosto'),

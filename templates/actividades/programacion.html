@@ -30,8 +30,8 @@
 
     <!-- Filters -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <form method="get" class="space-y-4">
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <form method="get" id="filter-form" class="space-y-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
                 <div>
                     <label for="filter-mes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mes</label>
                     <select name="mes" id="filter-mes" onchange="this.form.submit()"
@@ -61,6 +61,40 @@
                         </option>
                         {% endfor %}
                     </select>
+                </div>
+                <!-- Multi-select Cuadrilla filter -->
+                <div x-data="cuadrillaFilter()" class="relative">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cuadrilla</label>
+                    <!-- Hidden inputs for selected cuadrillas -->
+                    <template x-for="id in selectedCuadrillas" :key="id">
+                        <input type="hidden" name="cuadrilla" :value="id">
+                    </template>
+                    <button type="button" @click="open = !open" @click.outside="open = false"
+                            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 bg-white px-3 py-2 text-left text-sm flex items-center justify-between gap-1">
+                        <span x-text="selectedCuadrillas.length === 0 ? 'Todas' : selectedCuadrillas.length + ' seleccionada(s)'"
+                              class="truncate text-gray-700 dark:text-gray-300"></span>
+                        <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div x-show="open" x-transition
+                         class="absolute z-50 mt-1 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        <div class="p-2 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
+                            <button type="button" @click="selectedCuadrillas = []; submitFilter()"
+                                    class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400">Limpiar</button>
+                            <button type="button" @click="applyFilter()"
+                                    class="text-xs text-blue-600 hover:text-blue-800 font-medium">Aplicar</button>
+                        </div>
+                        {% for cuadrilla in cuadrillas %}
+                        <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm">
+                            <input type="checkbox" value="{{ cuadrilla.id }}"
+                                   :checked="selectedCuadrillas.includes('{{ cuadrilla.id }}')"
+                                   @change="toggleCuadrilla('{{ cuadrilla.id }}')"
+                                   class="rounded border-gray-300 text-blue-600 mr-2">
+                            <span class="text-gray-700 dark:text-gray-300 truncate">{{ cuadrilla.codigo }} - {{ cuadrilla.nombre }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
                 </div>
                 <div>
                     <label for="filter-tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo Actividad</label>
@@ -319,7 +353,7 @@
     <div class="flex justify-center">
         <nav class="flex items-center space-x-2">
             {% if page_obj.has_previous %}
-            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.previous_page_number }}{% if request.GET.linea %}&linea={{ request.GET.linea }}{% endif %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}"
+            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.previous_page_number }}{% if request.GET.linea %}&linea={{ request.GET.linea }}{% endif %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
                 Anterior
             </a>
@@ -328,7 +362,7 @@
                 Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
             </span>
             {% if page_obj.has_next %}
-            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.next_page_number }}{% if request.GET.linea %}&linea={{ request.GET.linea }}{% endif %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}"
+            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.next_page_number }}{% if request.GET.linea %}&linea={{ request.GET.linea }}{% endif %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
                 Siguiente
             </a>
@@ -341,6 +375,31 @@
 </div>
 
 <script>
+function cuadrillaFilter() {
+    // Read currently selected cuadrillas from URL params
+    const params = new URLSearchParams(window.location.search);
+    const selected = params.getAll('cuadrilla');
+    return {
+        open: false,
+        selectedCuadrillas: selected,
+        toggleCuadrilla(id) {
+            const idx = this.selectedCuadrillas.indexOf(id);
+            if (idx === -1) {
+                this.selectedCuadrillas.push(id);
+            } else {
+                this.selectedCuadrillas.splice(idx, 1);
+            }
+        },
+        applyFilter() {
+            this.open = false;
+            this.submitFilter();
+        },
+        submitFilter() {
+            document.getElementById('filter-form').submit();
+        }
+    };
+}
+
 function bulkActions() {
     return {
         selectedIds: [],
