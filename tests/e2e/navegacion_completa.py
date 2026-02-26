@@ -261,17 +261,24 @@ def run_navigation():
             # ===== 8. PROBAR FLUJO DE LOGOUT =====
             print("\n[8/8] Verificando flujo de logout...")
             try:
-                # Buscar enlace de logout
-                logout_link = page.locator("a[href*='logout']").first
-                if logout_link.is_visible():
-                    logout_link.click()
+                # Buscar boton de logout (ahora es un form POST)
+                logout_btn = page.locator("button:has-text('Cerrar Sesion')").first
+                if logout_btn.is_visible():
+                    logout_btn.click()
                     page.wait_for_load_state('networkidle')
                     print(f"   ✓ Logout ejecutado - URL: {page.url}")
                     report.add_visit(page.url, "Logout", "OK")
                 else:
-                    # Intentar acceder directamente
-                    page.goto(f"{BASE_URL}/usuarios/logout/")
-                    print(f"   ✓ Logout directo - URL: {page.url}")
+                    # Fallback: enviar POST directamente
+                    page.evaluate("""
+                        fetch('/usuarios/logout/', {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''},
+                            credentials: 'same-origin'
+                        }).then(() => window.location.href = '/usuarios/login/')
+                    """)
+                    page.wait_for_load_state('networkidle')
+                    print(f"   ✓ Logout directo via POST - URL: {page.url}")
 
             except Exception as e:
                 print(f"   ⚠ No se pudo probar logout: {str(e)}")
