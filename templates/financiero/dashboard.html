@@ -89,18 +89,18 @@
             <!-- Ingreso -->
             <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                 <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-3 font-medium uppercase tracking-wide">Ingreso Proyectado</h3>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                    <div>
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="min-w-0">
                         <p class="text-xs text-blue-600 font-medium">Planeado</p>
-                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_planeado.ingreso|floatformat:0|intcomma }}</p>
+                        <p class="text-sm font-bold text-gray-900 dark:text-white truncate">${{ resumen_planeado.ingreso|floatformat:0|intcomma }}</p>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <p class="text-xs text-green-600 font-medium">Real</p>
-                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_real.ingreso|floatformat:0|intcomma }}</p>
+                        <p class="text-sm font-bold text-gray-900 dark:text-white truncate">${{ resumen_real.ingreso|floatformat:0|intcomma }}</p>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <p class="text-xs text-gray-500 font-medium">Diferencia</p>
-                        <p class="text-lg font-bold {% if diff_ingreso >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        <p class="text-sm font-bold truncate {% if diff_ingreso >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
                             ${{ diff_ingreso|floatformat:0|intcomma }}
                         </p>
                     </div>
@@ -110,18 +110,18 @@
             <!-- Total Gastos -->
             <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                 <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-3 font-medium uppercase tracking-wide">Total Gastos</h3>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                    <div>
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="min-w-0">
                         <p class="text-xs text-blue-600 font-medium">Planeado</p>
-                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_planeado.total_gastos|floatformat:0|intcomma }}</p>
+                        <p class="text-sm font-bold text-gray-900 dark:text-white truncate">${{ resumen_planeado.total_gastos|floatformat:0|intcomma }}</p>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <p class="text-xs text-green-600 font-medium">Real</p>
-                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_real.total_gastos|floatformat:0|intcomma }}</p>
+                        <p class="text-sm font-bold text-gray-900 dark:text-white truncate">${{ resumen_real.total_gastos|floatformat:0|intcomma }}</p>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <p class="text-xs text-gray-500 font-medium">Diferencia</p>
-                        <p class="text-lg font-bold {% if diff_gastos <= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        <p class="text-sm font-bold truncate {% if diff_gastos <= 0 %}text-green-600{% else %}text-red-600{% endif %}">
                             ${{ diff_gastos|floatformat:0|intcomma }}
                         </p>
                     </div>
@@ -131,22 +131,22 @@
             <!-- Resultado -->
             <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                 <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-3 font-medium uppercase tracking-wide">Resultado (Ingreso - Gastos)</h3>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                    <div>
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="min-w-0">
                         <p class="text-xs text-blue-600 font-medium">Planeado</p>
-                        <p class="text-lg font-bold {% if resumen_planeado.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
+                        <p class="text-sm font-bold truncate {% if resumen_planeado.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
                             ${{ resumen_planeado.resultado|floatformat:0|intcomma }}
                         </p>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <p class="text-xs text-green-600 font-medium">Real</p>
-                        <p class="text-lg font-bold {% if resumen_real.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
+                        <p class="text-sm font-bold truncate {% if resumen_real.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
                             ${{ resumen_real.resultado|floatformat:0|intcomma }}
                         </p>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <p class="text-xs text-gray-500 font-medium">Diferencia</p>
-                        <p class="text-lg font-bold {% if diff_resultado >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        <p class="text-sm font-bold truncate {% if diff_resultado >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
                             ${{ diff_resultado|floatformat:0|intcomma }}
                         </p>
                     </div>
