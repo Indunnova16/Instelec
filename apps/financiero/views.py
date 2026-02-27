@@ -91,368 +91,178 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
     template_name = 'financiero/dashboard.html'
     allowed_roles = ['admin', 'director', 'coordinador']
 
-    def _get_period_filter(self, hoy):
-        """Return (anio_filter, mes_filter_start, mes_filter_end) based on periodo param."""
-        periodo = self.request.GET.get('periodo', 'mes')
-        if periodo == 'trimestre':
-            q = (hoy.month - 1) // 3
-            mes_inicio = q * 3 + 1
-            mes_fin = mes_inicio + 2
-            return hoy.year, mes_inicio, mes_fin, periodo
-        elif periodo == 'anio':
-            return hoy.year, 1, 12, periodo
-        else:
-            return hoy.year, hoy.month, hoy.month, periodo
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
         import json
 
-        from django.db.models import Q
         from django.utils import timezone
 
-        from apps.actividades.models import Actividad
-        from apps.lineas.models import Linea
-
         hoy = timezone.now()
-        anio, mes_inicio, mes_fin, periodo_actual = self._get_period_filter(hoy)
+        anio = int(self.request.GET.get('anio', hoy.year))
+        mes = int(self.request.GET.get('mes', 0))  # 0 = all months
 
-        # Budgets for the selected period
-        presupuestos = Presupuesto.objects.filter(
-            anio=anio,
-            mes__gte=mes_inicio,
-            mes__lte=mes_fin,
+        # Available years and months for filters
+        anios_db = list(
+            PresupuestoDetallado.objects.values_list('anio', flat=True).distinct()
         )
+        anios_disponibles = sorted(set(anios_db) | set(range(anio - 2, anio + 3)))
 
-        total_presupuestado = presupuestos.aggregate(
-            total=Sum('total_presupuestado')
-        )['total'] or Decimal('0')
-
-        total_ejecutado = presupuestos.aggregate(
-            total=Sum('total_ejecutado')
-        )['total'] or Decimal('0')
-
-        context['total_presupuestado'] = total_presupuestado
-        context['total_ejecutado'] = total_ejecutado
-        context['presupuesto'] = total_presupuestado
-        context['ejecutado'] = total_ejecutado
-
-        # Percentage executed
-        if total_presupuestado > 0:
-            context['porcentaje_ejecutado'] = float(total_ejecutado / total_presupuestado * 100)
-        else:
-            context['porcentaje_ejecutado'] = 0
-
-        context['facturacion_esperada'] = presupuestos.aggregate(
-            total=Sum('facturacion_esperada')
-        )['total'] or 0
-
-        # Billing cycles
-        context['ciclos_pendientes'] = CicloFacturacion.objects.exclude(
-            estado='PAGO_RECIBIDO'
-        ).count()
-
-        # Cost breakdown - all pillar aggregations in a single query
-        pillar_aggs = presupuestos.aggregate(
-            personal=Sum('costo_dias_hombre'),
-            vehiculos=Sum('costo_vehiculos'),
-            viaticos=Sum('viaticos_planeados'),
-            herramientas=Sum('costo_herramientas'),
-            ambientales=Sum('costo_ambientales'),
-            subcontratistas=Sum('costo_subcontratistas'),
-            transporte=Sum('costo_transporte'),
-            materiales=Sum('costo_materiales'),
-            garantia=Sum('costo_garantia'),
-            otros=Sum('otros_costos'),
-        )
-        costo_personal = pillar_aggs['personal'] or Decimal('0')
-        costo_equipos = pillar_aggs['vehiculos'] or Decimal('0')
-        costo_viaticos = pillar_aggs['viaticos'] or Decimal('0')
-        costo_herramientas = pillar_aggs['herramientas'] or Decimal('0')
-        costo_ambientales = pillar_aggs['ambientales'] or Decimal('0')
-        costo_subcontratistas = pillar_aggs['subcontratistas'] or Decimal('0')
-        costo_transporte = pillar_aggs['transporte'] or Decimal('0')
-        costo_materiales = pillar_aggs['materiales'] or Decimal('0')
-        costo_garantia = pillar_aggs['garantia'] or Decimal('0')
-        costo_otros = pillar_aggs['otros'] or Decimal('0')
-
-        context['costo_personal'] = costo_personal
-        context['costo_equipos'] = costo_equipos
-
-        if total_ejecutado > 0:
-            context['porcentaje_personal'] = float(costo_personal / total_ejecutado * 100)
-            context['porcentaje_equipos'] = float(costo_equipos / total_ejecutado * 100)
-        else:
-            context['porcentaje_personal'] = 0
-            context['porcentaje_equipos'] = 0
-
-        # Cost per activity
-        actividades_completadas = Actividad.objects.filter(
-            fecha_programada__year=anio,
-            fecha_programada__month__gte=mes_inicio,
-            fecha_programada__month__lte=mes_fin,
-            estado='COMPLETADA'
-        ).count()
-
-        if actividades_completadas > 0:
-            context['costo_promedio_actividad'] = float(total_ejecutado / actividades_completadas)
-        else:
-            context['costo_promedio_actividad'] = 0
-
-        # Month-over-month variation for cost per activity
-        if periodo_actual == 'mes':
-            prev_m = hoy.month - 1
-            prev_y = hoy.year
-            if prev_m <= 0:
-                prev_m += 12
-                prev_y -= 1
-            prev_pres = Presupuesto.objects.filter(anio=prev_y, mes=prev_m)
-            prev_ejecutado = prev_pres.aggregate(total=Sum('total_ejecutado'))['total'] or Decimal('0')
-            prev_actividades = Actividad.objects.filter(
-                fecha_programada__year=prev_y,
-                fecha_programada__month=prev_m,
-                estado='COMPLETADA'
-            ).count()
-            prev_costo_prom = float(prev_ejecutado / prev_actividades) if prev_actividades else 0
-            if prev_costo_prom > 0 and context['costo_promedio_actividad'] > 0:
-                context['variacion_costo'] = float(
-                    (context['costo_promedio_actividad'] - prev_costo_prom) / prev_costo_prom * 100
-                )
-            else:
-                context['variacion_costo'] = 0
-        else:
-            context['variacion_costo'] = 0
-
-        # Period filters
-        context['periodos'] = [
-            {'value': 'mes', 'label': 'Este mes'},
-            {'value': 'trimestre', 'label': 'Este trimestre'},
-            {'value': 'anio', 'label': 'Este año'},
+        meses_nombres = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
         ]
-        context['periodo_actual'] = periodo_actual
+        meses_cortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                        'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-        context['costo_herramientas'] = costo_herramientas
-        context['costo_ambientales'] = costo_ambientales
-        context['costo_subcontratistas'] = costo_subcontratistas
-        context['costo_transporte'] = costo_transporte
-        context['costo_garantia'] = costo_garantia
-        context['costo_materiales'] = costo_materiales
-
-        # Chart data - Costs by category (all pillars)
-        context['costos_categoria_data'] = json.dumps([
-            {'value': float(costo_personal), 'name': 'Personal'},
-            {'value': float(costo_equipos), 'name': 'Equipos/Vehículos'},
-            {'value': float(costo_viaticos), 'name': 'Viáticos'},
-            {'value': float(costo_herramientas), 'name': 'Herramientas'},
-            {'value': float(costo_ambientales), 'name': 'Ambientales'},
-            {'value': float(costo_subcontratistas), 'name': 'Subcontratistas'},
-            {'value': float(costo_transporte), 'name': 'Transporte'},
-            {'value': float(costo_materiales), 'name': 'Materiales'},
-            {'value': float(costo_garantia), 'name': 'Garantía'},
-            {'value': float(costo_otros), 'name': 'Otros'},
-        ])
-
-        # Monthly trend (last 6 months)
-        meses_labels = []
-        presupuesto_mensual = []
-        ejecutado_mensual = []
-        meses_nombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-
-        for i in range(5, -1, -1):
-            m = hoy.month - i
-            a = hoy.year
-            if m <= 0:
-                m += 12
-                a -= 1
-            meses_labels.append(meses_nombres[m-1])
-            pres_mes = Presupuesto.objects.filter(anio=a, mes=m)
-            presupuesto_mensual.append(float(pres_mes.aggregate(total=Sum('total_presupuestado'))['total'] or 0))
-            ejecutado_mensual.append(float(pres_mes.aggregate(total=Sum('total_ejecutado'))['total'] or 0))
-
-        context['meses_labels'] = json.dumps(meses_labels)
-        context['presupuesto_mensual'] = json.dumps(presupuesto_mensual)
-        context['ejecutado_mensual'] = json.dumps(ejecutado_mensual)
-
-        # Costs by line (uses the same period filter)
-        lineas = Linea.objects.filter(activa=True)[:10]
-        lineas_labels = []
-        costos_linea = []
-        presupuestos_linea = []
-        for linea in lineas:
-            lineas_labels.append(linea.codigo)
-            pres_linea = Presupuesto.objects.filter(
-                linea=linea, anio=anio,
-                mes__gte=mes_inicio, mes__lte=mes_fin,
-            )
-            costos_linea.append(float(pres_linea.aggregate(total=Sum('total_ejecutado'))['total'] or 0))
-            presupuestos_linea.append(float(pres_linea.aggregate(total=Sum('total_presupuestado'))['total'] or 0))
-
-        context['lineas_labels'] = json.dumps(lineas_labels)
-        context['costos_linea'] = json.dumps(costos_linea)
-        context['presupuestos_linea'] = json.dumps(presupuestos_linea)
-
-        # Cost detail table - all 6 budget pillars
-        def _build_row(cat, concepto, valor):
-            """Build a detail row. valor is the presupuestado amount (same as ejecutado for now)."""
-            pres = float(valor)
-            ejec = float(valor)  # until EjecucionCosto is linked per pillar
-            return {
-                'categoria': cat,
-                'concepto': concepto,
-                'presupuesto': pres,
-                'ejecutado': ejec,
-                'porcentaje': (ejec / pres * 100) if pres > 0 else 0,
-                'disponible': pres - ejec,
-            }
-
-        context['detalle_costos'] = [
-            {
-                'categoria': 'Mano de Obra',
-                'concepto': 'Días hombre',
-                'presupuesto': float(costo_personal),
-                'ejecutado': float(costo_personal),
-                'porcentaje': 100 if costo_personal > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Vehículos',
-                'concepto': 'Equipos y vehículos',
-                'presupuesto': float(costo_equipos),
-                'ejecutado': float(costo_equipos),
-                'porcentaje': 100 if costo_equipos > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Viáticos',
-                'concepto': 'Viáticos del personal',
-                'presupuesto': float(costo_viaticos),
-                'ejecutado': float(costo_viaticos),
-                'porcentaje': 100 if costo_viaticos > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Herramientas',
-                'concepto': 'Herramientas y equipos menores',
-                'presupuesto': float(costo_herramientas),
-                'ejecutado': float(costo_herramientas),
-                'porcentaje': 100 if costo_herramientas > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Ambientales',
-                'concepto': 'Gestión ambiental y permisos',
-                'presupuesto': float(costo_ambientales),
-                'ejecutado': float(costo_ambientales),
-                'porcentaje': 100 if costo_ambientales > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Subcontratistas',
-                'concepto': 'Subcontratistas y terceros',
-                'presupuesto': float(costo_subcontratistas),
-                'ejecutado': float(costo_subcontratistas),
-                'porcentaje': 100 if costo_subcontratistas > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Transporte',
-                'concepto': 'Transporte adicional',
-                'presupuesto': float(costo_transporte),
-                'ejecutado': float(costo_transporte),
-                'porcentaje': 100 if costo_transporte > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Materiales',
-                'concepto': 'Materiales e insumos',
-                'presupuesto': float(costo_materiales),
-                'ejecutado': float(costo_materiales),
-                'porcentaje': 100 if costo_materiales > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Garantía',
-                'concepto': 'Garantías y pólizas',
-                'presupuesto': float(costo_garantia),
-                'ejecutado': float(costo_garantia),
-                'porcentaje': 100 if costo_garantia > 0 else 0,
-                'disponible': 0,
-            },
-            {
-                'categoria': 'Otros',
-                'concepto': 'Otros costos',
-                'presupuesto': float(costo_otros),
-                'ejecutado': float(costo_otros),
-                'porcentaje': 100 if costo_otros > 0 else 0,
-                'disponible': 0,
-            },
+        context['anio'] = anio
+        context['mes'] = mes
+        context['anios_disponibles'] = anios_disponibles
+        context['meses_opciones'] = [{'value': 0, 'label': 'Todo el año'}] + [
+            {'value': i + 1, 'label': meses_nombres[i]} for i in range(12)
         ]
-        # Filter out zero rows
-        context['detalle_costos'] = [r for r in context['detalle_costos'] if r['presupuesto'] > 0]
 
-        context['total_presupuesto'] = total_presupuestado
-        context['porcentaje_total'] = context['porcentaje_ejecutado']
-        context['total_disponible'] = float(total_presupuestado - total_ejecutado)
+        # Determine which months to aggregate
+        if mes == 0:
+            mes_indices = list(range(12))
+            periodo_label = f'Año {anio}'
+        else:
+            mes_indices = [mes - 1]
+            periodo_label = f'{meses_nombres[mes - 1]} {anio}'
+        context['periodo_label'] = periodo_label
 
-        # Budget alerts (Issue 7)
+        # Fetch PresupuestoDetallado for both types
+        planeado_obj = PresupuestoDetallado.objects.filter(
+            anio=anio, tipo='PLANEADO'
+        ).first()
+        real_obj = PresupuestoDetallado.objects.filter(
+            anio=anio, tipo='REAL'
+        ).first()
+
+        datos_planeado = planeado_obj.datos if planeado_obj else _build_empty_datos()
+        datos_real = real_obj.datos if real_obj else _build_empty_datos()
+
+        resumen_planeado = _extract_presupuesto_summary(datos_planeado, mes_indices)
+        resumen_real = _extract_presupuesto_summary(datos_real, mes_indices)
+
+        context['resumen_planeado'] = resumen_planeado
+        context['resumen_real'] = resumen_real
+
+        # Compute differences
+        context['diff_ingreso'] = resumen_real['ingreso'] - resumen_planeado['ingreso']
+        context['diff_gastos'] = resumen_real['total_gastos'] - resumen_planeado['total_gastos']
+        context['diff_resultado'] = resumen_real['resultado'] - resumen_planeado['resultado']
+
+        # Build comparison detail table
+        detalle_comparacion = []
+        desglose_p = {d['codigo'] + d['seccion']: d for d in resumen_planeado['desglose']}
+        for item_r in resumen_real['desglose']:
+            key = item_r['codigo'] + item_r['seccion']
+            item_p = desglose_p.get(key, {'valor': 0})
+            planeado_val = item_p['valor']
+            real_val = item_r['valor']
+            diff = real_val - planeado_val
+            pct_desviacion = ((diff / planeado_val) * 100) if planeado_val else 0
+            detalle_comparacion.append({
+                'categoria': item_r['categoria'],
+                'seccion': item_r['seccion'],
+                'planeado': planeado_val,
+                'real': real_val,
+                'diferencia': diff,
+                'pct_desviacion': pct_desviacion,
+            })
+
+        # Add income row at the top
+        diff_ing = resumen_real['ingreso'] - resumen_planeado['ingreso']
+        pct_ing = ((diff_ing / resumen_planeado['ingreso']) * 100) if resumen_planeado['ingreso'] else 0
+        detalle_comparacion.insert(0, {
+            'categoria': 'Ingreso Proyectado',
+            'seccion': 'Ingreso',
+            'planeado': resumen_planeado['ingreso'],
+            'real': resumen_real['ingreso'],
+            'diferencia': diff_ing,
+            'pct_desviacion': pct_ing,
+        })
+
+        context['detalle_comparacion'] = detalle_comparacion
+
+        # Chart data - monthly trend for the selected year (Planeado vs Real gastos)
+        planeado_mensual = []
+        real_mensual = []
+        for i in range(12):
+            p_sum = _extract_presupuesto_summary(datos_planeado, [i])
+            r_sum = _extract_presupuesto_summary(datos_real, [i])
+            planeado_mensual.append(p_sum['total_gastos'])
+            real_mensual.append(r_sum['total_gastos'])
+
+        context['meses_labels'] = json.dumps(meses_cortos)
+        context['planeado_mensual'] = json.dumps(planeado_mensual)
+        context['real_mensual'] = json.dumps(real_mensual)
+
+        # Chart data - income monthly trend
+        ingreso_planeado_mensual = []
+        ingreso_real_mensual = []
+        for i in range(12):
+            ing_p = datos_planeado.get('ingreso_proyectado', {}).get(MESES[i], 0)
+            ing_r = datos_real.get('ingreso_proyectado', {}).get(MESES[i], 0)
+            ingreso_planeado_mensual.append(ing_p)
+            ingreso_real_mensual.append(ing_r)
+
+        context['ingreso_planeado_mensual'] = json.dumps(ingreso_planeado_mensual)
+        context['ingreso_real_mensual'] = json.dumps(ingreso_real_mensual)
+
+        # Chart data - category comparison (bar chart)
+        cat_labels = []
+        cat_planeado = []
+        cat_real = []
+        for item in detalle_comparacion:
+            if item['seccion'] != 'Ingreso' and (item['planeado'] > 0 or item['real'] > 0):
+                cat_labels.append(item['categoria'])
+                cat_planeado.append(item['planeado'])
+                cat_real.append(item['real'])
+
+        context['cat_labels'] = json.dumps(cat_labels)
+        context['cat_planeado'] = json.dumps(cat_planeado)
+        context['cat_real'] = json.dumps(cat_real)
+
+        # Alerts
         alertas = []
-        porcentaje = context['porcentaje_ejecutado']
-        if porcentaje > 100:
-            alertas.append({
-                'tipo': 'danger',
-                'icono': 'exclamation-triangle',
-                'titulo': 'Presupuesto excedido',
-                'mensaje': f'El ejecutado supera el presupuestado en {porcentaje - 100:.1f}%',
-                'color': 'red',
-            })
-        elif porcentaje > 80:
-            alertas.append({
-                'tipo': 'warning',
-                'icono': 'exclamation',
-                'titulo': 'Presupuesto en zona de alerta',
-                'mensaje': f'Se ha ejecutado el {porcentaje:.1f}% del presupuesto',
-                'color': 'yellow',
-            })
-
-        # Check facturacion esperada vs real
-        facturacion_esperada = context['facturacion_esperada'] or Decimal('0')
-        ciclos_facturados = CicloFacturacion.objects.filter(
-            presupuesto__anio=anio,
-            presupuesto__mes__gte=mes_inicio,
-            presupuesto__mes__lte=mes_fin,
-        )
-        facturacion_real = ciclos_facturados.aggregate(
-            total=Sum('monto_facturado')
-        )['total'] or Decimal('0')
-        context['facturacion_real'] = facturacion_real
-
-        if facturacion_esperada > 0:
-            pct_facturacion = float(facturacion_real / facturacion_esperada * 100)
-            context['porcentaje_facturacion'] = pct_facturacion
-            if pct_facturacion < 50:
+        if resumen_real['total_gastos'] > resumen_planeado['total_gastos'] and resumen_planeado['total_gastos'] > 0:
+            pct_exceso = ((resumen_real['total_gastos'] - resumen_planeado['total_gastos'])
+                          / resumen_planeado['total_gastos'] * 100)
+            if pct_exceso > 10:
+                alertas.append({
+                    'tipo': 'danger',
+                    'titulo': 'Gastos reales superan lo planeado',
+                    'mensaje': f'Los gastos reales superan el presupuesto planeado en {pct_exceso:.1f}%',
+                    'color': 'red',
+                })
+            elif pct_exceso > 0:
                 alertas.append({
                     'tipo': 'warning',
-                    'icono': 'currency-dollar',
-                    'titulo': 'Facturacion rezagada',
-                    'mensaje': f'Solo se ha facturado {pct_facturacion:.1f}% de lo esperado',
+                    'titulo': 'Gastos reales por encima de lo planeado',
+                    'mensaje': f'Los gastos reales exceden lo planeado en {pct_exceso:.1f}%',
                     'color': 'yellow',
                 })
-        else:
-            context['porcentaje_facturacion'] = 0
 
-        # Check individual line budgets
-        for pres in presupuestos.select_related('linea'):
-            if pres.total_presupuestado > 0:
-                pct = float(pres.total_ejecutado / pres.total_presupuestado * 100)
-                if pct > 100:
-                    alertas.append({
-                        'tipo': 'danger',
-                        'icono': 'exclamation-triangle',
-                        'titulo': f'{pres.linea.codigo} - Sobrecosto',
-                        'mensaje': f'Ejecutado {pct:.1f}% del presupuesto asignado',
-                        'color': 'red',
-                    })
+        if resumen_real['ingreso'] < resumen_planeado['ingreso'] and resumen_planeado['ingreso'] > 0:
+            pct_deficit = ((resumen_planeado['ingreso'] - resumen_real['ingreso'])
+                           / resumen_planeado['ingreso'] * 100)
+            if pct_deficit > 20:
+                alertas.append({
+                    'tipo': 'warning',
+                    'titulo': 'Ingreso real por debajo de lo planeado',
+                    'mensaje': f'El ingreso real es {pct_deficit:.1f}% menor que lo planeado',
+                    'color': 'yellow',
+                })
+
+        if resumen_real['resultado'] < 0 and resumen_planeado['resultado'] >= 0:
+            alertas.append({
+                'tipo': 'danger',
+                'titulo': 'Resultado negativo',
+                'mensaje': 'El resultado real es negativo mientras el planeado era positivo',
+                'color': 'red',
+            })
 
         context['alertas'] = alertas
 

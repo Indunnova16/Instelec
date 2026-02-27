@@ -9,43 +9,51 @@
 
 {% block content %}
 <main class="space-y-6" role="main" aria-label="Dashboard financiero del contrato">
-    <!-- Header -->
+    <!-- Header with filters -->
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Financiero</h1>
-            <p class="text-gray-600 dark:text-gray-400">Control de costos y presupuesto del contrato</p>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Financiero</h1>
+            <p class="text-gray-600 dark:text-gray-400">Comparativo Presupuesto Planeado vs Real - {{ periodo_label }}</p>
         </div>
-        <div class="flex gap-2" role="group" aria-label="Acciones y filtros">
-            <label for="periodo-filter" class="sr-only">Filtrar por periodo</label>
-            <select id="periodo-filter" class="rounded-lg border-gray-300"
-                    hx-get="{% url 'financiero:dashboard' %}"
-                    hx-target="#dashboard-content"
-                    hx-trigger="change"
-                    aria-label="Seleccionar periodo de tiempo">
-                {% for p in periodos %}
-                <option value="{{ p.value }}" {% if p.value == periodo_actual %}selected{% endif %}>
-                    {{ p.label }}
-                </option>
-                {% endfor %}
-            </select>
-            <button hx-get="{% url 'financiero:cuadro_costos' %}"
-                    hx-target="#modal-container"
-                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
-                    aria-label="Generar cuadro de costos del periodo">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                Generar Cuadro de Costos
-            </button>
+        <div class="flex flex-wrap gap-2 items-center" role="group" aria-label="Filtros">
+            <!-- Year filter -->
+            <div class="flex items-center gap-1">
+                <label for="anio-filter" class="text-sm text-gray-600 dark:text-gray-400 font-medium">Año:</label>
+                <select id="anio-filter"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                        onchange="applyFilters()">
+                    {% for a in anios_disponibles %}
+                    <option value="{{ a }}" {% if a == anio %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Month filter -->
+            <div class="flex items-center gap-1">
+                <label for="mes-filter" class="text-sm text-gray-600 dark:text-gray-400 font-medium">Mes:</label>
+                <select id="mes-filter"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                        onchange="applyFilters()">
+                    {% for m in meses_opciones %}
+                    <option value="{{ m.value }}" {% if m.value == mes %}selected{% endif %}>{{ m.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Quick links to detailed views -->
+            <a href="{% url 'financiero:presupuesto_planeado' %}?anio={{ anio }}"
+               class="px-3 py-2 text-sm bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition font-medium">
+                Ver Planeado
+            </a>
+            <a href="{% url 'financiero:presupuesto_real' %}?anio={{ anio }}"
+               class="px-3 py-2 text-sm bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition font-medium">
+                Ver Real
+            </a>
         </div>
     </header>
 
     <div id="dashboard-content" aria-live="polite">
         <!-- Budget Alerts -->
         {% if alertas %}
-        <section class="mb-6 space-y-3" aria-labelledby="alertas-title">
-            <h2 id="alertas-title" class="sr-only">Alertas de presupuesto</h2>
+        <section class="mb-6 space-y-3">
             {% for alerta in alertas %}
             <div class="flex items-center gap-3 p-4 rounded-lg
                 {% if alerta.color == 'red' %}bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800
@@ -76,211 +84,233 @@
         </section>
         {% endif %}
 
-        <!-- Main KPIs -->
-        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" aria-labelledby="kpi-section-title">
-            <h2 id="kpi-section-title" class="sr-only">Indicadores financieros clave</h2>
-
-            <!-- Presupuesto Ejecutado -->
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-presupuesto-title">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 id="kpi-presupuesto-title" class="text-sm text-gray-500">Presupuesto Ejecutado</h3>
-                    <span class="text-xs px-2 py-1 rounded-full
-                        {% if porcentaje_ejecutado <= 80 %}bg-green-100 text-green-800
-                        {% elif porcentaje_ejecutado <= 95 %}bg-yellow-100 text-yellow-800
-                        {% else %}bg-red-100 text-red-800{% endif %}"
-                        role="status"
-                        aria-label="Porcentaje de ejecucion: {{ porcentaje_ejecutado|floatformat:1 }} por ciento">
-                        {{ porcentaje_ejecutado|floatformat:1 }}%
-                    </span>
-                </div>
-                <p class="text-2xl font-bold text-gray-900 dark:text-white" aria-live="polite">
-                    ${{ ejecutado|floatformat:0|intcomma }}
-                </p>
-                <div class="mt-2">
-                    <div class="w-full bg-gray-200 rounded-full h-2" role="progressbar" aria-valuenow="{{ porcentaje_ejecutado }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de ejecucion presupuestal">
-                        <div class="h-2 rounded-full transition-all duration-500
-                            {% if porcentaje_ejecutado <= 80 %}bg-green-500
-                            {% elif porcentaje_ejecutado <= 95 %}bg-yellow-500
-                            {% else %}bg-red-500{% endif %}"
-                             style="width: {{ porcentaje_ejecutado|floatformat:0 }}%"></div>
+        <!-- Summary KPIs: Planeado vs Real -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <!-- Ingreso -->
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-3 font-medium uppercase tracking-wide">Ingreso Proyectado</h3>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                        <p class="text-xs text-blue-600 font-medium">Planeado</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_planeado.ingreso|floatformat:0|intcomma }}</p>
                     </div>
-                    <p class="text-xs text-gray-500 mt-1">De ${{ presupuesto|floatformat:0|intcomma }}</p>
+                    <div>
+                        <p class="text-xs text-green-600 font-medium">Real</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_real.ingreso|floatformat:0|intcomma }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 font-medium">Diferencia</p>
+                        <p class="text-lg font-bold {% if diff_ingreso >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                            ${{ diff_ingreso|floatformat:0|intcomma }}
+                        </p>
+                    </div>
                 </div>
             </article>
 
-            <!-- Costo por Actividad -->
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-costo-actividad-title">
-                <h3 id="kpi-costo-actividad-title" class="text-sm text-gray-500 mb-2">Costo Promedio / Actividad</h3>
-                <p class="text-2xl font-bold text-gray-900 dark:text-white" aria-live="polite">
-                    ${{ costo_promedio_actividad|floatformat:0|intcomma }}
-                </p>
-                <p class="text-xs text-gray-500 mt-2">
-                    {% if variacion_costo >= 0 %}
-                    <span class="text-green-600" aria-label="Disminucion del {{ variacion_costo|floatformat:1 }} por ciento respecto al mes anterior">-{{ variacion_costo|floatformat:1 }}%</span>
-                    {% else %}
-                    <span class="text-red-600" aria-label="Aumento del {{ variacion_costo|floatformat:1|slice:'1:' }} por ciento respecto al mes anterior">+{{ variacion_costo|floatformat:1|slice:"1:" }}%</span>
-                    {% endif %}
-                    vs mes anterior
-                </p>
+            <!-- Total Gastos -->
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-3 font-medium uppercase tracking-wide">Total Gastos</h3>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                        <p class="text-xs text-blue-600 font-medium">Planeado</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_planeado.total_gastos|floatformat:0|intcomma }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-green-600 font-medium">Real</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-white">${{ resumen_real.total_gastos|floatformat:0|intcomma }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 font-medium">Diferencia</p>
+                        <p class="text-lg font-bold {% if diff_gastos <= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                            ${{ diff_gastos|floatformat:0|intcomma }}
+                        </p>
+                    </div>
+                </div>
             </article>
 
-            <!-- Personal -->
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-personal-title">
-                <h3 id="kpi-personal-title" class="text-sm text-gray-500 mb-2">Costo Personal</h3>
-                <p class="text-2xl font-bold text-blue-600" aria-live="polite">
-                    ${{ costo_personal|floatformat:0|intcomma }}
-                </p>
-                <p class="text-xs text-gray-500 mt-2">
-                    {{ porcentaje_personal|floatformat:1 }}% del total
-                </p>
-            </article>
-
-            <!-- Equipos y Vehiculos -->
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-labelledby="kpi-equipos-title">
-                <h3 id="kpi-equipos-title" class="text-sm text-gray-500 mb-2">Costo Equipos/Vehiculos</h3>
-                <p class="text-2xl font-bold text-purple-600" aria-live="polite">
-                    ${{ costo_equipos|floatformat:0|intcomma }}
-                </p>
-                <p class="text-xs text-gray-500 mt-2">
-                    {{ porcentaje_equipos|floatformat:1 }}% del total
-                </p>
+            <!-- Resultado -->
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-3 font-medium uppercase tracking-wide">Resultado (Ingreso - Gastos)</h3>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                        <p class="text-xs text-blue-600 font-medium">Planeado</p>
+                        <p class="text-lg font-bold {% if resumen_planeado.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
+                            ${{ resumen_planeado.resultado|floatformat:0|intcomma }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-green-600 font-medium">Real</p>
+                        <p class="text-lg font-bold {% if resumen_real.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
+                            ${{ resumen_real.resultado|floatformat:0|intcomma }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 font-medium">Diferencia</p>
+                        <p class="text-lg font-bold {% if diff_resultado >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                            ${{ diff_resultado|floatformat:0|intcomma }}
+                        </p>
+                    </div>
+                </div>
             </article>
         </section>
 
-        <!-- Budget vs Execution Indicators -->
+        <!-- Secondary KPIs row -->
+        <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Variables (Planeado)</p>
+                <p class="text-xl font-bold text-blue-600">${{ resumen_planeado.total_variables|floatformat:0|intcomma }}</p>
+            </article>
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Variables (Real)</p>
+                <p class="text-xl font-bold text-green-600">${{ resumen_real.total_variables|floatformat:0|intcomma }}</p>
+            </article>
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Fijos (Planeado)</p>
+                <p class="text-xl font-bold text-blue-600">${{ resumen_planeado.total_fijos|floatformat:0|intcomma }}</p>
+            </article>
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Fijos (Real)</p>
+                <p class="text-xl font-bold text-green-600">${{ resumen_real.total_fijos|floatformat:0|intcomma }}</p>
+            </article>
+        </section>
+
+        <!-- Utility comparison -->
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <!-- Presupuesto vs Ejecutado -->
             <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Presupuesto vs Ejecutado</h3>
-                <div class="space-y-4">
-                    <div class="flex justify-between text-sm">
-                        <span class="text-gray-500">Ejecutado</span>
-                        <span class="font-medium {% if porcentaje_ejecutado > 100 %}text-red-600{% elif porcentaje_ejecutado > 80 %}text-yellow-600{% else %}text-green-600{% endif %}">
-                            ${{ ejecutado|floatformat:0|intcomma }} / ${{ presupuesto|floatformat:0|intcomma }}
-                        </span>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">% Utilidad Planeada</h3>
+                <div class="flex items-center gap-4">
+                    <div class="flex-1">
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                            <div class="h-4 rounded-full transition-all duration-700 {% if resumen_planeado.utilidad_pct >= 0 %}bg-blue-500{% else %}bg-red-500{% endif %}"
+                                style="width: min({{ resumen_planeado.utilidad_pct|floatformat:0 }}%, 100%)"></div>
+                        </div>
                     </div>
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                        <div class="h-4 rounded-full transition-all duration-700
-                            {% if porcentaje_ejecutado > 100 %}bg-red-500
-                            {% elif porcentaje_ejecutado > 80 %}bg-yellow-500
-                            {% else %}bg-green-500{% endif %}"
-                            style="width: min({{ porcentaje_ejecutado|floatformat:0 }}%, 100%)"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500">
-                        <span>0%</span>
-                        <span class="font-semibold {% if porcentaje_ejecutado > 100 %}text-red-600{% elif porcentaje_ejecutado > 80 %}text-yellow-600{% else %}text-green-600{% endif %}">
-                            {{ porcentaje_ejecutado|floatformat:1 }}%
-                        </span>
-                        <span>100%</span>
-                    </div>
-                    <div class="text-sm text-gray-600 dark:text-gray-400">
-                        Disponible: <span class="font-bold {% if total_disponible < 0 %}text-red-600{% else %}text-green-600{% endif %}">${{ total_disponible|floatformat:0|intcomma }}</span>
-                    </div>
+                    <span class="text-2xl font-bold {% if resumen_planeado.utilidad_pct >= 0 %}text-blue-600{% else %}text-red-600{% endif %}">
+                        {{ resumen_planeado.utilidad_pct|floatformat:1 }}%
+                    </span>
                 </div>
             </article>
 
-            <!-- Facturacion Esperada vs Real -->
             <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Facturacion Esperada vs Real</h3>
-                <div class="space-y-4">
-                    <div class="flex justify-between text-sm">
-                        <span class="text-gray-500">Facturado</span>
-                        <span class="font-medium text-blue-600">
-                            ${{ facturacion_real|floatformat:0|intcomma }} / ${{ facturacion_esperada|floatformat:0|intcomma }}
-                        </span>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">% Utilidad Real</h3>
+                <div class="flex items-center gap-4">
+                    <div class="flex-1">
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                            <div class="h-4 rounded-full transition-all duration-700 {% if resumen_real.utilidad_pct >= 0 %}bg-green-500{% else %}bg-red-500{% endif %}"
+                                style="width: min({{ resumen_real.utilidad_pct|floatformat:0 }}%, 100%)"></div>
+                        </div>
                     </div>
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                        <div class="h-4 rounded-full transition-all duration-700 bg-blue-500"
-                            style="width: min({{ porcentaje_facturacion|floatformat:0 }}%, 100%)"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500">
-                        <span>0%</span>
-                        <span class="font-semibold text-blue-600">{{ porcentaje_facturacion|floatformat:1 }}%</span>
-                        <span>100%</span>
-                    </div>
-                    <div class="text-sm text-gray-600 dark:text-gray-400">
-                        Ciclos pendientes: <span class="font-bold text-orange-600">{{ ciclos_pendientes }}</span>
-                    </div>
+                    <span class="text-2xl font-bold {% if resumen_real.utilidad_pct >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ resumen_real.utilidad_pct|floatformat:1 }}%
+                    </span>
                 </div>
             </article>
         </section>
 
         <!-- Charts Row -->
-        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6" aria-labelledby="charts-section-title">
-            <h2 id="charts-section-title" class="sr-only">Graficos financieros</h2>
-
-            <!-- Costos por Categoria -->
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="chart-categoria-title">
-                <h3 id="chart-categoria-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Distribucion de Costos</h3>
-                <div id="chart-costos-categoria" class="h-80" role="img" aria-label="Grafico circular mostrando la distribucion de costos por categoria"></div>
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Gastos Mensual: Planeado vs Real -->
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Gastos Mensuales: Planeado vs Real</h3>
+                <div id="chart-gastos-mensual" class="h-80"></div>
             </article>
 
-            <!-- Tendencia Mensual -->
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="chart-tendencia-title">
-                <h3 id="chart-tendencia-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Tendencia de Ejecucion</h3>
-                <div id="chart-tendencia-costos" class="h-80" role="img" aria-label="Grafico de lineas mostrando la tendencia de ejecucion presupuestal vs planificado"></div>
+            <!-- Ingreso Mensual: Planeado vs Real -->
+            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Ingreso Mensual: Planeado vs Real</h3>
+                <div id="chart-ingreso-mensual" class="h-80"></div>
             </article>
         </section>
 
-        <!-- Costos por Linea -->
-        <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6" aria-labelledby="chart-linea-title">
-            <h3 id="chart-linea-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Presupuesto vs Ejecutado por Linea</h3>
-            <div id="chart-costos-linea" class="h-80" role="img" aria-label="Grafico de barras mostrando presupuesto versus ejecutado por linea de transmision"></div>
+        <!-- Costos por Categoria: Planeado vs Real -->
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Costos por Categoria: Planeado vs Real</h3>
+            <div id="chart-categoria-comparacion" class="h-96"></div>
         </section>
 
-        <!-- Detalle de Costos -->
-        <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" aria-labelledby="detalle-costos-title">
-            <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
-                <h3 id="detalle-costos-title" class="font-medium text-gray-900 dark:text-white">Detalle de Ejecucion</h3>
-                <a href="{% url 'financiero:exportar_excel' %}?periodo={{ periodo_actual }}"
-                   class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                   aria-label="Exportar detalle de ejecucion a archivo Excel">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    Exportar Excel
-                </a>
+        <!-- Detalle Comparativo -->
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <div class="p-4 border-b dark:border-gray-700">
+                <h3 class="font-medium text-gray-900 dark:text-white">Detalle Comparativo: Planeado vs Real</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ periodo_label }}</p>
             </div>
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" aria-describedby="detalle-costos-title">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead class="bg-gray-50 dark:bg-gray-900">
                         <tr>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoria</th>
-                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Concepto</th>
-                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Presupuesto</th>
-                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ejecutado</th>
-                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">% Ejecucion</th>
-                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Disponible</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-blue-600 uppercase">Planeado</th>
+                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-green-600 uppercase">Real</th>
+                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Diferencia</th>
+                            <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">% Desviacion</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                        {% for item in detalle_costos %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                            <td class="px-4 py-3 text-sm font-medium">{{ item.categoria }}</td>
-                            <td class="px-4 py-3 text-sm text-gray-600">{{ item.concepto }}</td>
-                            <td class="px-4 py-3 text-sm text-right">${{ item.presupuesto|floatformat:0|intcomma }}</td>
-                            <td class="px-4 py-3 text-sm text-right font-medium">${{ item.ejecutado|floatformat:0|intcomma }}</td>
-                            <td class="px-4 py-3 text-sm text-right">
-                                <span class="{% if item.porcentaje > 100 %}text-red-600{% elif item.porcentaje > 90 %}text-yellow-600{% else %}text-green-600{% endif %}"
-                                      aria-label="{{ item.porcentaje|floatformat:1 }} por ciento de ejecucion">
-                                    {{ item.porcentaje|floatformat:1 }}%
+                        {% for item in detalle_comparacion %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700
+                            {% if item.seccion == 'Ingreso' %}bg-green-50/50 dark:bg-green-900/10{% endif %}">
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{{ item.categoria }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span class="px-2 py-0.5 rounded text-xs font-medium
+                                    {% if item.seccion == 'Ingreso' %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                    {% elif item.seccion == 'Variable' %}bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300
+                                    {% else %}bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300{% endif %}">
+                                    {{ item.seccion }}
                                 </span>
                             </td>
-                            <td class="px-4 py-3 text-sm text-right
-                                {% if item.disponible < 0 %}text-red-600 font-medium{% endif %}"
-                                aria-label="{% if item.disponible < 0 %}Deficit de{% else %}Disponible{% endif %} {{ item.disponible|floatformat:0 }} pesos">
-                                ${{ item.disponible|floatformat:0|intcomma }}
+                            <td class="px-4 py-3 text-sm text-right text-blue-700 dark:text-blue-400">${{ item.planeado|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right text-green-700 dark:text-green-400 font-medium">${{ item.real|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right font-medium
+                                {% if item.seccion == 'Ingreso' %}
+                                    {% if item.diferencia >= 0 %}text-green-600{% else %}text-red-600{% endif %}
+                                {% else %}
+                                    {% if item.diferencia <= 0 %}text-green-600{% else %}text-red-600{% endif %}
+                                {% endif %}">
+                                ${{ item.diferencia|floatformat:0|intcomma }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right">
+                                {% if item.pct_desviacion != 0 %}
+                                <span class="{% if item.seccion == 'Ingreso' %}
+                                        {% if item.pct_desviacion >= 0 %}text-green-600{% else %}text-red-600{% endif %}
+                                    {% else %}
+                                        {% if item.pct_desviacion <= 0 %}text-green-600{% else %}text-red-600{% endif %}
+                                    {% endif %}">
+                                    {{ item.pct_desviacion|floatformat:1 }}%
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
-                    <tfoot class="bg-gray-100 dark:bg-gray-900 font-medium">
+                    <tfoot class="bg-gray-100 dark:bg-gray-900 font-bold">
                         <tr>
-                            <td colspan="2" class="px-4 py-3 text-sm">TOTAL</td>
-                            <td class="px-4 py-3 text-sm text-right">${{ total_presupuesto|floatformat:0|intcomma }}</td>
-                            <td class="px-4 py-3 text-sm text-right">${{ total_ejecutado|floatformat:0|intcomma }}</td>
-                            <td class="px-4 py-3 text-sm text-right">{{ porcentaje_total|floatformat:1 }}%</td>
-                            <td class="px-4 py-3 text-sm text-right">${{ total_disponible|floatformat:0|intcomma }}</td>
+                            <td colspan="2" class="px-4 py-3 text-sm">TOTAL GASTOS</td>
+                            <td class="px-4 py-3 text-sm text-right text-blue-700">${{ resumen_planeado.total_gastos|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right text-green-700">${{ resumen_real.total_gastos|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-3 text-sm text-right {% if diff_gastos <= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                ${{ diff_gastos|floatformat:0|intcomma }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right">
+                                {% if resumen_planeado.total_gastos %}
+                                {% widthratio diff_gastos resumen_planeado.total_gastos 100 as pct_total %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr class="bg-yellow-50 dark:bg-yellow-900/20">
+                            <td colspan="2" class="px-4 py-3 text-sm">RESULTADO</td>
+                            <td class="px-4 py-3 text-sm text-right {% if resumen_planeado.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
+                                ${{ resumen_planeado.resultado|floatformat:0|intcomma }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right {% if resumen_real.resultado >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
+                                ${{ resumen_real.resultado|floatformat:0|intcomma }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right {% if diff_resultado >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                ${{ diff_resultado|floatformat:0|intcomma }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right"></td>
                         </tr>
                     </tfoot>
                 </table>
@@ -292,75 +322,114 @@
 
 {% block extra_js %}
 <script>
+function applyFilters() {
+    const anio = document.getElementById('anio-filter').value;
+    const mes = document.getElementById('mes-filter').value;
+    window.location.href = '{% url "financiero:dashboard" %}?anio=' + anio + '&mes=' + mes;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Costos por Categoria (Pie)
-    const chartCategoria = echarts.init(document.getElementById('chart-costos-categoria'));
-    chartCategoria.setOption({
-        tooltip: { trigger: 'item', formatter: '{b}: ${c} ({d}%)' },
-        series: [{
-            type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
-            label: { show: true, formatter: '{b}\n{d}%' },
-            data: {{ costos_categoria_data|safe }}
-        }]
-    });
+    const formatter = function(value) {
+        if (value >= 1000000) return '$' + (value / 1000000).toFixed(1) + 'M';
+        if (value >= 1000) return '$' + (value / 1000).toFixed(0) + 'K';
+        return '$' + value;
+    };
 
-    // Tendencia Mensual (Line)
-    const chartTendencia = echarts.init(document.getElementById('chart-tendencia-costos'));
-    chartTendencia.setOption({
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['Presupuesto', 'Ejecutado'], bottom: 0 },
+    // Gastos Mensual: Planeado vs Real (Line)
+    const chartGastos = echarts.init(document.getElementById('chart-gastos-mensual'));
+    chartGastos.setOption({
+        tooltip: { trigger: 'axis', valueFormatter: v => '$' + v.toLocaleString('es-CO') },
+        legend: { data: ['Planeado', 'Real'], bottom: 0 },
         xAxis: { type: 'category', data: {{ meses_labels|safe }} },
-        yAxis: { type: 'value', axisLabel: { formatter: '${value}' } },
+        yAxis: { type: 'value', axisLabel: { formatter: formatter } },
         series: [
             {
-                name: 'Presupuesto',
+                name: 'Planeado',
                 type: 'line',
-                data: {{ presupuesto_mensual|safe }},
-                lineStyle: { type: 'dashed' },
-                itemStyle: { color: '#9ca3af' }
+                data: {{ planeado_mensual|safe }},
+                lineStyle: { type: 'dashed', width: 2 },
+                itemStyle: { color: '#3b82f6' },
+                symbol: 'circle',
+                symbolSize: 6
             },
             {
-                name: 'Ejecutado',
+                name: 'Real',
                 type: 'line',
-                data: {{ ejecutado_mensual|safe }},
-                itemStyle: { color: '#3b82f6' },
-                areaStyle: { color: 'rgba(59, 130, 246, 0.1)' }
+                data: {{ real_mensual|safe }},
+                itemStyle: { color: '#10b981' },
+                areaStyle: { color: 'rgba(16, 185, 129, 0.1)' },
+                symbol: 'circle',
+                symbolSize: 6
             }
         ],
         grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
     });
 
-    // Costos por Linea (Grouped Bar: presupuesto vs ejecutado)
-    const chartLinea = echarts.init(document.getElementById('chart-costos-linea'));
-    chartLinea.setOption({
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['Presupuesto', 'Ejecutado'], bottom: 0 },
-        xAxis: { type: 'category', data: {{ lineas_labels|safe }} },
-        yAxis: { type: 'value', axisLabel: { formatter: '${value}' } },
+    // Ingreso Mensual: Planeado vs Real (Line)
+    const chartIngreso = echarts.init(document.getElementById('chart-ingreso-mensual'));
+    chartIngreso.setOption({
+        tooltip: { trigger: 'axis', valueFormatter: v => '$' + v.toLocaleString('es-CO') },
+        legend: { data: ['Planeado', 'Real'], bottom: 0 },
+        xAxis: { type: 'category', data: {{ meses_labels|safe }} },
+        yAxis: { type: 'value', axisLabel: { formatter: formatter } },
         series: [
             {
-                name: 'Presupuesto',
-                type: 'bar',
-                data: {{ presupuestos_linea|safe }},
-                itemStyle: { color: '#9ca3af' }
+                name: 'Planeado',
+                type: 'line',
+                data: {{ ingreso_planeado_mensual|safe }},
+                lineStyle: { type: 'dashed', width: 2 },
+                itemStyle: { color: '#3b82f6' },
+                symbol: 'circle',
+                symbolSize: 6
             },
             {
-                name: 'Ejecutado',
-                type: 'bar',
-                data: {{ costos_linea|safe }},
-                itemStyle: { color: '#3b82f6' }
+                name: 'Real',
+                type: 'line',
+                data: {{ ingreso_real_mensual|safe }},
+                itemStyle: { color: '#10b981' },
+                areaStyle: { color: 'rgba(16, 185, 129, 0.1)' },
+                symbol: 'circle',
+                symbolSize: 6
             }
         ],
         grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
+    });
+
+    // Costos por Categoria: Planeado vs Real (Grouped Bar)
+    const chartCategoria = echarts.init(document.getElementById('chart-categoria-comparacion'));
+    chartCategoria.setOption({
+        tooltip: { trigger: 'axis', valueFormatter: v => '$' + v.toLocaleString('es-CO') },
+        legend: { data: ['Planeado', 'Real'], bottom: 0 },
+        xAxis: {
+            type: 'category',
+            data: {{ cat_labels|safe }},
+            axisLabel: { rotate: 30, fontSize: 10 }
+        },
+        yAxis: { type: 'value', axisLabel: { formatter: formatter } },
+        series: [
+            {
+                name: 'Planeado',
+                type: 'bar',
+                data: {{ cat_planeado|safe }},
+                itemStyle: { color: '#3b82f6' },
+                barMaxWidth: 40
+            },
+            {
+                name: 'Real',
+                type: 'bar',
+                data: {{ cat_real|safe }},
+                itemStyle: { color: '#10b981' },
+                barMaxWidth: 40
+            }
+        ],
+        grid: { left: '3%', right: '4%', bottom: '20%', containLabel: true }
     });
 
     // Resize
     window.addEventListener('resize', function() {
+        chartGastos.resize();
+        chartIngreso.resize();
         chartCategoria.resize();
-        chartTendencia.resize();
-        chartLinea.resize();
     });
 });
 </script>
