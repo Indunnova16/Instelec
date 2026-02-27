@@ -23,8 +23,71 @@ from .models import (
 )
 
 
+def _extract_presupuesto_summary(datos, mes_indices):
+    """Extract summary from PresupuestoDetallado datos for given month indices.
+
+    Args:
+        datos: the JSON datos from PresupuestoDetallado
+        mes_indices: list of 0-based month indices (e.g. [0] for Jan, range(12) for all)
+
+    Returns dict with ingreso, category-level breakdown, totals.
+    """
+    meses_list = [
+        'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    ]
+    selected_months = [meses_list[i] for i in mes_indices]
+
+    # Income
+    ing = datos.get('ingreso_proyectado', {})
+    ingreso = sum(ing.get(m, 0) for m in selected_months)
+
+    # Cost breakdown by category
+    desglose = []
+    total_variables = 0
+    total_fijos = 0
+
+    for seccion_key in ('costos_variables', 'costos_fijos'):
+        seccion_data = datos.get(seccion_key, {})
+        estructura = ESTRUCTURA_COSTOS.get(seccion_key, {})
+        is_variable = seccion_key == 'costos_variables'
+
+        for cat in estructura.get('categorias', []):
+            cat_data = seccion_data.get(cat['codigo'], {})
+            cat_total = 0
+            for item_name in cat['items']:
+                item_data = cat_data.get(item_name, {})
+                cat_total += sum(item_data.get(m, 0) for m in selected_months)
+
+            desglose.append({
+                'categoria': cat['nombre'],
+                'codigo': cat['codigo'],
+                'seccion': 'Variable' if is_variable else 'Fijo',
+                'valor': cat_total,
+            })
+
+            if is_variable:
+                total_variables += cat_total
+            else:
+                total_fijos += cat_total
+
+    total_gastos = total_variables + total_fijos
+    resultado = ingreso - total_gastos
+    utilidad_pct = ((ingreso - total_gastos) / ingreso * 100) if ingreso else 0
+
+    return {
+        'ingreso': ingreso,
+        'total_variables': total_variables,
+        'total_fijos': total_fijos,
+        'total_gastos': total_gastos,
+        'resultado': resultado,
+        'utilidad_pct': utilidad_pct,
+        'desglose': desglose,
+    }
+
+
 class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Financial dashboard."""
+    """Financial dashboard with year/month filters and Planeado vs Real comparison."""
     template_name = 'financiero/dashboard.html'
     allowed_roles = ['admin', 'director', 'coordinador']
 
@@ -662,7 +725,7 @@ class PresupuestoCreateView(LoginRequiredMixin, RoleRequiredMixin, CreateView):
     model = Presupuesto
     template_name = 'financiero/presupuesto_form.html'
     allowed_roles = ['admin', 'director', 'coordinador']
-    success_url = reverse_lazy('financiero:presupuestos')
+    success_url = reverse_lazy('financiero:dashboard')
 
     def get_form_class(self):
         from .forms import PresupuestoForm

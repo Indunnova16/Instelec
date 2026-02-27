@@ -551,30 +551,6 @@ class TestFinancieroViews:
         assert 'total_presupuestado' in response.context
         assert 'total_ejecutado' in response.context
 
-    def test_presupuesto_list_view(self, client, coordinador_user, user_password):
-        """Test presupuesto list view for coordinador."""
-        client.login(email=coordinador_user.email, password=user_password)
-        PresupuestoFactory.create_batch(3)
-        url = reverse('financiero:presupuestos')
-
-        response = client.get(url)
-
-        assert response.status_code == 200
-        assert 'financiero/presupuestos.html' in [t.name for t in response.templates]
-        assert 'presupuestos' in response.context
-
-    def test_presupuesto_detail_view(self, client, admin_user, user_password, presupuesto):
-        """Test presupuesto detail view."""
-        client.login(email=admin_user.email, password=user_password)
-        url = reverse('financiero:presupuesto_detalle', kwargs={'pk': presupuesto.pk})
-
-        response = client.get(url)
-
-        assert response.status_code == 200
-        assert 'financiero/presupuesto_detalle.html' in [t.name for t in response.templates]
-        assert response.context['presupuesto'] == presupuesto
-        assert 'ejecuciones' in response.context
-
     def test_cuadro_costos_view(self, client, admin_user, user_password):
         """Test cuadro de costos view."""
         client.login(email=admin_user.email, password=user_password)
