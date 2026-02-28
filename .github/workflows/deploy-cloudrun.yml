@@ -15,7 +15,7 @@ env:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       should_deploy: ${{ steps.filter.outputs.src }}
     steps:
@@ -37,7 +37,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Build, Migrate & Deploy
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
       id-token: write
