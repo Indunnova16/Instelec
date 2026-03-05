@@ -98,9 +98,29 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
 
         from django.utils import timezone
 
+        from apps.contratos.models import Contrato
+
         hoy = timezone.now()
         anio = int(self.request.GET.get('anio', hoy.year))
         mes = int(self.request.GET.get('mes', 0))  # 0 = all months
+        unidad_filter = self.request.GET.get('unidad', '')
+
+        # Contract filter
+        contrato = None
+        contrato_id = self.request.GET.get('contrato')
+        if contrato_id:
+            try:
+                contrato = Contrato.objects.get(pk=contrato_id)
+            except Contrato.DoesNotExist:
+                pass
+
+        contratos_qs = Contrato.objects.all()
+        if unidad_filter:
+            contratos_qs = contratos_qs.filter(unidad_negocio=unidad_filter)
+        context['unidad_filter'] = unidad_filter
+        context['contrato_seleccionado'] = contrato
+        context['contratos_disponibles'] = contratos_qs
+        context['unidades_negocio'] = Contrato.UnidadNegocio.choices
 
         # Available years and months for filters
         anios_db = list(
@@ -133,10 +153,10 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
 
         # Fetch PresupuestoDetallado for both types
         planeado_obj = PresupuestoDetallado.objects.filter(
-            anio=anio, tipo='PLANEADO'
+            anio=anio, tipo='PLANEADO', contrato=contrato,
         ).first()
         real_obj = PresupuestoDetallado.objects.filter(
-            anio=anio, tipo='REAL'
+            anio=anio, tipo='REAL', contrato=contrato,
         ).first()
 
         datos_planeado = planeado_obj.datos if planeado_obj else _build_empty_datos()
@@ -1541,17 +1561,36 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
     allowed_roles = ['admin', 'director', 'coordinador']
     tipo_presupuesto = None  # Override in subclass
 
+    def _get_contrato_filter(self):
+        """Return contrato instance from GET params, or None."""
+        from apps.contratos.models import Contrato
+        contrato_id = self.request.GET.get('contrato') or self.request.POST.get('contrato')
+        if contrato_id:
+            try:
+                return Contrato.objects.get(pk=contrato_id)
+            except Contrato.DoesNotExist:
+                pass
+        return None
+
+    def _get_or_create_presupuesto(self, anio, contrato):
+        """Get or create PresupuestoDetallado with optional contrato."""
+        return PresupuestoDetallado.objects.get_or_create(
+            anio=anio,
+            tipo=self.tipo_presupuesto,
+            contrato=contrato,
+            defaults={'datos': _build_empty_datos()},
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         from django.utils import timezone
+        from apps.contratos.models import Contrato
 
         anio = int(self.request.GET.get('anio', timezone.now().year))
+        unidad_filter = self.request.GET.get('unidad', '')
+        contrato = self._get_contrato_filter()
 
-        obj, created = PresupuestoDetallado.objects.get_or_create(
-            anio=anio,
-            tipo=self.tipo_presupuesto,
-            defaults={'datos': _build_empty_datos()},
-        )
+        obj, created = self._get_or_create_presupuesto(anio, contrato)
 
         rows, resumen = _build_display_rows(obj.datos)
 
@@ -1564,6 +1603,15 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
         context['rows'] = rows
         context['resumen'] = resumen
         context['anios_disponibles'] = list(range(anio - 2, anio + 3))
+
+        # Contract filters
+        context['unidad_filter'] = unidad_filter
+        context['contrato_seleccionado'] = contrato
+        contratos_qs = Contrato.objects.all()
+        if unidad_filter:
+            contratos_qs = contratos_qs.filter(unidad_negocio=unidad_filter)
+        context['contratos_disponibles'] = contratos_qs
+        context['unidades_negocio'] = Contrato.UnidadNegocio.choices
         return context
 
     def post(self, request, *args, **kwargs):
@@ -1579,11 +1627,8 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
         from django.utils import timezone
 
         anio = int(request.POST.get('anio', timezone.now().year))
-        obj, _ = PresupuestoDetallado.objects.get_or_create(
-            anio=anio,
-            tipo=self.tipo_presupuesto,
-            defaults={'datos': _build_empty_datos()},
-        )
+        contrato = self._get_contrato_filter()
+        obj, _ = self._get_or_create_presupuesto(anio, contrato)
 
         seccion = request.POST.get('seccion', '')
         categoria = request.POST.get('categoria', '')
@@ -1619,6 +1664,13 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
             content_type='text/html',
         )
 
+    def _build_redirect_url(self, anio, contrato=None):
+        """Build redirect URL preserving filters."""
+        url = f'{self.request.path}?anio={anio}'
+        if contrato:
+            url += f'&contrato={contrato.pk}'
+        return url
+
     def _handle_excel_import(self, request):
         """Handle Excel file upload and data import."""
         from django.contrib import messages
@@ -1626,35 +1678,93 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
         from django.utils import timezone
 
         anio = int(request.POST.get('anio', timezone.now().year))
+        contrato = self._get_contrato_filter()
         archivo = request.FILES.get('archivo')
+
+        redirect_url = self._build_redirect_url(anio, contrato)
 
         if not archivo:
             messages.error(request, 'No se seleccionó ningún archivo.')
-            return redirect(request.path + f'?anio={anio}')
+            return redirect(redirect_url)
 
         if not archivo.name.lower().endswith(('.xlsx', '.xls')):
             messages.error(request, 'Formato no soportado. Use archivos .xlsx o .xls')
-            return redirect(request.path + f'?anio={anio}')
+            return redirect(redirect_url)
 
         if archivo.size > 10 * 1024 * 1024:
             messages.error(request, 'El archivo excede el tamaño máximo (10 MB).')
-            return redirect(request.path + f'?anio={anio}')
+            return redirect(redirect_url)
 
-        from .importers import PresupuestoExcelImporter
+        from .importers import (
+            ContableExcelImporter,
+            PresupuestoExcelImporter,
+            detect_excel_format,
+        )
 
-        importer = PresupuestoExcelImporter()
-        result = importer.importar(archivo, ESTRUCTURA_COSTOS)
+        # Detect format and show recommendation
+        deteccion = detect_excel_format(archivo)
+        archivo.seek(0)
+
+        formato = deteccion['formato']
+        confianza = deteccion['confianza']
+
+        if formato == 'desconocido':
+            messages.warning(
+                request,
+                f'Formato no reconocido: {deteccion["descripcion"]} '
+                f'Se intentará importar de todas formas.',
+            )
+        else:
+            formato_labels = {
+                'presupuesto': 'Presupuesto estándar',
+                'contable_resumen': 'Contable (resumen)',
+                'contable_transaccional': 'Contable (transaccional)',
+            }
+            messages.info(
+                request,
+                f'Formato detectado: {formato_labels.get(formato, formato)} '
+                f'(confianza: {confianza}). {deteccion["descripcion"]}',
+            )
+
+        # Import using the detected format (or try both)
+        if formato == 'presupuesto':
+            importer = PresupuestoExcelImporter()
+            result = importer.importar(archivo, ESTRUCTURA_COSTOS)
+            if not result['exito'] or result.get('matched', 0) == 0:
+                archivo.seek(0)
+                contable_importer = ContableExcelImporter()
+                contable_result = contable_importer.importar(archivo, ESTRUCTURA_COSTOS)
+                if contable_result['exito'] and contable_result.get('matched', 0) > 0:
+                    result = contable_result
+        elif formato in ('contable_resumen', 'contable_transaccional'):
+            contable_importer = ContableExcelImporter()
+            result = contable_importer.importar(archivo, ESTRUCTURA_COSTOS)
+            if not result['exito'] or result.get('matched', 0) == 0:
+                archivo.seek(0)
+                importer = PresupuestoExcelImporter()
+                pres_result = importer.importar(archivo, ESTRUCTURA_COSTOS)
+                if pres_result['exito'] and pres_result.get('matched', 0) > 0:
+                    result = pres_result
+        else:
+            # Unknown format: try both
+            importer = PresupuestoExcelImporter()
+            result = importer.importar(archivo, ESTRUCTURA_COSTOS)
+            if not result['exito'] or result.get('matched', 0) == 0:
+                archivo.seek(0)
+                contable_importer = ContableExcelImporter()
+                contable_result = contable_importer.importar(archivo, ESTRUCTURA_COSTOS)
+                if contable_result['exito'] and contable_result.get('matched', 0) > 0:
+                    result = contable_result
 
         if not result['exito']:
             messages.error(request, f'Error al importar: {result.get("error", "Error desconocido")}')
-            return redirect(request.path + f'?anio={anio}')
+            return redirect(redirect_url)
 
-        obj, created = PresupuestoDetallado.objects.get_or_create(
-            anio=anio,
-            tipo=self.tipo_presupuesto,
-            defaults={'datos': result['datos']},
-        )
+        obj, created = self._get_or_create_presupuesto(anio, contrato)
         if not created:
+            obj.datos = result['datos']
+            obj.save(update_fields=['datos', 'updated_at'])
+        else:
             obj.datos = result['datos']
             obj.save(update_fields=['datos', 'updated_at'])
 
@@ -1670,7 +1780,7 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
         for item in result.get('unmatched_items', [])[:5]:
             messages.info(request, f'No reconocido: {item}')
 
-        return redirect(request.path + f'?anio={anio}')
+        return redirect(redirect_url)
 
 
 class PresupuestoPlaneadoView(PresupuestoDetalladoBaseView):
@@ -1681,3 +1791,153 @@ class PresupuestoPlaneadoView(PresupuestoDetalladoBaseView):
 class PresupuestoRealView(PresupuestoDetalladoBaseView):
     """View for the actual/real budget tab."""
     tipo_presupuesto = 'REAL'
+
+
+class CargarCostosCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Calculate labor costs from cuadrilla attendance data and fill Presupuesto Real."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+    template_name = 'financiero/presupuesto_detallado.html'
+
+    # Colombian legal overtime multipliers over base hourly rate
+    FACTOR_HE_DIURNA = Decimal('1.25')
+    FACTOR_HE_NOCTURNA = Decimal('1.75')
+    FACTOR_HE_DOMINICAL_DIURNA = Decimal('2.00')
+    FACTOR_HE_DOMINICAL_NOCTURNA = Decimal('2.50')
+
+    # Standard working hours per day (average)
+    HORAS_JORNADA = Decimal('8')
+
+    def post(self, request, *args, **kwargs):
+        from calendar import monthrange
+
+        from django.contrib import messages
+        from django.db.models import Q, Sum
+        from django.shortcuts import redirect
+        from django.utils import timezone
+
+        from apps.contratos.models import Contrato
+        from apps.cuadrillas.models import Asistencia, CuadrillaMiembro
+
+        anio = int(request.POST.get('anio', timezone.now().year))
+        redirect_url = request.POST.get('redirect_url', reverse_lazy('financiero:presupuesto_real'))
+
+        # Handle optional contrato filter
+        contrato = None
+        contrato_id = request.POST.get('contrato')
+        if contrato_id:
+            try:
+                contrato = Contrato.objects.get(pk=contrato_id)
+            except Contrato.DoesNotExist:
+                pass
+
+        obj, created = PresupuestoDetallado.objects.get_or_create(
+            anio=anio,
+            tipo='REAL',
+            contrato=contrato,
+            defaults={'datos': _build_empty_datos()},
+        )
+        datos = obj.datos or _build_empty_datos()
+
+        total_nomina = 0
+        total_he = 0
+        total_viaticos = 0
+        total_transporte = 0
+
+        for mes_num in range(1, 13):
+            mes_name = MESES[mes_num - 1]
+            fecha_inicio = date(anio, mes_num, 1)
+            _, last_day = monthrange(anio, mes_num)
+            fecha_fin = date(anio, mes_num, last_day)
+
+            # Get all attendance records for this month
+            asistencias = Asistencia.objects.filter(
+                fecha__gte=fecha_inicio,
+                fecha__lte=fecha_fin,
+            ).select_related('cuadrilla', 'usuario')
+
+            # --- Nomina operacion ---
+            # Sum of costo_dia for all present days
+            nomina_mes = Decimal('0')
+            for asist in asistencias.filter(tipo_novedad='PRESENTE'):
+                # Get the member's daily cost
+                miembro = CuadrillaMiembro.objects.filter(
+                    cuadrilla=asist.cuadrilla,
+                    usuario=asist.usuario,
+                    activo=True,
+                ).first()
+                if miembro and miembro.costo_dia:
+                    nomina_mes += miembro.costo_dia
+
+            datos['costos_variables']['MO']['Nómina operación'][mes_name] = int(nomina_mes)
+            total_nomina += nomina_mes
+
+            # --- Tiempo extra operacion ---
+            # Calculate overtime cost based on hourly rate and overtime multipliers
+            he_costo_mes = Decimal('0')
+            he_qs = asistencias.filter(
+                Q(he_diurna__gt=0) | Q(he_nocturna__gt=0) |
+                Q(he_dominical_diurna__gt=0) | Q(he_dominical_nocturna__gt=0)
+            )
+            for asist in he_qs:
+                miembro = CuadrillaMiembro.objects.filter(
+                    cuadrilla=asist.cuadrilla,
+                    usuario=asist.usuario,
+                    activo=True,
+                ).first()
+                if miembro and miembro.costo_dia:
+                    tarifa_hora = miembro.costo_dia / self.HORAS_JORNADA
+                    he_costo = (
+                        (asist.he_diurna or 0) * tarifa_hora * self.FACTOR_HE_DIURNA +
+                        (asist.he_nocturna or 0) * tarifa_hora * self.FACTOR_HE_NOCTURNA +
+                        (asist.he_dominical_diurna or 0) * tarifa_hora * self.FACTOR_HE_DOMINICAL_DIURNA +
+                        (asist.he_dominical_nocturna or 0) * tarifa_hora * self.FACTOR_HE_DOMINICAL_NOCTURNA
+                    )
+                    he_costo_mes += he_costo
+
+            datos['costos_variables']['MO']['Tiempo extra operación'][mes_name] = int(he_costo_mes)
+            total_he += he_costo_mes
+
+            # --- Viaticos ---
+            viaticos_reemb = asistencias.filter(
+                viatico_aplica=True,
+            ).aggregate(total=Sum('viaticos'))['total'] or 0
+            datos['costos_variables']['MO']['Viáticos reembolsables operación'][mes_name] = int(viaticos_reemb)
+            total_viaticos += viaticos_reemb
+
+            # --- Transporte (vehicle costs for days with attendance) ---
+            from apps.cuadrillas.models import Cuadrilla
+            cuadrillas_activas = Cuadrilla.objects.filter(
+                asistencias__fecha__gte=fecha_inicio,
+                asistencias__fecha__lte=fecha_fin,
+                vehiculo__isnull=False,
+            ).distinct()
+            transporte_mes = Decimal('0')
+            for cuad in cuadrillas_activas:
+                dias_activos = Asistencia.objects.filter(
+                    cuadrilla=cuad,
+                    fecha__gte=fecha_inicio,
+                    fecha__lte=fecha_fin,
+                    tipo_novedad='PRESENTE',
+                ).values('fecha').distinct().count()
+                if cuad.vehiculo and cuad.vehiculo.costo_dia:
+                    transporte_mes += cuad.vehiculo.costo_dia * dias_activos
+
+            datos['costos_variables']['TA']['Transporte operación'][mes_name] = int(transporte_mes)
+            total_transporte += transporte_mes
+
+        obj.datos = datos
+        obj.save(update_fields=['datos', 'updated_at'])
+
+        messages.success(
+            request,
+            f'Costos cargados desde cuadrillas para {anio}: '
+            f'Nómina ${total_nomina:,.0f}, '
+            f'Horas Extra ${total_he:,.0f}, '
+            f'Viáticos ${total_viaticos:,.0f}, '
+            f'Transporte ${total_transporte:,.0f}.',
+        )
+
+        url = f'{redirect_url}?anio={anio}'
+        if contrato:
+            url += f'&contrato={contrato.pk}'
+        return redirect(url)

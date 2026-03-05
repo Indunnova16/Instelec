@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Editar{% else %}Nuevo{% endif %} Contrato - TransMaint{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <a href="{% url 'contratos:lista' %}" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                {% if object %}Editar Contrato{% else %}Nuevo Contrato{% endif %}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400">
+                {% if object %}{{ object.codigo }}{% else %}Complete la informacion del contrato{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                <p class="text-sm text-red-600 dark:text-red-400 font-medium">Por favor corrija los errores:</p>
+                <ul class="mt-2 text-sm text-red-600 dark:text-red-400 list-disc list-inside">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                        <li>{{ field }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Unidad de Negocio -->
+                <div>
+                    <label for="id_unidad_negocio" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Unidad de Negocio *
+                    </label>
+                    {{ form.unidad_negocio }}
+                </div>
+
+                <!-- Estado -->
+                <div>
+                    <label for="id_estado" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Estado
+                    </label>
+                    {{ form.estado }}
+                </div>
+
+                <!-- Codigo -->
+                <div>
+                    <label for="id_codigo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Codigo *
+                    </label>
+                    {{ form.codigo }}
+                </div>
+
+                <!-- Cliente -->
+                <div>
+                    <label for="id_cliente" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Cliente
+                    </label>
+                    {{ form.cliente }}
+                </div>
+
+                <!-- Nombre (full width) -->
+                <div class="md:col-span-2">
+                    <label for="id_nombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Nombre del contrato *
+                    </label>
+                    {{ form.nombre }}
+                </div>
+
+                <!-- Objeto -->
+                <div class="md:col-span-2">
+                    <label for="id_objeto" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Objeto del contrato
+                    </label>
+                    {{ form.objeto }}
+                </div>
+
+                <!-- Valor -->
+                <div>
+                    <label for="id_valor" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Valor del contrato
+                    </label>
+                    {{ form.valor }}
+                </div>
+
+                <!-- Fecha Inicio -->
+                <div>
+                    <label for="id_fecha_inicio" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Fecha de inicio
+                    </label>
+                    {{ form.fecha_inicio }}
+                </div>
+
+                <!-- Fecha Fin -->
+                <div>
+                    <label for="id_fecha_fin" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Fecha de finalizacion
+                    </label>
+                    {{ form.fecha_fin }}
+                </div>
+
+                <!-- Observaciones -->
+                <div class="md:col-span-2">
+                    <label for="id_observaciones" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Observaciones
+                    </label>
+                    {{ form.observaciones }}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <a href="{% url 'contratos:lista' %}"
+                   class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    Cancelar
+                </a>
+                <button type="submit"
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                    {% if object %}Guardar Cambios{% else %}Crear Contrato{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

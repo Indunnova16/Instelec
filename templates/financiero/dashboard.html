@@ -38,12 +38,36 @@
                     {% endfor %}
                 </select>
             </div>
+            <!-- Unidad de Negocio filter -->
+            <div class="flex items-center gap-1">
+                <label for="unidad-filter" class="text-sm text-gray-600 dark:text-gray-400 font-medium">Unidad:</label>
+                <select id="unidad-filter"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                        onchange="onUnidadChange()">
+                    <option value="">Todas</option>
+                    {% for code, label in unidades_negocio %}
+                    <option value="{{ code }}" {% if unidad_filter == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Contrato filter -->
+            <div class="flex items-center gap-1">
+                <label for="contrato-filter" class="text-sm text-gray-600 dark:text-gray-400 font-medium">Contrato:</label>
+                <select id="contrato-filter"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm min-w-[160px]"
+                        onchange="applyFilters()">
+                    <option value="">Todos</option>
+                    {% for c in contratos_disponibles %}
+                    <option value="{{ c.pk }}" {% if contrato_seleccionado and contrato_seleccionado.pk == c.pk %}selected{% endif %}>{{ c.codigo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <!-- Quick links to detailed views -->
-            <a href="{% url 'financiero:presupuesto_planeado' %}?anio={{ anio }}"
+            <a href="{% url 'financiero:presupuesto_planeado' %}?anio={{ anio }}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
                class="px-3 py-2 text-sm bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition font-medium">
                 Ver Planeado
             </a>
-            <a href="{% url 'financiero:presupuesto_real' %}?anio={{ anio }}"
+            <a href="{% url 'financiero:presupuesto_real' %}?anio={{ anio }}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
                class="px-3 py-2 text-sm bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition font-medium">
                 Ver Real
             </a>
@@ -325,7 +349,17 @@
 function applyFilters() {
     const anio = document.getElementById('anio-filter').value;
     const mes = document.getElementById('mes-filter').value;
-    window.location.href = '{% url "financiero:dashboard" %}?anio=' + anio + '&mes=' + mes;
+    const unidad = document.getElementById('unidad-filter').value;
+    const contrato = document.getElementById('contrato-filter').value;
+    let url = '{% url "financiero:dashboard" %}?anio=' + anio + '&mes=' + mes;
+    if (unidad) url += '&unidad=' + unidad;
+    if (contrato) url += '&contrato=' + contrato;
+    window.location.href = url;
+}
+function onUnidadChange() {
+    // When unidad changes, clear contrato and apply
+    document.getElementById('contrato-filter').value = '';
+    applyFilters();
 }
 
 document.addEventListener('DOMContentLoaded', function() {

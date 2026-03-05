@@ -15,25 +15,36 @@
                 Estructura detallada de costos y gastos - Año {{ anio }}
             </p>
         </div>
-        <div class="flex gap-2 items-center">
+        <div class="flex flex-wrap gap-2 items-center">
             <!-- Tab switcher -->
             <div class="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
-                <a href="{% url 'financiero:presupuesto_planeado' %}?anio={{ anio }}"
+                <a href="{% url 'financiero:presupuesto_planeado' %}?anio={{ anio }}{% if unidad_filter %}&unidad={{ unidad_filter }}{% endif %}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
                    class="px-4 py-2 text-sm font-medium {% if tipo_presupuesto == 'PLANEADO' %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %}">
                     Planeado
                 </a>
-                <a href="{% url 'financiero:presupuesto_real' %}?anio={{ anio }}"
+                <a href="{% url 'financiero:presupuesto_real' %}?anio={{ anio }}{% if unidad_filter %}&unidad={{ unidad_filter }}{% endif %}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
                    class="px-4 py-2 text-sm font-medium {% if tipo_presupuesto == 'REAL' %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %}">
                     Real
                 </a>
             </div>
             <!-- Year selector -->
             <select class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
-                    @change="window.location.href='?anio=' + $event.target.value">
+                    @change="window.location.href='?anio=' + $event.target.value + '{% if unidad_filter %}&unidad={{ unidad_filter }}{% endif %}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}'">
                 {% for a in anios_disponibles %}
                 <option value="{{ a }}" {% if a == anio %}selected{% endif %}>{{ a }}</option>
                 {% endfor %}
             </select>
+            {% if tipo_presupuesto == 'REAL' %}
+            <!-- Load from cuadrillas button -->
+            <button @click="showCuadrillas = !showCuadrillas"
+                    class="px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                </svg>
+                Cargar desde Cuadrillas
+            </button>
+            {% endif %}
             <!-- Upload Excel button -->
             <button @click="showUpload = !showUpload"
                     class="px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1">
@@ -46,37 +57,137 @@
         </div>
     </header>
 
-    <!-- Excel upload panel -->
-    <section x-show="showUpload" x-transition x-cloak
-             class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-green-200 dark:border-green-800">
-        <form method="post" enctype="multipart/form-data" class="flex flex-col sm:flex-row items-start sm:items-end gap-4">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="import_excel">
-            <input type="hidden" name="anio" value="{{ anio }}">
-            <div class="flex-1 w-full">
-                <label for="archivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Archivo Excel (.xlsx)
-                </label>
-                <input type="file" name="archivo" id="archivo" accept=".xlsx,.xls" required
-                       class="block w-full text-sm text-gray-500 dark:text-gray-400
-                              file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
-                              file:text-sm file:font-semibold
-                              file:bg-green-50 file:text-green-700
-                              hover:file:bg-green-100
-                              dark:file:bg-gray-700 dark:file:text-gray-300">
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Excel con hoja PRESUPUESTO (meses en columnas, items en filas). Max 10 MB.
-                </p>
+    <!-- Contract filter bar -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-wrap gap-4 items-end"
+         x-data="{ unidad: '{{ unidad_filter }}', contrato: '{{ contrato_seleccionado.pk|default:"" }}' }">
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Unidad de Negocio</label>
+            <select x-model="unidad"
+                    @change="contrato=''; let params = new URLSearchParams(window.location.search); params.set('unidad', $event.target.value); params.delete('contrato'); window.location.href = '?' + params.toString();"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <option value="">Todas</option>
+                {% for code, label in unidades_negocio %}
+                <option value="{{ code }}" {% if unidad_filter == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Contrato</label>
+            <select x-model="contrato"
+                    @change="let params = new URLSearchParams(window.location.search); if($event.target.value) { params.set('contrato', $event.target.value); } else { params.delete('contrato'); } window.location.href = '?' + params.toString();"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm min-w-[200px]">
+                <option value="">Todos los contratos</option>
+                {% for c in contratos_disponibles %}
+                <option value="{{ c.pk }}" {% if contrato_seleccionado and contrato_seleccionado.pk == c.pk %}selected{% endif %}>{{ c.codigo }} - {{ c.nombre|truncatechars:40 }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if contrato_seleccionado %}
+        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                {{ contrato_seleccionado.get_unidad_negocio_display }}
+            </span>
+            <span class="font-medium text-gray-900 dark:text-white">{{ contrato_seleccionado.codigo }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if tipo_presupuesto == 'REAL' %}
+    <!-- Cargar desde Cuadrillas panel -->
+    <section x-show="showCuadrillas" x-transition x-cloak
+             class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-indigo-200 dark:border-indigo-800">
+        <div class="flex flex-col gap-3">
+            <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Cargar costos desde Cuadrillas</h3>
+                    <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        Calcula automáticamente los costos reales a partir de la asistencia de cuadrillas para el año {{ anio }}.
+                        Se actualizarán los siguientes conceptos:
+                    </p>
+                    <ul class="mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                        <li class="flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                            <strong>Nómina operación:</strong> costo diario × días presentes por miembro
+                        </li>
+                        <li class="flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                            <strong>Tiempo extra operación:</strong> horas extras (diurna, nocturna, dominical) × factores legales
+                        </li>
+                        <li class="flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                            <strong>Viáticos reembolsables:</strong> suma de viáticos donde aplica
+                        </li>
+                        <li class="flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                            <strong>Transporte operación:</strong> costo diario de vehículos × días activos por cuadrilla
+                        </li>
+                    </ul>
+                </div>
             </div>
-            <div class="flex gap-2">
+            <form method="post" action="{% url 'financiero:cargar_costos_cuadrilla' %}"
+                  class="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                {% csrf_token %}
+                <input type="hidden" name="anio" value="{{ anio }}">
+                {% if contrato_seleccionado %}<input type="hidden" name="contrato" value="{{ contrato_seleccionado.pk }}">{% endif %}
+                <input type="hidden" name="redirect_url" value="{% url 'financiero:presupuesto_real' %}">
                 <button type="submit"
-                        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition">
-                    Importar
+                        class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium transition flex items-center gap-2"
+                        onclick="return confirm('Esto sobrescribirá los valores de Nómina, Horas Extra, Viáticos y Transporte operación con datos reales de cuadrillas. ¿Continuar?')">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Calcular y Cargar Costos
                 </button>
-                <button type="button" @click="showUpload = false"
+                <button type="button" @click="showCuadrillas = false"
                         class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm transition">
                     Cancelar
                 </button>
+            </form>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Excel upload panel -->
+    <section x-show="showUpload" x-transition x-cloak
+             class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-green-200 dark:border-green-800">
+        <form method="post" enctype="multipart/form-data" class="flex flex-col gap-4">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="import_excel">
+            <input type="hidden" name="anio" value="{{ anio }}">
+            {% if contrato_seleccionado %}<input type="hidden" name="contrato" value="{{ contrato_seleccionado.pk }}">{% endif %}
+            <div class="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+                <div class="flex-1 w-full">
+                    <label for="archivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Archivo Excel (.xlsx)
+                    </label>
+                    <input type="file" name="archivo" id="archivo" accept=".xlsx,.xls" required
+                           class="block w-full text-sm text-gray-500 dark:text-gray-400
+                                  file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-green-50 file:text-green-700
+                                  hover:file:bg-green-100
+                                  dark:file:bg-gray-700 dark:file:text-gray-300">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Formatos soportados: <strong>Presupuesto estándar</strong> (meses en columnas, códigos MO/SST/TA en filas)
+                        o <strong>Contable</strong> (resumen/pivot o transaccional con Neto/Cuenta). Max 10 MB.
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit"
+                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition">
+                        Importar
+                    </button>
+                    <button type="button" @click="showUpload = false"
+                            class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm transition">
+                        Cancelar
+                    </button>
+                </div>
             </div>
         </form>
     </section>
@@ -238,6 +349,7 @@ function presupuestoDetallado() {
     return {
         editing: null,
         showUpload: false,
+        showCuadrillas: false,
 
         editCell(event, seccion, categoria, item, anio, mesIdx) {
             const span = event.currentTarget;
@@ -268,6 +380,7 @@ function presupuestoDetallado() {
                 formData.append('mes', meses[mesIdx]);
                 formData.append('valor', numVal.toString());
                 formData.append('anio', anio);
+                {% if contrato_seleccionado %}formData.append('contrato', '{{ contrato_seleccionado.pk }}');{% endif %}
                 formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
                 fetch(window.location.pathname, {

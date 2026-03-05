@@ -551,6 +551,14 @@ class PresupuestoDetallado(BaseModel):
         max_length=10,
         choices=TipoPresupuesto.choices,
     )
+    contrato = models.ForeignKey(
+        'contratos.Contrato',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='presupuestos_detallados',
+        verbose_name='Contrato',
+    )
     datos = models.JSONField(
         'Datos',
         default=dict,
@@ -561,11 +569,14 @@ class PresupuestoDetallado(BaseModel):
         db_table = 'presupuestos_detallados'
         verbose_name = 'Presupuesto Detallado'
         verbose_name_plural = 'Presupuestos Detallados'
-        unique_together = ['anio', 'tipo']
+        unique_together = ['anio', 'tipo', 'contrato']
         ordering = ['-anio']
 
     def __str__(self):
-        return f"Presupuesto {self.get_tipo_display()} {self.anio}"
+        label = f"Presupuesto {self.get_tipo_display()} {self.anio}"
+        if self.contrato:
+            label += f" - {self.contrato.codigo}"
+        return label
 
 
 class ArchivoPeriodoFacturacion(BaseModel):
