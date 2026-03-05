@@ -9,7 +9,7 @@ from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import Asistencia, Cuadrilla, CuadrillaMiembro, Vehiculo, TrackingUbicacion
+from .models import Asistencia, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -131,7 +131,32 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
         from apps.usuarios.models import Usuario
 
         context = super().get_context_data(**kwargs)
-        miembros = self.object.miembros.filter(activo=True).select_related('usuario')
+        miembros = list(self.object.miembros.filter(activo=True).select_related('usuario'))
+
+        # If the cuadrilla has a supervisor and they're not already a member,
+        # create a virtual member entry so they appear in the attendance list
+        supervisor = self.object.supervisor
+        supervisor_is_member = False
+        if supervisor:
+            supervisor_is_member = any(m.usuario_id == supervisor.id for m in miembros)
+            if not supervisor_is_member:
+                # Check if there's an inactive record, otherwise create virtual
+                virtual_miembro = CuadrillaMiembro(
+                    cuadrilla=self.object,
+                    usuario=supervisor,
+                    rol_cuadrilla='SUPERVISOR',
+                    cargo='JT_CTA',
+                    costo_dia=0,
+                    fecha_inicio=date.today(),
+                    activo=True,
+                )
+                # Save it so the supervisor is a real member
+                try:
+                    virtual_miembro.save()
+                    miembros.insert(0, virtual_miembro)
+                except Exception:
+                    pass  # Unique constraint - already exists
+
         context['miembros'] = miembros
 
         # Total daily cost
@@ -140,7 +165,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
         )
 
         # Available users for add member form
-        miembros_ids = miembros.values_list('usuario_id', flat=True)
+        miembros_ids = [m.usuario_id for m in miembros]
         context['usuarios_disponibles'] = Usuario.objects.filter(
             is_active=True
         ).exclude(id__in=miembros_ids).order_by('first_name', 'last_name')
@@ -234,6 +259,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                 'total_viaticos': total_viaticos,
                 'total_horas_extra': total_horas_extra,
                 'total_horas_ordinarias': total_horas_ordinarias,
+                'total_horas_total': total_horas_ordinarias + total_horas_extra,
             })
 
         context['filas_asistencia'] = filas_asistencia
@@ -601,6 +627,8 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             'PERMISO': 'text-purple-600 bg-purple-50 border-purple-300',
             'LICENCIA': 'text-yellow-700 bg-yellow-50 border-yellow-300',
             'CAPACITACION': 'text-teal-600 bg-teal-50 border-teal-300',
+            'COMPENSATORIO': 'text-cyan-600 bg-cyan-50 border-cyan-300',
+            'DESCANSO': 'text-slate-600 bg-slate-50 border-slate-300',
         }
         css = color_map.get(tipo_novedad, 'text-gray-400 bg-white border-gray-200')
 
@@ -622,16 +650,24 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             lunes = hoy - timedelta(days=hoy.weekday())
         dias_semana = [lunes + timedelta(days=i) for i in range(7)]
 
-        totals = Asistencia.objects.filter(
+        week_asistencias = Asistencia.objects.filter(
             usuario_id=usuario_id,
             cuadrilla=cuadrilla,
             fecha__in=dias_semana,
-        ).aggregate(
+        )
+        totals = week_asistencias.aggregate(
             total_viaticos=models.Sum('viaticos', filter=models.Q(viatico_aplica=True)),
             total_he=models.Sum('horas_extra'),
         )
         total_viaticos_fmt = int(totals['total_viaticos'] or 0)
         total_he_fmt = float(totals['total_he'] or 0)
+
+        # Calculate ordinary hours (jornada regular for PRESENTE days)
+        JORNADA_DIA = {0: 8.0, 1: 7.5, 2: 7.5, 3: 7.5, 4: 7.5, 5: 6.0, 6: 0.0}
+        total_hord = 0.0
+        for a in week_asistencias.filter(tipo_novedad='PRESENTE'):
+            total_hord += JORNADA_DIA.get(a.fecha.weekday(), 0)
+        total_htotal = total_hord + total_he_fmt
 
         # Build observation field (visible when not PRESENTE)
         if tipo_novedad and tipo_novedad != 'PRESENTE':
@@ -749,6 +785,11 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             'updateTotalHorasExtra': {
                 'usuario_id': str(usuario_id),
                 'total': total_he_fmt,
+            },
+            'updateTotalHorasOrd': {
+                'usuario_id': str(usuario_id),
+                'total_hord': total_hord,
+                'total_htotal': total_htotal,
             },
         })
         return response
@@ -904,6 +945,8 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
                         'PERMISO': 'C39BD3',
                         'LICENCIA': 'F7DC6F',
                         'CAPACITACION': '76D7C4',
+                        'COMPENSATORIO': '67E8F9',
+                        'DESCANSO': 'CBD5E1',
                     }
                     fill_color = color_map.get(asist.tipo_novedad)
                     if fill_color:
@@ -969,6 +1012,104 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
         except (ValueError, IndexError):
             pass
         return None, None
+
+
+class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Upload crew personnel from Excel/CSV."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        import openpyxl
+        from io import BytesIO
+
+        archivo = request.FILES.get('archivo')
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo.')
+            return redirect('cuadrillas:lista')
+
+        roles_validos = dict(PersonalCuadrilla.RolCuadrilla.choices)
+        # Also build reverse map: display name -> key
+        roles_por_nombre = {v.upper(): k for k, v in roles_validos.items()}
+
+        try:
+            wb = openpyxl.load_workbook(BytesIO(archivo.read()))
+            ws = wb.active
+            creados = 0
+            actualizados = 0
+            errores = []
+
+            for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if not row or not row[0]:
+                    continue
+
+                nombre = str(row[0]).strip()
+                documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                rol_raw = str(row[2]).strip().upper() if len(row) > 2 and row[2] else ''
+
+                if not nombre or not documento:
+                    errores.append(f'Fila {idx}: nombre o documento vacío')
+                    continue
+
+                # Resolve role
+                rol = rol_raw if rol_raw in roles_validos else roles_por_nombre.get(rol_raw, 'LINIERO_I')
+
+                obj, created = PersonalCuadrilla.objects.update_or_create(
+                    documento=documento,
+                    defaults={'nombre': nombre, 'rol_cuadrilla': rol, 'activo': True},
+                )
+                if created:
+                    creados += 1
+                else:
+                    actualizados += 1
+
+            msg = f'Personal cargado: {creados} nuevos, {actualizados} actualizados.'
+            if errores:
+                msg += f' Errores: {len(errores)} filas.'
+            messages.success(request, msg)
+
+        except Exception as e:
+            messages.error(request, f'Error al procesar archivo: {str(e)}')
+
+        return redirect('cuadrillas:lista')
+
+
+class PersonalCuadrillaAPIView(LoginRequiredMixin, View):
+    """API endpoint to get crew personnel info by user selection."""
+
+    def get(self, request, *args, **kwargs):
+        documento = request.GET.get('documento', '').strip()
+        personal_id = request.GET.get('id', '').strip()
+
+        personal = None
+        if personal_id:
+            personal = PersonalCuadrilla.objects.filter(id=personal_id, activo=True).first()
+        elif documento:
+            personal = PersonalCuadrilla.objects.filter(documento=documento, activo=True).first()
+
+        if personal:
+            return JsonResponse({
+                'nombre': personal.nombre,
+                'documento': personal.documento,
+                'rol_cuadrilla': personal.rol_cuadrilla,
+            })
+        return JsonResponse({}, status=404)
+
+
+class PersonalCuadrillaListAPIView(LoginRequiredMixin, View):
+    """API endpoint to list all active crew personnel."""
+
+    def get(self, request, *args, **kwargs):
+        personal = PersonalCuadrilla.objects.filter(activo=True).order_by('nombre')
+        data = [
+            {
+                'id': str(p.id),
+                'nombre': p.nombre,
+                'documento': p.documento,
+                'rol_cuadrilla': p.rol_cuadrilla,
+            }
+            for p in personal
+        ]
+        return JsonResponse(data, safe=False)
 
 
 class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):

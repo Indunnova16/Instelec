@@ -11,6 +11,15 @@
             <p class="text-gray-600 dark:text-gray-400">Gestion de cuadrillas de trabajo</p>
         </div>
         <div class="flex items-center gap-3">
+            <!-- Subir Personal de Cuadrilla -->
+            <button onclick="document.getElementById('modal-personal').classList.remove('hidden')"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+                    aria-label="Subir personal de cuadrilla">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+                Subir Personal
+            </button>
             {% if perms.cuadrillas.add_cuadrilla %}
             <button hx-get="{% url 'cuadrillas:crear' %}"
                     hx-target="#modal-container"
@@ -252,6 +261,39 @@
         </section>
     </div>
 </main>
+
+<!-- Modal Subir Personal -->
+<div id="modal-personal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 m-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Subir Personal de Cuadrilla</h3>
+            <button onclick="document.getElementById('modal-personal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">&times;</button>
+        </div>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Suba un archivo Excel (.xlsx) con las columnas:<br>
+            <strong>Nombre | Documento | Cargo</strong><br>
+            <span class="text-xs text-gray-500">Cargos v&aacute;lidos: Supervisor, Liniero I, Liniero II, Ayudante, Conductor, Administrador de Obra, Profesional SST, Ingeniero Residente, Servicio General, Almacenista, Supervisor Forestal, Asistente Forestal</span>
+        </p>
+        <form method="post" action="{% url 'cuadrillas:personal_upload' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-4">
+                <input type="file" name="archivo" accept=".xlsx,.xls"
+                       required
+                       class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('modal-personal').classList.add('hidden')"
+                        class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-700">
+                    Cancelar
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                    Subir Personal
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Screen reader announcements -->
 <div id="map-announcements" class="sr-only" aria-live="polite" aria-atomic="true"></div>

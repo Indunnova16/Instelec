@@ -72,6 +72,45 @@ class Vehiculo(BaseModel):
         return f"{self.placa} - {self.marca} {self.modelo}"
 
 
+class PersonalCuadrilla(BaseModel):
+    """
+    Catálogo de personal disponible para cuadrillas, con su cargo predeterminado.
+    """
+
+    class RolCuadrilla(models.TextChoices):
+        SUPERVISOR = 'SUPERVISOR', 'Supervisor'
+        LINIERO_I = 'LINIERO_I', 'Liniero I'
+        LINIERO_II = 'LINIERO_II', 'Liniero II'
+        AYUDANTE = 'AYUDANTE', 'Ayudante'
+        CONDUCTOR = 'CONDUCTOR', 'Conductor'
+        ADMINISTRADOR_OBRA = 'ADMINISTRADOR_OBRA', 'Administrador de Obra'
+        PROFESIONAL_SST = 'PROFESIONAL_SST', 'Profesional SST'
+        INGENIERO_RESIDENTE = 'ING_RESIDENTE', 'Ingeniero Residente'
+        SERVICIO_GENERAL = 'SERVICIO_GENERAL', 'Servicio General'
+        ALMACENISTA = 'ALMACENISTA', 'Almacenista'
+        SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
+        ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
+
+    nombre = models.CharField('Nombre completo', max_length=200)
+    documento = models.CharField('Documento', max_length=30, unique=True)
+    rol_cuadrilla = models.CharField(
+        'Cargo / Rol',
+        max_length=20,
+        choices=RolCuadrilla.choices,
+        default=RolCuadrilla.LINIERO_I,
+    )
+    activo = models.BooleanField('Activo', default=True)
+
+    class Meta:
+        db_table = 'personal_cuadrilla'
+        verbose_name = 'Personal de Cuadrilla'
+        verbose_name_plural = 'Personal de Cuadrillas'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return f"{self.nombre} - {self.get_rol_cuadrilla_display()}"
+
+
 class Cuadrilla(BaseModel):
     """
     Work crew model.
@@ -303,6 +342,8 @@ class Asistencia(BaseModel):
         AUSENTE = 'AUSENTE', 'Ausente'
         LICENCIA = 'LICENCIA', 'Licencia'
         CAPACITACION = 'CAPACITACION', 'Capacitación'
+        COMPENSATORIO = 'COMPENSATORIO', 'Compensatorio'
+        DESCANSO = 'DESCANSO', 'Descanso'
 
     usuario = models.ForeignKey(
         'usuarios.Usuario',

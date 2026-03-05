@@ -3,7 +3,7 @@ Admin configuration for crews.
 """
 from django.contrib import admin
 from apps.core.admin import BaseModelAdmin
-from .models import Vehiculo, Cuadrilla, CuadrillaMiembro, TrackingUbicacion, Asistencia
+from .models import Vehiculo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, TrackingUbicacion, Asistencia
 
 
 class CuadrillaMiembroInline(admin.TabularInline):
@@ -91,3 +91,10 @@ class AsistenciaAdmin(BaseModelAdmin):
         }),
     )
     readonly_fields = ('id', 'created_at', 'updated_at', 'horas_extra')
+
+
+@admin.register(PersonalCuadrilla)
+class PersonalCuadrillaAdmin(BaseModelAdmin):
+    list_display = ('nombre', 'documento', 'rol_cuadrilla', 'activo')
+    list_filter = ('rol_cuadrilla', 'activo')
+    search_fields = ('nombre', 'documento')
