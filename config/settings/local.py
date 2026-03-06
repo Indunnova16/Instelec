@@ -5,7 +5,7 @@ from .base import *
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '34.174.86.113']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '34.174.217.145']
 
 # CORS - Specific origins only (even in development for security)
 CORS_ALLOW_ALL_ORIGINS = False
