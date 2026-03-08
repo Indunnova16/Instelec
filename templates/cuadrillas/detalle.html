@@ -175,9 +175,46 @@
     </div>
     {% endif %}
 
-    <!-- Add Member Form -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Agregar Miembro</h2>
+    <!-- Upload Members Excel -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" x-data="{ showUpload: false }">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Agregar Miembro</h2>
+            <button @click="showUpload = !showUpload"
+                    class="px-3 py-1.5 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                Subir Excel de Cargos
+            </button>
+        </div>
+        <div x-show="showUpload" x-transition x-cloak
+             class="mb-4 p-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
+            <form method="post" action="{% url 'cuadrillas:miembros_upload' cuadrilla.pk %}" enctype="multipart/form-data" class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+                {% csrf_token %}
+                <div class="flex-1 w-full">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Archivo Excel (.xlsx)</label>
+                    <input type="file" name="archivo" accept=".xlsx,.xls" required
+                           class="block w-full text-sm text-gray-500 dark:text-gray-400
+                                  file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
+                                  file:text-sm file:font-semibold file:bg-green-50 file:text-green-700
+                                  hover:file:bg-green-100 dark:file:bg-gray-700 dark:file:text-gray-300">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Columnas: <strong>Nombre</strong> | <strong>Cargo</strong> | <strong>Documento</strong> (opcional).
+                        Actualiza el cargo de los miembros existentes que coincidan por nombre.
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit"
+                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition">
+                        Importar
+                    </button>
+                    <button type="button" @click="showUpload = false"
+                            class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm transition">
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
         <form method="post" action="{% url 'cuadrillas:miembro_agregar' cuadrilla.pk %}" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             {% csrf_token %}
             <div>

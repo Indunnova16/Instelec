@@ -140,22 +140,30 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
         if supervisor:
             supervisor_is_member = any(m.usuario_id == supervisor.id for m in miembros)
             if not supervisor_is_member:
-                # Check if there's an inactive record, otherwise create virtual
-                virtual_miembro = CuadrillaMiembro(
-                    cuadrilla=self.object,
-                    usuario=supervisor,
-                    rol_cuadrilla='SUPERVISOR',
-                    cargo='JT_CTA',
-                    costo_dia=0,
-                    fecha_inicio=date.today(),
-                    activo=True,
-                )
-                # Save it so the supervisor is a real member
-                try:
-                    virtual_miembro.save()
-                    miembros.insert(0, virtual_miembro)
-                except Exception:
-                    pass  # Unique constraint - already exists
+                # Try to reactivate an existing inactive record first
+                existing = CuadrillaMiembro.objects.filter(
+                    cuadrilla=self.object, usuario=supervisor, activo=False
+                ).first()
+                if existing:
+                    existing.activo = True
+                    existing.rol_cuadrilla = 'SUPERVISOR'
+                    existing.cargo = 'JT_CTA'
+                    existing.save(update_fields=['activo', 'rol_cuadrilla', 'cargo', 'updated_at'])
+                    miembros.insert(0, existing)
+                else:
+                    try:
+                        miembro = CuadrillaMiembro.objects.create(
+                            cuadrilla=self.object,
+                            usuario=supervisor,
+                            rol_cuadrilla='SUPERVISOR',
+                            cargo='JT_CTA',
+                            costo_dia=0,
+                            fecha_inicio=date.today(),
+                            activo=True,
+                        )
+                        miembros.insert(0, miembro)
+                    except Exception:
+                        pass
 
         context['miembros'] = miembros
 
@@ -815,6 +823,97 @@ class CuadrillaMiembroRemoveView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
             messages.success(request, f'{nombre} removido de la cuadrilla.')
         except CuadrillaMiembro.DoesNotExist:
             messages.error(request, 'Miembro no encontrado.')
+
+        return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+
+class CuadrillaMiembroUploadView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Upload Excel to batch-update member roles in a cuadrilla."""
+    model = Cuadrilla
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def post(self, request, *args, **kwargs):
+        import openpyxl
+        from io import BytesIO
+
+        cuadrilla = self.get_object()
+        archivo = request.FILES.get('archivo')
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo.')
+            return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+        roles_validos = dict(CuadrillaMiembro.RolCuadrilla.choices)
+        roles_por_nombre = {v.upper(): k for k, v in roles_validos.items()}
+
+        # Costos fijos por rol
+        costos = {
+            'SUPERVISOR': 0, 'LINIERO_I': 3176095, 'LINIERO_II': 2804856,
+            'AYUDANTE': 1750905, 'CONDUCTOR': 480000, 'ADMINISTRADOR_OBRA': 2522400,
+            'PROFESIONAL_SST': 4204000, 'ING_RESIDENTE': 7357000,
+            'SERVICIO_GENERAL': 1750905, 'ALMACENISTA': 1800000,
+            'SUPERVISOR_FOREST': 2969427, 'ASISTENTE_FOREST': 4204000,
+        }
+
+        try:
+            wb = openpyxl.load_workbook(BytesIO(archivo.read()), read_only=True)
+            ws = wb.active
+
+            # Build lookup of current members by normalized name
+            miembros = CuadrillaMiembro.objects.filter(
+                cuadrilla=cuadrilla, activo=True
+            ).select_related('usuario')
+            miembros_por_nombre = {}
+            for m in miembros:
+                nombre_norm = m.usuario.get_full_name().strip().upper()
+                miembros_por_nombre[nombre_norm] = m
+
+            actualizados = 0
+            no_encontrados = []
+
+            for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if not row or not row[0]:
+                    continue
+
+                nombre = str(row[0]).strip()
+                cargo_raw = str(row[1]).strip().upper() if len(row) > 1 and row[1] else ''
+
+                if not cargo_raw:
+                    continue
+
+                # Resolve role code
+                rol_code = cargo_raw if cargo_raw in roles_validos else roles_por_nombre.get(cargo_raw, '')
+                if not rol_code:
+                    continue
+
+                # Match by name
+                nombre_norm = nombre.upper()
+                miembro = miembros_por_nombre.get(nombre_norm)
+
+                if miembro:
+                    miembro.rol_cuadrilla = rol_code
+                    miembro.costo_dia = costos.get(rol_code, 0)
+                    miembro.save(update_fields=['rol_cuadrilla', 'costo_dia', 'updated_at'])
+                    actualizados += 1
+                else:
+                    no_encontrados.append(nombre)
+
+                # Also update PersonalCuadrilla catalog
+                documento = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                if documento:
+                    PersonalCuadrilla.objects.update_or_create(
+                        documento=documento,
+                        defaults={'nombre': nombre, 'rol_cuadrilla': rol_code, 'activo': True},
+                    )
+
+            msg = f'{actualizados} miembro(s) actualizado(s).'
+            if no_encontrados:
+                msg += f' No encontrados: {", ".join(no_encontrados[:5])}'
+                if len(no_encontrados) > 5:
+                    msg += f' y {len(no_encontrados) - 5} más.'
+            messages.success(request, msg)
+
+        except Exception as e:
+            messages.error(request, f'Error al procesar archivo: {str(e)}')
 
         return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
 

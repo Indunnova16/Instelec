@@ -13,6 +13,7 @@ urlpatterns = [
     path('<uuid:pk>/editar/', views.CuadrillaEditView.as_view(), name='editar'),
     path('<uuid:pk>/miembro/agregar/', views.CuadrillaMiembroAddView.as_view(), name='miembro_agregar'),
     path('<uuid:pk>/miembro/<uuid:miembro_pk>/eliminar/', views.CuadrillaMiembroRemoveView.as_view(), name='miembro_eliminar'),
+    path('<uuid:pk>/miembros/subir/', views.CuadrillaMiembroUploadView.as_view(), name='miembros_upload'),
     path('<uuid:pk>/asistencia/', views.AsistenciaUpdateView.as_view(), name='asistencia_update'),
     path('<uuid:pk>/exportar-asistencia/', views.ExportarAsistenciaView.as_view(), name='exportar_asistencia'),
     path('personal/subir/', views.PersonalCuadrillaUploadView.as_view(), name='personal_upload'),
