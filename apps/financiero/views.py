@@ -1881,6 +1881,113 @@ class NominaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             except Exception as e:
                 messages.error(request, f'Error al procesar archivo: {str(e)}')
 
+        elif action == 'cargar_cuadrilla':
+            # Load operative costs from cuadrilla attendance for the selected month
+            from calendar import monthrange
+            from datetime import timedelta
+            from decimal import Decimal
+
+            from apps.cuadrillas.models import Asistencia, Cuadrilla
+
+            if mes_idx is None:
+                messages.error(request, 'Debe seleccionar un mes para cargar datos de cuadrilla.')
+                return redirect(redirect_url)
+
+            mes_nombre = MESES[mes_idx]
+            num_mes = mes_idx + 1  # 1-based month
+            _, ultimo_dia = monthrange(anio, num_mes)
+            fecha_inicio = date(anio, num_mes, 1)
+            fecha_fin = date(anio, num_mes, ultimo_dia)
+
+            # Find all ISO weeks that overlap with this month
+            semanas_mes = set()
+            dia = fecha_inicio
+            while dia <= fecha_fin:
+                iso_year, iso_week, _ = dia.isocalendar()
+                semanas_mes.add((iso_year, iso_week))
+                dia += timedelta(days=1)
+
+            # Find cuadrillas matching those weeks
+            from django.db.models import Q
+            q_filter = Q()
+            for iso_year, iso_week in semanas_mes:
+                prefix = f'{iso_week:02d}-{iso_year}-'
+                q_filter |= Q(codigo__startswith=prefix)
+
+            cuadrillas_mes = Cuadrilla.objects.filter(q_filter, activa=True)
+
+            if not cuadrillas_mes.exists():
+                messages.warning(request, f'No se encontraron cuadrillas para {mes_nombre.title()} {anio}.')
+                return redirect(redirect_url)
+
+            # Get attendance records within the actual month dates
+            asistencias = Asistencia.objects.filter(
+                cuadrilla__in=cuadrillas_mes,
+                fecha__gte=fecha_inicio,
+                fecha__lte=fecha_fin,
+            ).select_related('usuario', 'cuadrilla')
+
+            # Get costo_dia for each member
+            from apps.cuadrillas.models import CuadrillaMiembro
+            miembros_map = {}
+            for cm in CuadrillaMiembro.objects.filter(
+                cuadrilla__in=cuadrillas_mes, activo=True
+            ):
+                miembros_map[(str(cm.usuario_id), str(cm.cuadrilla_id))] = cm.costo_dia
+
+            # Calculate totals
+            total_nomina = Decimal('0')
+            total_he = Decimal('0')
+            total_viaticos = Decimal('0')
+            dias_trabajados = 0
+
+            for a in asistencias:
+                key = (str(a.usuario_id), str(a.cuadrilla_id))
+                costo = miembros_map.get(key, Decimal('0'))
+
+                if a.tipo_novedad == 'PRESENTE':
+                    total_nomina += costo
+                    dias_trabajados += 1
+
+                if a.horas_extra and a.horas_extra > 0:
+                    total_he += Decimal(str(a.horas_extra))
+
+                if a.viatico_aplica and a.viaticos:
+                    total_viaticos += a.viaticos
+
+            # Save to REAL budget for costos_variables > MO
+            obj, _ = PresupuestoDetallado.objects.get_or_create(
+                anio=anio, tipo='REAL', contrato=contrato,
+                defaults={'datos': _build_empty_datos()},
+            )
+            datos = obj.datos or _build_empty_datos()
+            sec = 'costos_variables'
+            cat = 'MO'
+            if sec not in datos:
+                datos[sec] = {}
+            if cat not in datos[sec]:
+                datos[sec][cat] = {}
+
+            items_to_save = {
+                'Nómina operación': int(total_nomina),
+                'Viáticos reembolsables operación': int(total_viaticos),
+            }
+            for item_name, valor in items_to_save.items():
+                if item_name not in datos[sec][cat]:
+                    datos[sec][cat][item_name] = {m: 0 for m in MESES}
+                datos[sec][cat][item_name][mes_nombre] = valor
+
+            obj.datos = datos
+            obj.save(update_fields=['datos', 'updated_at'])
+
+            cuadrillas_count = cuadrillas_mes.count()
+            messages.success(
+                request,
+                f'{mes_nombre.title()} {anio}: Cargados datos de {cuadrillas_count} cuadrilla(s). '
+                f'Nómina: ${total_nomina:,.0f} ({dias_trabajados} días), '
+                f'Viáticos: ${total_viaticos:,.0f}.'
+            )
+
         elif action == 'edit_presupuesto':
             # Inline edit of a budget item value (total annual)
             from django.http import HttpResponse

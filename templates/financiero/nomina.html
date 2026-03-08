@@ -300,7 +300,7 @@
     {% else %}
     <!-- OPERATIVE PERSONNEL (from cuadrillas) -->
     <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -309,6 +309,24 @@
                 Personal Operativo
                 <span class="text-sm font-normal text-gray-500 dark:text-gray-400">({{ total_personal }} personas)</span>
             </h2>
+            {% if mes_nombre %}
+            <form method="post" class="inline"
+                  onsubmit="return confirm('¿Cargar costos de cuadrillas para {{ mes_nombre }} {{ anio }}? Esto actualizará Nómina operación y Viáticos en el presupuesto Real.')">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cargar_cuadrilla">
+                <input type="hidden" name="tipo" value="{{ tipo }}">
+                <input type="hidden" name="anio" value="{{ anio }}">
+                <input type="hidden" name="mes" value="{{ mes_idx }}">
+                {% if contrato_seleccionado %}<input type="hidden" name="contrato" value="{{ contrato_seleccionado.pk }}">{% endif %}
+                <button type="submit"
+                        class="px-3 py-1.5 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Cargar desde Cuadrilla
+                </button>
+            </form>
+            {% endif %}
         </div>
 
         {% if cuadrillas_list %}
