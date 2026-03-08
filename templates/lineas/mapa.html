@@ -220,5 +220,13 @@ map.getContainer().addEventListener('keydown', function(e) {
             break;
     }
 });
+
+// Fix rendering after layout settles
+setTimeout(function() { map.invalidateSize(); }, 200);
+
+// Re-render map when sidebar toggles or window resizes
+new ResizeObserver(function() {
+    if (map) map.invalidateSize();
+}).observe(document.getElementById('map'));
 </script>
 {% endblock %}

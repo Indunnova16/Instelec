@@ -2,12 +2,13 @@
 
 {% block title %}Mapa de Cuadrillas - TransMaint{% endblock %}
 
-{% block extra_css %}
+{% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
     #map-cuadrillas {
         height: calc(100vh - 200px);
         min-height: 500px;
+        width: 100%;
     }
     .crew-marker {
         background: #3B82F6;
@@ -162,6 +163,14 @@
     setInterval(loadCrewLocations, 30000);
 
     // Initialize
-    document.addEventListener('DOMContentLoaded', initMap);
+    document.addEventListener('DOMContentLoaded', function() {
+        initMap();
+        // Fix rendering after layout settles
+        setTimeout(function() { map.invalidateSize(); }, 200);
+        // Re-render map when sidebar toggles or window resizes
+        new ResizeObserver(function() {
+            if (map) map.invalidateSize();
+        }).observe(document.getElementById('map-cuadrillas'));
+    });
 </script>
 {% endblock %}
