@@ -1,0 +1,559 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Nómina {{ anio }}{% if mes_nombre %} - {{ mes_nombre }}{% endif %} - TransMaint{% endblock %}
+
+{% block content %}
+<main class="space-y-4" x-data="nominaPage()">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Nómina</h1>
+            <p class="text-gray-600 dark:text-gray-400">
+                Personal y costos de mano de obra - {% if mes_nombre %}{{ mes_nombre }} {% endif %}{{ anio }}
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center">
+            <!-- Type switcher -->
+            <div class="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
+                <a href="?tipo=operativo&anio={{ anio }}{% if mes_idx != None %}&mes={{ mes_idx }}{% endif %}{% if unidad_filter %}&unidad={{ unidad_filter }}{% endif %}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
+                   class="px-4 py-2 text-sm font-medium {% if tipo == 'operativo' %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %}">
+                    Mano de Obra Operativa
+                </a>
+                <a href="?tipo=administrativo&anio={{ anio }}{% if mes_idx != None %}&mes={{ mes_idx }}{% endif %}{% if unidad_filter %}&unidad={{ unidad_filter }}{% endif %}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
+                   class="px-4 py-2 text-sm font-medium {% if tipo == 'administrativo' %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %}">
+                    Mano de Obra Administrativa
+                </a>
+            </div>
+            <!-- Month selector -->
+            <select class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                    onchange="let params = new URLSearchParams(window.location.search); if(this.value !== '') { params.set('mes', this.value); } else { params.delete('mes'); } window.location.href = '?' + params.toString();">
+                <option value="">Todo el Año</option>
+                {% for m in meses_opciones %}
+                <option value="{{ m.idx }}" {% if mes_idx == m.idx %}selected{% endif %}>{{ m.nombre }}</option>
+                {% endfor %}
+            </select>
+            <!-- Year selector -->
+            <select class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                    onchange="let params = new URLSearchParams(window.location.search); params.set('anio', this.value); window.location.href = '?' + params.toString();">
+                {% for a in anios_disponibles %}
+                <option value="{{ a }}" {% if a == anio %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </header>
+
+    <!-- Contract filter bar -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-wrap gap-4 items-end">
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Unidad de Negocio</label>
+            <select onchange="let params = new URLSearchParams(window.location.search); params.set('unidad', this.value); params.delete('contrato'); window.location.href = '?' + params.toString();"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <option value="">Todas</option>
+                {% for code, label in unidades_negocio %}
+                <option value="{{ code }}" {% if unidad_filter == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Contrato</label>
+            <select onchange="let params = new URLSearchParams(window.location.search); if(this.value) { params.set('contrato', this.value); } else { params.delete('contrato'); } window.location.href = '?' + params.toString();"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm min-w-[200px]">
+                <option value="">Todos los contratos</option>
+                {% for c in contratos_disponibles %}
+                <option value="{{ c.pk }}" {% if contrato_seleccionado and contrato_seleccionado.pk == c.pk %}selected{% endif %}>{{ c.codigo }} - {{ c.nombre|truncatechars:40 }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if contrato_seleccionado %}
+        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                {{ contrato_seleccionado.get_unidad_negocio_display }}
+            </span>
+            <span class="font-medium text-gray-900 dark:text-white">{{ contrato_seleccionado.codigo }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Django messages -->
+    {% if messages %}
+    <div class="space-y-2">
+        {% for message in messages %}
+        <div class="p-3 rounded-lg text-sm flex items-center gap-2
+            {% if message.tags == 'success' %}bg-green-50 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800
+            {% elif message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800
+            {% else %}bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Summary cards -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Total Personal</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_personal }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Planeado{% if mes_nombre %} {{ mes_nombre }}{% endif %}</p>
+            <p class="text-lg font-bold text-blue-600">${{ total_planeado|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Real{% if mes_nombre %} {{ mes_nombre }}{% endif %}</p>
+            <p class="text-lg font-bold text-green-600">${{ total_real|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Diferencia</p>
+            <p class="text-lg font-bold {% if diferencia_total > 0 %}text-red-600{% elif diferencia_total < 0 %}text-green-600{% else %}text-gray-600{% endif %}">
+                ${{ diferencia_total|floatformat:0|intcomma }}
+            </p>
+        </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- PERSONNEL SECTION -->
+    <!-- ============================================================ -->
+
+    {% if tipo == 'administrativo' %}
+    <!-- ADMINISTRATIVE PERSONNEL (independent model) -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Personal Administrativo
+                <span class="text-sm font-normal text-gray-500 dark:text-gray-400">({{ total_personal }} personas)</span>
+            </h2>
+            <div class="flex gap-2">
+                <button @click="showUpload = !showUpload"
+                        class="px-3 py-1.5 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    Subir Excel
+                </button>
+                <button @click="showAddForm = !showAddForm"
+                        class="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                    </svg>
+                    Agregar
+                </button>
+            </div>
+        </div>
+
+        <!-- Upload Excel panel -->
+        <div x-show="showUpload" x-transition x-cloak
+             class="px-4 py-4 border-b border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
+            <form method="post" enctype="multipart/form-data" class="space-y-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload_personal">
+                <input type="hidden" name="tipo" value="{{ tipo }}">
+                <input type="hidden" name="anio" value="{{ anio }}">
+                {% if mes_idx != None %}<input type="hidden" name="mes" value="{{ mes_idx }}">{% endif %}
+                {% if contrato_seleccionado %}<input type="hidden" name="contrato" value="{{ contrato_seleccionado.pk }}">{% endif %}
+                <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+                    <div class="flex-1 w-full">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Archivo Excel (.xlsx)
+                        </label>
+                        <input type="file" name="archivo" accept=".xlsx,.xls" required
+                               class="block w-full text-sm text-gray-500 dark:text-gray-400
+                                      file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
+                                      file:text-sm file:font-semibold file:bg-green-50 file:text-green-700
+                                      hover:file:bg-green-100 dark:file:bg-gray-700 dark:file:text-gray-300">
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Columnas esperadas: <strong>Nombre</strong> | <strong>Documento</strong> | <strong>Cargo</strong> | <strong>Salario Mensual</strong>
+                        </p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit"
+                                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition">
+                            Importar
+                        </button>
+                        <button type="button" @click="showUpload = false"
+                                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm transition">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add personnel form -->
+        <div x-show="showAddForm" x-transition x-cloak
+             class="px-4 py-4 border-b border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+            <form method="post" class="space-y-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="agregar_personal">
+                <input type="hidden" name="tipo" value="{{ tipo }}">
+                <input type="hidden" name="anio" value="{{ anio }}">
+                {% if mes_idx != None %}<input type="hidden" name="mes" value="{{ mes_idx }}">{% endif %}
+                {% if contrato_seleccionado %}<input type="hidden" name="contrato" value="{{ contrato_seleccionado.pk }}">{% endif %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre completo</label>
+                        <input type="text" name="nombre" required placeholder="Nombre completo"
+                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Documento</label>
+                        <input type="text" name="documento" placeholder="CC / NIT"
+                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cargo</label>
+                        <select name="cargo"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                            {% for code, label in cargos_admin %}
+                            <option value="{{ code }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Salario mensual ($)</label>
+                        <input type="number" name="salario_mensual" value="0" min="0" step="1"
+                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button type="submit"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition">
+                            Agregar
+                        </button>
+                        <button type="button" @click="showAddForm = false"
+                                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm transition">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Admin personnel table -->
+        {% if personal_list %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-700/50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Nombre</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Documento</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Cargo</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Salario Mensual</th>
+                        <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for p in personal_list %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                        <td class="px-4 py-2 text-gray-900 dark:text-white font-medium">{{ p.nombre }}</td>
+                        <td class="px-4 py-2 text-gray-600 dark:text-gray-300 text-xs">{{ p.documento|default:"-" }}</td>
+                        <td class="px-4 py-2">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                {% if p.cargo == 'ING_RESIDENTE' %}bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300
+                                {% elif p.cargo == 'PROFESIONAL_SST' %}bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300
+                                {% elif p.cargo == 'ADMINISTRADOR_OBRA' %}bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300
+                                {% elif p.cargo == 'DIRECTOR_PROYECTO' %}bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300
+                                {% elif p.cargo == 'COORDINADOR' %}bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300
+                                {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                {{ p.get_cargo_display }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-right text-gray-900 dark:text-white font-medium">${{ p.salario_mensual|floatformat:0|intcomma }}</td>
+                        <td class="px-4 py-2 text-center">
+                            <form method="post" class="inline"
+                                  onsubmit="return confirm('¿Remover a {{ p.nombre }}?')">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remover_personal">
+                                <input type="hidden" name="tipo" value="{{ tipo }}">
+                                <input type="hidden" name="anio" value="{{ anio }}">
+                                {% if mes_idx != None %}<input type="hidden" name="mes" value="{{ mes_idx }}">{% endif %}
+                                <input type="hidden" name="persona_id" value="{{ p.pk }}">
+                                <button type="submit"
+                                        class="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition"
+                                        title="Remover">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+            <svg class="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <p class="mt-2 text-sm">No se encontró personal administrativo. Use "Agregar" o "Subir Excel" para cargar personal.</p>
+        </div>
+        {% endif %}
+    </section>
+
+    {% else %}
+    <!-- OPERATIVE PERSONNEL (from cuadrillas) -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Personal Operativo
+                <span class="text-sm font-normal text-gray-500 dark:text-gray-400">({{ total_personal }} personas)</span>
+            </h2>
+        </div>
+
+        {% if cuadrillas_list %}
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for grupo in cuadrillas_list %}
+            <div x-data="{ open: true }" class="last:border-b-0">
+                <button @click="open = !open"
+                        class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-bold">
+                            {{ grupo.miembros|length }}
+                        </span>
+                        <div class="text-left">
+                            <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ grupo.cuadrilla.codigo }} - {{ grupo.cuadrilla.nombre }}</p>
+                            {% if grupo.cuadrilla.linea_asignada %}
+                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ grupo.cuadrilla.linea_asignada }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <svg class="w-4 h-4 text-gray-400 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div x-show="open" x-transition x-cloak>
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50 dark:bg-gray-700/50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Nombre</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Rol</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Cargo</th>
+                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Costo/Día</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Desde</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            {% for m in grupo.miembros %}
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                <td class="px-4 py-2 text-gray-900 dark:text-white font-medium">{{ m.usuario.get_full_name }}</td>
+                                <td class="px-4 py-2">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                        {% if m.rol_cuadrilla == 'SUPERVISOR' %}bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300
+                                        {% elif m.rol_cuadrilla == 'CONDUCTOR' %}bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300
+                                        {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                        {{ m.get_rol_cuadrilla_display }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-gray-600 dark:text-gray-300 text-xs">{{ m.get_cargo_display }}</td>
+                                <td class="px-4 py-2 text-right text-gray-900 dark:text-white font-medium">${{ m.costo_dia|floatformat:0|intcomma }}</td>
+                                <td class="px-4 py-2 text-gray-500 dark:text-gray-400 text-xs">{{ m.fecha_inicio|date:"d/m/Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+            <svg class="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <p class="mt-2 text-sm">No se encontró personal operativo activo en cuadrillas.</p>
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <!-- ============================================================ -->
+    <!-- BUDGET ITEMS (EDITABLE) -->
+    <!-- ============================================================ -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                </svg>
+                Presupuesto: {{ cat_nombre }}
+            </h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Haga clic en cualquier valor de Planeado o Real para editarlo.{% if mes_nombre %} Mostrando datos de <strong>{{ mes_nombre }}</strong>.{% else %} Vista anual (total de todos los meses).{% endif %}
+            </p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-700/50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Concepto</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider">Planeado{% if mes_nombre %} ({{ mes_nombre }}){% else %} (Anual){% endif %}</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wider">Real{% if mes_nombre %} ({{ mes_nombre }}){% else %} (Anual){% endif %}</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Diferencia</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">% Desv.</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for item in items_presupuesto %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td class="px-4 py-3 text-gray-900 dark:text-white font-medium">{{ item.nombre }}</td>
+                        <td class="px-4 py-3 text-right">
+                            <span class="editable-cell cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 py-1 rounded text-blue-600 dark:text-blue-400"
+                                  @click="editBudgetCell($event, '{{ item.seccion_key }}', '{{ item.cat_codigo }}', '{{ item.nombre }}', 'PLANEADO')"
+                                  data-value="{{ item.total_planeado }}">
+                                ${{ item.total_planeado|floatformat:0|intcomma }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <span class="editable-cell cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 px-2 py-1 rounded text-green-600 dark:text-green-400"
+                                  @click="editBudgetCell($event, '{{ item.seccion_key }}', '{{ item.cat_codigo }}', '{{ item.nombre }}', 'REAL')"
+                                  data-value="{{ item.total_real }}">
+                                ${{ item.total_real|floatformat:0|intcomma }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right font-medium {% if item.diferencia > 0 %}text-red-600{% elif item.diferencia < 0 %}text-green-600{% else %}text-gray-500{% endif %}">
+                            ${{ item.diferencia|floatformat:0|intcomma }}
+                        </td>
+                        <td class="px-4 py-3 text-right text-xs">
+                            {% if item.total_planeado %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                {% if item.pct_desviacion > 10 %}bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300
+                                {% elif item.pct_desviacion < -10 %}bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300
+                                {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                {{ item.pct_desviacion|floatformat:1 }}%
+                            </span>
+                            {% else %}
+                            <span class="text-gray-400">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-bold">
+                        <td class="px-4 py-3 text-gray-900 dark:text-white">TOTAL</td>
+                        <td class="px-4 py-3 text-right text-blue-700 dark:text-blue-300">${{ total_planeado|floatformat:0|intcomma }}</td>
+                        <td class="px-4 py-3 text-right text-green-700 dark:text-green-300">${{ total_real|floatformat:0|intcomma }}</td>
+                        <td class="px-4 py-3 text-right {% if diferencia_total > 0 %}text-red-700{% elif diferencia_total < 0 %}text-green-700{% else %}text-gray-700{% endif %}">
+                            ${{ diferencia_total|floatformat:0|intcomma }}
+                        </td>
+                        <td class="px-4 py-3 text-right">-</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </section>
+</main>
+{% csrf_token %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function nominaPage() {
+    const meses = {{ meses|safe }};
+    const mesIdx = {% if mes_idx != None %}{{ mes_idx }}{% else %}null{% endif %};
+    const mesActual = mesIdx !== null ? meses[mesIdx] : null;
+
+    return {
+        showAddForm: false,
+        showUpload: false,
+
+        editBudgetCell(event, seccionKey, catCodigo, itemName, tipoPresupuesto) {
+            const span = event.currentTarget;
+            const currentVal = span.dataset.value || '0';
+            const td = span.parentElement;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = parseInt(currentVal).toLocaleString('es-CO');
+            input.className = 'w-full text-right text-xs border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:text-white';
+            input.style.minWidth = '100px';
+
+            span.style.display = 'none';
+            td.appendChild(input);
+            input.focus();
+            input.select();
+
+            const save = () => {
+                const rawVal = input.value.replace(/[.,\s]/g, '');
+                const numVal = parseInt(rawVal) || 0;
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+                if (mesActual) {
+                    // Single month: save directly
+                    const fd = new FormData();
+                    fd.append('action', 'edit_presupuesto');
+                    fd.append('tipo', '{{ tipo }}');
+                    fd.append('anio', '{{ anio }}');
+                    {% if contrato_seleccionado %}fd.append('contrato', '{{ contrato_seleccionado.pk }}');{% endif %}
+                    fd.append('seccion_key', seccionKey);
+                    fd.append('cat_codigo', catCodigo);
+                    fd.append('item_name', itemName);
+                    fd.append('tipo_presupuesto', tipoPresupuesto);
+                    fd.append('mes', mesActual);
+                    fd.append('valor', numVal.toString());
+                    fd.append('csrfmiddlewaretoken', csrfToken);
+
+                    fetch(window.location.pathname, {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    }).then(() => window.location.reload());
+                } else {
+                    // Annual view: distribute evenly across 12 months
+                    const perMonth = Math.floor(numVal / 12);
+                    const remainder = numVal - (perMonth * 12);
+                    let pending = 12;
+
+                    meses.forEach((mes, idx) => {
+                        const fd = new FormData();
+                        fd.append('action', 'edit_presupuesto');
+                        fd.append('tipo', '{{ tipo }}');
+                        fd.append('anio', '{{ anio }}');
+                        {% if contrato_seleccionado %}fd.append('contrato', '{{ contrato_seleccionado.pk }}');{% endif %}
+                        fd.append('seccion_key', seccionKey);
+                        fd.append('cat_codigo', catCodigo);
+                        fd.append('item_name', itemName);
+                        fd.append('tipo_presupuesto', tipoPresupuesto);
+                        fd.append('mes', mes);
+                        fd.append('valor', (idx === 0 ? perMonth + remainder : perMonth).toString());
+                        fd.append('csrfmiddlewaretoken', csrfToken);
+
+                        fetch(window.location.pathname, {
+                            method: 'POST',
+                            body: fd,
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        }).then(() => {
+                            pending--;
+                            if (pending === 0) window.location.reload();
+                        });
+                    });
+                }
+            };
+
+            input.addEventListener('blur', save);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); save(); }
+                if (e.key === 'Escape') {
+                    input.remove();
+                    span.style.display = '';
+                }
+            });
+        },
+    };
+}
+</script>
+{% endblock %}

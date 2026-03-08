@@ -748,185 +748,6 @@ class CostosCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
         return context
 
 
-class CostosVsProduccionDashboardView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
-    """
-    Dashboard de costos vs producción en tiempo real.
-    Muestra: costo acumulado, producción estimada, desviación.
-    """
-    template_name = 'financiero/costos_vs_produccion.html'
-    partial_template_name = 'financiero/partials/costos_vs_produccion_tabla.html'
-    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        from apps.actividades.models import Actividad
-        from apps.lineas.models import Linea
-
-        from .models import CostoActividad
-
-        # Filtros
-        linea_id = self.request.GET.get('linea')
-        fecha_inicio = self.request.GET.get('fecha_inicio')
-        fecha_fin = self.request.GET.get('fecha_fin')
-
-        # Obtener actividades en curso o completadas
-        qs = Actividad.objects.filter(
-            estado__in=['EN_CURSO', 'COMPLETADA']
-        ).select_related(
-            'linea', 'tipo_actividad', 'cuadrilla', 'tramo'
-        )
-
-        if linea_id:
-            qs = qs.filter(linea_id=linea_id)
-
-        if fecha_inicio:
-            try:
-                qs = qs.filter(fecha_programada__gte=date.fromisoformat(fecha_inicio))
-            except ValueError:
-                pass
-
-        if fecha_fin:
-            try:
-                qs = qs.filter(fecha_programada__lte=date.fromisoformat(fecha_fin))
-            except ValueError:
-                pass
-
-        # Calcular métricas por actividad
-        actividades_data = []
-        total_produccion = Decimal('0')
-        total_costo = Decimal('0')
-
-        for actividad in qs:
-            produccion = actividad.produccion_proporcional
-
-            try:
-                costo = CostoActividad.objects.get(actividad=actividad)
-                costo_acumulado = costo.costo_total
-            except CostoActividad.DoesNotExist:
-                costo_acumulado = Decimal('0')
-
-            desviacion = produccion - costo_acumulado
-            margen = (desviacion / produccion * 100) if produccion > 0 else Decimal('0')
-
-            total_produccion += produccion
-            total_costo += costo_acumulado
-
-            actividades_data.append({
-                'id': actividad.id,
-                'linea': actividad.linea.codigo,
-                'tipo': actividad.tipo_actividad.nombre,
-                'cuadrilla': actividad.cuadrilla.codigo if actividad.cuadrilla else '-',
-                'tramo': str(actividad.tramo) if actividad.tramo else '-',
-                'avance': float(actividad.porcentaje_avance),
-                'valor_facturacion': float(actividad.valor_facturacion),
-                'produccion': float(produccion),
-                'costo': float(costo_acumulado),
-                'desviacion': float(desviacion),
-                'margen': float(margen),
-                'estado': 'positivo' if desviacion >= 0 else 'negativo',
-            })
-
-        # Totales
-        desviacion_total = total_produccion - total_costo
-        margen_total = (desviacion_total / total_produccion * 100) if total_produccion > 0 else Decimal('0')
-
-        context['actividades'] = actividades_data
-        context['totales'] = {
-            'produccion': float(total_produccion),
-            'costo': float(total_costo),
-            'desviacion': float(desviacion_total),
-            'margen': float(margen_total),
-            'estado': 'positivo' if desviacion_total >= 0 else 'negativo',
-        }
-
-        # Filtros para el template
-        context['lineas'] = Linea.objects.filter(activa=True)
-        context['filtro_linea'] = linea_id
-        context['filtro_fecha_inicio'] = fecha_inicio
-        context['filtro_fecha_fin'] = fecha_fin
-
-        return context
-
-
-class CostosVsProduccionAPIView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """
-    API endpoint para obtener datos de costos vs producción (JSON).
-    Útil para actualizaciones AJAX/HTMX.
-    """
-    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
-
-    def get(self, request, *args, **kwargs):
-        from apps.actividades.models import Actividad
-
-        from .models import CostoActividad
-
-        linea_id = request.GET.get('linea')
-        actividad_id = request.GET.get('actividad')
-
-        if actividad_id:
-            # Datos de una actividad específica
-            try:
-                actividad = Actividad.objects.select_related(
-                    'linea', 'tipo_actividad', 'cuadrilla'
-                ).get(id=actividad_id)
-            except Actividad.DoesNotExist:
-                return JsonResponse({'error': 'Actividad no encontrada'}, status=404)
-
-            produccion = actividad.produccion_proporcional
-
-            try:
-                costo = CostoActividad.objects.get(actividad=actividad)
-                costo_acumulado = costo.costo_total
-            except CostoActividad.DoesNotExist:
-                costo_acumulado = Decimal('0')
-
-            desviacion = produccion - costo_acumulado
-            margen = (desviacion / produccion * 100) if produccion > 0 else Decimal('0')
-
-            return JsonResponse({
-                'actividad_id': str(actividad.id),
-                'linea': actividad.linea.codigo,
-                'tipo': actividad.tipo_actividad.nombre,
-                'avance': float(actividad.porcentaje_avance),
-                'produccion': float(produccion),
-                'costo': float(costo_acumulado),
-                'desviacion': float(desviacion),
-                'margen': float(margen),
-                'estado': 'positivo' if desviacion >= 0 else 'negativo',
-            })
-
-        # Resumen general o por línea
-        qs = Actividad.objects.filter(
-            estado__in=['EN_CURSO', 'COMPLETADA']
-        )
-
-        if linea_id:
-            qs = qs.filter(linea_id=linea_id)
-
-        total_produccion = Decimal('0')
-        total_costo = Decimal('0')
-
-        for actividad in qs:
-            total_produccion += actividad.produccion_proporcional
-
-            try:
-                costo = CostoActividad.objects.get(actividad=actividad)
-                total_costo += costo.costo_total
-            except CostoActividad.DoesNotExist:
-                pass
-
-        desviacion_total = total_produccion - total_costo
-        margen_total = (desviacion_total / total_produccion * 100) if total_produccion > 0 else Decimal('0')
-
-        return JsonResponse({
-            'total_actividades': qs.count(),
-            'produccion': float(total_produccion),
-            'costo': float(total_costo),
-            'desviacion': float(desviacion_total),
-            'margen': float(margen_total),
-            'estado': 'positivo' if desviacion_total >= 0 else 'negativo',
-        })
-
 
 class ChecklistFacturacionView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
     """Checklist for tracking billing status of completed activities."""
@@ -1791,6 +1612,501 @@ class PresupuestoPlaneadoView(PresupuestoDetalladoBaseView):
 class PresupuestoRealView(PresupuestoDetalladoBaseView):
     """View for the actual/real budget tab."""
     tipo_presupuesto = 'REAL'
+
+
+ROLES_OPERATIVOS = [
+    'SUPERVISOR', 'LINIERO_I', 'LINIERO_II', 'AYUDANTE', 'CONDUCTOR',
+    'SUPERVISOR_FOREST', 'ASISTENTE_FOREST',
+]
+
+
+class NominaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Payroll view: operative and administrative labor with personnel and budget items."""
+    template_name = 'financiero/nomina.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def _get_filters(self, request):
+        from django.utils import timezone
+        from apps.contratos.models import Contrato
+
+        anio = int(request.GET.get('anio') or request.POST.get('anio') or timezone.now().year)
+        tipo = request.GET.get('tipo') or request.POST.get('tipo') or 'operativo'
+        mes_idx = request.GET.get('mes') or request.POST.get('mes')
+        if mes_idx is not None:
+            try:
+                mes_idx = int(mes_idx)
+                if mes_idx < 0 or mes_idx > 11:
+                    mes_idx = None
+            except (ValueError, TypeError):
+                mes_idx = None
+        unidad_filter = request.GET.get('unidad', '')
+        contrato = None
+        contrato_id = request.GET.get('contrato') or request.POST.get('contrato')
+        if contrato_id:
+            try:
+                contrato = Contrato.objects.get(pk=contrato_id)
+            except Contrato.DoesNotExist:
+                pass
+        contratos_qs = Contrato.objects.all()
+        if unidad_filter:
+            contratos_qs = contratos_qs.filter(unidad_negocio=unidad_filter)
+        return anio, tipo, unidad_filter, contrato, contratos_qs, mes_idx
+
+    def _build_redirect(self, request, tipo, anio, contrato=None, mes_idx=None):
+        url = f'{request.path}?tipo={tipo}&anio={anio}'
+        if contrato:
+            url += f'&contrato={contrato.pk}'
+        if mes_idx is not None:
+            url += f'&mes={mes_idx}'
+        return url
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from apps.contratos.models import Contrato
+        from apps.cuadrillas.models import CuadrillaMiembro
+
+        from .models import PersonalAdministrativo
+
+        anio, tipo, unidad_filter, contrato, contratos_qs, mes_idx = self._get_filters(self.request)
+        mes_actual = MESES[mes_idx] if mes_idx is not None else None
+
+        # --- Personnel ---
+        if tipo == 'administrativo':
+            # Use PersonalAdministrativo model
+            personal_qs = PersonalAdministrativo.objects.filter(activo=True)
+            if contrato:
+                personal_qs = personal_qs.filter(contrato=contrato)
+            personal_list = list(personal_qs)
+            total_personal = len(personal_list)
+            cuadrillas_list = []  # Not used for admin
+        else:
+            # Use CuadrillaMiembro for operative
+            miembros_qs = CuadrillaMiembro.objects.filter(
+                activo=True,
+                rol_cuadrilla__in=ROLES_OPERATIVOS,
+            ).select_related('usuario', 'cuadrilla', 'cuadrilla__linea_asignada').order_by(
+                'cuadrilla__codigo', 'rol_cuadrilla', 'usuario__first_name'
+            )
+            personal_list = []  # Not used for operative
+            total_personal = miembros_qs.count()
+            # Group by cuadrilla
+            cuadrillas_dict = {}
+            for m in miembros_qs:
+                cua = m.cuadrilla
+                if cua.pk not in cuadrillas_dict:
+                    cuadrillas_dict[cua.pk] = {'cuadrilla': cua, 'miembros': []}
+                cuadrillas_dict[cua.pk]['miembros'].append(m)
+            cuadrillas_list = list(cuadrillas_dict.values())
+
+        # --- Budget data ---
+        planeado_obj = PresupuestoDetallado.objects.filter(
+            anio=anio, tipo='PLANEADO', contrato=contrato,
+        ).first()
+        real_obj = PresupuestoDetallado.objects.filter(
+            anio=anio, tipo='REAL', contrato=contrato,
+        ).first()
+        datos_planeado = planeado_obj.datos if planeado_obj else _build_empty_datos()
+        datos_real = real_obj.datos if real_obj else _build_empty_datos()
+
+        if tipo == 'administrativo':
+            seccion_key = 'costos_fijos'
+            cat_codigo = 'MO'
+            cat_nombre = 'Mano de Obra Administración'
+        else:
+            seccion_key = 'costos_variables'
+            cat_codigo = 'MO'
+            cat_nombre = 'Mano de Obra'
+
+        estructura_cat = None
+        for cat in ESTRUCTURA_COSTOS[seccion_key]['categorias']:
+            if cat['codigo'] == cat_codigo and cat['nombre'] == cat_nombre:
+                estructura_cat = cat
+                break
+
+        items_presupuesto = []
+        if estructura_cat:
+            cat_data_planeado = datos_planeado.get(seccion_key, {}).get(cat_codigo, {})
+            cat_data_real = datos_real.get(seccion_key, {}).get(cat_codigo, {})
+            for item_name in estructura_cat['items']:
+                planeado_vals = cat_data_planeado.get(item_name, {})
+                real_vals = cat_data_real.get(item_name, {})
+                if mes_actual:
+                    total_p = planeado_vals.get(mes_actual, 0)
+                    total_r = real_vals.get(mes_actual, 0)
+                else:
+                    total_p = sum(planeado_vals.get(m, 0) for m in MESES)
+                    total_r = sum(real_vals.get(m, 0) for m in MESES)
+                pct = ((total_r - total_p) / total_p * 100) if total_p else 0
+                items_presupuesto.append({
+                    'nombre': item_name,
+                    'total_planeado': total_p,
+                    'total_real': total_r,
+                    'diferencia': total_r - total_p,
+                    'pct_desviacion': pct,
+                    'seccion_key': seccion_key,
+                    'cat_codigo': cat_codigo,
+                })
+
+        total_planeado = sum(i['total_planeado'] for i in items_presupuesto)
+        total_real = sum(i['total_real'] for i in items_presupuesto)
+
+        context.update({
+            'anio': anio,
+            'tipo': tipo,
+            'unidad_filter': unidad_filter,
+            'contrato_seleccionado': contrato,
+            'contratos_disponibles': contratos_qs,
+            'unidades_negocio': Contrato.UnidadNegocio.choices,
+            'anios_disponibles': list(range(anio - 2, anio + 3)),
+            'cuadrillas_list': cuadrillas_list,
+            'personal_list': personal_list,
+            'total_personal': total_personal,
+            'items_presupuesto': items_presupuesto,
+            'cat_nombre': cat_nombre,
+            'seccion_key': seccion_key,
+            'cat_codigo': cat_codigo,
+            'total_planeado': total_planeado,
+            'total_real': total_real,
+            'diferencia_total': total_real - total_planeado,
+            'meses_cortos': [m[:3].title() for m in MESES],
+            'meses': MESES,
+            'mes_idx': mes_idx,
+            'mes_actual': mes_actual,
+            'mes_nombre': MESES[mes_idx].title() if mes_idx is not None else None,
+            'meses_opciones': [{'idx': i, 'nombre': m.title()} for i, m in enumerate(MESES)],
+            'cargos_admin': PersonalAdministrativo.Cargo.choices,
+        })
+        return context
+
+    def post(self, request, *args, **kwargs):
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        from .models import PersonalAdministrativo
+
+        action = request.POST.get('action', '')
+        anio, tipo, unidad_filter, contrato, _, mes_idx = self._get_filters(request)
+        redirect_url = self._build_redirect(request, tipo, anio, contrato, mes_idx)
+
+        if action == 'agregar_personal':
+            nombre = request.POST.get('nombre', '').strip()
+            documento = request.POST.get('documento', '').strip()
+            cargo = request.POST.get('cargo', 'OTRO')
+            salario = request.POST.get('salario_mensual', '0') or '0'
+
+            if not nombre:
+                messages.error(request, 'El nombre es obligatorio.')
+                return redirect(redirect_url)
+
+            PersonalAdministrativo.objects.create(
+                nombre=nombre,
+                documento=documento,
+                cargo=cargo if cargo in dict(PersonalAdministrativo.Cargo.choices) else 'OTRO',
+                salario_mensual=float(salario),
+                contrato=contrato,
+            )
+            messages.success(request, f'{nombre} agregado al personal administrativo.')
+
+        elif action == 'remover_personal':
+            persona_id = request.POST.get('persona_id')
+            try:
+                persona = PersonalAdministrativo.objects.get(pk=persona_id, activo=True)
+                persona.activo = False
+                persona.save(update_fields=['activo', 'updated_at'])
+                messages.success(request, f'{persona.nombre} removido.')
+            except PersonalAdministrativo.DoesNotExist:
+                messages.error(request, 'Persona no encontrada.')
+
+        elif action == 'upload_personal':
+            archivo = request.FILES.get('archivo')
+            if not archivo:
+                messages.error(request, 'No se seleccionó archivo.')
+                return redirect(redirect_url)
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(archivo, read_only=True)
+                ws = wb.active
+                creados = 0
+                actualizados = 0
+                cargos_map = {v.lower(): k for k, v in PersonalAdministrativo.Cargo.choices}
+
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    if not row or not row[0]:
+                        continue
+                    nombre = str(row[0]).strip()
+                    documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                    cargo_raw = str(row[2]).strip().lower() if len(row) > 2 and row[2] else ''
+                    salario_raw = row[3] if len(row) > 3 and row[3] else 0
+
+                    cargo_code = cargos_map.get(cargo_raw, '')
+                    if not cargo_code:
+                        # Try matching by code directly
+                        if cargo_raw.upper() in dict(PersonalAdministrativo.Cargo.choices):
+                            cargo_code = cargo_raw.upper()
+                        else:
+                            cargo_code = 'OTRO'
+
+                    try:
+                        salario = float(salario_raw)
+                    except (ValueError, TypeError):
+                        salario = 0
+
+                    if documento:
+                        obj, created = PersonalAdministrativo.objects.update_or_create(
+                            documento=documento,
+                            defaults={
+                                'nombre': nombre,
+                                'cargo': cargo_code,
+                                'salario_mensual': salario,
+                                'contrato': contrato,
+                                'activo': True,
+                            },
+                        )
+                    else:
+                        PersonalAdministrativo.objects.create(
+                            nombre=nombre,
+                            documento=documento,
+                            cargo=cargo_code,
+                            salario_mensual=salario,
+                            contrato=contrato,
+                        )
+                        created = True
+
+                    if created:
+                        creados += 1
+                    else:
+                        actualizados += 1
+
+                messages.success(request, f'Personal cargado: {creados} nuevos, {actualizados} actualizados.')
+            except Exception as e:
+                messages.error(request, f'Error al procesar archivo: {str(e)}')
+
+        elif action == 'edit_presupuesto':
+            # Inline edit of a budget item value (total annual)
+            from django.http import HttpResponse
+
+            seccion_key = request.POST.get('seccion_key', '')
+            cat_codigo = request.POST.get('cat_codigo', '')
+            item_name = request.POST.get('item_name', '')
+            tipo_pres = request.POST.get('tipo_presupuesto', '')  # PLANEADO or REAL
+            mes = request.POST.get('mes', '')
+            valor_raw = request.POST.get('valor', '0').replace(',', '').replace('.', '').strip()
+
+            try:
+                valor = int(valor_raw)
+            except (ValueError, TypeError):
+                valor = 0
+
+            obj, _ = PresupuestoDetallado.objects.get_or_create(
+                anio=anio, tipo=tipo_pres, contrato=contrato,
+                defaults={'datos': _build_empty_datos()},
+            )
+
+            datos = obj.datos or _build_empty_datos()
+            if seccion_key not in datos:
+                datos[seccion_key] = {}
+            if cat_codigo not in datos[seccion_key]:
+                datos[seccion_key][cat_codigo] = {}
+            if item_name not in datos[seccion_key][cat_codigo]:
+                datos[seccion_key][cat_codigo][item_name] = {m: 0 for m in MESES}
+            datos[seccion_key][cat_codigo][item_name][mes] = valor
+
+            obj.datos = datos
+            obj.save(update_fields=['datos', 'updated_at'])
+
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return HttpResponse('OK')
+            return redirect(redirect_url)
+
+        return redirect(redirect_url)
+
+
+class DescargarPlantillaExcelView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Generate and download an Excel template for budget data entry."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+    template_name = ''  # Not used
+
+    def get(self, request, *args, **kwargs):
+        import io
+
+        from django.http import HttpResponse
+
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'PRESUPUESTO'
+
+        anio = request.GET.get('anio', '')
+
+        # Styles
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
+        seccion_font = Font(bold=True, color='FFFFFF', size=10)
+        seccion_fill = PatternFill(start_color='2E75B6', end_color='2E75B6', fill_type='solid')
+        cat_font = Font(bold=True, size=10)
+        cat_fill = PatternFill(start_color='D6E4F0', end_color='D6E4F0', fill_type='solid')
+        subtotal_font = Font(bold=True, italic=True, size=10)
+        subtotal_fill = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+        total_font = Font(bold=True, color='FFFFFF', size=10)
+        total_fill = PatternFill(start_color='375623', end_color='375623', fill_type='solid')
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'),
+        )
+        money_fmt = '#,##0'
+
+        meses_header = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                        'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+        # Title row
+        ws.merge_cells('A1:N1')
+        title_cell = ws['A1']
+        title_cell.value = f'Presupuesto {anio}' if anio else 'Presupuesto'
+        title_cell.font = Font(bold=True, size=14)
+        title_cell.alignment = Alignment(horizontal='center')
+
+        # Header row (row 3)
+        row = 3
+        headers = ['Concepto'] + meses_header + ['Total']
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col_idx, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+
+        # Column widths
+        ws.column_dimensions['A'].width = 45
+        for c in range(2, 15):
+            ws.column_dimensions[get_column_letter(c)].width = 15
+
+        row = 4
+
+        # Helper to write a row
+        def write_row(label, font_style, fill_style, is_formula_row=False, item_row_start=None, item_row_end=None):
+            nonlocal row
+            cell_a = ws.cell(row=row, column=1, value=label)
+            cell_a.font = font_style
+            cell_a.fill = fill_style
+            cell_a.border = thin_border
+            for col in range(2, 15):
+                cell = ws.cell(row=row, column=col)
+                cell.border = thin_border
+                cell.number_format = money_fmt
+                cell.fill = fill_style
+                cell.font = font_style
+                if is_formula_row and item_row_start and col <= 13:
+                    col_letter = get_column_letter(col)
+                    cell.value = f'=SUM({col_letter}{item_row_start}:{col_letter}{item_row_end})'
+                elif col == 14:
+                    col_b = get_column_letter(2)
+                    col_m = get_column_letter(13)
+                    cell.value = f'=SUM({col_b}{row}:{col_m}{row})'
+                else:
+                    cell.value = 0
+            row += 1
+            return row - 1
+
+        # INGRESO PROYECTADO
+        ingreso_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+        write_row('INGRESO PROYECTADO', Font(bold=True, size=10), ingreso_fill)
+
+        row += 1  # blank row
+
+        # Build sections
+        for seccion_key, seccion in ESTRUCTURA_COSTOS.items():
+            # Section header
+            cell_a = ws.cell(row=row, column=1, value=seccion['titulo'].upper())
+            cell_a.font = seccion_font
+            cell_a.fill = seccion_fill
+            cell_a.border = thin_border
+            for col in range(2, 15):
+                cell = ws.cell(row=row, column=col)
+                cell.fill = seccion_fill
+                cell.border = thin_border
+            seccion_item_rows = []
+            row += 1
+
+            for cat in seccion['categorias']:
+                # Category header
+                cell_a = ws.cell(row=row, column=1, value=f"  {cat['nombre']}")
+                cell_a.font = cat_font
+                cell_a.fill = cat_fill
+                cell_a.border = thin_border
+                for col in range(2, 15):
+                    cell = ws.cell(row=row, column=col)
+                    cell.fill = cat_fill
+                    cell.border = thin_border
+                row += 1
+
+                item_start = row
+                for item_name in cat['items']:
+                    write_row(f"    {item_name}", Font(size=10), PatternFill())
+                item_end = row - 1
+
+                # Subtotal with formulas
+                st_row = write_row(
+                    f"  Subtotal {cat['nombre']}",
+                    subtotal_font, subtotal_fill,
+                    is_formula_row=True, item_row_start=item_start, item_row_end=item_end,
+                )
+                seccion_item_rows.append(st_row)
+                row += 1  # spacing
+
+            # Section total (sum of subtotals)
+            cell_a = ws.cell(row=row, column=1, value=f"TOTAL {seccion['titulo'].upper()}")
+            cell_a.font = total_font
+            cell_a.fill = total_fill
+            cell_a.border = thin_border
+            for col in range(2, 15):
+                cell = ws.cell(row=row, column=col)
+                cell.border = thin_border
+                cell.number_format = money_fmt
+                cell.fill = total_fill
+                cell.font = total_font
+                if col <= 13:
+                    col_letter = get_column_letter(col)
+                    formula_parts = [f'{col_letter}{r}' for r in seccion_item_rows]
+                    cell.value = f'={"+".join(formula_parts)}'
+                else:
+                    col_b = get_column_letter(2)
+                    col_m = get_column_letter(13)
+                    cell.value = f'=SUM({col_b}{row}:{col_m}{row})'
+            row += 2  # spacing
+
+        # Instructions sheet
+        ws2 = wb.create_sheet('Instrucciones')
+        ws2['A1'] = 'Instrucciones para llenar la plantilla'
+        ws2['A1'].font = Font(bold=True, size=14)
+        instructions = [
+            '',
+            '1. Llene los valores mensuales (Ene-Dic) en la hoja PRESUPUESTO.',
+            '2. Solo modifique las celdas de los items (filas blancas). Los subtotales y totales se calculan automaticamente.',
+            '3. El INGRESO PROYECTADO es la facturacion esperada por mes.',
+            '4. Los valores deben ser en pesos colombianos (COP), sin decimales.',
+            '5. Cuando termine, guarde el archivo y suba desde el boton "Subir Excel" en la aplicacion.',
+            '',
+            'Nota: No cambie los nombres de los conceptos ni la estructura de la hoja.',
+        ]
+        for i, txt in enumerate(instructions, 2):
+            ws2.cell(row=i, column=1, value=txt)
+        ws2.column_dimensions['A'].width = 80
+
+        # Save to response
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        filename = f'Plantilla_Presupuesto_{anio}.xlsx' if anio else 'Plantilla_Presupuesto.xlsx'
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class CargarCostosCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):

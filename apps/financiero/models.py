@@ -628,3 +628,56 @@ class ArchivoPeriodoFacturacion(BaseModel):
 
     def __str__(self):
         return f"{self.nombre_original} ({self.mes}/{self.anio})"
+
+
+class PersonalAdministrativo(BaseModel):
+    """
+    Personal administrativo independiente de cuadrillas.
+    Se puede cargar manualmente o por Excel.
+    """
+
+    class Cargo(models.TextChoices):
+        ADMINISTRADOR_OBRA = 'ADMINISTRADOR_OBRA', 'Administrador de Obra'
+        PROFESIONAL_SST = 'PROFESIONAL_SST', 'Profesional SST'
+        INGENIERO_RESIDENTE = 'ING_RESIDENTE', 'Ingeniero Residente'
+        SERVICIO_GENERAL = 'SERVICIO_GENERAL', 'Servicio General'
+        ALMACENISTA = 'ALMACENISTA', 'Almacenista'
+        DIRECTOR_PROYECTO = 'DIRECTOR_PROYECTO', 'Director de Proyecto'
+        COORDINADOR = 'COORDINADOR', 'Coordinador'
+        CONTADOR = 'CONTADOR', 'Contador'
+        AUXILIAR_ADMIN = 'AUXILIAR_ADMIN', 'Auxiliar Administrativo'
+        OTRO = 'OTRO', 'Otro'
+
+    nombre = models.CharField('Nombre completo', max_length=200)
+    documento = models.CharField('Documento', max_length=30, blank=True)
+    cargo = models.CharField(
+        'Cargo',
+        max_length=30,
+        choices=Cargo.choices,
+        default=Cargo.OTRO,
+    )
+    salario_mensual = models.DecimalField(
+        'Salario mensual',
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    activo = models.BooleanField('Activo', default=True)
+    contrato = models.ForeignKey(
+        'contratos.Contrato',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='personal_administrativo',
+        verbose_name='Contrato',
+    )
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'personal_administrativo'
+        verbose_name = 'Personal Administrativo'
+        verbose_name_plural = 'Personal Administrativo'
+        ordering = ['cargo', 'nombre']
+
+    def __str__(self):
+        return f"{self.nombre} - {self.get_cargo_display()}"
