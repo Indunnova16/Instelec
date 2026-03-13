@@ -36,7 +36,7 @@
 
             <div>
                 <label for="id_username" class="block text-sm font-medium text-gray-700 mb-2">
-                    Correo electronico
+                    Correo electronico o Cedula
                 </label>
                 {{ form.username }}
             </div>
@@ -53,9 +53,11 @@
                     <input type="checkbox" name="remember" id="remember" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                     <span class="ml-2 text-sm text-gray-600">Recordarme</span>
                 </label>
-                <a href="#" class="text-sm text-blue-600 hover:text-blue-500">
-                    Olvidaste tu contrasena?
-                </a>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                <p><strong>Personal de campo:</strong> Ingrese con su numero de cedula.</p>
+                <p class="mt-1">Contrasena: cedula + 3 primeras letras de su nombre en minuscula.</p>
             </div>
 
             <button type="submit"

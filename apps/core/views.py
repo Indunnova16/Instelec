@@ -15,6 +15,12 @@ class HomeView(LoginRequiredMixin, TemplateView):
     """Home page / Dashboard."""
     template_name = 'core/home.html'
 
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.is_campo:
+            from django.shortcuts import redirect
+            return redirect('campo:lista')
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         user = self.request.user

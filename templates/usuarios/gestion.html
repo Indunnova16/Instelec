@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion de Usuarios - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Gestion de Usuarios</h1>
+            <p class="text-gray-600 dark:text-gray-400">{{ usuarios|length }} usuarios registrados</p>
+        </div>
+        <div class="flex space-x-3">
+            <a href="{% url 'usuarios:campo_upload' %}"
+               class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">
+                Carga Masiva Campo
+            </a>
+            <a href="{% url 'usuarios:crear_admin' %}"
+               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                + Nuevo Usuario Admin
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <form method="get" class="flex items-center space-x-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+        <select name="rol" class="px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+            <option value="">Todos los roles</option>
+            {% for value, label in roles %}
+            <option value="{{ value }}" {% if rol_actual == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="buscar" value="{{ buscar }}" placeholder="Buscar por nombre, cedula..."
+               class="px-3 py-2 border rounded-lg text-sm flex-1 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+        <button type="submit" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm">
+            Filtrar
+        </button>
+    </form>
+
+    <!-- Users table -->
+    <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nombre</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cedula</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Email</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Rol</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cargo</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for u in usuarios %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{{ u.get_full_name }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ u.documento }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ u.email }}</td>
+                    <td class="px-6 py-4">
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full
+                            {% if u.rol == 'admin' %}bg-red-100 text-red-800
+                            {% elif u.is_campo %}bg-green-100 text-green-800
+                            {% else %}bg-blue-100 text-blue-800{% endif %}">
+                            {{ u.get_rol_display }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ u.cargo }}</td>
+                    <td class="px-6 py-4 text-sm">
+                        <form method="post" action="{% url 'usuarios:reset_password' %}" class="inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="usuario_id" value="{{ u.pk }}">
+                            <button type="submit" class="text-orange-600 hover:text-orange-800 text-xs"
+                                    onclick="return confirm('Restablecer contrasena de {{ u.get_full_name }}?')">
+                                Resetear Pass
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">No se encontraron usuarios.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

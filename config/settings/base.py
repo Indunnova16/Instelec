@@ -125,6 +125,11 @@ AUTH_USER_MODEL = 'usuarios.Usuario'
 LOGIN_URL = '/usuarios/login/'
 LOGIN_REDIRECT_URL = '/'
 
+# Authentication backends - allow login with cedula or email
+AUTHENTICATION_BACKENDS = [
+    'apps.usuarios.backends.CedulaOrEmailBackend',
+]
+
 # Internationalization
 LANGUAGE_CODE = 'es-co'
 TIME_ZONE = 'America/Bogota'

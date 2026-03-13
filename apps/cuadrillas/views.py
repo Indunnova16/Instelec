@@ -360,13 +360,13 @@ class CuadrillaEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Detail
 class MapaCuadrillasView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Real-time map of all crews."""
     template_name = 'cuadrillas/mapa.html'
-    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero', 'auxiliar']
 
 
 class MapaCuadrillasPartialView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Partial view for HTMX polling of crew locations."""
     template_name = 'cuadrillas/partials/mapa_cuadrillas.html'
-    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero', 'auxiliar']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1247,3 +1247,175 @@ class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
             'es_conductor': es_conductor,
             'conductor_interno': conductor_interno if es_conductor else None,
         })
+
+
+class CuadrillaMasivaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Bulk upload of cuadrillas and their members from Excel."""
+    template_name = 'cuadrillas/masiva_upload.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    COSTOS = {
+        'SUPERVISOR': 0, 'LINIERO_I': 3176095, 'LINIERO_II': 2804856,
+        'AYUDANTE': 1750905, 'CONDUCTOR': 480000, 'ADMINISTRADOR_OBRA': 2522400,
+        'PROFESIONAL_SST': 4204000, 'ING_RESIDENTE': 7357000,
+        'SERVICIO_GENERAL': 1750905, 'ALMACENISTA': 1800000,
+        'SUPERVISOR_FOREST': 2969427, 'ASISTENTE_FOREST': 4204000,
+    }
+
+    def post(self, request, *args, **kwargs):
+        import openpyxl
+        from io import BytesIO
+        from datetime import date
+        from apps.usuarios.models import Usuario
+        from apps.lineas.models import Linea
+
+        archivo = request.FILES.get('archivo')
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo Excel.')
+            return self.get(request, *args, **kwargs)
+
+        try:
+            wb = openpyxl.load_workbook(BytesIO(archivo.read()), read_only=True)
+            ws = wb.active
+
+            cuadrillas_creadas = 0
+            miembros_agregados = 0
+            errores = []
+
+            # Expected columns:
+            # A: Cuadrilla (numero), B: Año, C: Actividad, D: Fecha,
+            # E: Supervisor, F: Linea asignada, G: Vehiculo,
+            # H: Miembro1, I: Miembro2, J: Miembro3, K: Miembro4, L: Miembro5
+
+            for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if not row or not row[0]:
+                    continue
+
+                try:
+                    cuadrilla_num = str(row[0]).strip()
+                    ano = str(row[1]).strip() if len(row) > 1 and row[1] else str(date.today().year)
+                    actividad = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                    fecha_str = str(row[3]).strip() if len(row) > 3 and row[3] else ''
+                    supervisor_name = str(row[4]).strip() if len(row) > 4 and row[4] else ''
+                    linea_name = str(row[5]).strip() if len(row) > 5 and row[5] else ''
+                    vehiculo_placa = str(row[6]).strip() if len(row) > 6 and row[6] else ''
+
+                    # Generate week number from date or current week
+                    from datetime import datetime
+                    fecha = None
+                    semana = date.today().isocalendar()[1]
+                    if fecha_str:
+                        try:
+                            if isinstance(row[3], datetime):
+                                fecha = row[3].date()
+                            else:
+                                fecha = date.fromisoformat(fecha_str)
+                            semana = fecha.isocalendar()[1]
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Build cuadrilla code: WW-YYYY-NNN
+                    codigo = f'{semana:02d}-{ano}-{cuadrilla_num.zfill(3)}'
+                    nombre = f'Cuadrilla {cuadrilla_num}'
+                    if actividad:
+                        nombre = f'{nombre} - {actividad}'
+
+                    # Find supervisor
+                    supervisor = None
+                    if supervisor_name:
+                        supervisor = Usuario.objects.filter(
+                            is_active=True,
+                            rol='supervisor',
+                        ).filter(
+                            models.Q(first_name__icontains=supervisor_name.split()[0]) if supervisor_name.split() else models.Q()
+                        ).first()
+
+                    # Find linea
+                    linea = None
+                    if linea_name:
+                        linea = Linea.objects.filter(
+                            activa=True,
+                        ).filter(
+                            models.Q(codigo__icontains=linea_name) | models.Q(nombre__icontains=linea_name)
+                        ).first()
+
+                    # Find vehiculo
+                    vehiculo = None
+                    if vehiculo_placa:
+                        vehiculo = Vehiculo.objects.filter(placa__icontains=vehiculo_placa, activo=True).first()
+
+                    # Create or update cuadrilla
+                    cuadrilla, created = Cuadrilla.objects.update_or_create(
+                        codigo=codigo,
+                        defaults={
+                            'nombre': nombre,
+                            'supervisor': supervisor,
+                            'linea_asignada': linea,
+                            'vehiculo': vehiculo,
+                            'fecha': fecha,
+                            'activa': True,
+                        }
+                    )
+                    if created:
+                        cuadrillas_creadas += 1
+
+                    # Add members (columns H onwards)
+                    for col_idx in range(7, min(len(row), 17)):
+                        miembro_ref = str(row[col_idx]).strip() if row[col_idx] else ''
+                        if not miembro_ref:
+                            continue
+
+                        # Try to find by documento first, then by name
+                        usuario = None
+                        personal = PersonalCuadrilla.objects.filter(
+                            models.Q(documento=miembro_ref) | models.Q(nombre__icontains=miembro_ref),
+                            activo=True
+                        ).first()
+
+                        if personal:
+                            # Find corresponding Usuario
+                            usuario = Usuario.objects.filter(documento=personal.documento).first()
+                            rol = personal.rol_cuadrilla
+                        else:
+                            # Try direct user lookup
+                            usuario = Usuario.objects.filter(
+                                models.Q(documento=miembro_ref) |
+                                models.Q(first_name__icontains=miembro_ref.split()[0] if miembro_ref.split() else ''),
+                                is_active=True
+                            ).first()
+                            rol = 'LINIERO_I'
+
+                        if usuario:
+                            _, member_created = CuadrillaMiembro.objects.get_or_create(
+                                cuadrilla=cuadrilla,
+                                usuario=usuario,
+                                activo=True,
+                                defaults={
+                                    'rol_cuadrilla': rol,
+                                    'cargo': 'MIEMBRO',
+                                    'costo_dia': self.COSTOS.get(rol, 0),
+                                    'fecha_inicio': fecha or date.today(),
+                                }
+                            )
+                            if member_created:
+                                miembros_agregados += 1
+                        else:
+                            errores.append(f'Fila {row_num}: Miembro "{miembro_ref}" no encontrado.')
+
+                except Exception as e:
+                    errores.append(f'Fila {row_num}: {str(e)}')
+
+            wb.close()
+
+            msg = f'Carga completada: {cuadrillas_creadas} cuadrillas creadas, {miembros_agregados} miembros agregados.'
+            if errores:
+                msg += f' {len(errores)} advertencias.'
+            messages.success(request, msg)
+
+            for err in errores[:10]:
+                messages.warning(request, err)
+
+        except Exception as e:
+            messages.error(request, f'Error al procesar el archivo: {str(e)}')
+
+        return self.get(request, *args, **kwargs)

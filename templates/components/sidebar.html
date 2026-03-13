@@ -13,6 +13,50 @@
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-4" role="navigation" aria-label="Menu principal">
         <ul class="space-y-1 px-3" role="menubar">
+
+            {% if request.user.is_campo %}
+            {# ========== MENU PARA TRABAJADORES DE CAMPO ========== #}
+
+            <!-- Formato de Campo (4 botones) -->
+            <li x-data="{ open: true }" role="none">
+                <button @click="open = !open"
+                        class="w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                        aria-haspopup="true"
+                        :aria-expanded="open"
+                        type="button">
+                    <span class="flex items-center">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Formato de Campo
+                    </span>
+                    <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Formato de Campo">
+                    <li role="none"><a href="{% url 'campo:procedimientos' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Procedimientos</a></li>
+                    <li role="none"><a href="{% url 'campo:crear' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Nuevo Registro</a></li>
+                    <li role="none"><a href="{% url 'campo:reportar_dano' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Reportar Dano</a></li>
+                    <li role="none"><a href="{% url 'campo:lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Mis Registros</a></li>
+                </ul>
+            </li>
+
+            <!-- Mapa en Vivo (campo) -->
+            <li role="none">
+                <a href="{% url 'cuadrillas:mapa' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    Mapa en Vivo
+                </a>
+            </li>
+
+            {% else %}
+            {# ========== MENU PARA ADMINISTRATIVOS ========== #}
+
             <!-- Dashboard -->
             <li role="none">
                 <a href="{% url 'core:home' %}"
@@ -127,7 +171,7 @@
                     <li role="none"><a href="{% url 'financiero:presupuesto_real' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Presupuesto Real</a></li>
                     <li role="none"><a href="{% url 'financiero:checklist_facturacion' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Checklist Facturacion</a></li>
                     <li role="none"><a href="{% url 'financiero:costos_cuadrilla' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Costos Cuadrilla</a></li>
-                    <li role="none"><a href="{% url 'financiero:nomina' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Nómina</a></li>
+                    <li role="none"><a href="{% url 'financiero:nomina' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Nomina</a></li>
                 </ul>
             </li>
 
@@ -151,6 +195,38 @@
                     Mapa en Vivo
                 </a>
             </li>
+
+            {% if request.user.is_admin %}
+            <!-- Separator -->
+            <li class="border-t border-gray-200 dark:border-gray-700 my-4" role="separator" aria-hidden="true"></li>
+
+            <!-- Parametrizacion / Admin -->
+            <li x-data="{ open: false }" role="none">
+                <button @click="open = !open"
+                        class="w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                        aria-haspopup="true"
+                        :aria-expanded="open"
+                        type="button">
+                    <span class="flex items-center">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Parametrizacion
+                    </span>
+                    <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Parametrizacion">
+                    <li role="none"><a href="{% url 'usuarios:gestion' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Usuarios</a></li>
+                    <li role="none"><a href="{% url 'usuarios:campo_upload' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Carga Masiva Usuarios</a></li>
+                    <li role="none"><a href="{% url 'cuadrillas:masiva_upload' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Carga Masiva Cuadrillas</a></li>
+                </ul>
+            </li>
+            {% endif %}
+
+            {% endif %}
         </ul>
     </nav>
 
