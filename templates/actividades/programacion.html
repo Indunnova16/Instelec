@@ -50,17 +50,39 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label for="filter-linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Linea</label>
-                    <select name="linea" id="filter-linea" onchange="this.form.submit()"
-                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                        <option value="">Todas</option>
+                <!-- Multi-select Linea filter -->
+                <div x-data="lineaFilter()" class="relative">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Linea</label>
+                    <!-- Hidden inputs for selected lineas -->
+                    <template x-for="id in selectedLineas" :key="id">
+                        <input type="hidden" name="linea" :value="id">
+                    </template>
+                    <button type="button" @click="open = !open" @click.outside="open = false"
+                            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 bg-white px-3 py-2 text-left text-sm flex items-center justify-between gap-1">
+                        <span x-text="selectedLineas.length === 0 ? 'Todas' : selectedLineas.length + ' seleccionada(s)'"
+                              class="truncate text-gray-700 dark:text-gray-300"></span>
+                        <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div x-show="open" x-transition
+                         class="absolute z-50 mt-1 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        <div class="p-2 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
+                            <button type="button" @click="selectedLineas = []; submitLineaFilter()"
+                                    class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400">Limpiar</button>
+                            <button type="button" @click="applyLineaFilter()"
+                                    class="text-xs text-blue-600 hover:text-blue-800 font-medium">Aplicar</button>
+                        </div>
                         {% for linea in lineas %}
-                        <option value="{{ linea.id }}" {% if request.GET.linea == linea.id|stringformat:"s" %}selected{% endif %}>
-                            {{ linea.codigo }}
-                        </option>
+                        <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm">
+                            <input type="checkbox" value="{{ linea.id }}"
+                                   :checked="selectedLineas.includes('{{ linea.id }}')"
+                                   @change="toggleLinea('{{ linea.id }}')"
+                                   class="rounded border-gray-300 text-blue-600 mr-2">
+                            <span class="text-gray-700 dark:text-gray-300 truncate">{{ linea.codigo }} - {{ linea.nombre }}</span>
+                        </label>
                         {% endfor %}
-                    </select>
+                    </div>
                 </div>
                 <!-- Multi-select Cuadrilla filter -->
                 <div x-data="cuadrillaFilter()" class="relative">
@@ -353,7 +375,7 @@
     <div class="flex justify-center">
         <nav class="flex items-center space-x-2">
             {% if page_obj.has_previous %}
-            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.previous_page_number }}{% if request.GET.linea %}&linea={{ request.GET.linea }}{% endif %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
+            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.previous_page_number }}{% for lid in selected_lineas %}&linea={{ lid }}{% endfor %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
                 Anterior
             </a>
@@ -362,7 +384,7 @@
                 Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
             </span>
             {% if page_obj.has_next %}
-            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.next_page_number }}{% if request.GET.linea %}&linea={{ request.GET.linea }}{% endif %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
+            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.next_page_number }}{% for lid in selected_lineas %}&linea={{ lid }}{% endfor %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
                 Siguiente
             </a>
@@ -395,6 +417,30 @@ function cuadrillaFilter() {
             this.submitFilter();
         },
         submitFilter() {
+            document.getElementById('filter-form').submit();
+        }
+    };
+}
+
+function lineaFilter() {
+    const params = new URLSearchParams(window.location.search);
+    const selected = params.getAll('linea');
+    return {
+        open: false,
+        selectedLineas: selected,
+        toggleLinea(id) {
+            const idx = this.selectedLineas.indexOf(id);
+            if (idx === -1) {
+                this.selectedLineas.push(id);
+            } else {
+                this.selectedLineas.splice(idx, 1);
+            }
+        },
+        applyLineaFilter() {
+            this.open = false;
+            this.submitLineaFilter();
+        },
+        submitLineaFilter() {
             document.getElementById('filter-form').submit();
         }
     };

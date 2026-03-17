@@ -18,4 +18,6 @@ urlpatterns = [
     path('mapa/', views.MapaLineasView.as_view(), name='mapa'),
     path('importar-kmz/', views.ImportarKMZView.as_view(), name='importar_kmz'),
     path('<uuid:pk>/avance/', views.AvanceLineaView.as_view(), name='avance'),
+    path('mi-avance/', views.AvanceCampoView.as_view(), name='mi_avance'),
+    path('mi-avance/<uuid:pk>/', views.AvanceCampoLineaView.as_view(), name='avance_campo_linea'),
 ]

@@ -398,6 +398,110 @@ class LineaDeleteKMZView(LoginRequiredMixin, RoleRequiredMixin, View):
         return redirect('lineas:detalle', pk=pk)
 
 
+class AvanceCampoView(LoginRequiredMixin, View):
+    """Redirect campo users to the avance of their assigned line, or show line list."""
+
+    def get(self, request, *args, **kwargs):
+        from apps.cuadrillas.models import CuadrillaMiembro
+
+        # Find the user's active cuadrilla assignment
+        asignacion = CuadrillaMiembro.objects.filter(
+            usuario=request.user,
+            activo=True,
+            cuadrilla__activa=True,
+        ).select_related('cuadrilla__linea_asignada').first()
+
+        if asignacion and asignacion.cuadrilla.linea_asignada:
+            return redirect('lineas:avance_campo_linea', pk=asignacion.cuadrilla.linea_asignada.pk)
+
+        # No cuadrilla or no line assigned — show all active lines
+        lineas = Linea.objects.filter(activa=True).prefetch_related('torres')
+        lineas_data = []
+        for linea in lineas:
+            total_torres = linea.torres.count()
+            lineas_data.append({
+                'linea': linea,
+                'total_torres': total_torres,
+            })
+
+        from django.shortcuts import render
+        return render(request, 'lineas/avance_campo.html', {
+            'lineas_data': lineas_data,
+            'sin_cuadrilla': True,
+        })
+
+
+class AvanceCampoLineaView(LoginRequiredMixin, HTMXMixin, DetailView):
+    """Simplified tower-by-tower progress for campo users."""
+    model = Linea
+    template_name = 'lineas/avance_campo.html'
+    context_object_name = 'linea'
+
+    def get_context_data(self, **kwargs):
+        from collections import defaultdict
+        from apps.actividades.models import Actividad
+
+        context = super().get_context_data(**kwargs)
+        linea = self.object
+
+        torres = linea.torres.all().order_by('numero')
+
+        actividades = Actividad.objects.filter(
+            linea=linea
+        ).select_related('torre', 'tipo_actividad').order_by('torre__numero')
+
+        actividades_por_torre = defaultdict(list)
+        for act in actividades:
+            actividades_por_torre[str(act.torre_id)].append(act)
+
+        filas_torres = []
+        total_actividades = 0
+        total_completadas = 0
+        for torre in torres:
+            acts = actividades_por_torre.get(str(torre.id), [])
+            completadas = sum(1 for a in acts if a.estado == 'COMPLETADA')
+            en_curso = sum(1 for a in acts if a.estado == 'EN_CURSO')
+            pendientes = sum(1 for a in acts if a.estado in ('PENDIENTE', 'PROGRAMADA'))
+            total = len(acts)
+
+            total_actividades += total
+            total_completadas += completadas
+
+            porcentaje = round(completadas / total * 100) if total > 0 else 0
+
+            if total == 0:
+                estado_color = 'gray'
+            elif completadas == total:
+                estado_color = 'green'
+            elif en_curso > 0:
+                estado_color = 'blue'
+            elif pendientes > 0:
+                estado_color = 'yellow'
+            else:
+                estado_color = 'gray'
+
+            filas_torres.append({
+                'torre': torre,
+                'total': total,
+                'completadas': completadas,
+                'en_curso': en_curso,
+                'pendientes': pendientes,
+                'porcentaje': porcentaje,
+                'estado_color': estado_color,
+            })
+
+        context['filas_torres'] = filas_torres
+        context['total_torres'] = torres.count()
+        context['total_actividades'] = total_actividades
+        context['total_completadas'] = total_completadas
+        context['porcentaje_global'] = (
+            round(total_completadas / total_actividades * 100)
+            if total_actividades > 0 else 0
+        )
+
+        return context
+
+
 class AvanceLineaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
     """Tower-by-tower progress tracking for a line."""
     model = Linea

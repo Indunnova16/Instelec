@@ -219,14 +219,17 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
             fecha_programada__year=self.selected_anio,
         )
 
-        # Filter by linea
-        linea_id = self.request.GET.get('linea')
-        if linea_id:
+        # Filter by linea(s) - multiple selection
+        linea_ids = self.request.GET.getlist('linea')
+        valid_linea_ids = []
+        for lid in linea_ids:
             try:
-                UUID(linea_id)
-                qs = qs.filter(linea_id=linea_id)
+                UUID(lid)
+                valid_linea_ids.append(lid)
             except ValueError:
                 pass
+        if valid_linea_ids:
+            qs = qs.filter(linea_id__in=valid_linea_ids)
 
         # Filter by tipo_actividad
         tipo_id = self.request.GET.get('tipo_actividad')
@@ -272,6 +275,7 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         context['estados'] = Actividad.Estado.choices
         context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
         context['selected_cuadrillas'] = self.request.GET.getlist('cuadrilla')
+        context['selected_lineas'] = self.request.GET.getlist('linea')
         context['meses'] = [
             (1, 'Enero'), (2, 'Febrero'), (3, 'Marzo'), (4, 'Abril'),
             (5, 'Mayo'), (6, 'Junio'), (7, 'Julio'), (8, 'Agosto'),

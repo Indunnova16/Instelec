@@ -66,7 +66,7 @@
     </div>
 
     <!-- Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
             <div class="text-center">
                 <p class="text-3xl font-bold text-blue-600">{{ stats.total|default:0 }}</p>
@@ -89,6 +89,21 @@
             <div class="text-center">
                 <p class="text-3xl font-bold text-orange-600">{{ lineas_intervenidas|default:0 }}</p>
                 <p class="text-sm text-gray-500 dark:text-gray-400">Lineas</p>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="text-center">
+                <p class="text-3xl font-bold text-teal-600">{{ especies_vegetacion|default:0 }}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Especies Vegetacion</p>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="text-center">
+                <p class="text-3xl font-bold text-indigo-600">{{ porcentaje_avance|default:0 }}%</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Avance</p>
+                <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div class="bg-indigo-500 h-2 rounded-full transition-all" style="width: {{ porcentaje_avance|default:0 }}%"></div>
+                </div>
             </div>
         </div>
     </div>

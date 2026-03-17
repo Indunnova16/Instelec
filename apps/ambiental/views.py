@@ -114,21 +114,79 @@ class ConsolidadoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        from django.db.models import Count
+        from django.db.models import Count, Sum
         from apps.lineas.models import Linea
 
         registros = self._get_registros_filtrados()
 
-        context['registros'] = registros.select_related(
+        registros_qs = registros.select_related(
             'actividad__linea',
             'actividad__torre',
             'actividad__tipo_actividad',
             'usuario'
         ).prefetch_related('evidencias')
 
+        context['registros'] = registros_qs
+
         context['stats'] = registros.aggregate(
             total=Count('id'),
         )
+
+        # KPI calculations
+        from apps.campo.models import Evidencia
+        context['total_evidencias'] = Evidencia.objects.filter(
+            registro__in=registros
+        ).count()
+
+        context['torres_intervenidas'] = registros.filter(
+            actividad__torre__isnull=False
+        ).values('actividad__torre').distinct().count()
+
+        context['lineas_intervenidas'] = registros.filter(
+            actividad__linea__isnull=False
+        ).values('actividad__linea').distinct().count()
+
+        # Especies de vegetacion (unique species from JSON datos_formulario)
+        especies = set()
+        for reg in registros_qs:
+            datos = reg.datos_formulario or {}
+            for veg in datos.get('reporte_vegetacion', []):
+                especie = veg.get('especie', '').strip()
+                if especie:
+                    especies.add(especie.lower())
+        context['especies_vegetacion'] = len(especies)
+
+        # Porcentaje de avance (actividades completadas vs total para las lineas/periodo filtrados)
+        from apps.actividades.models import Actividad
+        actividad_filter = {}
+        mes_param = self.request.GET.get('mes')
+        anio_param = self.request.GET.get('anio')
+        linea_param = self.request.GET.get('linea')
+        if mes_param and anio_param:
+            try:
+                actividad_filter['fecha_programada__month'] = int(mes_param)
+                actividad_filter['fecha_programada__year'] = int(anio_param)
+            except (ValueError, TypeError):
+                pass
+        if linea_param:
+            from uuid import UUID
+            try:
+                UUID(linea_param)
+                actividad_filter['linea_id'] = linea_param
+            except ValueError:
+                pass
+
+        if actividad_filter:
+            total_act = Actividad.objects.filter(**actividad_filter).count()
+            completadas_act = Actividad.objects.filter(
+                estado='COMPLETADA', **actividad_filter
+            ).count()
+            context['porcentaje_avance'] = (
+                round(completadas_act / total_act * 100)
+                if total_act > 0 else 0
+            )
+        else:
+            context['porcentaje_avance'] = 0
 
         context['lineas'] = Linea.objects.filter(activa=True)
         context['mes_actual'] = self.request.GET.get('mes', '')

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Avance{% if linea %} {{ linea.codigo }}{% endif %} - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    {% if sin_cuadrilla %}
+    {# No assigned cuadrilla — show line list #}
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Avance por Linea</h1>
+        <p class="text-gray-600 dark:text-gray-400">Seleccione una linea para ver el avance por torres</p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for item in lineas_data %}
+        <a href="{% url 'lineas:avance_campo_linea' item.linea.pk %}"
+           class="bg-white dark:bg-gray-800 rounded-lg shadow p-5 hover:shadow-md transition block">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ item.linea.codigo }}</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ item.linea.nombre }}</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">{{ item.total_torres }} torres</p>
+        </a>
+        {% empty %}
+        <p class="text-gray-500 col-span-full text-center py-8">No hay lineas disponibles</p>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    {# Show tower-by-tower progress #}
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Avance por Torres</h1>
+        <p class="text-gray-600 dark:text-gray-400">{{ linea.codigo }} - {{ linea.nombre }}</p>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Torres</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_torres }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Actividades</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_actividades }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Completadas</p>
+            <p class="text-2xl font-bold text-green-600 dark:text-green-400">{{ total_completadas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Avance Global</p>
+            <div class="flex items-center gap-2">
+                <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ porcentaje_global }}%</p>
+                <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
+                    <div class="h-full bg-blue-600 rounded-full" style="width: {{ porcentaje_global }}%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Torre</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Completadas</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">En Curso</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pendientes</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase min-w-[180px]">Avance</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in filas_torres %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-6 py-3 whitespace-nowrap font-medium text-gray-900 dark:text-white">
+                            T{{ fila.torre.numero }}
+                        </td>
+                        <td class="px-6 py-3 text-center text-sm text-gray-900 dark:text-white">
+                            {{ fila.total }}
+                        </td>
+                        <td class="px-6 py-3 text-center text-sm font-medium text-green-600 dark:text-green-400">
+                            {{ fila.completadas }}
+                        </td>
+                        <td class="px-6 py-3 text-center text-sm font-medium text-blue-600 dark:text-blue-400">
+                            {{ fila.en_curso }}
+                        </td>
+                        <td class="px-6 py-3 text-center text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                            {{ fila.pendientes }}
+                        </td>
+                        <td class="px-6 py-3">
+                            {% if fila.total > 0 %}
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div class="h-full rounded-full transition-all duration-300
+                                        {% if fila.estado_color == 'green' %}bg-green-500
+                                        {% elif fila.estado_color == 'blue' %}bg-blue-500
+                                        {% elif fila.estado_color == 'yellow' %}bg-yellow-500
+                                        {% else %}bg-gray-400{% endif %}"
+                                        style="width: {{ fila.porcentaje }}%">
+                                    </div>
+                                </div>
+                                <span class="text-xs font-medium text-gray-600 dark:text-gray-400 w-10 text-right">
+                                    {{ fila.porcentaje }}%
+                                </span>
+                            </div>
+                            {% else %}
+                            <span class="text-xs text-gray-400">Sin actividades</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                            No hay torres registradas para esta linea
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
