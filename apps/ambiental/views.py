@@ -135,7 +135,7 @@ class ConsolidadoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         # KPI calculations
         from apps.campo.models import Evidencia
         context['total_evidencias'] = Evidencia.objects.filter(
-            registro__in=registros
+            registro_campo__in=registros
         ).count()
 
         context['torres_intervenidas'] = registros.filter(
@@ -146,15 +146,32 @@ class ConsolidadoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             actividad__linea__isnull=False
         ).values('actividad__linea').distinct().count()
 
+        # Tipo de actividad breakdown
+        tipo_breakdown = registros.filter(
+            actividad__tipo_actividad__isnull=False
+        ).values(
+            'actividad__tipo_actividad__nombre'
+        ).annotate(
+            cantidad=Count('id')
+        ).order_by('-cantidad')
+        context['tipo_breakdown'] = tipo_breakdown
+
         # Especies de vegetacion (unique species from JSON datos_formulario)
+        # Also count total individuos_vegetacion
         especies = set()
+        individuos_vegetacion = 0
         for reg in registros_qs:
             datos = reg.datos_formulario or {}
             for veg in datos.get('reporte_vegetacion', []):
                 especie = veg.get('especie', '').strip()
                 if especie:
                     especies.add(especie.lower())
+                try:
+                    individuos_vegetacion += int(veg.get('cantidad', 0) or 0)
+                except (ValueError, TypeError):
+                    pass
         context['especies_vegetacion'] = len(especies)
+        context['individuos_vegetacion'] = individuos_vegetacion
 
         # Porcentaje de avance (actividades completadas vs total para las lineas/periodo filtrados)
         from apps.actividades.models import Actividad
@@ -194,6 +211,52 @@ class ConsolidadoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         context['linea_actual'] = self.request.GET.get('linea', '')
 
         return context
+
+
+class CrearInformeDesdeConsolidadoView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Create a draft InformeAmbiental from current consolidado filters."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_ambiental']
+
+    def post(self, request, *args, **kwargs):
+        from django.shortcuts import redirect
+        from django.contrib import messages
+        from django.utils import timezone
+        from apps.lineas.models import Linea
+
+        mes = request.POST.get('mes')
+        anio = request.POST.get('anio')
+        linea_id = request.POST.get('linea')
+
+        if not mes or not anio or not linea_id:
+            messages.error(request, 'Debe seleccionar mes, año y línea para generar un informe.')
+            return redirect('ambiental:consolidado')
+
+        try:
+            mes = int(mes)
+            anio = int(anio)
+            linea = Linea.objects.get(pk=linea_id)
+        except (ValueError, TypeError, Linea.DoesNotExist):
+            messages.error(request, 'Parámetros inválidos.')
+            return redirect('ambiental:consolidado')
+
+        # Check if informe already exists for this period/line
+        existing = InformeAmbiental.objects.filter(
+            periodo_mes=mes, periodo_anio=anio, linea=linea
+        ).first()
+        if existing:
+            messages.info(request, 'Ya existe un informe para este periodo y línea.')
+            return redirect('ambiental:detalle', pk=existing.pk)
+
+        informe = InformeAmbiental.objects.create(
+            periodo_mes=mes,
+            periodo_anio=anio,
+            linea=linea,
+            estado='BORRADOR',
+            elaborado_por=request.user,
+            fecha_elaboracion=timezone.now(),
+        )
+        messages.success(request, f'Informe borrador creado para {linea.codigo} - {mes}/{anio}.')
+        return redirect('ambiental:detalle', pk=informe.pk)
 
 
 class ExportarConsolidadoView(LoginRequiredMixin, RoleRequiredMixin, View):

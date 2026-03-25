@@ -132,10 +132,28 @@ from .base import *  # noqa: F401,F403
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = ['*']
 
 # ── Database: Custom SQLite backend with GIS TEXT support ────────────────
+# Check if SpatiaLite is actually available (GDAL alone is not enough)
+_has_spatialite = False
 if _has_gdal:
+    try:
+        import sqlite3
+        conn = sqlite3.connect(':memory:')
+        conn.enable_load_extension(True)
+        for lib_name in ('mod_spatialite.so', 'mod_spatialite'):
+            try:
+                conn.load_extension(lib_name)
+                _has_spatialite = True
+                break
+            except Exception:
+                continue
+        conn.close()
+    except Exception:
+        pass
+
+if _has_spatialite:
     DATABASES = {
         'default': {
             'ENGINE': 'django.contrib.gis.db.backends.spatialite',

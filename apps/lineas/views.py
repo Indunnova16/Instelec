@@ -488,6 +488,7 @@ class AvanceCampoLineaView(LoginRequiredMixin, HTMXMixin, DetailView):
                 'pendientes': pendientes,
                 'porcentaje': porcentaje,
                 'estado_color': estado_color,
+                'actividades': acts,
             })
 
         context['filas_torres'] = filas_torres
@@ -500,6 +501,41 @@ class AvanceCampoLineaView(LoginRequiredMixin, HTMXMixin, DetailView):
         )
 
         return context
+
+
+class MarcarActividadCompletadaView(LoginRequiredMixin, View):
+    """Allow campo users to mark an activity as completed."""
+
+    def post(self, request, pk):
+        from apps.actividades.models import Actividad
+        from apps.cuadrillas.models import CuadrillaMiembro
+
+        try:
+            actividad = Actividad.objects.select_related('linea').get(pk=pk)
+        except Actividad.DoesNotExist:
+            messages.error(request, 'Actividad no encontrada.')
+            return redirect('lineas:mi_avance')
+
+        # Verify user belongs to a cuadrilla assigned to this line
+        tiene_acceso = CuadrillaMiembro.objects.filter(
+            usuario=request.user,
+            activo=True,
+            cuadrilla__activa=True,
+            cuadrilla__linea_asignada=actividad.linea,
+        ).exists()
+
+        # Also allow admin/coordinador roles
+        if not tiene_acceso and request.user.rol not in ('admin', 'director', 'coordinador', 'ing_residente'):
+            messages.error(request, 'No tiene permiso para marcar esta actividad.')
+            return redirect('lineas:mi_avance')
+
+        if actividad.estado in ('PENDIENTE', 'PROGRAMADA', 'EN_CURSO'):
+            actividad.completar()
+            messages.success(request, f'Actividad marcada como ejecutada.')
+        else:
+            messages.info(request, 'La actividad ya fue completada o no se puede modificar.')
+
+        return redirect('lineas:avance_campo_linea', pk=actividad.linea.pk)
 
 
 class AvanceLineaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):

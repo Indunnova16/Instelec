@@ -73,9 +73,15 @@
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     {% for fila in filas_torres %}
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                        onclick="document.getElementById('acts-{{ fila.torre.id }}').classList.toggle('hidden')">
                         <td class="px-6 py-3 whitespace-nowrap font-medium text-gray-900 dark:text-white">
-                            T{{ fila.torre.numero }}
+                            <div class="flex items-center gap-1">
+                                <svg class="w-4 h-4 text-gray-400 transition-transform" id="chevron-{{ fila.torre.id }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                T{{ fila.torre.numero }}
+                            </div>
                         </td>
                         <td class="px-6 py-3 text-center text-sm text-gray-900 dark:text-white">
                             {{ fila.total }}
@@ -110,6 +116,54 @@
                             {% endif %}
                         </td>
                     </tr>
+                    {# Expandable activities row #}
+                    {% if fila.actividades %}
+                    <tr id="acts-{{ fila.torre.id }}" class="hidden">
+                        <td colspan="6" class="px-6 py-2 bg-gray-50 dark:bg-gray-900">
+                            <div class="space-y-2">
+                                {% for act in fila.actividades %}
+                                <div class="flex items-center justify-between py-2 px-3 rounded-lg
+                                    {% if act.estado == 'COMPLETADA' %}bg-green-50 dark:bg-green-900/20
+                                    {% elif act.estado == 'EN_CURSO' %}bg-blue-50 dark:bg-blue-900/20
+                                    {% else %}bg-white dark:bg-gray-800{% endif %}">
+                                    <div class="flex items-center gap-3">
+                                        {% if act.estado == 'COMPLETADA' %}
+                                        <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                        </svg>
+                                        {% else %}
+                                        <div class="w-5 h-5 rounded-full border-2
+                                            {% if act.estado == 'EN_CURSO' %}border-blue-400{% else %}border-gray-300{% endif %}">
+                                        </div>
+                                        {% endif %}
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                                {{ act.tipo_actividad.nombre|default:"Actividad" }}
+                                            </p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">
+                                                {{ act.get_estado_display }}
+                                                {% if act.fecha_programada %} &middot; {{ act.fecha_programada|date:"d/m/Y" }}{% endif %}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {% if act.estado == 'COMPLETADA' %}
+                                    <span class="text-xs font-medium text-green-600 dark:text-green-400">Ejecutado</span>
+                                    {% elif act.estado in 'PENDIENTE,PROGRAMADA,EN_CURSO' %}
+                                    <form method="post" action="{% url 'lineas:marcar_actividad_completada' act.pk %}"
+                                          onclick="event.stopPropagation()">
+                                        {% csrf_token %}
+                                        <button type="submit"
+                                                class="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition">
+                                            Marcar Ejecutado
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
                     {% empty %}
                     <tr>
                         <td colspan="6" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">

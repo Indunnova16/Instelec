@@ -20,6 +20,15 @@
                 </svg>
                 Subir Personal
             </button>
+            <!-- Carga Masiva de Cuadrillas -->
+            <a href="{% url 'cuadrillas:masiva_upload' %}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+               aria-label="Carga masiva de cuadrillas desde Excel">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Carga Masiva
+            </a>
             {% if perms.cuadrillas.add_cuadrilla %}
             <button hx-get="{% url 'cuadrillas:crear' %}"
                     hx-target="#modal-container"

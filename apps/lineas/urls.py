@@ -20,4 +20,5 @@ urlpatterns = [
     path('<uuid:pk>/avance/', views.AvanceLineaView.as_view(), name='avance'),
     path('mi-avance/', views.AvanceCampoView.as_view(), name='mi_avance'),
     path('mi-avance/<uuid:pk>/', views.AvanceCampoLineaView.as_view(), name='avance_campo_linea'),
+    path('mi-avance/<uuid:pk>/marcar/', views.MarcarActividadCompletadaView.as_view(), name='marcar_actividad_completada'),
 ]

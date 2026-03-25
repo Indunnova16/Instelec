@@ -30,6 +30,10 @@ class RegistroListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVie
             'usuario'
         ).prefetch_related('evidencias')
 
+        # Campo users only see their own records
+        if self.request.user.is_campo:
+            qs = qs.filter(usuario=self.request.user)
+
         # Filters
         linea = self.request.GET.get('linea')
         if linea:

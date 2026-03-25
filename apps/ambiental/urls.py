@@ -12,5 +12,6 @@ urlpatterns = [
     path('informe/<uuid:pk>/generar/', views.GenerarInformeView.as_view(), name='generar'),
     path('permisos/', views.PermisoListView.as_view(), name='permisos'),
     path('consolidado/', views.ConsolidadoView.as_view(), name='consolidado'),
+    path('consolidado/crear-informe/', views.CrearInformeDesdeConsolidadoView.as_view(), name='crear_informe_consolidado'),
     path('consolidado/exportar/', views.ExportarConsolidadoView.as_view(), name='exportar_consolidado'),
 ]
