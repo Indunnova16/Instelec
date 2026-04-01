@@ -164,13 +164,27 @@
 
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
-        initMap();
-        // Fix rendering after layout settles
-        setTimeout(function() { map.invalidateSize(); }, 200);
-        // Re-render map when sidebar toggles or window resizes
-        new ResizeObserver(function() {
-            if (map) map.invalidateSize();
-        }).observe(document.getElementById('map-cuadrillas'));
+        // Asegurar que el contenedor del mapa tenga altura antes de inicializar
+        const mapContainer = document.getElementById('map-cuadrillas');
+        if (mapContainer) {
+            initMap();
+            // Fix rendering after layout settles (múltiples intentos para asegurar)
+            setTimeout(function() { if (map) map.invalidateSize(); }, 100);
+            setTimeout(function() { if (map) map.invalidateSize(); }, 300);
+            setTimeout(function() { if (map) map.invalidateSize(); }, 500);
+
+            // Re-render map when sidebar toggles or window resizes
+            new ResizeObserver(function() {
+                if (map) map.invalidateSize();
+            }).observe(mapContainer);
+
+            // También invalidar al cambiar de pestaña o ventana
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden && map) {
+                    setTimeout(function() { map.invalidateSize(); }, 100);
+                }
+            });
+        }
     });
 </script>
 {% endblock %}

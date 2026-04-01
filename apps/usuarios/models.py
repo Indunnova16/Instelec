@@ -14,6 +14,13 @@ class UsuarioManager(BaseUserManager):
         if not email:
             raise ValueError('El email es obligatorio')
         email = self.normalize_email(email)
+
+        # Asignar is_staff=True automáticamente para roles administrativos
+        # Fix 1 abril 2026: Usuarios admin/director/coordinador necesitan is_staff=True
+        rol = extra_fields.get('rol', '')
+        if rol in ['admin', 'director', 'coordinador']:
+            extra_fields.setdefault('is_staff', True)
+
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)

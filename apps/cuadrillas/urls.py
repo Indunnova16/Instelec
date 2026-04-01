@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/personal/detalle/', views.PersonalCuadrillaAPIView.as_view(), name='personal_detalle_api'),
     path('api/costo-rol/', views.CostoRolAPIView.as_view(), name='costo_rol_api'),
     path('masiva/upload/', views.CuadrillaMasivaUploadView.as_view(), name='masiva_upload'),
+    path('masiva/plantilla/', views.DescargarPlantillaCuadrillasView.as_view(), name='descargar_plantilla'),
     path('mapa/', views.MapaCuadrillasView.as_view(), name='mapa'),
     path('mapa/partial/', views.MapaCuadrillasPartialView.as_view(), name='mapa_partial'),
     path('ubicaciones/json/', views.MapaCuadrillasPartialView.as_view(), name='ubicaciones_json'),

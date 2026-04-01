@@ -344,3 +344,146 @@ def subir_firma(
     registro.save(update_fields=['firma_responsable_url', 'updated_at'])
 
     return {'url': url}
+
+
+# ============================================================================
+# API Endpoints para Avances de Vanos - Agregado 1 abril 2026
+# ============================================================================
+
+class VanoOut(Schema):
+    """Schema de salida para un vano."""
+    id: UUID
+    numero_vano: int
+    estado: str
+    torre_inicio_numero: str
+    torre_fin_numero: str
+    es_apoyo: bool
+    marcado_por_nombre: Optional[str]
+    fecha_marcado: Optional[datetime]
+    observaciones: str
+    aprobado: bool
+
+
+class ActividadVanosOut(Schema):
+    """Schema de salida para actividad con vanos."""
+    actividad_id: UUID
+    tipo: str
+    linea_codigo: str
+    avance: float
+    vanos: list[VanoOut]
+
+
+class MarcarVanoIn(Schema):
+    """Schema de entrada para marcar un vano."""
+    estado: str
+    observaciones: str = ""
+
+
+@router.get('/cuadrilla/avances', response=ActividadVanosOut, tags=['Vanos'])
+@ratelimit_api
+def listar_avances_cuadrilla(request: HttpRequest):
+    """
+    Lista los vanos de la cuadrilla del usuario autenticado.
+
+    Retorna la actividad activa con todos los vanos asignados a la cuadrilla.
+    """
+    from apps.cuadrillas.models import CuadrillaMiembro
+    from apps.actividades.models import Actividad
+    from .models import AvanceVano
+
+    # Obtener cuadrilla del usuario
+    miembro = CuadrillaMiembro.objects.filter(
+        usuario=request.auth,
+        activo=True,
+        cuadrilla__activa=True
+    ).select_related('cuadrilla').first()
+
+    if not miembro:
+        raise HttpError(400, 'Usuario no asignado a cuadrilla activa')
+
+    cuadrilla = miembro.cuadrilla
+
+    # Obtener actividad activa
+    actividad = Actividad.objects.filter(
+        cuadrillas=cuadrilla,
+        estado__in=['PROGRAMADA', 'EN_CURSO']
+    ).select_related('linea', 'tipo_actividad').first()
+
+    if not actividad:
+        raise HttpError(404, 'Sin actividades asignadas')
+
+    # Obtener vanos
+    vanos = actividad.avances_vanos.filter(
+        cuadrilla=cuadrilla
+    ).select_related('torre_inicio', 'torre_fin', 'marcado_por', 'cuadrilla_asignada_original')
+
+    vanos_list = []
+    for v in vanos:
+        vanos_list.append({
+            'id': v.id,
+            'numero_vano': v.numero_vano,
+            'estado': v.estado,
+            'torre_inicio_numero': v.torre_inicio.numero,
+            'torre_fin_numero': v.torre_fin.numero,
+            'es_apoyo': v.es_apoyo,
+            'marcado_por_nombre': v.marcado_por.get_full_name() if v.marcado_por else None,
+            'fecha_marcado': v.fecha_marcado,
+            'observaciones': v.observaciones,
+            'aprobado': v.aprobado,
+        })
+
+    return {
+        'actividad_id': actividad.id,
+        'tipo': actividad.tipo_actividad.nombre,
+        'linea_codigo': actividad.linea.codigo,
+        'avance': float(actividad.porcentaje_avance),
+        'vanos': vanos_list,
+    }
+
+
+@router.post('/vanos/{vano_id}/marcar', response={200: dict}, tags=['Vanos'])
+@ratelimit_api
+def marcar_vano_api(request: HttpRequest, vano_id: UUID, payload: MarcarVanoIn):
+    """
+    Marca el estado de un vano.
+
+    Estados válidos: pendiente, ejecutado, sin_permiso, no_ejecutado, en_espera
+    """
+    from .models import AvanceVano
+    from apps.cuadrillas.models import CuadrillaMiembro
+    from django.utils import timezone
+
+    vano = AvanceVano.objects.select_related('cuadrilla', 'actividad').get(id=vano_id)
+
+    # Validar que usuario pertenece a la cuadrilla
+    es_miembro = CuadrillaMiembro.objects.filter(
+        usuario=request.auth,
+        cuadrilla=vano.cuadrilla,
+        activo=True
+    ).exists()
+
+    if not es_miembro:
+        raise HttpError(403, 'No autorizado para modificar este vano')
+
+    # Validar estado
+    estados_validos = dict(AvanceVano.Estado.choices).keys()
+    if payload.estado not in estados_validos:
+        raise HttpError(400, f'Estado inválido. Estados permitidos: {", ".join(estados_validos)}')
+
+    # Actualizar vano
+    vano.estado = payload.estado
+    vano.marcado_por = request.auth
+    vano.fecha_marcado = timezone.now()
+    vano.observaciones = payload.observaciones
+    vano.save()
+
+    # Recalcular avance si se marcó como ejecutado
+    if payload.estado == 'ejecutado':
+        vano.actividad.recalcular_avance()
+
+    return {
+        'success': True,
+        'vano_id': str(vano.id),
+        'nuevo_estado': vano.estado,
+        'fecha_marcado': vano.fecha_marcado.isoformat(),
+    }

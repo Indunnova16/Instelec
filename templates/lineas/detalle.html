@@ -71,6 +71,12 @@
                         </span>
                     </dd>
                 </div>
+                {% if linea.contrato %}
+                <div>
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Contrato/Proyecto</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">{{ linea.contrato.codigo }}</dd>
+                </div>
+                {% endif %}
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Tension</dt>
                     <dd class="font-medium text-gray-900 dark:text-white">{{ linea.tension_kv|default:"-" }} kV</dd>
@@ -78,6 +84,10 @@
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Longitud</dt>
                     <dd class="font-medium text-gray-900 dark:text-white">{{ linea.longitud_km|default:"-" }} km</dd>
+                </div>
+                <div>
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Tipo de Estructura</dt>
+                    <dd class="font-medium text-gray-900 dark:text-white">{{ linea.get_tipo_estructura_display }}</dd>
                 </div>
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Estado</dt>
@@ -119,12 +129,24 @@
             <div class="grid grid-cols-2 gap-4">
                 <div class="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                     <p class="text-3xl font-bold text-purple-600 dark:text-purple-400">{{ total_torres }}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Torres</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Torres en BD</p>
                 </div>
                 <div class="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                     <p class="text-3xl font-bold text-blue-600 dark:text-blue-400">{{ linea.longitud_km|default:0 }}</p>
                     <p class="text-sm text-gray-500 dark:text-gray-400">Km</p>
                 </div>
+                {% if linea.cantidad_torres %}
+                <div class="text-center p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                    <p class="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{{ linea.cantidad_torres }}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Torres totales</p>
+                </div>
+                {% endif %}
+                {% if linea.cantidad_postes %}
+                <div class="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <p class="text-3xl font-bold text-green-600 dark:text-green-400">{{ linea.cantidad_postes }}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Postes</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

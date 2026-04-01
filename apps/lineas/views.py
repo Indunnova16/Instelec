@@ -31,11 +31,15 @@ class LineaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
         if cliente:
             qs = qs.filter(cliente=cliente)
 
+        contrato_id = self.request.GET.get('contrato')
+        if contrato_id:
+            qs = qs.filter(contrato_id=contrato_id)
+
         buscar = self.request.GET.get('buscar')
         if buscar:
             qs = qs.filter(nombre__icontains=buscar) | qs.filter(codigo__icontains=buscar)
 
-        return qs.prefetch_related('torres')
+        return qs.select_related('contrato').prefetch_related('torres')
 
 
 class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
@@ -64,9 +68,12 @@ class LineaEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView
     allowed_roles = ['admin', 'director', 'coordinador']
 
     def get_context_data(self, **kwargs):
+        from apps.contratos.models import Contrato
         context = super().get_context_data(**kwargs)
         context['clientes'] = Linea.Cliente.choices
         context['contratistas'] = Linea.Contratista.choices
+        context['tipos_estructura'] = Linea.TipoEstructura.choices
+        context['contratos'] = Contrato.objects.filter(estado='ACTIVO').order_by('codigo')
         return context
 
     def post(self, request, *args, **kwargs):
@@ -86,6 +93,8 @@ class LineaEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView
             return self.get(request, *args, **kwargs)
 
         try:
+            from apps.contratos.models import Contrato
+
             linea.codigo = codigo
             linea.nombre = nombre
             linea.codigo_transelca = request.POST.get('codigo_transelca', '').strip()
@@ -104,6 +113,26 @@ class LineaEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView
             linea.municipios = request.POST.get('municipios', '').strip()
             linea.activa = request.POST.get('activa') == 'on'
             linea.observaciones = request.POST.get('observaciones', '').strip()
+
+            # Nuevos campos agregados 1 abril 2026
+            contrato_id = request.POST.get('contrato') or None
+            if contrato_id:
+                try:
+                    linea.contrato = Contrato.objects.get(id=contrato_id)
+                except Contrato.DoesNotExist:
+                    linea.contrato = None
+            else:
+                linea.contrato = None
+
+            tipo_estructura = request.POST.get('tipo_estructura', '').strip()
+            linea.tipo_estructura = tipo_estructura if tipo_estructura in dict(Linea.TipoEstructura.choices) else linea.tipo_estructura
+
+            cantidad_torres = request.POST.get('cantidad_torres') or None
+            linea.cantidad_torres = int(cantidad_torres) if cantidad_torres else None
+
+            cantidad_postes = request.POST.get('cantidad_postes') or None
+            linea.cantidad_postes = int(cantidad_postes) if cantidad_postes else None
+
             linea.save()
             messages.success(request, f'Línea {linea.codigo} actualizada exitosamente.')
             return redirect('lineas:detalle', pk=linea.pk)

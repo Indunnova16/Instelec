@@ -490,3 +490,163 @@ class Procedimiento(BaseModel):
         elif self.tamanio < 1024 * 1024:
             return f"{self.tamanio / 1024:.1f} KB"
         return f"{self.tamanio / (1024 * 1024):.1f} MB"
+
+
+class AvanceVano(BaseModel):
+    """
+    Registro de ejecución de vanos individuales.
+    Un vano es el espacio entre dos torres consecutivas.
+
+    Agregado: 1 abril 2026
+    Permite a las cuadrillas marcar el avance vano por vano en campo.
+    """
+
+    class Estado(models.TextChoices):
+        PENDIENTE = 'pendiente', 'Pendiente'
+        EJECUTADO = 'ejecutado', 'Ejecutado'
+        SIN_PERMISO = 'sin_permiso', 'Sin Permiso'
+        NO_EJECUTADO = 'no_ejecutado', 'No Ejecutado'
+        EN_ESPERA = 'en_espera', 'En Espera'
+
+    actividad = models.ForeignKey(
+        'actividades.Actividad',
+        on_delete=models.CASCADE,
+        related_name='avances_vanos',
+        verbose_name='Actividad'
+    )
+    cuadrilla = models.ForeignKey(
+        'cuadrillas.Cuadrilla',
+        on_delete=models.CASCADE,
+        related_name='avances_vanos',
+        verbose_name='Cuadrilla asignada'
+    )
+
+    # Vano = espacio entre dos torres
+    torre_inicio = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.CASCADE,
+        related_name='avances_inicio',
+        verbose_name='Torre inicio'
+    )
+    torre_fin = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.CASCADE,
+        related_name='avances_fin',
+        verbose_name='Torre fin'
+    )
+    numero_vano = models.PositiveIntegerField(
+        'Número de vano',
+        help_text='Número secuencial del vano en la actividad'
+    )
+
+    estado = models.CharField(
+        'Estado',
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+
+    # Trazabilidad
+    marcado_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vanos_marcados',
+        verbose_name='Marcado por'
+    )
+    fecha_marcado = models.DateTimeField(
+        'Fecha marcado',
+        null=True,
+        blank=True
+    )
+
+    # Revisión de supervisor
+    revisado_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vanos_revisados',
+        verbose_name='Revisado por'
+    )
+    fecha_revision = models.DateTimeField(
+        'Fecha revisión',
+        null=True,
+        blank=True
+    )
+    aprobado = models.BooleanField(
+        'Aprobado',
+        default=False,
+        help_text='Indica si el supervisor aprobó este vano'
+    )
+
+    observaciones = models.TextField(
+        'Observaciones',
+        blank=True
+    )
+
+    # Para permitir ayuda entre cuadrillas
+    cuadrilla_asignada_original = models.ForeignKey(
+        'cuadrillas.Cuadrilla',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vanos_originales',
+        verbose_name='Cuadrilla asignada originalmente',
+        help_text='Cuadrilla a la que se asignó originalmente este vano'
+    )
+
+    class Meta:
+        db_table = 'avances_vanos'
+        verbose_name = 'Avance de Vano'
+        verbose_name_plural = 'Avances de Vanos'
+        ordering = ['actividad', 'numero_vano']
+        unique_together = [('actividad', 'numero_vano')]
+        indexes = [
+            models.Index(fields=['actividad', 'cuadrilla']),
+            models.Index(fields=['estado']),
+            models.Index(fields=['cuadrilla', 'fecha_marcado']),
+        ]
+
+    def __str__(self):
+        return (
+            f"Vano {self.numero_vano} - "
+            f"T{self.torre_inicio.numero} a T{self.torre_fin.numero} - "
+            f"{self.get_estado_display()}"
+        )
+
+    def marcar_ejecutado(self, usuario):
+        """Marca vano como ejecutado y registra usuario y timestamp."""
+        from django.utils import timezone
+        self.estado = self.Estado.EJECUTADO
+        self.marcado_por = usuario
+        self.fecha_marcado = timezone.now()
+        self.save()
+
+        # Recalcular avance de actividad
+        self.actividad.recalcular_avance()
+
+    def aprobar(self, supervisor):
+        """Aprueba el vano ejecutado (solo supervisores)."""
+        from django.utils import timezone
+        if self.estado == self.Estado.EJECUTADO:
+            self.aprobado = True
+            self.revisado_por = supervisor
+            self.fecha_revision = timezone.now()
+            self.save()
+
+            # Recalcular avance de actividad
+            self.actividad.recalcular_avance()
+
+    def requiere_aprobacion_supervisor(self):
+        """Retorna True si el vano fue marcado pero no aprobado."""
+        return self.estado == self.Estado.EJECUTADO and not self.aprobado
+
+    @property
+    def es_apoyo(self):
+        """Indica si este vano es de apoyo (otra cuadrilla lo está ejecutando)."""
+        return (
+            self.cuadrilla_asignada_original
+            and self.cuadrilla != self.cuadrilla_asignada_original
+        )

@@ -3,7 +3,7 @@ Views for field records.
 """
 from typing import Any
 
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Q
 from django.views.generic import ListView, DetailView, CreateView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
@@ -329,7 +329,10 @@ class ReportarDanoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
 
 
 class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
-    """List damage reports."""
+    """
+    List damage reports with filters.
+    Actualizado: 1 abril 2026
+    """
     model = ReporteDano
     template_name = 'campo/lista_danos.html'
     context_object_name = 'reportes'
@@ -337,7 +340,42 @@ class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
 
     def get_queryset(self) -> QuerySet[ReporteDano]:
-        return super().get_queryset().select_related('usuario', 'linea', 'torre')
+        qs = super().get_queryset().select_related('usuario', 'linea', 'torre').prefetch_related('fotos')
+
+        # Filtro por línea
+        linea_id = self.request.GET.get('linea')
+        if linea_id:
+            qs = qs.filter(linea_id=linea_id)
+
+        # Filtro por severidad
+        severidad = self.request.GET.get('severidad')
+        if severidad:
+            qs = qs.filter(severidad=severidad)
+
+        # Filtro por tipo
+        tipo = self.request.GET.get('tipo')
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+
+        return qs.order_by('-created_at')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Datos para filtros
+        from apps.lineas.models import Linea
+        context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
+        context['tipos'] = ReporteDano.Tipo.choices
+        context['severidades'] = ReporteDano.Severidad.choices
+
+        # Valores actuales de filtros
+        context['filtros'] = {
+            'linea': self.request.GET.get('linea', ''),
+            'severidad': self.request.GET.get('severidad', ''),
+            'tipo': self.request.GET.get('tipo', ''),
+        }
+
+        return context
 
 
 class ReporteDanoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
@@ -352,7 +390,10 @@ class ReporteDanoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
 
 
 class ProcedimientoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
-    """List uploaded procedure documents."""
+    """
+    List uploaded procedure documents with search functionality.
+    Actualizado: 1 abril 2026
+    """
     model = Procedimiento
     template_name = 'campo/procedimientos_lista.html'
     context_object_name = 'procedimientos'
@@ -360,7 +401,19 @@ class ProcedimientoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
 
     def get_queryset(self) -> QuerySet[Procedimiento]:
-        return super().get_queryset().select_related('subido_por')
+        qs = super().get_queryset().select_related('subido_por')
+
+        # Búsqueda por término
+        q = self.request.GET.get('q', '').strip()
+        if q:
+            qs = qs.filter(
+                Q(titulo__icontains=q) |
+                Q(descripcion__icontains=q) |
+                Q(nombre_original__icontains=q) |
+                Q(tipo_archivo__icontains=q)
+            )
+
+        return qs.order_by('-created_at')
 
 
 class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
@@ -406,3 +459,157 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         )
 
         return HttpResponseRedirect(reverse_lazy('campo:procedimientos'))
+
+
+class ProcedimientoViewerView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """
+    View for displaying/viewing a procedure document.
+    Agregado: 1 abril 2026
+
+    Para PDFs, usa visualización inline.
+    Para otros formatos, ofrece descarga.
+    """
+    model = Procedimiento
+    template_name = 'campo/procedimiento_viewer.html'
+    context_object_name = 'procedimiento'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        procedimiento = self.get_object()
+
+        # Verificar si es PDF para visualización inline
+        context['es_pdf'] = procedimiento.es_pdf
+        context['url_archivo'] = procedimiento.archivo.url if procedimiento.archivo else None
+
+        return context
+
+
+class AvancesCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """
+    Vista de avances de vanos para cuadrillas en campo.
+    Agregado: 1 abril 2026
+
+    Permite a los miembros de cuadrilla ver y marcar el estado de vanos asignados.
+    """
+    template_name = 'campo/avances_cuadrilla.html'
+    allowed_roles = ['supervisor', 'liniero', 'auxiliar']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Obtener cuadrilla actual del usuario
+        from apps.cuadrillas.models import CuadrillaMiembro
+
+        miembro = CuadrillaMiembro.objects.filter(
+            usuario=self.request.user,
+            activo=True,
+            cuadrilla__activa=True
+        ).select_related('cuadrilla').first()
+
+        if not miembro:
+            context['vanos'] = []
+            context['mensaje'] = 'No estás asignado a ninguna cuadrilla activa'
+            return context
+
+        cuadrilla = miembro.cuadrilla
+        context['cuadrilla'] = cuadrilla
+
+        # Obtener actividad activa de la cuadrilla
+        from apps.actividades.models import Actividad
+        actividad_activa = Actividad.objects.filter(
+            cuadrillas=cuadrilla,
+            estado__in=['PROGRAMADA', 'EN_CURSO']
+        ).select_related('linea', 'tipo_actividad', 'tramo').first()
+
+        if not actividad_activa:
+            context['vanos'] = []
+            context['mensaje'] = 'No hay actividades asignadas a tu cuadrilla'
+            return context
+
+        context['actividad'] = actividad_activa
+
+        # Obtener vanos de esta cuadrilla
+        from .models import AvanceVano
+
+        vanos_propios = actividad_activa.avances_vanos.filter(
+            cuadrilla_asignada_original=cuadrilla
+        ).select_related('torre_inicio', 'torre_fin', 'marcado_por', 'revisado_por')
+
+        # Vanos de otras cuadrillas que esta cuadrilla está ayudando
+        vanos_apoyo = actividad_activa.avances_vanos.filter(
+            cuadrilla=cuadrilla
+        ).exclude(
+            cuadrilla_asignada_original=cuadrilla
+        ).select_related('torre_inicio', 'torre_fin', 'cuadrilla_asignada_original', 'marcado_por')
+
+        context['vanos_propios'] = vanos_propios
+        context['vanos_apoyo'] = vanos_apoyo
+
+        # Calcular estadísticas
+        total_vanos = vanos_propios.count()
+        ejecutados = vanos_propios.filter(estado='ejecutado').count()
+        sin_permiso = vanos_propios.filter(estado='sin_permiso').count()
+        pendientes = vanos_propios.filter(estado='pendiente').count()
+
+        context['estadisticas'] = {
+            'total': total_vanos,
+            'ejecutados': ejecutados,
+            'sin_permiso': sin_permiso,
+            'pendientes': pendientes,
+            'porcentaje': round((ejecutados / total_vanos * 100) if total_vanos > 0 else 0, 1)
+        }
+
+        return context
+
+
+class MarcarVanoView(LoginRequiredMixin, View):
+    """
+    Vista HTMX para marcar el estado de un vano.
+    Agregado: 1 abril 2026
+    """
+
+    def post(self, request, vano_id):
+        from django.shortcuts import get_object_or_404, render
+        from django.http import HttpResponse
+        from .models import AvanceVano
+
+        vano = get_object_or_404(AvanceVano, id=vano_id)
+        nuevo_estado = request.POST.get('estado')
+        observaciones = request.POST.get('observaciones', '')
+
+        # Validar que usuario pertenece a la cuadrilla asignada
+        from apps.cuadrillas.models import CuadrillaMiembro
+        es_miembro = CuadrillaMiembro.objects.filter(
+            usuario=request.user,
+            cuadrilla=vano.cuadrilla,
+            activo=True
+        ).exists()
+
+        if not es_miembro and request.user.rol not in ['admin', 'director', 'coordinador']:
+            return HttpResponse('No autorizado', status=403)
+
+        # Confirmación para evitar errores (solo para ejecutado)
+        confirmar = request.POST.get('confirmar', 'false') == 'true'
+        if not confirmar and nuevo_estado == 'ejecutado':
+            # Retornar modal de confirmación
+            return render(request, 'campo/partials/confirmar_vano.html', {
+                'vano': vano
+            })
+
+        # Actualizar estado
+        if nuevo_estado in dict(AvanceVano.Estado.choices):
+            vano.estado = nuevo_estado
+            vano.marcado_por = request.user
+            vano.fecha_marcado = timezone.now()
+            vano.observaciones = observaciones
+            vano.save()
+
+            # Si es ejecutado, recalcular avance de actividad
+            if nuevo_estado == 'ejecutado':
+                vano.actividad.recalcular_avance()
+
+        # Retornar partial actualizado
+        return render(request, 'campo/partials/vano_item.html', {
+            'vano': vano
+        })

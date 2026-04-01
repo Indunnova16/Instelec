@@ -1419,3 +1419,132 @@ class CuadrillaMasivaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
             messages.error(request, f'Error al procesar el archivo: {str(e)}')
 
         return self.get(request, *args, **kwargs)
+
+
+class DescargarPlantillaCuadrillasView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """
+    Descarga plantilla Excel para carga masiva de cuadrillas.
+    Agregado: 1 abril 2026
+    """
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get(self, request):
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+        from datetime import date
+
+        # Crear workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Cuadrillas"
+
+        # Estilos
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+
+        # Headers
+        headers = [
+            'CuadrillaNum', 'Año', 'Actividad', 'Fecha',
+            'Supervisor', 'Línea', 'Vehículo',
+            'Miembro1', 'Miembro2', 'Miembro3', 'Miembro4', 'Miembro5',
+            'Miembro6', 'Miembro7', 'Miembro8', 'Miembro9', 'Miembro10'
+        ]
+
+        # Escribir headers con estilo
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+
+        # Fila de ejemplo
+        ejemplo = [
+            1,                                      # CuadrillaNum
+            date.today().year,                      # Año
+            'Poda de vegetación',                   # Actividad
+            date.today().strftime('%Y-%m-%d'),      # Fecha
+            'Juan Pérez',                           # Supervisor
+            'LT-811',                               # Línea
+            'ABC-123',                              # Vehículo
+            'Carlos López',                         # Miembro1
+            'María García',                         # Miembro2
+            '',                                     # Miembro3
+            '',                                     # Miembro4
+            '',                                     # Miembro5
+            '',                                     # Miembro6
+            '',                                     # Miembro7
+            '',                                     # Miembro8
+            '',                                     # Miembro9
+            '',                                     # Miembro10
+        ]
+        ws.append(ejemplo)
+
+        # Ajustar anchos de columna
+        column_widths = {
+            'A': 14,  # CuadrillaNum
+            'B': 8,   # Año
+            'C': 25,  # Actividad
+            'D': 12,  # Fecha
+            'E': 20,  # Supervisor
+            'F': 15,  # Línea
+            'G': 12,  # Vehículo
+        }
+        for i in range(8, 18):  # Miembros 1-10
+            column_widths[get_column_letter(i)] = 18
+
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+
+        # Agregar instrucciones en hoja separada
+        ws_instrucciones = wb.create_sheet("Instrucciones")
+        instrucciones = [
+            "INSTRUCCIONES PARA CARGA MASIVA DE CUADRILLAS",
+            "",
+            "1. Complete la hoja 'Cuadrillas' con los datos de sus cuadrillas",
+            "",
+            "2. Formato de columnas:",
+            "   - CuadrillaNum: Número secuencial de cuadrilla (ej: 1, 2, 3...)",
+            "   - Año: Año de la cuadrilla (ej: 2026)",
+            "   - Actividad: Nombre de la actividad principal",
+            "   - Fecha: Fecha en formato YYYY-MM-DD (ej: 2026-04-15)",
+            "   - Supervisor: Nombre completo del supervisor",
+            "   - Línea: Código de la línea (ej: LT-811)",
+            "   - Vehículo: Placa del vehículo (ej: ABC-123)",
+            "   - Miembro1 a Miembro10: Nombres completos de los miembros",
+            "",
+            "3. El supervisor debe estar previamente registrado en el sistema",
+            "",
+            "4. Los miembros se buscarán por nombre. Si no existen, se crearán automáticamente",
+            "",
+            "5. Puede dejar en blanco las columnas de miembros que no necesite",
+            "",
+            "6. Guarde el archivo y súbalo en la opción 'Carga Masiva' del sistema",
+            "",
+            "IMPORTANTE:",
+            "- No modifique los nombres de las columnas",
+            "- Use el formato de fecha especificado",
+            "- Asegúrese de que la línea existe en el sistema",
+        ]
+
+        for row_num, instruccion in enumerate(instrucciones, 1):
+            cell = ws_instrucciones.cell(row=row_num, column=1)
+            cell.value = instruccion
+            if row_num == 1:
+                cell.font = Font(bold=True, size=14)
+            elif instruccion.startswith("IMPORTANTE:"):
+                cell.font = Font(bold=True, color="FF0000")
+
+        ws_instrucciones.column_dimensions['A'].width = 80
+
+        # Preparar respuesta HTTP
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f'plantilla_cuadrillas_{date.today().strftime("%Y%m%d")}.xlsx'
+        response['Content-Disposition'] = f'attachment; filename={filename}'
+
+        wb.save(response)
+        return response

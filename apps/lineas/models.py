@@ -101,6 +101,42 @@ class Linea(BaseModel):
         'Observaciones',
         blank=True
     )
+
+    # Nuevos campos agregados 1 abril 2026
+    contrato = models.ForeignKey(
+        'contratos.Contrato',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lineas',
+        verbose_name='Contrato/Proyecto',
+        help_text='Contrato o proyecto al que pertenece esta línea'
+    )
+    cantidad_torres = models.PositiveIntegerField(
+        'Cantidad de torres',
+        null=True,
+        blank=True,
+        help_text='Cantidad total de torres en la línea'
+    )
+    cantidad_postes = models.PositiveIntegerField(
+        'Cantidad de postes',
+        null=True,
+        blank=True,
+        help_text='Cantidad de postes (si aplica)'
+    )
+
+    class TipoEstructura(models.TextChoices):
+        TORRES = 'TORRES', 'Torres'
+        POSTES = 'POSTES', 'Postes'
+        MIXTO = 'MIXTO', 'Mixto'
+
+    tipo_estructura = models.CharField(
+        'Tipo de estructura',
+        max_length=20,
+        choices=TipoEstructura.choices,
+        default=TipoEstructura.TORRES,
+        help_text='Tipo de estructura predominante en la línea'
+    )
     archivo_kmz = models.FileField(
         'Archivo KMZ/KML',
         upload_to='lineas/kmz/',
@@ -127,6 +163,15 @@ class Linea(BaseModel):
     @property
     def total_torres(self):
         return self.torres.count()
+
+    @property
+    def total_estructuras(self):
+        """Retorna total de torres o postes según tipo de estructura."""
+        if self.tipo_estructura == self.TipoEstructura.POSTES:
+            return self.cantidad_postes or 0
+        elif self.tipo_estructura == self.TipoEstructura.MIXTO:
+            return (self.cantidad_torres or 0) + (self.cantidad_postes or 0)
+        return self.cantidad_torres or 0
 
 
 class Torre(BaseModel):

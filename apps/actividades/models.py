@@ -387,6 +387,129 @@ class Actividad(BaseModel):
         self.motivo_cancelacion = motivo
         self.save(update_fields=['estado', 'motivo_cancelacion', 'updated_at'])
 
+    def recalcular_avance(self):
+        """
+        Recalcula porcentaje de avance basado en vanos ejecutados.
+        Agregado: 1 abril 2026
+        """
+        from apps.campo.models import AvanceVano
+
+        total_vanos = self.avances_vanos.count()
+        if total_vanos == 0:
+            return
+
+        # Contar vanos ejecutados y aprobados
+        vanos_ejecutados = self.avances_vanos.filter(
+            estado=AvanceVano.Estado.EJECUTADO,
+            aprobado=True
+        ).count()
+
+        # Calcular nuevo avance
+        nuevo_avance = (vanos_ejecutados / total_vanos) * 100
+        self.porcentaje_avance = round(nuevo_avance, 2)
+        self.save(update_fields=['porcentaje_avance', 'updated_at'])
+
+        # Si avance es 100%, marcar como completada
+        if nuevo_avance >= 100 and self.estado != self.Estado.COMPLETADA:
+            self.completar()
+
+
+class HistorialIntervencion(BaseModel):
+    """
+    Registro histórico de todas las intervenciones en líneas.
+    Agregado: 1 abril 2026
+
+    Se alimenta automáticamente cuando se completa un RegistroCampo.
+    Permite consultar el histórico de intervenciones por línea, cuadrilla, etc.
+    """
+
+    linea = models.ForeignKey(
+        'lineas.Linea',
+        on_delete=models.CASCADE,
+        related_name='historial_intervenciones',
+        verbose_name='Línea'
+    )
+    actividad = models.ForeignKey(
+        Actividad,
+        on_delete=models.CASCADE,
+        related_name='historial_intervenciones',
+        verbose_name='Actividad'
+    )
+    registro_campo = models.ForeignKey(
+        'campo.RegistroCampo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historial_intervenciones',
+        verbose_name='Registro de campo'
+    )
+
+    fecha_intervencion = models.DateTimeField(
+        'Fecha de intervención',
+        help_text='Fecha y hora en que se realizó la intervención'
+    )
+    tipo_intervencion = models.CharField(
+        'Tipo de intervención',
+        max_length=100,
+        help_text='Tipo de actividad realizada'
+    )
+    cuadrilla = models.ForeignKey(
+        'cuadrillas.Cuadrilla',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historial_intervenciones',
+        verbose_name='Cuadrilla'
+    )
+    usuario = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historial_intervenciones',
+        verbose_name='Usuario'
+    )
+
+    torre_inicio = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='intervenciones_inicio',
+        verbose_name='Torre inicio'
+    )
+    torre_fin = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='intervenciones_fin',
+        verbose_name='Torre fin'
+    )
+
+    observaciones = models.TextField(
+        'Observaciones',
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'historial_intervenciones'
+        verbose_name = 'Historial de Intervención'
+        verbose_name_plural = 'Historial de Intervenciones'
+        ordering = ['-fecha_intervencion']
+        indexes = [
+            models.Index(fields=['linea', 'fecha_intervencion']),
+            models.Index(fields=['cuadrilla', 'fecha_intervencion']),
+            models.Index(fields=['actividad']),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.tipo_intervencion} - "
+            f"{self.linea.codigo if self.linea else 'N/A'} - "
+            f"{self.fecha_intervencion.strftime('%Y-%m-%d')}"
+        )
+
     def reprogramar(self, nueva_fecha, motivo: str):
         """Reschedule activity."""
         self.estado = self.Estado.REPROGRAMADA

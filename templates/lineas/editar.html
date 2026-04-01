@@ -100,6 +100,21 @@
                     </div>
 
                     <div>
+                        <label for="contrato" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Contrato/Proyecto
+                        </label>
+                        <select name="contrato" id="contrato"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            <option value="">Sin asignar</option>
+                            {% for contrato in contratos %}
+                            <option value="{{ contrato.id }}" {% if linea.contrato_id == contrato.id %}selected{% endif %}>
+                                {{ contrato.codigo }} - {{ contrato.nombre }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
                         <label for="tension_kv" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Tension (kV)
                         </label>
@@ -114,6 +129,44 @@
                         </label>
                         <input type="number" name="longitud_km" id="longitud_km" step="0.01" min="0"
                                value="{{ linea.longitud_km|default_if_none:'' }}"
+                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estructura -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Estructura</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div>
+                        <label for="tipo_estructura" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Tipo de Estructura
+                        </label>
+                        <select name="tipo_estructura" id="tipo_estructura"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            {% for value, label in tipos_estructura %}
+                            <option value="{{ value }}" {% if value == linea.tipo_estructura %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="cantidad_torres" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Cantidad de Torres
+                        </label>
+                        <input type="number" name="cantidad_torres" id="cantidad_torres" min="0"
+                               value="{{ linea.cantidad_torres|default_if_none:'' }}"
+                               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </div>
+
+                    <div>
+                        <label for="cantidad_postes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Cantidad de Postes
+                        </label>
+                        <input type="number" name="cantidad_postes" id="cantidad_postes" min="0"
+                               value="{{ linea.cantidad_postes|default_if_none:'' }}"
                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                     </div>
                 </div>

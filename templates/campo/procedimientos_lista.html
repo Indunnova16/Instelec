@@ -28,6 +28,26 @@
         </div>
     </div>
 
+    <!-- Buscador - Agregado 1 abril 2026 -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <form method="get" class="flex gap-2">
+            <input type="text" name="q" value="{{ request.GET.q }}"
+                   placeholder="Buscar procedimiento (ej: cadena, poda, lavado)..."
+                   class="flex-1 px-4 py-2 border rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500">
+            <button type="submit" class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                Buscar
+            </button>
+            {% if request.GET.q %}
+            <a href="{% url 'campo:procedimientos' %}" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Limpiar
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
     <!-- Table -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -72,13 +92,23 @@
                         {{ proc.tamanio_legible }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        <a href="{{ proc.archivo.url }}" target="_blank"
-                           class="text-blue-600 hover:text-blue-900 dark:text-blue-400 flex items-center gap-1">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                            </svg>
-                            Descargar
-                        </a>
+                        <div class="flex items-center gap-3">
+                            <a href="{% url 'campo:procedimiento_viewer' proc.id %}"
+                               class="text-blue-600 hover:text-blue-900 dark:text-blue-400 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                                Ver
+                            </a>
+                            <a href="{{ proc.archivo.url }}" download
+                               class="text-green-600 hover:text-green-900 dark:text-green-400 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                </svg>
+                                Descargar
+                            </a>
+                        </div>
                     </td>
                 </tr>
                 {% empty %}

@@ -13,7 +13,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import Actividad, ProgramacionMensual, TipoActividad
+from .models import Actividad, ProgramacionMensual, TipoActividad, HistorialIntervencion
 
 
 class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
@@ -524,6 +524,16 @@ class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
             except Cuadrilla.DoesNotExist:
                 pass
 
+        # Fix 1 abril 2026: Permitir crear actividades sin aviso_sap en emergencias
+        # Si no hay aviso_sap y el tipo de actividad contiene "EMERGENCIA", generar código automático
+        if not aviso_sap:
+            if tipo_actividad and 'EMERGENCIA' in tipo_actividad.nombre.upper():
+                from datetime import datetime
+                aviso_sap = f"EMG-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            else:
+                # Para otros casos, aviso_sap es opcional
+                aviso_sap = ''
+
         try:
             actividad = Actividad.objects.create(
                 tipo_actividad=tipo_actividad,
@@ -949,3 +959,86 @@ class EditarRestriccionesView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
 
         messages.success(request, 'Restricciones actualizadas exitosamente.')
         return redirect('actividades:detalle', pk=actividad.pk)
+
+
+class ListaOperativaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
+    """
+    Vista de histórico de intervenciones en líneas.
+    Agregado: 1 abril 2026
+
+    Muestra todas las intervenciones realizadas con filtros por:
+    - Línea
+    - Fecha desde/hasta
+    - Cuadrilla
+    - Tipo de intervención
+    """
+    model = HistorialIntervencion
+    template_name = 'actividades/lista_operativa.html'
+    partial_template_name = 'actividades/partials/lista_operativa.html'
+    context_object_name = 'intervenciones'
+    paginate_by = 50
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related(
+            'linea', 'actividad', 'cuadrilla', 'usuario',
+            'torre_inicio', 'torre_fin', 'actividad__tipo_actividad'
+        )
+
+        # Filtro por línea
+        linea_id = self.request.GET.get('linea')
+        if linea_id:
+            qs = qs.filter(linea_id=linea_id)
+
+        # Filtro por fecha desde
+        fecha_desde = self.request.GET.get('fecha_desde')
+        if fecha_desde:
+            qs = qs.filter(fecha_intervencion__gte=fecha_desde)
+
+        # Filtro por fecha hasta
+        fecha_hasta = self.request.GET.get('fecha_hasta')
+        if fecha_hasta:
+            from datetime import datetime, time
+            # Incluir todo el día hasta las 23:59:59
+            fecha_hasta_dt = datetime.strptime(fecha_hasta, '%Y-%m-%d')
+            fecha_hasta_dt = datetime.combine(fecha_hasta_dt.date(), time(23, 59, 59))
+            qs = qs.filter(fecha_intervencion__lte=fecha_hasta_dt)
+
+        # Filtro por cuadrilla
+        cuadrilla_id = self.request.GET.get('cuadrilla')
+        if cuadrilla_id:
+            qs = qs.filter(cuadrilla_id=cuadrilla_id)
+
+        # Filtro por tipo de intervención
+        tipo = self.request.GET.get('tipo')
+        if tipo:
+            qs = qs.filter(tipo_intervencion__icontains=tipo)
+
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Datos para filtros
+        from apps.lineas.models import Linea
+        from apps.cuadrillas.models import Cuadrilla
+
+        context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
+        context['cuadrillas'] = Cuadrilla.objects.filter(activa=True).order_by('codigo')
+
+        # Obtener tipos de intervención únicos
+        tipos = HistorialIntervencion.objects.values_list(
+            'tipo_intervencion', flat=True
+        ).distinct().order_by('tipo_intervencion')
+        context['tipos_intervencion'] = list(tipos)
+
+        # Valores actuales de filtros
+        context['filtros'] = {
+            'linea': self.request.GET.get('linea', ''),
+            'fecha_desde': self.request.GET.get('fecha_desde', ''),
+            'fecha_hasta': self.request.GET.get('fecha_hasta', ''),
+            'cuadrilla': self.request.GET.get('cuadrilla', ''),
+            'tipo': self.request.GET.get('tipo', ''),
+        }
+
+        return context

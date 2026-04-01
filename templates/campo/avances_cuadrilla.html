@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Avances de Cuadrilla - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Avances de Cuadrilla</h1>
+            {% if cuadrilla %}
+            <p class="text-gray-600 dark:text-gray-400">{{ cuadrilla.codigo }} - {{ cuadrilla.nombre }}</p>
+            {% endif %}
+        </div>
+        <a href="{% url 'campo:lista' %}"
+           class="px-4 py-2 bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            Volver
+        </a>
+    </div>
+
+    {% if actividad %}
+        <!-- Información de Actividad -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Actividad</p>
+                    <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ actividad.tipo_actividad.nombre }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Línea</p>
+                    <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ actividad.linea.codigo }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Avance General</p>
+                    <p class="text-lg font-semibold text-blue-600 dark:text-blue-400">{{ actividad.porcentaje_avance|floatformat:1 }}%</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Estado</p>
+                    <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ actividad.get_estado_display }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estadísticas de Vanos -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+                <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ estadisticas.total }}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Total Vanos</p>
+            </div>
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg shadow p-4 text-center border border-green-200 dark:border-green-800">
+                <p class="text-3xl font-bold text-green-600 dark:text-green-400">{{ estadisticas.ejecutados }}</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Ejecutados</p>
+            </div>
+            <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg shadow p-4 text-center border border-orange-200 dark:border-orange-800">
+                <p class="text-3xl font-bold text-orange-600 dark:text-orange-400">{{ estadisticas.sin_permiso }}</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Sin Permiso</p>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg shadow p-4 text-center border border-gray-200 dark:border-gray-600">
+                <p class="text-3xl font-bold text-gray-600 dark:text-gray-400">{{ estadisticas.pendientes }}</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Pendientes</p>
+            </div>
+        </div>
+
+        <!-- Vanos Asignados -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Vanos Asignados</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Marca los vanos conforme los ejecutes</p>
+            </div>
+            <div class="divide-y divide-gray-200 dark:divide-gray-700" id="vanos-list">
+                {% for vano in vanos_propios %}
+                    {% include 'campo/partials/vano_item.html' with vano=vano es_apoyo=False %}
+                {% empty %}
+                <div class="p-6 text-center text-gray-500 dark:text-gray-400">
+                    <p>No hay vanos asignados a tu cuadrilla</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Vanos de Apoyo -->
+        {% if vanos_apoyo %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    Vanos de Apoyo (Otra Cuadrilla)
+                </h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Estos vanos fueron asignados originalmente a otra cuadrilla</p>
+            </div>
+            <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for vano in vanos_apoyo %}
+                    {% include 'campo/partials/vano_item.html' with vano=vano es_apoyo=True %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    {% else %}
+        <!-- Sin actividad asignada -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+            <svg class="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">{{ mensaje|default:"Sin actividades asignadas" }}</h3>
+            <p class="text-gray-500 dark:text-gray-400">Contacta a tu supervisor para que te asigne una actividad</p>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Modal de confirmación (se carga dinámicamente por HTMX) -->
+<div id="modal-confirmacion"></div>
+{% endblock %}
