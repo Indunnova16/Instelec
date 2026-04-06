@@ -4,6 +4,7 @@ Views for field records.
 from typing import Any
 
 from django.db.models import QuerySet, Q
+from django.views import View
 from django.views.generic import ListView, DetailView, CreateView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
