@@ -25,13 +25,15 @@ class HTMXMixin:
 class RoleRequiredMixin(UserPassesTestMixin):
     """
     Mixin that requires user to have specific role(s).
+    Administrators (admin role) have access to all views.
     """
     allowed_roles = []
 
     def test_func(self):
         if not self.request.user.is_authenticated:
             return False
-        if self.request.user.is_superuser:
+        # Superusers and admin users have full access
+        if self.request.user.is_superuser or self.request.user.is_admin:
             return True
         return self.request.user.rol in self.allowed_roles
 
