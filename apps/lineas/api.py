@@ -8,10 +8,10 @@ from decimal import Decimal
 from ninja import Router, Schema
 from django.http import HttpRequest
 
-from apps.api.auth import JWTAuth
+from apps.api.auth import OptionalJWTAuth
 from .models import Linea, Torre, PoligonoServidumbre
 
-router = Router(auth=JWTAuth())
+router = Router(auth=OptionalJWTAuth())
 
 
 class LineaOut(Schema):
@@ -19,8 +19,12 @@ class LineaOut(Schema):
     codigo: str
     nombre: str
     cliente: str
+    contrato_id: Optional[UUID]
+    contrato_nombre: Optional[str]
     tension_kv: Optional[int]
     longitud_km: Optional[Decimal]
+    tipo_estructura: str
+    cantidad_torres: Optional[int]
     activa: bool
 
 
@@ -70,20 +74,100 @@ class ValidarUbicacionOut(Schema):
 @router.get('/lineas', response=list[LineaOut])
 def listar_lineas(
     request: HttpRequest,
+    search: Optional[str] = None,
     cliente: Optional[str] = None,
+    contrato_id: Optional[UUID] = None,
+    tipo_estructura: Optional[str] = None,
     activa: bool = True
-) -> list[Linea]:
-    """List all transmission lines."""
-    qs = Linea.objects.filter(activa=activa)
+) -> list[LineaOut]:
+    """
+    List all transmission lines with filtering options.
+
+    Query parameters:
+    - search: Search by codigo or nombre (case-insensitive)
+    - cliente: Filter by client (TRANSELCA, INTERCOLOMBIA)
+    - contrato_id: Filter by contract/project ID
+    - tipo_estructura: Filter by structure type (TORRES, POSTES, MIXTO)
+    - activa: Filter by active status (default: true)
+    """
+    qs = Linea.objects.filter(activa=activa).select_related('contrato')
+
+    if search:
+        from django.db.models import Q
+        qs = qs.filter(
+            Q(codigo__icontains=search) |
+            Q(nombre__icontains=search) |
+            Q(codigo_transelca__icontains=search)
+        )
+
     if cliente:
         qs = qs.filter(cliente=cliente)
-    return list(qs)
+
+    if contrato_id:
+        qs = qs.filter(contrato_id=contrato_id)
+
+    if tipo_estructura:
+        qs = qs.filter(tipo_estructura=tipo_estructura)
+
+    return [
+        LineaOut(
+            id=linea.id,
+            codigo=linea.codigo,
+            nombre=linea.nombre,
+            cliente=linea.cliente,
+            contrato_id=linea.contrato_id,
+            contrato_nombre=linea.contrato.nombre if linea.contrato else None,
+            tension_kv=linea.tension_kv,
+            longitud_km=linea.longitud_km,
+            tipo_estructura=linea.tipo_estructura,
+            cantidad_torres=linea.cantidad_torres,
+            activa=linea.activa,
+        )
+        for linea in qs.order_by('codigo')
+    ]
 
 
-@router.get('/lineas/{linea_id}/torres', response=list[TorreOut])
-def listar_torres_linea(request: HttpRequest, linea_id: UUID) -> list[TorreOut]:
-    """List all towers for a specific line."""
-    torres = Torre.objects.filter(linea_id=linea_id).select_related('linea')
+@router.get('/torres', response=list[TorreOut])
+def listar_torres(
+    request: HttpRequest,
+    linea_id: Optional[UUID] = None,
+    search: Optional[str] = None,
+    tipo: Optional[str] = None,
+    estado: Optional[str] = None,
+    municipio: Optional[str] = None,
+    contrato_id: Optional[UUID] = None
+) -> list[TorreOut]:
+    """
+    List all towers with filtering options.
+
+    Query parameters:
+    - linea_id: Filter by line ID
+    - search: Search by tower number (case-insensitive)
+    - tipo: Filter by tower type (SUSPENSION, ANCLAJE, TERMINAL, REMATE, DERIVACION)
+    - estado: Filter by tower state (BUENO, REGULAR, MALO, CRITICO)
+    - municipio: Filter by municipality (case-insensitive)
+    - contrato_id: Filter by contract/project (through line)
+    """
+    qs = Torre.objects.select_related('linea')
+
+    if linea_id:
+        qs = qs.filter(linea_id=linea_id)
+
+    if search:
+        qs = qs.filter(numero__icontains=search)
+
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+
+    if estado:
+        qs = qs.filter(estado=estado)
+
+    if municipio:
+        qs = qs.filter(municipio__icontains=municipio)
+
+    if contrato_id:
+        qs = qs.filter(linea__contrato_id=contrato_id)
+
     return [
         TorreOut(
             id=t.id,
@@ -97,7 +181,51 @@ def listar_torres_linea(request: HttpRequest, linea_id: UUID) -> list[TorreOut]:
             linea_codigo=t.linea.codigo,
             linea_nombre=t.linea.nombre,
         )
-        for t in torres
+        for t in qs.order_by('linea__codigo', 'numero')
+    ]
+
+
+@router.get('/lineas/{linea_id}/torres', response=list[TorreOut])
+def listar_torres_linea(
+    request: HttpRequest,
+    linea_id: UUID,
+    search: Optional[str] = None,
+    tipo: Optional[str] = None,
+    estado: Optional[str] = None
+) -> list[TorreOut]:
+    """
+    List all towers for a specific line with filtering options.
+
+    Query parameters:
+    - search: Search by tower number (case-insensitive)
+    - tipo: Filter by tower type
+    - estado: Filter by tower state
+    """
+    qs = Torre.objects.filter(linea_id=linea_id).select_related('linea')
+
+    if search:
+        qs = qs.filter(numero__icontains=search)
+
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+
+    if estado:
+        qs = qs.filter(estado=estado)
+
+    return [
+        TorreOut(
+            id=t.id,
+            numero=t.numero,
+            tipo=t.tipo,
+            estado=t.estado,
+            latitud=t.latitud,
+            longitud=t.longitud,
+            altitud=t.altitud,
+            municipio=t.municipio,
+            linea_codigo=t.linea.codigo,
+            linea_nombre=t.linea.nombre,
+        )
+        for t in qs.order_by('numero')
     ]
 
 
