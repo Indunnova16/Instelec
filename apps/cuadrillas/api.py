@@ -9,10 +9,10 @@ from datetime import datetime, date, time
 from ninja import Router, Schema
 from django.http import HttpRequest
 
-from apps.api.auth import JWTAuth
+from apps.api.auth import OptionalJWTAuth
 from .models import Cuadrilla, CuadrillaMiembro, TrackingUbicacion, Asistencia
 
-router = Router(auth=JWTAuth())
+router = Router(auth=OptionalJWTAuth())
 
 
 class MiembroOut(Schema):
