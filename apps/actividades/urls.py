@@ -21,6 +21,7 @@ urlpatterns = [
     path('<uuid:pk>/restricciones/', views.EditarRestriccionesView.as_view(), name='editar_restricciones'),
     path('programacion/', views.ProgramacionListView.as_view(), name='programacion'),
     path('programacion/importar/', views.ImportarProgramacionView.as_view(), name='importar'),
+    path('programacion/descargar-plantilla/', views.DescargarPlantillaProgramacionView.as_view(), name='descargar_plantilla'),
     path('programacion/exportar/', views.ExportarProgramacionView.as_view(), name='exportar_programacion'),
     path('programacion/bulk-asignar/', views.BulkAsignarCuadrillaView.as_view(), name='bulk_asignar_cuadrilla'),
     path('programacion/bulk-estado/', views.BulkCambiarEstadoView.as_view(), name='bulk_cambiar_estado'),

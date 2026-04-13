@@ -1042,3 +1042,185 @@ class ListaOperativaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
         }
 
         return context
+
+
+class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """
+    Descarga plantilla Excel para carga masiva de actividades.
+
+    Agregado: 13 abril 2026
+    """
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get(self, request):
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        from datetime import date
+
+        # Crear workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Programación"
+
+        # Estilos
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # Headers
+        headers = [
+            'AvísoSAP',                 # A - Aviso SAP (primer campo)
+            'Línea',                    # B
+            'Torre',                    # C
+            'TipoActividad',            # D
+            'Fecha',                    # E
+            'Cuadrilla',                # F
+            'Prioridad',                # G
+            'Descripción',              # H
+        ]
+
+        # Escribir headers
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+        # Fila de ejemplo
+        ejemplo = [
+            '4500001234',                           # AvísoSAP
+            'L-838',                                # Línea
+            '25',                                   # Torre
+            'PODA',                                 # TipoActividad
+            date.today().strftime('%Y-%m-%d'),    # Fecha
+            'Cuadrilla 01',                        # Cuadrilla
+            'ALTA',                                 # Prioridad
+            'Poda de vegetación en torre T-25',   # Descripción
+        ]
+
+        ws.append(ejemplo)
+
+        # Aplicar estilos a fila de ejemplo
+        for col_num in range(1, len(headers) + 1):
+            cell = ws.cell(row=2, column=col_num)
+            cell.border = thin_border
+
+        # Ajustar anchos de columna
+        column_widths = {
+            'A': 14,    # AvísoSAP
+            'B': 12,    # Línea
+            'C': 8,     # Torre
+            'D': 18,    # TipoActividad
+            'E': 12,    # Fecha
+            'F': 16,    # Cuadrilla
+            'G': 12,    # Prioridad
+            'H': 35,    # Descripción
+        }
+
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+
+        # Agregar hoja de instrucciones
+        ws_instrucciones = wb.create_sheet("Instrucciones")
+        ws_instrucciones.column_dimensions['A'].width = 100
+
+        instrucciones = [
+            "INSTRUCCIONES PARA CARGA MASIVA DE ACTIVIDADES PROGRAMADAS",
+            "",
+            "1. FORMATO DE COLUMNAS (en la hoja 'Programación'):",
+            "",
+            "   A. AvísoSAP (Requerido):",
+            "      - Número de aviso en el sistema SAP de Transelca",
+            "      - Ejemplo: 4500001234",
+            "",
+            "   B. Línea (Requerido):",
+            "      - Código de la línea de transmisión",
+            "      - Debe existir en el sistema",
+            "      - Ejemplo: L-838, L-811",
+            "",
+            "   C. Torre (Requerido):",
+            "      - Número de la torre",
+            "      - Ejemplo: 25, 30, T-25",
+            "",
+            "   D. TipoActividad (Requerido):",
+            "      - Código del tipo de actividad",
+            "      - Ejemplo: PODA, INSPECCION, HERRAJES, AISLADORES",
+            "      - Tipos válidos:",
+            "        * PODA - Poda de Vegetación",
+            "        * HERRAJES - Cambio de Herrajes",
+            "        * AISLADORES - Cambio de Aisladores",
+            "        * INSPECCION - Inspección General",
+            "        * LIMPIEZA - Limpieza",
+            "        * SEÑALIZACION - Señalización",
+            "        * MEDICION - Medición",
+            "        * LAVADO - Lavado Tradicional",
+            "        * Y otros tipos disponibles en el sistema",
+            "",
+            "   E. Fecha (Requerido):",
+            "      - Formato: YYYY-MM-DD",
+            "      - Ejemplo: 2026-04-15",
+            "",
+            "   F. Cuadrilla (Opcional):",
+            "      - Código de la cuadrilla asignada",
+            "      - Ejemplo: Cuadrilla 01, CUA-001",
+            "",
+            "   G. Prioridad (Opcional):",
+            "      - Valores: BAJA, NORMAL, ALTA, URGENTE",
+            "      - Default: NORMAL",
+            "",
+            "   H. Descripción (Opcional):",
+            "      - Descripción detallada de la actividad",
+            "",
+            "2. REQUISITOS:",
+            "   - La línea DEBE existir en el sistema",
+            "   - La torre DEBE existir en la línea especificada",
+            "   - El tipo de actividad DEBE existir en el sistema",
+            "   - Si especifica cuadrilla, DEBE existir y estar activa",
+            "",
+            "3. EJEMPLO DE FILA COMPLETA:",
+            "   4500001234 | L-838 | 25 | PODA | 2026-04-15 | Cuadrilla 01 | ALTA | Poda de vegetación",
+            "",
+            "4. NOTAS IMPORTANTES:",
+            "   - No modifique los nombres de las columnas",
+            "   - Use el formato de fecha especificado (YYYY-MM-DD)",
+            "   - El AvísoSAP es obligatorio en cada fila",
+            "   - Las líneas vacías serán ignoradas",
+            "   - Si hay errores, se mostrarán advertencias pero el proceso continuará",
+            "",
+            "5. DESPUÉS DE CARGAR:",
+            "   - Verifique que las actividades se crearon correctamente",
+            "   - Si hay advertencias, revise los datos",
+            "   - Las actividades aparecerán en la programación mensual",
+        ]
+
+        for row_num, instruccion in enumerate(instrucciones, 1):
+            cell = ws_instrucciones.cell(row=row_num, column=1)
+            cell.value = instruccion
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+            if row_num == 1:
+                cell.font = Font(bold=True, size=14, color="FFFFFF")
+                cell.fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+            elif instruccion.startswith(('1.', '2.', '3.', '4.', '5.')):
+                cell.font = Font(bold=True, size=11)
+            elif instruccion.startswith('   -') or instruccion.startswith('   *') or instruccion.startswith('      '):
+                cell.font = Font(size=10)
+
+        # Preparar respuesta HTTP
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f'plantilla_programacion_{date.today().strftime("%Y%m%d")}.xlsx'
+        response['Content-Disposition'] = f'attachment; filename={filename}'
+
+        wb.save(response)
+        return response
