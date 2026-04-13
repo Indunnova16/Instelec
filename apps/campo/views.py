@@ -10,7 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.utils import timezone
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import RegistroCampo, Evidencia, ReporteDano, FotoDano, Procedimiento
+from .models import RegistroCampo, Evidencia, ReporteDano, FotoDano, Procedimiento, RegistroAvance
 
 
 class RegistroListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -614,3 +614,178 @@ class MarcarVanoView(LoginRequiredMixin, View):
         return render(request, 'campo/partials/vano_item.html', {
             'vano': vano
         })
+
+
+# ==================== REGISTRO DE AVANCES ====================
+
+class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """
+    Formulario para que trabajadores registren avances en torres.
+    Solo accesibles para trabajadores en cuadrilla.
+    Muestra solo la línea y torres de su cuadrilla asignada.
+    """
+    template_name = 'campo/avance_registrar.html'
+    allowed_roles = ['liniero', 'auxiliar', 'supervisor']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        usuario = self.request.user
+
+        # Obtener cuadrilla del usuario
+        from apps.cuadrillas.models import CuadrillaMiembro
+        miembro = CuadrillaMiembro.objects.filter(
+            usuario=usuario,
+            activo=True
+        ).select_related('cuadrilla').first()
+
+        if not miembro:
+            context['error'] = 'No estás asignado a ninguna cuadrilla activa.'
+            return context
+
+        cuadrilla = miembro.cuadrilla
+        context['cuadrilla'] = cuadrilla
+
+        # Obtener línea asignada a la cuadrilla
+        if not cuadrilla.linea_asignada:
+            context['error'] = 'Tu cuadrilla no tiene una línea asignada.'
+            return context
+
+        linea = cuadrilla.linea_asignada
+        context['linea'] = linea
+
+        # Obtener torres de la línea
+        from apps.lineas.models import Torre
+        torres = Torre.objects.filter(linea=linea).order_by('numero')
+        context['torres'] = torres
+
+        # Tipos de avance
+        context['tipos_avance'] = RegistroAvance.TipoAvance.choices
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Crear registro de avance."""
+        from django.shortcuts import redirect
+        from django.contrib import messages
+        from apps.cuadrillas.models import CuadrillaMiembro
+        from apps.lineas.models import Torre
+
+        usuario = request.user
+
+        # Validar que el usuario está en una cuadrilla
+        miembro = CuadrillaMiembro.objects.filter(
+            usuario=usuario,
+            activo=True
+        ).select_related('cuadrilla', 'cuadrilla__linea_asignada').first()
+
+        if not miembro:
+            messages.error(request, 'No estás asignado a ninguna cuadrilla activa.')
+            return redirect('campo:avance_registrar')
+
+        cuadrilla = miembro.cuadrilla
+        linea = cuadrilla.linea_asignada
+
+        if not linea:
+            messages.error(request, 'Tu cuadrilla no tiene una línea asignada.')
+            return redirect('campo:avance_registrar')
+
+        # Obtener datos del formulario
+        torre_id = request.POST.get('torre_id', '').strip()
+        tipo_avance = request.POST.get('tipo_avance', 'completo').strip()
+        observaciones = request.POST.get('observaciones', '').strip()
+        porcentaje = request.POST.get('porcentaje', '100').strip()
+
+        # Validaciones
+        if not torre_id:
+            messages.error(request, 'Debes seleccionar una torre.')
+            return redirect('campo:avance_registrar')
+
+        try:
+            from uuid import UUID
+            torre_uuid = UUID(torre_id)
+            torre = Torre.objects.get(id=torre_uuid, linea=linea)
+        except (ValueError, TypeError):
+            messages.error(request, 'Torre inválida.')
+            return redirect('campo:avance_registrar')
+        except Torre.DoesNotExist:
+            messages.error(request, 'La torre no pertenece a tu línea asignada.')
+            return redirect('campo:avance_registrar')
+
+        # Validar porcentaje
+        try:
+            porcentaje = int(porcentaje)
+            if not (0 <= porcentaje <= 100):
+                porcentaje = 100
+        except (ValueError, TypeError):
+            porcentaje = 100
+
+        # Validar tipo de avance
+        tipos_validos = dict(RegistroAvance.TipoAvance.choices)
+        if tipo_avance not in tipos_validos:
+            tipo_avance = 'completo'
+
+        # Crear registro
+        try:
+            RegistroAvance.objects.create(
+                usuario=usuario,
+                cuadrilla=cuadrilla,
+                linea=linea,
+                torre=torre,
+                tipo_avance=tipo_avance,
+                observaciones=observaciones,
+                porcentaje=porcentaje
+            )
+            messages.success(
+                request,
+                f'Avance registrado en Torre {torre.numero} exitosamente.'
+            )
+        except Exception as e:
+            messages.error(request, f'Error al registrar avance: {str(e)}')
+
+        return redirect('campo:avance_registrar')
+
+
+class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
+    """
+    Lista de avances registrados por el usuario actual.
+    Solo usuarios de campo pueden ver sus propios avances.
+    """
+    model = RegistroAvance
+    template_name = 'campo/avances_lista.html'
+    partial_template_name = 'campo/partials/avances_lista.html'
+    context_object_name = 'avances'
+    paginate_by = 20
+    allowed_roles = ['liniero', 'auxiliar', 'supervisor', 'admin', 'director', 'coordinador']
+
+    def get_queryset(self) -> QuerySet:
+        qs = RegistroAvance.objects.select_related(
+            'usuario', 'cuadrilla', 'linea', 'torre'
+        )
+
+        # Usuario de campo solo ve sus propios avances
+        if self.request.user.is_campo:
+            qs = qs.filter(usuario=self.request.user)
+
+        # Filtros opcionaleslinea = self.request.GET.get('linea')
+        if linea:
+            from uuid import UUID
+            try:
+                UUID(linea)
+                qs = qs.filter(linea_id=linea)
+            except ValueError:
+                pass
+
+        cuadrilla = self.request.GET.get('cuadrilla')
+        if cuadrilla:
+            from uuid import UUID
+            try:
+                UUID(cuadrilla)
+                qs = qs.filter(cuadrilla_id=cuadrilla)
+            except ValueError:
+                pass
+
+        tipo_avance = self.request.GET.get('tipo_avance')
+        if tipo_avance:
+            qs = qs.filter(tipo_avance=tipo_avance)
+
+        return qs.order_by('-fecha_avance')

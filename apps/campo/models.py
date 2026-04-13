@@ -650,3 +650,100 @@ class AvanceVano(BaseModel):
             self.cuadrilla_asignada_original
             and self.cuadrilla != self.cuadrilla_asignada_original
         )
+
+
+class RegistroAvance(BaseModel):
+    """
+    Registro de avances en torres para trabajadores en campo.
+    Permite que los trabajadores reporten dónde avanzaron y qué observaciones tienen.
+
+    Agregado: 13 abril 2026
+    """
+
+    class TipoAvance(models.TextChoices):
+        COMPLETO = 'completo', 'Avance Completo'
+        PARCIAL = 'parcial', 'Avance Parcial'
+        SIN_AVANCE = 'sin_avance', 'Sin Avance'
+        NO_EJECUTABLE = 'no_ejecutable', 'No Ejecutable'
+
+    # Usuario y cuadrilla (relación primaria)
+    usuario = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.CASCADE,
+        related_name='registros_avance',
+        verbose_name='Trabajador'
+    )
+    cuadrilla = models.ForeignKey(
+        'cuadrillas.Cuadrilla',
+        on_delete=models.CASCADE,
+        related_name='registros_avance',
+        verbose_name='Cuadrilla'
+    )
+
+    # Ubicación del avance
+    linea = models.ForeignKey(
+        'lineas.Linea',
+        on_delete=models.CASCADE,
+        related_name='registros_avance',
+        verbose_name='Línea'
+    )
+    torre = models.ForeignKey(
+        'lineas.Torre',
+        on_delete=models.CASCADE,
+        related_name='registros_avance',
+        verbose_name='Torre'
+    )
+
+    # Información del avance
+    tipo_avance = models.CharField(
+        'Tipo de avance',
+        max_length=20,
+        choices=TipoAvance.choices,
+        default=TipoAvance.COMPLETO
+    )
+    fecha_avance = models.DateTimeField(
+        'Fecha del avance',
+        auto_now_add=True
+    )
+    observaciones = models.TextField(
+        'Observaciones',
+        blank=True,
+        help_text='Detalles del trabajo realizado, pendientes, etc.'
+    )
+
+    # Porcentaje de avance (opcional)
+    porcentaje = models.PositiveIntegerField(
+        'Porcentaje de avance',
+        default=100,
+        help_text='Porcentaje completado en esta torre (0-100)'
+    )
+
+    class Meta:
+        db_table = 'registros_avance'
+        verbose_name = 'Registro de Avance'
+        verbose_name_plural = 'Registros de Avance'
+        ordering = ['-fecha_avance']
+        indexes = [
+            models.Index(fields=['usuario', 'fecha_avance']),
+            models.Index(fields=['cuadrilla', 'fecha_avance']),
+            models.Index(fields=['linea', 'fecha_avance']),
+            models.Index(fields=['torre', 'fecha_avance']),
+        ]
+
+    def __str__(self):
+        return (
+            f"Avance {self.get_tipo_avance_display()} - "
+            f"Torre {self.torre.numero} - {self.usuario.get_full_name()}"
+        )
+
+    def clean(self):
+        """Validación: torre debe pertenecer a la línea."""
+        from django.core.exceptions import ValidationError
+        if self.torre and self.linea and self.torre.linea_id != self.linea.id:
+            raise ValidationError('La torre debe pertenecer a la línea seleccionada.')
+
+    def save(self, *args, **kwargs):
+        """Asegurar que la torre pertenece a la línea."""
+        if self.torre and not self.linea:
+            self.linea = self.torre.linea
+        super().save(*args, **kwargs)

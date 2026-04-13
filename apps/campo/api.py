@@ -13,14 +13,14 @@ from django.core.exceptions import ValidationError
 from django.http import HttpRequest
 from ninja.errors import HttpError
 
-from apps.api.auth import JWTAuth
+from apps.api.auth import OptionalJWTAuth
 from apps.api.ratelimit import ratelimit_api, ratelimit_upload
-from .models import RegistroCampo, Evidencia
+from .models import RegistroCampo, Evidencia, RegistroAvance
 from .tasks import procesar_evidencia
 from .validators import validate_evidence_mime_type, validate_signature_mime_type
 
 logger = logging.getLogger(__name__)
-router = Router(auth=JWTAuth())
+router = Router(auth=OptionalJWTAuth())
 
 
 class RegistroIn(Schema):
@@ -487,3 +487,188 @@ def marcar_vano_api(request: HttpRequest, vano_id: UUID, payload: MarcarVanoIn):
         'nuevo_estado': vano.estado,
         'fecha_marcado': vano.fecha_marcado.isoformat(),
     }
+
+
+# ==================== REGISTRO DE AVANCES ====================
+
+class RegistroAvanceIn(Schema):
+    """Schema para crear un registro de avance."""
+    torre_id: UUID
+    tipo_avance: str = "completo"
+    observaciones: str = ""
+    porcentaje: int = 100
+
+
+class RegistroAvanceOut(Schema):
+    """Schema para respuesta de registro de avance."""
+    id: UUID
+    usuario_id: UUID
+    usuario_nombre: str
+    cuadrilla_id: UUID
+    cuadrilla_nombre: str
+    linea_id: UUID
+    linea_codigo: str
+    torre_id: UUID
+    torre_numero: str
+    tipo_avance: str
+    fecha_avance: datetime
+    observaciones: str
+    porcentaje: int
+
+
+@router.post('/avances', response={201: RegistroAvanceOut}, tags=['Avances'])
+@ratelimit_api
+def crear_registro_avance(request: HttpRequest, data: RegistroAvanceIn):
+    """
+    Crear un registro de avance en una torre.
+    El usuario debe estar asignado a una cuadrilla.
+    Solo puede registrar avances en la línea de su cuadrilla.
+
+    Parámetros:
+    - torre_id: UUID de la torre
+    - tipo_avance: 'completo', 'parcial', 'sin_avance', 'no_ejecutable'
+    - observaciones: Detalles del avance (opcional)
+    - porcentaje: Porcentaje completado 0-100 (default: 100)
+    """
+    from apps.cuadrillas.models import CuadrillaMiembro
+    from apps.lineas.models import Torre
+    from django.utils import timezone
+
+    if not request.auth:
+        raise HttpError(401, 'Autenticación requerida')
+
+    usuario = request.auth
+
+    # Obtener cuadrilla del usuario
+    miembro = CuadrillaMiembro.objects.filter(
+        usuario=usuario,
+        activo=True
+    ).select_related('cuadrilla', 'cuadrilla__linea_asignada').first()
+
+    if not miembro:
+        raise HttpError(403, 'No estás asignado a ninguna cuadrilla activa')
+
+    cuadrilla = miembro.cuadrilla
+    linea = cuadrilla.linea_asignada
+
+    if not linea:
+        raise HttpError(400, 'Tu cuadrilla no tiene una línea asignada')
+
+    # Obtener y validar torre
+    try:
+        torre = Torre.objects.get(id=data.torre_id, linea=linea)
+    except Torre.DoesNotExist:
+        raise HttpError(400, 'La torre no pertenece a la línea de tu cuadrilla')
+
+    # Validar tipo de avance
+    tipos_validos = dict(RegistroAvance.TipoAvance.choices).keys()
+    tipo_avance = data.tipo_avance if data.tipo_avance in tipos_validos else 'completo'
+
+    # Validar porcentaje
+    porcentaje = max(0, min(100, data.porcentaje))
+
+    # Crear registro
+    try:
+        registro = RegistroAvance.objects.create(
+            usuario=usuario,
+            cuadrilla=cuadrilla,
+            linea=linea,
+            torre=torre,
+            tipo_avance=tipo_avance,
+            observaciones=data.observaciones.strip(),
+            porcentaje=porcentaje
+        )
+
+        return 201, RegistroAvanceOut(
+            id=registro.id,
+            usuario_id=registro.usuario.id,
+            usuario_nombre=registro.usuario.get_full_name(),
+            cuadrilla_id=registro.cuadrilla.id,
+            cuadrilla_nombre=registro.cuadrilla.nombre,
+            linea_id=registro.linea.id,
+            linea_codigo=registro.linea.codigo,
+            torre_id=registro.torre.id,
+            torre_numero=registro.torre.numero,
+            tipo_avance=registro.tipo_avance,
+            fecha_avance=registro.fecha_avance,
+            observaciones=registro.observaciones,
+            porcentaje=registro.porcentaje,
+        )
+    except Exception as e:
+        logger.error(f"Error crear registro avance: {str(e)}")
+        raise HttpError(500, f'Error al registrar avance: {str(e)}')
+
+
+@router.get('/avances', response=list[RegistroAvanceOut], tags=['Avances'])
+def listar_avances(
+    request: HttpRequest,
+    usuario_id: Optional[UUID] = None,
+    cuadrilla_id: Optional[UUID] = None,
+    linea_id: Optional[UUID] = None,
+    tipo_avance: Optional[str] = None,
+    limite: int = 50
+):
+    """
+    Listar registros de avance con filtros opcionales.
+
+    Parámetros:
+    - usuario_id: Filtrar por usuario específico
+    - cuadrilla_id: Filtrar por cuadrilla
+    - linea_id: Filtrar por línea
+    - tipo_avance: Filtrar por tipo ('completo', 'parcial', etc)
+    - limite: Máximo de registros (default: 50, máximo: 500)
+    """
+    from apps.cuadrillas.models import CuadrillaMiembro
+
+    qs = RegistroAvance.objects.select_related(
+        'usuario', 'cuadrilla', 'linea', 'torre'
+    ).order_by('-fecha_avance')
+
+    # Si no es admin, solo ver propios avances o de su cuadrilla
+    if request.auth and not request.auth.is_admin:
+        miembro = CuadrillaMiembro.objects.filter(
+            usuario=request.auth,
+            activo=True
+        ).first()
+        if miembro:
+            qs = qs.filter(cuadrilla=miembro.cuadrilla)
+        else:
+            qs = qs.filter(usuario=request.auth)
+
+    # Aplicar filtros
+    if usuario_id:
+        qs = qs.filter(usuario_id=usuario_id)
+
+    if cuadrilla_id:
+        qs = qs.filter(cuadrilla_id=cuadrilla_id)
+
+    if linea_id:
+        qs = qs.filter(linea_id=linea_id)
+
+    if tipo_avance:
+        tipos_validos = dict(RegistroAvance.TipoAvance.choices).keys()
+        if tipo_avance in tipos_validos:
+            qs = qs.filter(tipo_avance=tipo_avance)
+
+    # Limitar resultados
+    limite = min(limite, 500)
+    qs = qs[:limite]
+
+    return [
+        RegistroAvanceOut(
+            id=r.id,
+            usuario_id=r.usuario.id,
+            usuario_nombre=r.usuario.get_full_name(),
+            cuadrilla_id=r.cuadrilla.id,
+            cuadrilla_nombre=r.cuadrilla.nombre,
+            linea_id=r.linea.id,
+            linea_codigo=r.linea.codigo,
+            torre_id=r.torre.id,
+            torre_numero=r.torre.numero,
+            tipo_avance=r.tipo_avance,
+            fecha_avance=r.fecha_avance,
+            observaciones=r.observaciones,
+            porcentaje=r.porcentaje,
+        )
+        for r in qs
+    ]
