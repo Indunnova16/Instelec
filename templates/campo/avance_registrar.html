@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar Avances - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Registrar Avances</h1>
+        <p class="text-gray-600 dark:text-gray-400">Registra el avance de trabajo en las torres asignadas a tu cuadrilla</p>
+    </div>
+
+    <!-- Error Message -->
+    {% if error %}
+    <div class="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <p class="text-red-800 dark:text-red-200">{{ error }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Success Message -->
+    {% if messages %}
+    {% for message in messages %}
+    <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4">
+        <p class="text-green-800 dark:text-green-200">{{ message }}</p>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Form -->
+    {% if cuadrilla and linea %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            <!-- Cuadrilla Info -->
+            <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p class="text-sm">
+                    <span class="font-semibold text-gray-700 dark:text-gray-300">Cuadrilla:</span>
+                    <span class="text-gray-900 dark:text-white">{{ cuadrilla.nombre }}</span>
+                </p>
+                <p class="text-sm mt-1">
+                    <span class="font-semibold text-gray-700 dark:text-gray-300">Línea:</span>
+                    <span class="text-gray-900 dark:text-white">{{ linea.codigo }} - {{ linea.nombre }}</span>
+                </p>
+            </div>
+
+            <!-- Torre Selection -->
+            <div>
+                <label for="torre_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Torre *
+                </label>
+                <select name="torre_id" id="torre_id" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">-- Selecciona una torre --</option>
+                    {% for torre in torres %}
+                    <option value="{{ torre.id }}">Torre {{ torre.numero }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Tipo de Avance -->
+            <div>
+                <label for="tipo_avance" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Tipo de Avance *
+                </label>
+                <select name="tipo_avance" id="tipo_avance" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    {% for value, label in tipos_avance %}
+                    <option value="{{ value }}" {% if value == 'completo' %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Selecciona el estado del trabajo completado en esta torre
+                </p>
+            </div>
+
+            <!-- Porcentaje -->
+            <div>
+                <label for="porcentaje" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Porcentaje Completado (%)
+                </label>
+                <div class="flex items-center gap-4">
+                    <input type="range" name="porcentaje" id="porcentaje"
+                           min="0" max="100" value="100" step="10"
+                           class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                    <span id="porcentaje_valor" class="text-lg font-semibold text-gray-900 dark:text-white w-16">100%</span>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Indica qué porcentaje del trabajo se completó en esta torre
+                </p>
+            </div>
+
+            <!-- Observaciones -->
+            <div>
+                <label for="observaciones" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Observaciones
+                </label>
+                <textarea name="observaciones" id="observaciones" rows="4"
+                          placeholder="Describe cualquier detalle importante sobre el trabajo realizado..."
+                          class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400">
+                </textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="flex gap-3">
+                <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold">
+                    Registrar Avance
+                </button>
+                <a href="{% url 'campo:lista' %}" class="px-6 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition font-semibold">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Mis Avances Link -->
+    <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <p class="text-sm text-blue-900 dark:text-blue-200">
+            <a href="{% url 'campo:mis_avances' %}" class="font-semibold hover:underline">
+                Ver mis avances registrados →
+            </a>
+        </p>
+    </div>
+    {% else %}
+    <div class="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+        <p class="text-yellow-900 dark:text-yellow-200">
+            No puedes registrar avances en este momento. {{ error|default:'Verifica que tengas una cuadrilla y línea asignadas.' }}
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Update percentage display
+document.getElementById('porcentaje').addEventListener('input', function() {
+    document.getElementById('porcentaje_valor').textContent = this.value + '%';
+});
+</script>
+{% endblock %}

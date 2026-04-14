@@ -766,7 +766,8 @@ class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
         if self.request.user.is_campo:
             qs = qs.filter(usuario=self.request.user)
 
-        # Filtros opcionaleslinea = self.request.GET.get('linea')
+        # Filtros opcionales
+        linea = self.request.GET.get('linea')
         if linea:
             from uuid import UUID
             try:
