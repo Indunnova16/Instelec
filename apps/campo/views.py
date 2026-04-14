@@ -366,7 +366,7 @@ class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         # Datos para filtros
         from apps.lineas.models import Linea
         context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
-        context['tipos'] = ReporteDano.Tipo.choices
+        context['tipos'] = ReporteDano.TipoDano.choices
         context['severidades'] = ReporteDano.Severidad.choices
 
         # Valores actuales de filtros
