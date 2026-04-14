@@ -620,43 +620,54 @@ class MarcarVanoView(LoginRequiredMixin, View):
 
 class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """
-    Formulario para que trabajadores registren avances en torres.
-    Solo accesibles para trabajadores en cuadrilla.
-    Muestra solo la línea y torres de su cuadrilla asignada.
+    Formulario para registrar avances en torres.
+    - Trabajadores: ven solo su línea y cuadrilla asignadas
+    - Administradores: pueden seleccionar cualquier línea, torre y cuadrilla
     """
     template_name = 'campo/avance_registrar.html'
-    allowed_roles = ['liniero', 'auxiliar', 'supervisor']
+    allowed_roles = ['liniero', 'auxiliar', 'supervisor', 'admin', 'director', 'coordinador']
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         usuario = self.request.user
+        es_admin = usuario.rol in ['admin', 'director', 'coordinador']
 
-        # Obtener cuadrilla del usuario
-        from apps.cuadrillas.models import CuadrillaMiembro
-        miembro = CuadrillaMiembro.objects.filter(
-            usuario=usuario,
-            activo=True
-        ).select_related('cuadrilla').first()
+        if es_admin:
+            # Administradores: pueden ver todas las líneas y cuadrillas
+            from apps.lineas.models import Linea, Torre
+            from apps.cuadrillas.models import Cuadrilla
 
-        if not miembro:
-            context['error'] = 'No estás asignado a ninguna cuadrilla activa.'
-            return context
+            context['es_admin'] = True
+            context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
+            context['cuadrillas'] = Cuadrilla.objects.filter(activa=True).order_by('nombre')
+            context['torres'] = Torre.objects.select_related('linea').order_by('linea', 'numero')
+        else:
+            # Trabajadores: ven solo su línea y cuadrilla asignadas
+            from apps.cuadrillas.models import CuadrillaMiembro
+            miembro = CuadrillaMiembro.objects.filter(
+                usuario=usuario,
+                activo=True
+            ).select_related('cuadrilla').first()
 
-        cuadrilla = miembro.cuadrilla
-        context['cuadrilla'] = cuadrilla
+            if not miembro:
+                context['error'] = 'No estás asignado a ninguna cuadrilla activa.'
+                return context
 
-        # Obtener línea asignada a la cuadrilla
-        if not cuadrilla.linea_asignada:
-            context['error'] = 'Tu cuadrilla no tiene una línea asignada.'
-            return context
+            cuadrilla = miembro.cuadrilla
+            context['cuadrilla'] = cuadrilla
 
-        linea = cuadrilla.linea_asignada
-        context['linea'] = linea
+            # Obtener línea asignada a la cuadrilla
+            if not cuadrilla.linea_asignada:
+                context['error'] = 'Tu cuadrilla no tiene una línea asignada.'
+                return context
 
-        # Obtener torres de la línea
-        from apps.lineas.models import Torre
-        torres = Torre.objects.filter(linea=linea).order_by('numero')
-        context['torres'] = torres
+            linea = cuadrilla.linea_asignada
+            context['linea'] = linea
+
+            # Obtener torres de la línea
+            from apps.lineas.models import Torre
+            torres = Torre.objects.filter(linea=linea).order_by('numero')
+            context['torres'] = torres
 
         # Tipos de avance
         context['tipos_avance'] = RegistroAvance.TipoAvance.choices
@@ -667,33 +678,19 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         """Crear registro de avance."""
         from django.shortcuts import redirect
         from django.contrib import messages
-        from apps.cuadrillas.models import CuadrillaMiembro
-        from apps.lineas.models import Torre
+        from apps.cuadrillas.models import CuadrillaMiembro, Cuadrilla
+        from apps.lineas.models import Torre, Linea
+        from uuid import UUID
 
         usuario = request.user
-
-        # Validar que el usuario está en una cuadrilla
-        miembro = CuadrillaMiembro.objects.filter(
-            usuario=usuario,
-            activo=True
-        ).select_related('cuadrilla', 'cuadrilla__linea_asignada').first()
-
-        if not miembro:
-            messages.error(request, 'No estás asignado a ninguna cuadrilla activa.')
-            return redirect('campo:avance_registrar')
-
-        cuadrilla = miembro.cuadrilla
-        linea = cuadrilla.linea_asignada
-
-        if not linea:
-            messages.error(request, 'Tu cuadrilla no tiene una línea asignada.')
-            return redirect('campo:avance_registrar')
+        es_admin = usuario.rol in ['admin', 'director', 'coordinador']
 
         # Obtener datos del formulario
         torre_id = request.POST.get('torre_id', '').strip()
         tipo_avance = request.POST.get('tipo_avance', 'completo').strip()
         observaciones = request.POST.get('observaciones', '').strip()
         porcentaje = request.POST.get('porcentaje', '100').strip()
+        cuadrilla_id = request.POST.get('cuadrilla_id', '').strip()  # Para admins
 
         # Validaciones
         if not torre_id:
@@ -701,15 +698,54 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
             return redirect('campo:avance_registrar')
 
         try:
-            from uuid import UUID
             torre_uuid = UUID(torre_id)
-            torre = Torre.objects.get(id=torre_uuid, linea=linea)
+            torre = Torre.objects.get(id=torre_uuid)
         except (ValueError, TypeError):
             messages.error(request, 'Torre inválida.')
             return redirect('campo:avance_registrar')
         except Torre.DoesNotExist:
-            messages.error(request, 'La torre no pertenece a tu línea asignada.')
+            messages.error(request, 'Torre no encontrada.')
             return redirect('campo:avance_registrar')
+
+        linea = torre.linea
+
+        # Determinar cuadrilla
+        if es_admin:
+            # Los admins pueden seleccionar cuadrilla
+            if cuadrilla_id:
+                try:
+                    cuadrilla_uuid = UUID(cuadrilla_id)
+                    cuadrilla = Cuadrilla.objects.get(id=cuadrilla_uuid)
+                except (ValueError, TypeError, Cuadrilla.DoesNotExist):
+                    messages.error(request, 'Cuadrilla inválida.')
+                    return redirect('campo:avance_registrar')
+            else:
+                # Si admin no selecciona cuadrilla, es null (avance general)
+                cuadrilla = None
+        else:
+            # Trabajadores: deben estar en una cuadrilla
+            miembro = CuadrillaMiembro.objects.filter(
+                usuario=usuario,
+                activo=True
+            ).select_related('cuadrilla', 'cuadrilla__linea_asignada').first()
+
+            if not miembro:
+                messages.error(request, 'No estás asignado a ninguna cuadrilla activa.')
+                return redirect('campo:avance_registrar')
+
+            cuadrilla = miembro.cuadrilla
+            linea_cuadrilla = cuadrilla.linea_asignada
+
+            if not linea_cuadrilla:
+                messages.error(request, 'Tu cuadrilla no tiene una línea asignada.')
+                return redirect('campo:avance_registrar')
+
+            # Validar que la torre pertenece a la línea de la cuadrilla
+            if torre.linea_id != linea_cuadrilla.id:
+                messages.error(request, 'La torre no pertenece a tu línea asignada.')
+                return redirect('campo:avance_registrar')
+
+            linea = linea_cuadrilla
 
         # Validar porcentaje
         try:

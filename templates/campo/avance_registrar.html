@@ -32,7 +32,56 @@
         <form method="post" class="space-y-6">
             {% csrf_token %}
 
-            <!-- Cuadrilla Info -->
+            {% if es_admin %}
+            <!-- ADMIN VIEW: Multiple Selection Options -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Línea Selection -->
+                <div>
+                    <label for="linea_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Línea *
+                    </label>
+                    <select name="linea_id" id="linea_id" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                        <option value="">-- Selecciona una línea --</option>
+                        {% for linea in lineas %}
+                        <option value="{{ linea.id }}">{{ linea.codigo }} - {{ linea.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Cuadrilla Selection (Optional) -->
+                <div>
+                    <label for="cuadrilla_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Cuadrilla (Opcional)
+                    </label>
+                    <select name="cuadrilla_id" id="cuadrilla_id" class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                        <option value="">Sin asignar a cuadrilla</option>
+                        {% for cuadrilla in cuadrillas %}
+                        <option value="{{ cuadrilla.id }}">{{ cuadrilla.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Torre Selection -->
+            <div>
+                <label for="torre_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Torre *
+                </label>
+                <select name="torre_id" id="torre_id" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">-- Selecciona una torre --</option>
+                    {% for torre in torres %}
+                    <option value="{{ torre.id }}" data-linea="{{ torre.linea.id }}">
+                        {{ torre.linea.codigo }} - Torre {{ torre.numero }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Selecciona primero la línea para filtrar las torres disponibles
+                </p>
+            </div>
+
+            {% else %}
+            <!-- WORKER VIEW: Fixed Assignment -->
             <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <p class="text-sm">
                     <span class="font-semibold text-gray-700 dark:text-gray-300">Cuadrilla:</span>
@@ -56,6 +105,7 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
 
             <!-- Tipo de Avance -->
             <div>
@@ -133,5 +183,29 @@
 document.getElementById('porcentaje').addEventListener('input', function() {
     document.getElementById('porcentaje_valor').textContent = this.value + '%';
 });
+
+// Filter towers by line (admin only)
+{% if es_admin %}
+const lineaSelect = document.getElementById('linea_id');
+const torreSelect = document.getElementById('torre_id');
+
+if (lineaSelect && torreSelect) {
+    lineaSelect.addEventListener('change', function() {
+        const selectedLinea = this.value;
+        const options = torreSelect.querySelectorAll('option[data-linea]');
+
+        options.forEach(option => {
+            if (selectedLinea === '' || option.getAttribute('data-linea') === selectedLinea) {
+                option.style.display = 'block';
+            } else {
+                option.style.display = 'none';
+            }
+        });
+
+        // Reset torre selection
+        torreSelect.value = '';
+    });
+}
+{% endif %}
 </script>
 {% endblock %}
