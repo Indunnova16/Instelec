@@ -11,6 +11,13 @@
             <p class="text-gray-600 dark:text-gray-400">Histórico de trabajos realizados</p>
         </div>
         <div class="flex gap-2">
+            <a href="{% url 'campo:avance_registrar' %}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Registrar Avances
+            </a>
             <button hx-get="{% url 'campo:exportar' %}"
                     hx-include="[name='fecha_inicio'], [name='fecha_fin'], [name='linea']"
                     class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
