@@ -747,8 +747,9 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
 class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
     """
-    Lista de avances registrados por el usuario actual.
-    Solo usuarios de campo pueden ver sus propios avances.
+    Lista de avances registrados.
+    Usuarios de campo ven solo sus propios avances.
+    Administradores ven todos los avances con filtros.
     """
     model = RegistroAvance
     template_name = 'campo/avances_lista.html'
@@ -790,3 +791,15 @@ class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
             qs = qs.filter(tipo_avance=tipo_avance)
 
         return qs.order_by('-fecha_avance')
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+
+        # Agregar líneas y cuadrillas para los filtros
+        from apps.lineas.models import Linea
+        from apps.cuadrillas.models import Cuadrilla
+
+        context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
+        context['cuadrillas'] = Cuadrilla.objects.filter(activa=True).order_by('nombre')
+
+        return context

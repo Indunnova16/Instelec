@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Avances Registrados - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{% if request.user.is_campo %}Mis Avances{% else %}Avances Registrados{% endif %}</h1>
+            <p class="text-gray-600 dark:text-gray-400">{% if request.user.is_campo %}Tu historial de avances en torres{% else %}Historial de avances registrados por los trabajadores{% endif %}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{% url 'campo:avance_registrar' %}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Registrar Nuevo
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    {% if not request.user.is_campo %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>
+                <select name="linea" id="linea" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">Todas las líneas</option>
+                    {% for linea in lineas %}
+                    <option value="{{ linea.id }}" {% if request.GET.linea == linea.id|stringformat:"s" %}selected{% endif %}>{{ linea.codigo }} - {{ linea.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="tipo_avance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de Avance</label>
+                <select name="tipo_avance" id="tipo_avance" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">Todos</option>
+                    <option value="completo" {% if request.GET.tipo_avance == 'completo' %}selected{% endif %}>Completo</option>
+                    <option value="parcial" {% if request.GET.tipo_avance == 'parcial' %}selected{% endif %}>Parcial</option>
+                    <option value="sin_avance" {% if request.GET.tipo_avance == 'sin_avance' %}selected{% endif %}>Sin Avance</option>
+                    <option value="no_ejecutable" {% if request.GET.tipo_avance == 'no_ejecutable' %}selected{% endif %}>No Ejecutable</option>
+                </select>
+            </div>
+            <div>
+                <label for="cuadrilla" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cuadrilla</label>
+                <select name="cuadrilla" id="cuadrilla" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">Todas las cuadrillas</option>
+                    {% for cuadrilla in cuadrillas %}
+                    <option value="{{ cuadrilla.id }}" {% if request.GET.cuadrilla == cuadrilla.id|stringformat:"s" %}selected{% endif %}>{{ cuadrilla.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold w-full">
+                    Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Fecha
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Línea / Torre
+                    </th>
+                    {% if not request.user.is_campo %}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Usuario
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Cuadrilla
+                    </th>
+                    {% endif %}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Tipo
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Avance
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Observaciones
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {% for avance in avances %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {{ avance.fecha_avance|date:"d/m/Y H:i" }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {{ avance.linea.codigo }} / Torre {{ avance.torre.numero }}
+                    </td>
+                    {% if not request.user.is_campo %}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {{ avance.usuario.get_full_name }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {{ avance.cuadrilla.nombre }}
+                    </td>
+                    {% endif %}
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if avance.tipo_avance == 'completo' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+                            Completo
+                        </span>
+                        {% elif avance.tipo_avance == 'parcial' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
+                            Parcial
+                        </span>
+                        {% elif avance.tipo_avance == 'sin_avance' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+                            Sin Avance
+                        </span>
+                        {% else %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">
+                            No Ejecutable
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-semibold">
+                        {{ avance.porcentaje }}%
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                        {{ avance.observaciones|default:"-" }}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="{% if request.user.is_campo %}6{% else %}9{% endif %}" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <p class="mt-2">No hay avances registrados</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="flex justify-center">
+        <nav class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}" class="px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">Anterior</a>
+            {% endif %}
+            <span class="px-3 py-2">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}" class="px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">Siguiente</a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
