@@ -27,7 +27,7 @@
     {% endif %}
 
     <!-- Form -->
-    {% if es_admin or (cuadrilla and linea) %}
+    {% if es_admin or cuadrilla and linea %}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <form method="post" class="space-y-6">
             {% csrf_token %}
