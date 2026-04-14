@@ -652,7 +652,7 @@ class CambiarEstadoView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
 
 
 class BulkAsignarCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Bulk assign cuadrilla to multiple activities via HTMX POST."""
+    """Bulk assign cuadrillas (one or multiple) to activities via HTMX POST."""
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
 
     def post(self, request, *args, **kwargs):
@@ -660,29 +660,40 @@ class BulkAsignarCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, View):
         from apps.cuadrillas.models import Cuadrilla
 
         actividad_ids = request.POST.getlist('actividad_ids')
-        cuadrilla_id = request.POST.get('cuadrilla_id')
+        cuadrilla_ids = request.POST.getlist('cuadrilla_id')  # Handle multiple selections
 
         if not actividad_ids:
             return JsonResponse({'success': False, 'error': 'No se seleccionaron avisos'}, status=400)
-        if not cuadrilla_id:
-            return JsonResponse({'success': False, 'error': 'Debe seleccionar una cuadrilla'}, status=400)
+        if not cuadrilla_ids:
+            return JsonResponse({'success': False, 'error': 'Debe seleccionar al menos una cuadrilla'}, status=400)
 
         try:
-            cuadrilla = Cuadrilla.objects.get(id=cuadrilla_id)
-        except Cuadrilla.DoesNotExist:
-            return JsonResponse({'success': False, 'error': 'Cuadrilla no encontrada'}, status=404)
+            cuadrillas = Cuadrilla.objects.filter(id__in=cuadrilla_ids)
+            if not cuadrillas.exists():
+                return JsonResponse({'success': False, 'error': 'Cuadrillas no encontradas'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Error al obtener cuadrillas: {str(e)}'}, status=400)
 
-        updated = Actividad.objects.filter(id__in=actividad_ids).update(cuadrilla=cuadrilla)
-
-        # Also sync M2M
+        updated = 0
+        # Asignar todas las cuadrillas seleccionadas a todas las actividades
         for actividad in Actividad.objects.filter(id__in=actividad_ids):
-            actividad.cuadrillas.add(cuadrilla)
+            # Si es una sola cuadrilla, asignarla como cuadrilla principal
+            if len(cuadrilla_ids) == 1:
+                actividad.cuadrilla = cuadrillas.first()
+                actividad.save(update_fields=['cuadrilla', 'updated_at'])
+
+            # Agregar todas las cuadrillas a la relación M2M
+            for cuadrilla in cuadrillas:
+                actividad.cuadrillas.add(cuadrilla)
+            updated += 1
+
+        cuadrilla_nombres = ', '.join([f'{c.codigo}' for c in cuadrillas])
 
         if request.headers.get('HX-Request'):
             response = HttpResponse()
             response['HX-Trigger'] = json.dumps({
                 'showToast': {
-                    'message': f'{updated} aviso(s) asignados a {cuadrilla.codigo}',
+                    'message': f'{updated} aviso(s) asignados a cuadrilla(s): {cuadrilla_nombres}',
                     'type': 'success',
                 },
                 'refreshTable': True,
