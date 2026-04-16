@@ -82,10 +82,6 @@
                     <dd class="font-medium text-gray-900 dark:text-white">{{ linea.tension_kv|default:"-" }} kV</dd>
                 </div>
                 <div>
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Longitud</dt>
-                    <dd class="font-medium text-gray-900 dark:text-white">{{ linea.longitud_km|default:"-" }} km</dd>
-                </div>
-                <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Tipo de Estructura</dt>
                     <dd class="font-medium text-gray-900 dark:text-white">{{ linea.get_tipo_estructura_display }}</dd>
                 </div>
@@ -130,10 +126,6 @@
                 <div class="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                     <p class="text-3xl font-bold text-purple-600 dark:text-purple-400">{{ total_torres }}</p>
                     <p class="text-sm text-gray-500 dark:text-gray-400">Torres en BD</p>
-                </div>
-                <div class="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <p class="text-3xl font-bold text-blue-600 dark:text-blue-400">{{ linea.longitud_km|default:0 }}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Km</p>
                 </div>
                 {% if linea.cantidad_torres %}
                 <div class="text-center p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
@@ -332,6 +324,48 @@
         </div>
     </div>
 
+    <!-- Vanos Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Vanos</h2>
+                <div x-data="{ editing: false, value: {{ linea.cantidad_vanos|default:'null' }} }">
+                    <template x-if="!editing">
+                        <div class="flex items-center gap-4">
+                            <div class="text-center">
+                                <p class="text-3xl font-bold text-blue-600 dark:text-blue-400">{{ linea.cantidad_vanos|default:"-" }}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Cantidad de vanos</p>
+                            </div>
+                            <button @click="editing = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+                                Editar
+                            </button>
+                        </div>
+                    </template>
+
+                    <template x-if="editing">
+                        <form @submit.prevent="submitVanos" class="flex items-center gap-3">
+                            {% csrf_token %}
+                            <input type="number" x-model.number="value" min="0" required
+                                   class="w-24 px-3 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium">
+                                Guardar
+                            </button>
+                            <button type="button" @click="editing = false" class="px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition text-sm font-medium">
+                                Cancelar
+                            </button>
+                        </form>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6 bg-gray-50 dark:bg-gray-900">
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Los vanos son los segmentos entre torres consecutivas. Ingrese la cantidad total de vanos en esta línea.
+            </p>
+        </div>
+    </div>
+
     <!-- Modal container for tower form -->
     <div id="torre-form-container"></div>
 </div>
@@ -409,4 +443,36 @@
 })();
 </script>
 {% endif %}
+
+<script>
+// Handle vanos submission
+function submitVanos(e) {
+    e.preventDefault();
+    const form = e.target;
+    const cantidad = form.querySelector('input[type="number"]').value;
+    const csrfToken = form.querySelector('[name="csrfmiddlewaretoken"]').value;
+
+    fetch('{{ linea.get_absolute_url }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: 'cantidad_vanos=' + encodeURIComponent(cantidad) + '&action=actualizar_vanos'
+    })
+    .then(response => {
+        if (response.ok) {
+            // Reload page
+            setTimeout(() => location.reload(), 300);
+        } else {
+            alert('Error al guardar. Por favor, intente de nuevo.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al guardar los vanos.');
+    });
+}
+</script>
 {% endblock %}

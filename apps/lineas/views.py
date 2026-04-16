@@ -59,6 +59,27 @@ class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailVi
             context['kmz_geojson_json'] = json.dumps(self.object.kmz_geojson)
         return context
 
+    def post(self, request, *args, **kwargs):
+        """Handle AJAX POST requests for updating vanos."""
+        from django.http import JsonResponse
+        self.object = self.get_object()
+
+        # Check if user has permission to edit
+        if not self.request.user.is_authenticated or self.request.user.rol not in ['admin', 'director', 'coordinador']:
+            return JsonResponse({'error': 'No autorizado'}, status=403)
+
+        # Handle vanos update
+        if request.POST.get('action') == 'actualizar_vanos':
+            cantidad_vanos = request.POST.get('cantidad_vanos', '').strip()
+            if cantidad_vanos.isdigit():
+                self.object.cantidad_vanos = int(cantidad_vanos)
+                self.object.save(update_fields=['cantidad_vanos'])
+                return JsonResponse({'success': True})
+            else:
+                return JsonResponse({'error': 'Cantidad inválida'}, status=400)
+
+        return JsonResponse({'error': 'Acción no reconocida'}, status=400)
+
 
 class LineaEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
     """View for editing a transmission line."""

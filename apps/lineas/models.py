@@ -124,6 +124,12 @@ class Linea(BaseModel):
         blank=True,
         help_text='Cantidad de postes (si aplica)'
     )
+    cantidad_vanos = models.PositiveIntegerField(
+        'Cantidad de vanos',
+        null=True,
+        blank=True,
+        help_text='Cantidad total de vanos entre torres'
+    )
 
     class TipoEstructura(models.TextChoices):
         TORRES = 'TORRES', 'Torres'
