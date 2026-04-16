@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cronograma de Proyectos - Instelec</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 0.95rem;
+        }
+
+        /* Controls */
+        .controls {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .controls label {
+            font-weight: 500;
+            color: #1f2937;
+        }
+
+        .controls select,
+        .controls input {
+            padding: 0.6rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .btn-nuevo {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-left: auto;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-nuevo:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #667eea;
+        }
+
+        .stat-num {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        /* Tabla Gantt */
+        .gantt-wrapper {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+            margin-bottom: 2rem;
+        }
+
+        .gantt-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1400px;
+        }
+
+        .gantt-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .gantt-table th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .gantt-table tbody tr {
+            border-bottom: 1px solid #e5e7eb;
+            transition: background-color 0.2s;
+        }
+
+        .gantt-table tbody tr:hover {
+            background-color: #f9fafb;
+        }
+
+        .gantt-table td {
+            padding: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .col-proyecto {
+            font-weight: 600;
+            color: #1f2937;
+            min-width: 180px;
+        }
+
+        .col-modulo {
+            background: #f0f4ff;
+            border-radius: 4px;
+            padding: 0.4rem 0.8rem;
+            display: inline-block;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .modulo-actividades { background: #dbeafe; color: #0c4a6e; }
+        .modulo-lineas { background: #dcfce7; color: #166534; }
+        .modulo-torres { background: #fef3c7; color: #92400e; }
+        .modulo-cuadrillas { background: #ede9fe; color: #5b21b6; }
+        .modulo-financiero { background: #fee2e2; color: #991b1b; }
+        .modulo-campo { background: #f3e8ff; color: #6b21a8; }
+        .modulo-ambiental { background: #cffafe; color: #164e63; }
+
+        .fecha {
+            font-size: 0.85rem;
+            color: #374151;
+            white-space: nowrap;
+        }
+
+        .estado-badge {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .estado-pendiente { background: #fee2e2; color: #991b1b; }
+        .estado-activo { background: #fef3c7; color: #92400e; }
+        .estado-revision { background: #dbeafe; color: #0c4a6e; }
+        .estado-completado { background: #dcfce7; color: #166534; }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 0.3rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: bold;
+            transition: width 0.3s ease;
+        }
+
+        .col-responsable {
+            font-size: 0.85rem;
+            color: #6b7280;
+        }
+
+        .gantt-chart-col {
+            min-width: 600px;
+            position: relative;
+            background: linear-gradient(90deg, #f9fafb 0%, transparent 100%);
+        }
+
+        .gantt-bar-wrapper {
+            position: relative;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            background: white;
+            border-radius: 4px;
+            margin: 0.3rem 0;
+        }
+
+        .gantt-bar {
+            position: absolute;
+            height: 28px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .gantt-bar:hover {
+            filter: brightness(1.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .bar-color-actividades { background: linear-gradient(90deg, #3b82f6, #1d4ed8); }
+        .bar-color-lineas { background: linear-gradient(90deg, #10b981, #059669); }
+        .bar-color-torres { background: linear-gradient(90deg, #f59e0b, #d97706); }
+        .bar-color-cuadrillas { background: linear-gradient(90deg, #8b5cf6, #7c3aed); }
+        .bar-color-financiero { background: linear-gradient(90deg, #ef4444, #dc2626); }
+        .bar-color-campo { background: linear-gradient(90deg, #a855f7, #9333ea); }
+        .bar-color-ambiental { background: linear-gradient(90deg, #06b6d4, #0891b2); }
+
+        .mes-header {
+            position: sticky;
+            top: 45px;
+            z-index: 9;
+            background: white;
+            border-bottom: 2px solid #667eea;
+            display: flex;
+            height: 40px;
+        }
+
+        .mes {
+            flex: 1;
+            min-width: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid #e5e7eb;
+            font-weight: 600;
+            color: #667eea;
+            font-size: 0.85rem;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header h2 {
+            color: #1f2937;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #1f2937;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .form-row .form-group {
+            margin-bottom: 0;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn-cancel,
+        .btn-save {
+            flex: 1;
+            padding: 0.7rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            border: none;
+            transition: transform 0.2s;
+        }
+
+        .btn-cancel {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+
+        .btn-cancel:hover {
+            transform: translateY(-2px);
+            background: #d1d5db;
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+            }
+
+            .controls select,
+            .controls input,
+            .btn-nuevo {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            .gantt-table {
+                min-width: 100%;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📅 Cronograma de Proyectos Instelec</h1>
+            <p>Gestión de proyectos y tareas por módulo con fechas de entrega y revisión</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-num">18</div>
+                <div class="stat-label">Total Proyectos</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">5</div>
+                <div class="stat-label">Activos Ahora</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">8</div>
+                <div class="stat-label">En Revisión</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">5</div>
+                <div class="stat-label">Completados</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <label>Módulo:</label>
+            <select id="filtro-modulo" onchange="filtrar()">
+                <option value="">Todos</option>
+                <option value="actividades">Actividades</option>
+                <option value="lineas">Líneas</option>
+                <option value="torres">Torres</option>
+                <option value="cuadrillas">Cuadrillas</option>
+                <option value="financiero">Financiero</option>
+                <option value="campo">Campo</option>
+                <option value="ambiental">Ambiental</option>
+            </select>
+
+            <label>Estado:</label>
+            <select id="filtro-estado" onchange="filtrar()">
+                <option value="">Todos</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="activo">Activo</option>
+                <option value="revision">En Revisión</option>
+                <option value="completado">Completado</option>
+            </select>
+
+            <button class="btn-nuevo" onclick="abrirModalNuevo()">+ Nuevo Proyecto</button>
+        </div>
+
+        <!-- Tabla Gantt -->
+        <div class="gantt-wrapper">
+            <table class="gantt-table" id="tabla-proyectos">
+                <thead>
+                    <tr>
+                        <th style="width: 200px;">Proyecto</th>
+                        <th style="width: 120px;">Módulo</th>
+                        <th style="width: 100px;">Inicio</th>
+                        <th style="width: 100px;">Entrega</th>
+                        <th style="width: 100px;">Revisión</th>
+                        <th style="width: 80px;">Estado</th>
+                        <th style="width: 100px;">Avance</th>
+                        <th style="width: 120px;">Responsable</th>
+                        <th style="width: 600px;">Cronograma</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-proyectos">
+                    <!-- Los datos se cargan aquí con JavaScript -->
+                </tbody>
+            </table>
+            <div class="mes-header" id="mes-header">
+                <div class="mes">FEBRERO 26</div>
+                <div class="mes">MARZO 26</div>
+                <div class="mes">ABRIL 26</div>
+                <div class="mes">MAYO 26</div>
+                <div class="mes">JUNIO 26</div>
+            </div>
+        </div>
+
+        <!-- Modal Nuevo Proyecto -->
+        <div class="modal" id="modal-proyecto">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="titulo-modal">Nuevo Proyecto</h2>
+                </div>
+                <form id="form-proyecto" onsubmit="guardarProyecto(event)">
+                    <div class="form-group">
+                        <label>Nombre del Proyecto</label>
+                        <input type="text" id="nombre-proyecto" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Módulo</label>
+                        <select id="modulo-proyecto" required>
+                            <option value="">Seleccionar...</option>
+                            <option value="actividades">Actividades</option>
+                            <option value="lineas">Líneas</option>
+                            <option value="torres">Torres</option>
+                            <option value="cuadrillas">Cuadrillas</option>
+                            <option value="financiero">Financiero</option>
+                            <option value="campo">Campo</option>
+                            <option value="ambiental">Ambiental</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Fecha Inicio</label>
+                            <input type="date" id="fecha-inicio" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha Entrega</label>
+                            <input type="date" id="fecha-entrega" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Fecha Revisión (Proveedor)</label>
+                        <input type="date" id="fecha-revision" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select id="estado-proyecto" required>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="activo">Activo</option>
+                            <option value="revision">En Revisión</option>
+                            <option value="completado">Completado</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Responsable</label>
+                        <input type="text" id="responsable-proyecto" placeholder="Proveedor o equipo">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Porcentaje de Avance: <span id="valor-avance">50</span>%</label>
+                        <input type="range" id="avance-proyecto" min="0" max="100" value="50"
+                               oninput="document.getElementById('valor-avance').textContent = this.value">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Descripción</label>
+                        <textarea id="descripcion-proyecto" rows="3" placeholder="Detalles adicionales..."></textarea>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+                        <button type="submit" class="btn-save">Guardar Proyecto</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Datos de proyectos
+        const proyectos = [
+            { nombre: "Modernizar Dashboard Actividades", modulo: "actividades", inicio: "2026-02-15", entrega: "2026-03-15", revision: "2026-03-22", estado: "activo", avance: 65, responsable: "Proveedor A" },
+            { nombre: "Reportes Avanzados Campo", modulo: "campo", inicio: "2026-02-20", entrega: "2026-04-10", revision: "2026-04-17", estado: "activo", avance: 45, responsable: "Proveedor B" },
+            { nombre: "Integración Torres", modulo: "torres", inicio: "2026-03-01", entrega: "2026-04-15", revision: "2026-04-22", estado: "pendiente", avance: 10, responsable: "Por asignar" },
+            { nombre: "Sistema de Cuadrillas", modulo: "cuadrillas", inicio: "2026-02-10", entrega: "2026-03-20", revision: "2026-03-27", estado: "revision", avance: 90, responsable: "Proveedor C" },
+            { nombre: "Módulo Financiero", modulo: "financiero", inicio: "2026-01-15", entrega: "2026-02-28", revision: "2026-03-07", estado: "completado", avance: 100, responsable: "Proveedor A" },
+            { nombre: "Mapeo Líneas Transmisión", modulo: "lineas", inicio: "2026-02-25", entrega: "2026-04-20", revision: "2026-04-27", estado: "activo", avance: 35, responsable: "Proveedor B" },
+            { nombre: "Gestión Ambiental Fase 1", modulo: "ambiental", inicio: "2026-02-01", entrega: "2026-03-10", revision: "2026-03-17", estado: "revision", avance: 85, responsable: "Proveedor C" },
+            { nombre: "Optimización BD Actividades", modulo: "actividades", inicio: "2026-03-05", entrega: "2026-03-25", revision: "2026-04-01", estado: "activo", avance: 55, responsable: "Proveedor A" },
+            { nombre: "API REST Líneas", modulo: "lineas", inicio: "2026-03-10", entrega: "2026-04-30", revision: "2026-05-07", estado: "activo", avance: 40, responsable: "Proveedor D" },
+            { nombre: "Validación Cuadrillas", modulo: "cuadrillas", inicio: "2026-03-15", entrega: "2026-04-10", revision: "2026-04-17", estado: "revision", avance: 95, responsable: "Proveedor C" },
+            { nombre: "Reportes Financieros 2026", modulo: "financiero", inicio: "2026-02-01", entrega: "2026-03-15", revision: "2026-03-22", estado: "completado", avance: 100, responsable: "Proveedor A" },
+            { nombre: "Integración Mapas Campo", modulo: "campo", inicio: "2026-03-01", entrega: "2026-05-01", revision: "2026-05-08", estado: "activo", avance: 25, responsable: "Proveedor B" },
+            { nombre: "Auditoría Ambiental", modulo: "ambiental", inicio: "2026-03-01", entrega: "2026-04-30", revision: "2026-05-07", estado: "activo", avance: 30, responsable: "Proveedor C" },
+            { nombre: "Backup Automático Sistema", modulo: "actividades", inicio: "2026-02-10", entrega: "2026-02-28", revision: "2026-03-07", estado: "completado", avance: 100, responsable: "Proveedor D" },
+            { nombre: "Seguridad Líneas Críticas", modulo: "lineas", inicio: "2026-02-01", entrega: "2026-03-31", revision: "2026-04-07", estado: "revision", avance: 75, responsable: "Proveedor A" },
+            { nombre: "Capacitación Cuadrillas", modulo: "cuadrillas", inicio: "2026-03-20", entrega: "2026-04-25", revision: "2026-05-02", estado: "pendiente", avance: 5, responsable: "Por asignar" },
+            { nombre: "Análisis Costos Campo", modulo: "campo", inicio: "2026-02-15", entrega: "2026-03-30", revision: "2026-04-06", estado: "completado", avance: 100, responsable: "Proveedor B" },
+            { nombre: "Actualización Políticas Ambientales", modulo: "ambiental", inicio: "2026-01-15", entrega: "2026-02-28", revision: "2026-03-07", estado: "completado", avance: 100, responsable: "Proveedor C" }
+        ];
+
+        // Cargar tabla
+        function cargarTabla() {
+            const tbody = document.getElementById('tbody-proyectos');
+            tbody.innerHTML = '';
+
+            proyectos.forEach(p => {
+                const fila = document.createElement('tr');
+                fila.className = `proyecto-row modulo-${p.modulo} estado-${p.estado}`;
+
+                const inicio = new Date(p.inicio);
+                const entrega = new Date(p.entrega);
+                const totalDias = Math.ceil((entrega - inicio) / (1000 * 60 * 60 * 24));
+                const posicion = ((inicio - new Date('2026-02-01')) / (1000 * 60 * 60 * 24)) / (148) * 100;
+                const ancho = (totalDias / 148) * 100;
+
+                fila.innerHTML = `
+                    <td class="col-proyecto">${p.nombre}</td>
+                    <td><span class="col-modulo modulo-${p.modulo}">${p.modulo}</span></td>
+                    <td class="fecha">${p.inicio}</td>
+                    <td class="fecha">${p.entrega}</td>
+                    <td class="fecha">${p.revision}</td>
+                    <td><span class="estado-badge estado-${p.estado}">${p.estado}</span></td>
+                    <td>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${p.avance}%">${p.avance}%</div>
+                        </div>
+                    </td>
+                    <td class="col-responsable">${p.responsable}</td>
+                    <td class="gantt-chart-col">
+                        <div class="gantt-bar-wrapper">
+                            <div class="gantt-bar bar-color-${p.modulo}"
+                                 style="left: ${posicion}%; width: ${ancho}%;"
+                                 onclick="editarProyecto('${p.nombre}')"
+                                 title="${p.inicio} → ${p.entrega}">
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(fila);
+            });
+        }
+
+        function filtrar() {
+            const modulo = document.getElementById('filtro-modulo').value;
+            const estado = document.getElementById('filtro-estado').value;
+
+            document.querySelectorAll('.proyecto-row').forEach(fila => {
+                let mostrar = true;
+                if (modulo && !fila.classList.contains(`modulo-${modulo}`)) mostrar = false;
+                if (estado && !fila.classList.contains(`estado-${estado}`)) mostrar = false;
+                fila.style.display = mostrar ? '' : 'none';
+            });
+        }
+
+        function abrirModalNuevo() {
+            document.getElementById('titulo-modal').textContent = 'Nuevo Proyecto';
+            document.getElementById('form-proyecto').reset();
+            document.getElementById('modal-proyecto').classList.add('active');
+        }
+
+        function editarProyecto(nombre) {
+            const p = proyectos.find(x => x.nombre === nombre);
+            if (!p) return;
+
+            document.getElementById('titulo-modal').textContent = `Editar: ${nombre}`;
+            document.getElementById('nombre-proyecto').value = p.nombre;
+            document.getElementById('modulo-proyecto').value = p.modulo;
+            document.getElementById('fecha-inicio').value = p.inicio;
+            document.getElementById('fecha-entrega').value = p.entrega;
+            document.getElementById('fecha-revision').value = p.revision;
+            document.getElementById('estado-proyecto').value = p.estado;
+            document.getElementById('avance-proyecto').value = p.avance;
+            document.getElementById('valor-avance').textContent = p.avance;
+            document.getElementById('responsable-proyecto').value = p.responsable;
+            document.getElementById('modal-proyecto').classList.add('active');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal-proyecto').classList.remove('active');
+        }
+
+        function guardarProyecto(e) {
+            e.preventDefault();
+            alert('Proyecto guardado exitosamente');
+            cerrarModal();
+        }
+
+        // Cerrar modal al hacer click afuera
+        document.getElementById('modal-proyecto').addEventListener('click', function(e) {
+            if (e.target === this) cerrarModal();
+        });
+
+        // Cargar datos al iniciar
+        cargarTabla();
+    </script>
+</body>
+</html>

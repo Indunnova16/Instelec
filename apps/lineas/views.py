@@ -644,3 +644,103 @@ class AvanceLineaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailVi
         )
 
         return context
+
+
+class TorreCreateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Create a new tower for a transmission line."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get(self, request, linea_pk):
+        """Show the form to create a new tower."""
+        try:
+            linea = Linea.objects.get(pk=linea_pk)
+        except Linea.DoesNotExist:
+            messages.error(request, 'Línea no encontrada.')
+            return redirect('lineas:lista')
+
+        from .forms import TorreForm
+        form = TorreForm()
+        return self.render_form(request, linea, form)
+
+    def post(self, request, linea_pk):
+        """Handle form submission to create a tower."""
+        try:
+            linea = Linea.objects.get(pk=linea_pk)
+        except Linea.DoesNotExist:
+            messages.error(request, 'Línea no encontrada.')
+            return redirect('lineas:lista')
+
+        from .forms import TorreForm
+        form = TorreForm(request.POST)
+
+        if form.is_valid():
+            tower = form.save(commit=False)
+            tower.linea = linea
+            # Set default coordinates (can be updated later)
+            tower.latitud = 4.5709
+            tower.longitud = -74.2973
+            tower.save()
+            messages.success(request, f'Torre {tower.numero} creada exitosamente.')
+            return redirect('lineas:detalle', pk=linea_pk)
+        else:
+            messages.error(request, 'Error al crear la torre. Revise los datos.')
+            return self.render_form(request, linea, form)
+
+    def render_form(self, request, linea, form):
+        """Render the tower form."""
+        from django.http import HttpResponse
+        from django.template.loader import render_to_string
+        html = render_to_string('lineas/partials/torre_form.html', {
+            'form': form,
+            'linea': linea,
+            'accion': 'Crear Torre'
+        })
+        return HttpResponse(html)
+
+
+class TorreEditView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Edit an existing tower."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get(self, request, pk):
+        """Show the form to edit a tower."""
+        try:
+            torre = Torre.objects.get(pk=pk)
+        except Torre.DoesNotExist:
+            messages.error(request, 'Torre no encontrada.')
+            return redirect('lineas:lista')
+
+        from .forms import TorreForm
+        form = TorreForm(instance=torre)
+        return self.render_form(request, torre, form)
+
+    def post(self, request, pk):
+        """Handle form submission to edit a tower."""
+        try:
+            torre = Torre.objects.get(pk=pk)
+        except Torre.DoesNotExist:
+            messages.error(request, 'Torre no encontrada.')
+            return redirect('lineas:lista')
+
+        from .forms import TorreForm
+        form = TorreForm(request.POST, instance=torre)
+
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Torre {torre.numero} actualizada exitosamente.')
+            return redirect('lineas:detalle', pk=torre.linea.pk)
+        else:
+            messages.error(request, 'Error al actualizar la torre. Revise los datos.')
+            return self.render_form(request, torre, form)
+
+    def render_form(self, request, torre, form):
+        """Render the tower form."""
+        from django.http import HttpResponse
+        from django.template.loader import render_to_string
+        html = render_to_string('lineas/partials/torre_form.html', {
+            'form': form,
+            'linea': torre.linea,
+            'torre': torre,
+            'accion': 'Editar Torre'
+        })
+        return HttpResponse(html)

@@ -1,0 +1,123 @@
+{# Modal form para crear/editar torres #}
+<div x-data="{ open: true, loading: false }" x-show="open" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" @click="open = false">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4" @click.stop>
+        <!-- Header -->
+        <div class="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white">{{ accion }}</h3>
+            <button type="button" @click="open = false" class="text-gray-400 hover:text-gray-500">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Form -->
+        <form method="post" @submit.prevent="submitForm" class="p-6 space-y-4">
+            {% csrf_token %}
+
+            <!-- Número -->
+            <div>
+                <label for="id_numero" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Número de Torre *
+                </label>
+                {% if form.numero.errors %}
+                    <input type="text" name="numero" id="id_numero" value="{{ form.numero.value }}" required
+                           class="mt-1 block w-full rounded-md border-red-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm bg-red-50 dark:bg-gray-700 dark:border-red-500">
+                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.numero.errors.0 }}</p>
+                {% else %}
+                    <input type="text" name="numero" id="id_numero" value="{{ form.numero.value|default:'' }}" required
+                           placeholder="Ej: T-001" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                {% endif %}
+            </div>
+
+            <!-- Tipo -->
+            <div>
+                <label for="id_tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Tipo de Torre *
+                </label>
+                {% if form.tipo.errors %}
+                    <select name="tipo" id="id_tipo" required class="mt-1 block w-full rounded-md border-red-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm bg-red-50 dark:bg-gray-700 dark:border-red-500 dark:text-white">
+                        {{ form.tipo }}
+                    </select>
+                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.tipo.errors.0 }}</p>
+                {% else %}
+                    <select name="tipo" id="id_tipo" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        <option value="">-- Seleccione tipo --</option>
+                        <option value="SUSPENSION" {% if form.tipo.value == 'SUSPENSION' %}selected{% endif %}>Suspensión</option>
+                        <option value="ANCLAJE" {% if form.tipo.value == 'ANCLAJE' %}selected{% endif %}>Anclaje</option>
+                        <option value="TERMINAL" {% if form.tipo.value == 'TERMINAL' %}selected{% endif %}>Terminal</option>
+                        <option value="REMATE" {% if form.tipo.value == 'REMATE' %}selected{% endif %}>Remate</option>
+                        <option value="DERIVACION" {% if form.tipo.value == 'DERIVACION' %}selected{% endif %}>Derivación</option>
+                    </select>
+                {% endif %}
+            </div>
+
+            <!-- Municipio -->
+            <div>
+                <label for="id_municipio" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Municipio
+                </label>
+                <input type="text" name="municipio" id="id_municipio" value="{{ form.municipio.value|default:'' }}"
+                       placeholder="Ej: Bogotá" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+            </div>
+
+            <!-- Observaciones -->
+            <div>
+                <label for="id_observaciones" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Observaciones
+                </label>
+                <textarea name="observaciones" id="id_observaciones" rows="3"
+                          placeholder="Añada cualquier observación importante..."
+                          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">{{ form.observaciones.value|default:'' }}</textarea>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex gap-3 pt-4">
+                <button type="submit" :disabled="loading" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50">
+                    <span x-show="!loading">{{ accion }}</span>
+                    <span x-show="loading" class="flex items-center justify-center">
+                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </span>
+                </button>
+                <button type="button" @click="open = false" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function submitForm(e) {
+    const form = e.target;
+    const formData = new FormData(form);
+    const loading = this.loading;
+
+    this.loading = true;
+
+    fetch(form.action || location.href, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            // Reload page on success
+            setTimeout(() => location.reload(), 500);
+        } else {
+            this.loading = false;
+            alert('Error al guardar la torre. Por favor, revise los datos.');
+        }
+    })
+    .catch(error => {
+        this.loading = false;
+        console.error('Error:', error);
+        alert('Error al guardar la torre.');
+    });
+}
+</script>

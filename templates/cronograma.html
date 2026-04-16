@@ -1,0 +1,859 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Cronograma de Módulos{% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --primary: #3b82f6;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --light: #f9fafb;
+        --dark: #1f2937;
+    }
+
+    .cronograma-container {
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+    }
+
+    .cronograma-header {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .cronograma-header h1 {
+        margin: 0;
+        color: var(--dark);
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .cronograma-header p {
+        color: #6b7280;
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    /* Tabla de cronograma */
+    .cronograma-table-wrapper {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .cronograma-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+    }
+
+    .cronograma-table thead {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .cronograma-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        border: none;
+    }
+
+    .cronograma-table tbody tr {
+        border-bottom: 1px solid #e5e7eb;
+        transition: background-color 0.2s;
+    }
+
+    .cronograma-table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+
+    .cronograma-table td {
+        padding: 1.2rem;
+        vertical-align: middle;
+    }
+
+    .modulo-nombre {
+        font-weight: 600;
+        color: var(--dark);
+    }
+
+    .fecha-cell {
+        font-weight: 500;
+        color: var(--dark);
+    }
+
+    .fecha-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        display: block;
+        margin-bottom: 0.2rem;
+    }
+
+    /* Estados y badges */
+    .badge {
+        display: inline-block;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .badge-pendiente {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .badge-en-desarrollo {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .badge-revision {
+        background: #dbeafe;
+        color: #0c4a6e;
+    }
+
+    .badge-completado {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    /* Barra de progreso */
+    .progress-bar-wrapper {
+        width: 100%;
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        transition: width 0.3s ease;
+    }
+
+    /* Timeline visual */
+    .cronograma-timeline {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 2rem;
+    }
+
+    .timeline-item {
+        display: flex;
+        margin-bottom: 2rem;
+        position: relative;
+    }
+
+    .timeline-item:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 20px;
+        top: 60px;
+        width: 2px;
+        height: calc(100% + 2rem);
+        background: #e5e7eb;
+    }
+
+    .timeline-dot {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        flex-shrink: 0;
+        margin-right: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .timeline-content {
+        flex: 1;
+        background: #f9fafb;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 3px solid #667eea;
+    }
+
+    .timeline-content h3 {
+        margin: 0 0 0.5rem 0;
+        color: var(--dark);
+    }
+
+    .timeline-dates {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-top: 0.8rem;
+        font-size: 0.85rem;
+    }
+
+    .timeline-date {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .timeline-date-label {
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    .timeline-date-value {
+        color: var(--dark);
+        font-weight: 600;
+    }
+
+    /* Filtros y controles */
+    .cronograma-controls {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .cronograma-controls label {
+        font-weight: 500;
+        color: var(--dark);
+        margin: 0;
+    }
+
+    .cronograma-controls select,
+    .cronograma-controls input {
+        padding: 0.5rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.9rem;
+    }
+
+    .btn-agregar {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.6rem 1.2rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-agregar:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    /* Resumen superior */
+    .resumen-estadisticas {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-top: 4px solid #667eea;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #667eea;
+    }
+
+    .stat-label {
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+
+    /* Modal de edición */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal-header {
+        margin-bottom: 1.5rem;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        color: var(--dark);
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: var(--dark);
+        font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 0.6rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        font-family: inherit;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .btn-cancel {
+        flex: 1;
+        padding: 0.6rem;
+        border: 1px solid #d1d5db;
+        background: white;
+        color: var(--dark);
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    .btn-save {
+        flex: 1;
+        padding: 0.6rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+        .cronograma-table {
+            font-size: 0.8rem;
+        }
+
+        .cronograma-table th,
+        .cronograma-table td {
+            padding: 0.7rem;
+        }
+
+        .resumen-estadisticas {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .cronograma-controls {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .cronograma-controls select,
+        .cronograma-controls input,
+        .btn-agregar {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cronograma-container">
+    <!-- Header -->
+    <div class="cronograma-header">
+        <h1>📅 Cronograma de Módulos</h1>
+        <p>Seguimiento de fechas de finalización y revisión por el proveedor</p>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="resumen-estadisticas">
+        <div class="stat-card">
+            <div class="stat-number">11</div>
+            <div class="stat-label">Total Módulos</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">3</div>
+            <div class="stat-label">En Desarrollo</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">2</div>
+            <div class="stat-label">En Revisión</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">6</div>
+            <div class="stat-label">Completados</div>
+        </div>
+    </div>
+
+    <!-- Controles -->
+    <div class="cronograma-controls">
+        <label>Filtrar por estado:</label>
+        <select id="filtro-estado" onchange="filtrarCronograma()">
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="en-desarrollo">En Desarrollo</option>
+            <option value="revision">En Revisión</option>
+            <option value="completado">Completado</option>
+        </select>
+
+        <label style="margin-left: auto;">Ordenar por:</label>
+        <select id="ordenar-por" onchange="ordenarCronograma()">
+            <option value="fecha-entrega">Fecha de Entrega</option>
+            <option value="fecha-revision">Fecha de Revisión</option>
+            <option value="nombre">Nombre</option>
+        </select>
+
+        <button class="btn-agregar" onclick="abrirModalNuevo()">+ Nuevo Módulo</button>
+    </div>
+
+    <!-- Tabla de Cronograma -->
+    <div class="cronograma-table-wrapper">
+        <table class="cronograma-table" id="tabla-cronograma">
+            <thead>
+                <tr>
+                    <th style="width: 20%;">Módulo</th>
+                    <th style="width: 20%;">Fecha Entrega</th>
+                    <th style="width: 20%;">Fecha Revisión</th>
+                    <th style="width: 15%;">Estado</th>
+                    <th style="width: 15%;">Responsable</th>
+                    <th style="width: 10%;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Actividades -->
+                <tr class="modulo-row" data-estado="en-desarrollo">
+                    <td class="modulo-nombre">Actividades</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-05-15
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-05-22
+                    </td>
+                    <td>
+                        <span class="badge badge-en-desarrollo">En Desarrollo</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 65%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor A</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('actividades')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('actividades')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Campo -->
+                <tr class="modulo-row" data-estado="en-desarrollo">
+                    <td class="modulo-nombre">Campo</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-05-10
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-05-17
+                    </td>
+                    <td>
+                        <span class="badge badge-en-desarrollo">En Desarrollo</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 75%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor B</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('campo')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('campo')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Cuadrillas -->
+                <tr class="modulo-row" data-estado="revision">
+                    <td class="modulo-nombre">Cuadrillas</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-04-20
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-04-27
+                    </td>
+                    <td>
+                        <span class="badge badge-revision">En Revisión</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 95%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor A</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('cuadrillas')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('cuadrillas')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Líneas -->
+                <tr class="modulo-row" data-estado="revision">
+                    <td class="modulo-nombre">Líneas</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-04-18
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-04-25
+                    </td>
+                    <td>
+                        <span class="badge badge-revision">En Revisión</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 90%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor C</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('lineas')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('lineas')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Usuarios -->
+                <tr class="modulo-row" data-estado="completado">
+                    <td class="modulo-nombre">Usuarios</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-04-01
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-04-08
+                    </td>
+                    <td>
+                        <span class="badge badge-completado">Completado</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 100%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor A</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('usuarios')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('usuarios')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Contratos -->
+                <tr class="modulo-row" data-estado="completado">
+                    <td class="modulo-nombre">Contratos</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-03-30
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-04-06
+                    </td>
+                    <td>
+                        <span class="badge badge-completado">Completado</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 100%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor B</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('contratos')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('contratos')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Financiero -->
+                <tr class="modulo-row" data-estado="completado">
+                    <td class="modulo-nombre">Financiero</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-03-25
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-04-01
+                    </td>
+                    <td>
+                        <span class="badge badge-completado">Completado</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 100%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor C</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('financiero')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('financiero')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Ambiental -->
+                <tr class="modulo-row" data-estado="completado">
+                    <td class="modulo-nombre">Ambiental</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-03-20
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-03-27
+                    </td>
+                    <td>
+                        <span class="badge badge-completado">Completado</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 100%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor A</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('ambiental')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('ambiental')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Indicadores -->
+                <tr class="modulo-row" data-estado="completado">
+                    <td class="modulo-nombre">Indicadores</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-03-15
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-03-22
+                    </td>
+                    <td>
+                        <span class="badge badge-completado">Completado</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 100%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor B</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('indicadores')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('indicadores')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- Core -->
+                <tr class="modulo-row" data-estado="completado">
+                    <td class="modulo-nombre">Core</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-03-10
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-03-17
+                    </td>
+                    <td>
+                        <span class="badge badge-completado">Completado</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 100%;"></div>
+                        </div>
+                    </td>
+                    <td>Proveedor C</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('core')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('core')" title="Ver">👁</button>
+                    </td>
+                </tr>
+
+                <!-- API -->
+                <tr class="modulo-row" data-estado="pendiente">
+                    <td class="modulo-nombre">API</td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Entrega</span>
+                        2026-06-01
+                    </td>
+                    <td class="fecha-cell">
+                        <span class="fecha-label">Revisión</span>
+                        2026-06-08
+                    </td>
+                    <td>
+                        <span class="badge badge-pendiente">Pendiente</span>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: 10%;"></div>
+                        </div>
+                    </td>
+                    <td>Por Asignar</td>
+                    <td>
+                        <button class="btn-action" onclick="editarModulo('api')" title="Editar">✎</button>
+                        <button class="btn-action" onclick="verDetalles('api')" title="Ver">👁</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal de Edición -->
+    <div class="modal" id="modalEdicion">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="titulo-modal">Editar Módulo</h2>
+            </div>
+            <form id="formulario-modulo">
+                <div class="form-group">
+                    <label>Nombre del Módulo</label>
+                    <input type="text" id="nombre-modulo" required>
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Entrega</label>
+                    <input type="date" id="fecha-entrega" required>
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Revisión</label>
+                    <input type="date" id="fecha-revision" required>
+                </div>
+                <div class="form-group">
+                    <label>Estado</label>
+                    <select id="estado-modulo" required>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="en-desarrollo">En Desarrollo</option>
+                        <option value="revision">En Revisión</option>
+                        <option value="completado">Completado</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Responsable (Proveedor)</label>
+                    <input type="text" id="responsable" required>
+                </div>
+                <div class="form-group">
+                    <label>Porcentaje de Avance</label>
+                    <input type="range" id="progreso" min="0" max="100" value="50">
+                    <span id="progreso-valor">50%</span>
+                </div>
+                <div class="form-group">
+                    <label>Observaciones</label>
+                    <textarea id="observaciones" rows="3" placeholder="Notas adicionales..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+                    <button type="submit" class="btn-save">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-action {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 0.4rem;
+        margin: 0 0.2rem;
+        transition: transform 0.2s;
+    }
+
+    .btn-action:hover {
+        transform: scale(1.2);
+    }
+</style>
+
+<script>
+    function filtrarCronograma() {
+        const estado = document.getElementById('filtro-estado').value;
+        const filas = document.querySelectorAll('.modulo-row');
+
+        filas.forEach(fila => {
+            if (estado === '' || fila.dataset.estado === estado) {
+                fila.style.display = '';
+            } else {
+                fila.style.display = 'none';
+            }
+        });
+    }
+
+    function ordenarCronograma() {
+        const orden = document.getElementById('ordenar-por').value;
+        console.log('Ordenar por:', orden);
+        // Implementar lógica de ordenamiento
+    }
+
+    function editarModulo(modulo) {
+        document.getElementById('titulo-modal').textContent = 'Editar: ' + modulo.charAt(0).toUpperCase() + modulo.slice(1);
+        document.getElementById('modalEdicion').classList.add('active');
+    }
+
+    function abrirModalNuevo() {
+        document.getElementById('titulo-modal').textContent = 'Nuevo Módulo';
+        document.getElementById('modalEdicion').classList.add('active');
+        document.getElementById('formulario-modulo').reset();
+    }
+
+    function cerrarModal() {
+        document.getElementById('modalEdicion').classList.remove('active');
+    }
+
+    function verDetalles(modulo) {
+        alert('Detalles del módulo: ' + modulo);
+    }
+
+    // Actualizar valor del progreso
+    document.addEventListener('DOMContentLoaded', function() {
+        const progreso = document.getElementById('progreso');
+        const valor = document.getElementById('progreso-valor');
+
+        if (progreso) {
+            progreso.addEventListener('input', function() {
+                valor.textContent = this.value + '%';
+            });
+        }
+    });
+</script>
+{% endblock %}

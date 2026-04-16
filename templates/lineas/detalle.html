@@ -263,9 +263,18 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Torres ({{ total_torres }})</h2>
-            <a href="{% url 'lineas:torres' linea.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
-                Ver todas
-            </a>
+            <div class="flex gap-3">
+                <button @click="document.getElementById('torre-form-container').innerHTML = ''; fetch('{% url 'lineas:torre_crear' linea.id %}').then(r => r.text()).then(html => document.getElementById('torre-form-container').innerHTML = html)"
+                        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Agregar Torre
+                </button>
+                <a href="{% url 'lineas:torres' linea.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
+                    Ver todas
+                </a>
+            </div>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -300,9 +309,15 @@
                             {{ torre.municipio|default:"-" }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right">
-                            <a href="{% url 'lineas:torre_detalle' torre.id %}" class="text-blue-600 hover:text-blue-800">
-                                Ver detalle
-                            </a>
+                            <div class="flex gap-3 justify-end">
+                                <button @click="fetch('{% url 'lineas:torre_editar' torre.id %}').then(r => r.text()).then(html => document.getElementById('torre-form-container').innerHTML = html)"
+                                        class="text-amber-600 hover:text-amber-800 text-sm font-medium">
+                                    Editar
+                                </button>
+                                <a href="{% url 'lineas:torre_detalle' torre.id %}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                    Ver detalle
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -316,6 +331,9 @@
             </table>
         </div>
     </div>
+
+    <!-- Modal container for tower form -->
+    <div id="torre-form-container"></div>
 </div>
 {% endblock %}
 
