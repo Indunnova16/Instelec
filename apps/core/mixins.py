@@ -32,10 +32,44 @@ class RoleRequiredMixin(UserPassesTestMixin):
     def test_func(self):
         if not self.request.user.is_authenticated:
             return False
+
         # Superusers and admin users have full access
-        if self.request.user.is_superuser or self.request.user.is_admin:
+        if self.request.user.is_superuser:
             return True
-        return self.request.user.rol in self.allowed_roles
+
+        # Check if user has is_admin property (for custom User model)
+        try:
+            if getattr(self.request.user, 'is_admin', False):
+                return True
+        except Exception:
+            pass
+
+        # Check user rol field
+        user_rol = getattr(self.request.user, 'rol', None)
+        if user_rol and self.allowed_roles:
+            return user_rol in self.allowed_roles
+
+        # If no specific roles required, allow authenticated users
+        if not self.allowed_roles:
+            return True
+
+        return False
+
+    def handle_no_permission(self):
+        """
+        Handle permission denied.
+        If user is not authenticated, redirect to login.
+        If user is authenticated but doesn't have permission, raise PermissionDenied.
+        """
+        if not self.request.user.is_authenticated:
+            # Not authenticated - redirect to login
+            return super().handle_no_permission()
+        # Authenticated but no permission - raise 403
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied(
+            f"Acceso denegado. Su rol ({getattr(self.request.user, 'rol', 'sin rol')}) "
+            f"no tiene permisos para esta acción."
+        )
 
 
 class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
