@@ -274,37 +274,39 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Numero</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Municipio</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Observaciones</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     {% for torre in torres %}
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 edit-row-detail" data-torre-id="{{ torre.id }}">
                         <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                             {{ torre.numero }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                             {{ torre.get_tipo_display }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 py-1 text-xs rounded-full
-                                {% if torre.estado == 'BUENO' %}bg-green-100 text-green-800
-                                {% elif torre.estado == 'REGULAR' %}bg-yellow-100 text-yellow-800
-                                {% elif torre.estado == 'MALO' %}bg-orange-100 text-orange-800
-                                {% else %}bg-red-100 text-red-800{% endif %}">
-                                {{ torre.get_estado_display }}
-                            </span>
-                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                             {{ torre.municipio|default:"-" }}
                         </td>
+                        <td class="px-6 py-4 edit-cell">
+                            <div class="observaciones-display text-gray-600 dark:text-gray-400 text-sm max-w-xs truncate cursor-pointer hover:underline" title="Click para editar">
+                                {{ torre.observaciones|default:"" }}
+                            </div>
+                            <input type="text" class="observaciones-input hidden w-full px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm" value="{{ torre.observaciones|default:'' }}" />
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right">
                             <div class="flex gap-3 justify-end">
-                                <button @click="fetch('{% url 'lineas:torre_editar' torre.id %}').then(r => r.text()).then(html => document.getElementById('torre-form-container').innerHTML = html)"
-                                        class="text-amber-600 hover:text-amber-800 text-sm font-medium">
+                                <button type="button" class="btn-edit-obs-detail text-blue-600 hover:text-blue-900 text-sm font-medium edit-action">
                                     Editar
+                                </button>
+                                <button type="button" class="btn-save-obs-detail hidden text-green-600 hover:text-green-900 text-sm font-medium edit-action">
+                                    Guardar
+                                </button>
+                                <button type="button" class="btn-cancel-obs-detail hidden text-gray-600 hover:text-gray-900 text-sm font-medium edit-action">
+                                    Cancelar
                                 </button>
                                 <a href="{% url 'lineas:torre_detalle' torre.id %}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
                                     Ver detalle
@@ -474,5 +476,68 @@ function submitVanos(e) {
         alert('Error al guardar los vanos.');
     });
 }
+
+// Torre Observaciones Editing
+function initTorreObservacionesEditing() {
+    document.querySelectorAll('.edit-row-detail').forEach(row => {
+        const editBtn = row.querySelector('.btn-edit-obs-detail');
+        const saveBtn = row.querySelector('.btn-save-obs-detail');
+        const cancelBtn = row.querySelector('.btn-cancel-obs-detail');
+        const displayDiv = row.querySelector('.observaciones-display');
+        const inputField = row.querySelector('.observaciones-input');
+        const torreId = row.dataset.torreId;
+
+        editBtn.addEventListener('click', () => {
+            displayDiv.classList.add('hidden');
+            inputField.classList.remove('hidden');
+            inputField.focus();
+            editBtn.classList.add('hidden');
+            saveBtn.classList.remove('hidden');
+            cancelBtn.classList.remove('hidden');
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            inputField.classList.add('hidden');
+            displayDiv.classList.remove('hidden');
+            editBtn.classList.remove('hidden');
+            saveBtn.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+            inputField.value = displayDiv.textContent;
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const newValue = inputField.value;
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+
+            fetch(`/lineas/api/torres/${torreId}/observaciones/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ observaciones: newValue })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Error al guardar');
+                return response.json();
+            })
+            .then(data => {
+                displayDiv.textContent = newValue;
+                displayDiv.title = newValue || 'Click para editar';
+                inputField.classList.add('hidden');
+                displayDiv.classList.remove('hidden');
+                editBtn.classList.remove('hidden');
+                saveBtn.classList.add('hidden');
+                cancelBtn.classList.add('hidden');
+            })
+            .catch(error => {
+                alert('Error al guardar observaciones: ' + error.message);
+            });
+        });
+    });
+}
+
+initTorreObservacionesEditing();
 </script>
 {% endblock %}

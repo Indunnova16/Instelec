@@ -8,6 +8,10 @@ from django.contrib import messages
 from django.views import View
 from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.utils.decorators import method_decorator
+import json
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Linea, Torre
 
@@ -765,3 +769,32 @@ class TorreEditView(LoginRequiredMixin, RoleRequiredMixin, View):
             'accion': 'Editar Torre'
         })
         return HttpResponse(html)
+
+
+class TorreUpdateObservacionesView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Update observaciones of a tower via API."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+    @method_decorator(require_http_methods(["PATCH"]))
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def patch(self, request, pk):
+        """Handle PATCH request to update observaciones."""
+        try:
+            torre = Torre.objects.get(pk=pk)
+            data = json.loads(request.body)
+            observaciones = data.get('observaciones', '')
+
+            torre.observaciones = observaciones
+            torre.save(update_fields=['observaciones'])
+
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Observaciones actualizadas',
+                'observaciones': torre.observaciones
+            })
+        except Torre.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Torre no encontrada'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)

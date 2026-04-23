@@ -3,29 +3,20 @@
         <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Numero</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ubicacion</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Coordenadas</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Observaciones</th>
             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
         </tr>
     </thead>
     <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
         {% for torre in torres %}
-        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 edit-row" data-torre-id="{{ torre.id }}">
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="font-medium text-gray-900 dark:text-white">{{ torre.numero }}</span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                 {{ torre.get_tipo_display }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="px-2 py-1 text-xs rounded-full
-                    {% if torre.estado == 'BUENO' %}bg-green-100 text-green-800
-                    {% elif torre.estado == 'REGULAR' %}bg-yellow-100 text-yellow-800
-                    {% elif torre.estado == 'MALO' %}bg-orange-100 text-orange-800
-                    {% else %}bg-red-100 text-red-800{% endif %}">
-                    {{ torre.get_estado_display }}
-                </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                 <div class="text-sm">{{ torre.municipio|default:"-" }}</div>
@@ -34,9 +25,25 @@
             <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400 text-sm font-mono">
                 {{ torre.latitud|floatformat:6 }}, {{ torre.longitud|floatformat:6 }}
             </td>
+            <td class="px-6 py-4 edit-cell">
+                <div class="observaciones-display text-gray-600 dark:text-gray-400 text-sm max-w-xs truncate cursor-pointer hover:underline" title="Click para editar">
+                    {{ torre.observaciones|default:"" }}
+                </div>
+                <input type="text" class="observaciones-input hidden w-full px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm" value="{{ torre.observaciones|default:'' }}" />
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <a href="{% url 'lineas:torre_detalle' torre.id %}" class="text-blue-600 hover:text-blue-900 mr-3">Ver</a>
-                <a href="{% url 'lineas:mapa' %}?torre={{ torre.id }}" class="text-green-600 hover:text-green-900">Mapa</a>
+                <button type="button" class="btn-edit-obs text-blue-600 hover:text-blue-900 mr-3 edit-action">
+                    Editar
+                </button>
+                <button type="button" class="btn-save-obs hidden text-green-600 hover:text-green-900 mr-3 edit-action">
+                    Guardar
+                </button>
+                <button type="button" class="btn-cancel-obs hidden text-gray-600 hover:text-gray-900 mr-3 edit-action">
+                    Cancelar
+                </button>
+                <a href="{% url 'lineas:mapa' %}?torre={{ torre.id }}" class="text-green-600 hover:text-green-900">
+                    Mapa
+                </a>
             </td>
         </tr>
         {% empty %}
@@ -76,3 +83,77 @@
     </nav>
 </div>
 {% endif %}
+
+<script>
+function initTorreEditing() {
+    document.querySelectorAll('.edit-row').forEach(row => {
+        const editBtn = row.querySelector('.btn-edit-obs');
+        const saveBtn = row.querySelector('.btn-save-obs');
+        const cancelBtn = row.querySelector('.btn-cancel-obs');
+        const displayDiv = row.querySelector('.observaciones-display');
+        const inputField = row.querySelector('.observaciones-input');
+        const torreId = row.dataset.torreId;
+
+        editBtn.addEventListener('click', () => {
+            displayDiv.classList.add('hidden');
+            inputField.classList.remove('hidden');
+            inputField.focus();
+            editBtn.classList.add('hidden');
+            saveBtn.classList.remove('hidden');
+            cancelBtn.classList.remove('hidden');
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            inputField.classList.add('hidden');
+            displayDiv.classList.remove('hidden');
+            editBtn.classList.remove('hidden');
+            saveBtn.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+            inputField.value = displayDiv.textContent;
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const newValue = inputField.value;
+
+            fetch(`/lineas/api/torres/${torreId}/observaciones/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                },
+                body: JSON.stringify({ observaciones: newValue })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Error al guardar');
+                return response.json();
+            })
+            .then(data => {
+                displayDiv.textContent = newValue;
+                displayDiv.title = newValue || 'Click para editar';
+                inputField.classList.add('hidden');
+                displayDiv.classList.remove('hidden');
+                editBtn.classList.remove('hidden');
+                saveBtn.classList.add('hidden');
+                cancelBtn.classList.add('hidden');
+                showNotification('✓ Observaciones guardadas');
+            })
+            .catch(error => {
+                showNotification('Error al guardar: ' + error.message, 'error');
+            });
+        });
+    });
+}
+
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 px-4 py-3 rounded-lg text-white ${type === 'error' ? 'bg-red-500' : 'bg-green-500'} shadow-lg z-50`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+}
+
+initTorreEditing();
+
+// Reinitialize when HTMX loads new content
+document.addEventListener('htmx:afterSwap', initTorreEditing);
+</script>

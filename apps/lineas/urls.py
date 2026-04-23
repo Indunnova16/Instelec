@@ -23,4 +23,5 @@ urlpatterns = [
     path('mi-avance/', views.AvanceCampoView.as_view(), name='mi_avance'),
     path('mi-avance/<uuid:pk>/', views.AvanceCampoLineaView.as_view(), name='avance_campo_linea'),
     path('mi-avance/<uuid:pk>/marcar/', views.MarcarActividadCompletadaView.as_view(), name='marcar_actividad_completada'),
+    path('api/torres/<uuid:pk>/observaciones/', views.TorreUpdateObservacionesView.as_view(), name='torre_update_observaciones'),
 ]

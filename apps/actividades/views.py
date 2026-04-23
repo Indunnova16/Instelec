@@ -334,7 +334,7 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
     def post(self, request, *args, **kwargs):
         """Handle Excel file upload and import."""
-        from .importers import ProgramaTranselcaImporter
+        from .importers import ProgramaTranselcaImporter, AvisosTranselcaImporter
         from apps.lineas.models import Linea
 
         archivo = request.FILES.get('archivo')
@@ -349,21 +349,63 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
         # Obtener parámetros
         linea_id = request.POST.get('linea')
-        anio = request.POST.get('anio')
-        mes = request.POST.get('mes')
+        anio_str = request.POST.get('anio', '').strip()
+        mes_str = request.POST.get('mes', '').strip()
         actualizar_existentes = request.POST.get('actualizar_existentes') == 'on'
 
-        if not all([linea_id, anio, mes]):
-            messages.error(request, 'Debe especificar línea, año y mes')
-            return redirect('actividades:importar')
+        # Convertir a int, permitir None para detección automática
+        anio = int(anio_str) if anio_str else None
+        mes = int(mes_str) if mes_str else None
+
+        # Si no hay línea, intentar importar como avisos (detecta línea del Excel)
+        if not linea_id:
+            importer = AvisosTranselcaImporter()
+            resultado = importer.importar(
+                archivo,
+                anio=anio,
+                mes=mes,
+                opciones={'actualizar_existentes': actualizar_existentes}
+            )
+
+            if resultado['exito']:
+                mensaje = (
+                    f"Importación exitosa: {resultado['actividades_creadas']} actividades creadas, "
+                    f"{resultado['actividades_actualizadas']} actualizadas."
+                )
+                if resultado.get('advertencias'):
+                    mensaje += f" {len(resultado['advertencias'])} advertencias."
+                messages.success(request, mensaje)
+            else:
+                messages.error(request, f"Error en importación: {resultado.get('error', 'Error desconocido')}")
+
+            return redirect('actividades:programacion')
 
         try:
             linea = Linea.objects.get(id=linea_id)
-            anio = int(anio)
-            mes = int(mes)
-        except (Linea.DoesNotExist, ValueError) as e:
-            messages.error(request, f'Error en parámetros: {e}')
+        except Linea.DoesNotExist as e:
+            messages.error(request, f'Línea no encontrada: {e}')
             return redirect('actividades:importar')
+
+        # Si año o mes no se especifican, detectarlos del Excel
+        if not anio or not mes:
+            importer_detect = ProgramaTranselcaImporter()
+            from openpyxl import load_workbook
+            try:
+                wb = load_workbook(archivo, read_only=True, data_only=True)
+                rows = list(wb.active.iter_rows(values_only=True))
+                importer_detect._detectar_columnas(rows[0])
+                anio_excel, mes_excel = importer_detect._detectar_fecha_excel(rows[1:])
+                anio = anio or anio_excel
+                mes = mes or mes_excel
+            except Exception:
+                pass
+
+        # Usar valores por defecto si no se encuentran
+        if not anio or not mes:
+            from datetime import date
+            hoy = date.today()
+            anio = anio or hoy.year
+            mes = mes or hoy.month
 
         # Crear o obtener programación mensual
         programacion, created = ProgramacionMensual.objects.get_or_create(
@@ -406,6 +448,47 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
             programacion.save(update_fields=['datos_importados', 'updated_at'])
         else:
             messages.error(request, f"Error en importación: {resultado.get('error', 'Error desconocido')}")
+
+        return redirect('actividades:programacion')
+
+
+class ImportarAvancesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """View for importing activity progress/avances from Excel."""
+    template_name = 'actividades/importar_avances.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context['columnas_soportadas'] = {
+            'Aviso SAP (requerido)': ['aviso sap', 'aviso', 'nro aviso', 'sap'],
+            'Porcentaje de Avance': ['avance', '% avance', 'porcentaje', 'progreso'],
+            'Estado': ['estado', 'status'],
+            'Observaciones': ['observaciones', 'notas', 'comentarios'],
+        }
+        return context
+
+    def post(self, request, *args, **kwargs):
+        from .importers import AvancesImporter
+
+        archivo = request.FILES.get('archivo')
+        if not archivo or not archivo.name.endswith(('.xlsx', '.xls')):
+            messages.error(request, 'Por favor suba un archivo Excel (.xlsx o .xls)')
+            return redirect('actividades:importar_avances')
+
+        importer = AvancesImporter()
+        resultado = importer.importar(archivo)
+
+        if resultado['exito']:
+            parts = [f"✓ {resultado['actividades_actualizadas']} actividades actualizadas"]
+            if resultado['filas_omitidas']:
+                parts.append(f"{resultado['filas_omitidas']} filas omitidas")
+            if resultado['advertencias']:
+                parts.append(f"{len(resultado['advertencias'])} advertencias")
+            if resultado['errores']:
+                parts.append(f"{len(resultado['errores'])} errores")
+            messages.success(request, ' | '.join(parts))
+        else:
+            messages.error(request, f"Error: {resultado.get('error', 'Error desconocido')}")
 
         return redirect('actividades:programacion')
 

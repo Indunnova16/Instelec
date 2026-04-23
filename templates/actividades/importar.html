@@ -15,7 +15,7 @@
 
             <div>
                 <label for="archivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Archivo Excel (.xlsx)
+                    Archivo Excel (.xlsx) <span class="text-red-500">*</span>
                 </label>
                 <input type="file" name="archivo" id="archivo" accept=".xlsx,.xls" required
                        class="block w-full text-sm text-gray-500 dark:text-gray-400
@@ -27,11 +27,62 @@
                               dark:file:bg-gray-700 dark:file:text-gray-300">
             </div>
 
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <label for="linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Línea <span class="text-xs text-gray-500">(opcional)</span>
+                    </label>
+                    <select name="linea" id="linea"
+                            class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">-- Detectar del Excel --</option>
+                        {% for linea in lineas %}
+                            <option value="{{ linea.id }}">{{ linea.codigo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="anio" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Año <span class="text-xs text-gray-500">(opcional)</span>
+                    </label>
+                    <select name="anio" id="anio"
+                            class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">-- Detectar del Excel --</option>
+                        {% for anio_opt in anios %}
+                            <option value="{{ anio_opt }}">{{ anio_opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="mes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Mes <span class="text-xs text-gray-500">(opcional)</span>
+                    </label>
+                    <select name="mes" id="mes"
+                            class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">-- Detectar del Excel --</option>
+                        {% for mes_num, mes_nombre in meses %}
+                            <option value="{{ mes_num }}">{{ mes_nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
             <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <h3 class="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Formato esperado</h3>
-                <p class="text-sm text-blue-700 dark:text-blue-400">
-                    El archivo debe contener las columnas: Linea, Torre, Tipo Actividad, Fecha Programada, Descripcion
-                </p>
+                <h3 class="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">ℹ️ Información importante</h3>
+                <ul class="text-sm text-blue-700 dark:text-blue-400 space-y-1">
+                    <li>• <strong>Línea, Año y Mes son opcionales:</strong> Se detectarán automáticamente del Excel si existen las columnas</li>
+                    <li>• Para torres que no están en el Excel, use <strong>N/A</strong></li>
+                    <li>• Columnas esperadas: Aviso SAP, Línea, Tipo Actividad, Torre, Año, Mes</li>
+                </ul>
+            </div>
+
+            <div class="flex items-center">
+                <input type="checkbox" name="actualizar_existentes" id="actualizar"
+                       class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600">
+                <label for="actualizar" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Actualizar actividades existentes (si ya existen por Aviso SAP)
+                </label>
             </div>
 
             <div class="flex justify-end gap-3">

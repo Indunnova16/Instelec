@@ -33,6 +33,7 @@ class ProgramaTranselcaImporter:
         'linea': ['línea', 'linea', 'line', 'codigo linea', 'código línea'],
         'tipo_actividad': ['tipo actividad', 'actividad', 'tipo', 'tipo de actividad', 'descripcion actividad'],
         'mes': ['mes', 'mes programado', 'fecha programada', 'mes ejecucion'],
+        'anio': ['año', 'ano', 'year'],
         'ejecutor': ['ejecutor', 'contratista', 'outsourcing', 'empresa'],
         'tramo': ['tramo', 'sector', 'seccion'],
         'torre_inicio': ['torre inicio', 'torre ini', 'desde torre', 'torre desde'],
@@ -168,6 +169,34 @@ class ProgramaTranselcaImporter:
         if idx < len(row):
             return row[idx]
         return None
+
+    def _detectar_fecha_excel(self, data_rows):
+        """Detecta año y mes del Excel inspeccionando datos."""
+        anio = None
+        mes = None
+
+        for row in data_rows[:5]:
+            if 'anio' in self.column_indices:
+                val = self._get_cell_value(row, 'anio')
+                if val:
+                    try:
+                        anio = int(val)
+                        if 2000 < anio < 2100:
+                            break
+                    except (ValueError, TypeError):
+                        pass
+
+            if 'mes' in self.column_indices:
+                val = self._get_cell_value(row, 'mes')
+                if val:
+                    try:
+                        mes = int(val)
+                        if 1 <= mes <= 12:
+                            break
+                    except (ValueError, TypeError):
+                        pass
+
+        return anio, mes
 
     def _procesar_fila(self, row, row_num, programacion_mensual, linea_asociada, actualizar_existentes):
         """Procesa una fila del Excel y crea/actualiza la actividad."""
@@ -377,6 +406,8 @@ class AvisosTranselcaImporter:
         'torre_inicio': ['torre inicio', 'desde', 'torre desde'],
         'torre_fin': ['torre fin', 'hasta', 'torre hasta'],
         'descripcion': ['descripcion', 'descripción', 'descripcion actividad'],
+        'anio': ['año', 'año fin prioridad', 'ano', 'year'],
+        'mes': ['mes', 'mes ejecucion', 'mes\nejecu', 'month'],
     }
 
     def __init__(self):
@@ -387,20 +418,21 @@ class AvisosTranselcaImporter:
         self.actividades_omitidas = []
         self.column_indices = {}
 
-    def importar(self, archivo_excel, anio: int, mes: int, opciones=None):
+    def importar(self, archivo_excel, anio: int = None, mes: int = None, opciones=None):
         """
         Importa avisos desde el archivo Excel de Transelca.
 
         Args:
             archivo_excel: File object or path to Excel file
-            anio: Año de la programación
-            mes: Mes de la programación
+            anio: Año de la programación (opcional, se detecta del Excel si no se proporciona)
+            mes: Mes de la programación (opcional, se detecta del Excel si no se proporciona)
             opciones: Dict with import options
 
         Returns:
             Dict with import summary
         """
         from apps.lineas.models import Linea
+        from datetime import date
 
         from .models import TipoActividad
 
@@ -432,6 +464,19 @@ class AvisosTranselcaImporter:
                 'exito': False,
                 'error': 'No se encontró la columna de Aviso SAP',
             }
+
+        # Detectar año y mes del Excel si no se proporcionan
+        if not anio or not mes:
+            anio_excel, mes_excel = self._detectar_fecha_excel(rows[1:])
+            if anio_excel and mes_excel:
+                anio = anio or anio_excel
+                mes = mes or mes_excel
+
+        # Usar valores por defecto si no se encuentran
+        if not anio or not mes:
+            hoy = date.today()
+            anio = anio or hoy.year
+            mes = mes or hoy.month
 
         # Cache de líneas y tipos de actividad
         lineas_cache = {linea_obj.codigo: linea_obj for linea_obj in Linea.objects.all()}
@@ -481,6 +526,34 @@ class AvisosTranselcaImporter:
                     break
 
         logger.info(f"Avisos importer detected columns: {self.column_indices}")
+
+    def _detectar_fecha_excel(self, data_rows):
+        """Detecta año y mes del Excel inspeccionando datos."""
+        anio = None
+        mes = None
+
+        for row in data_rows[:5]:  # Revisar primeras 5 filas
+            if 'anio' in self.column_indices:
+                val = self._get_cell(row, 'anio')
+                if val:
+                    try:
+                        anio = int(val)
+                        if 2000 < anio < 2100:
+                            break
+                    except (ValueError, TypeError):
+                        pass
+
+            if 'mes' in self.column_indices:
+                val = self._get_cell(row, 'mes')
+                if val:
+                    try:
+                        mes = int(val)
+                        if 1 <= mes <= 12:
+                            break
+                    except (ValueError, TypeError):
+                        pass
+
+        return anio, mes
 
     def _get_cell(self, row, field_name):
         """Obtiene el valor de una celda."""
@@ -662,3 +735,145 @@ class ImportadorExcelGenerico:
             data.append(row_dict)
 
         return data
+
+
+class AvancesImporter:
+    """
+    Importa avances de actividades desde Excel con detección flexible de columnas.
+    Busca actividades por aviso_sap y actualiza porcentaje_avance, estado, observaciones.
+    """
+
+    COLUMN_MAPPINGS = {
+        'aviso_sap': ['aviso sap', 'aviso', 'nro aviso', 'numero aviso', 'sap', 'no. aviso', 'aviso_sap', 'id aviso'],
+        'porcentaje_avance': ['avance', 'porcentaje avance', '% avance', 'avance %', 'porcentaje', 'progreso', '% progreso', 'porcentaje_avance'],
+        'estado': ['estado', 'estado actividad', 'status'],
+        'observaciones': ['observaciones', 'notas', 'comentarios', 'obs', 'nota'],
+    }
+
+    ESTADO_MAPPING = {
+        'pendiente': 'PENDIENTE',
+        'programada': 'PROGRAMADA',
+        'en curso': 'EN_CURSO',
+        'en_curso': 'EN_CURSO',
+        'completada': 'COMPLETADA',
+        'cancelada': 'CANCELADA',
+        'reprogramada': 'REPROGRAMADA',
+    }
+
+    def __init__(self):
+        self.errores = []
+        self.advertencias = []
+        self.actividades_actualizadas = []
+        self.filas_omitidas = []
+        self.column_indices = {}
+
+    def importar(self, archivo_excel):
+        """Importa avances desde un archivo Excel."""
+        try:
+            workbook = load_workbook(archivo_excel, read_only=True, data_only=True)
+            sheet = workbook.active
+        except Exception as e:
+            logger.error(f"Error loading Excel file: {e}")
+            return {'exito': False, 'error': f'Error al cargar archivo Excel: {str(e)}'}
+
+        rows = list(sheet.iter_rows(values_only=True))
+        if not rows:
+            return {'exito': False, 'error': 'El archivo está vacío'}
+
+        self._detectar_columnas(rows[0])
+
+        if 'aviso_sap' not in self.column_indices:
+            columnas_recibidas = [str(h) for h in rows[0] if h]
+            return {
+                'exito': False,
+                'error': f'No se encontró columna de Aviso SAP. Columnas detectadas: {", ".join(columnas_recibidas)}',
+                'columnas_recibidas': columnas_recibidas,
+            }
+
+        with transaction.atomic():
+            for row_num, row in enumerate(rows[1:], start=2):
+                try:
+                    self._procesar_fila(row, row_num)
+                except Exception as e:
+                    logger.warning(f"Error processing row {row_num}: {e}")
+                    self.errores.append({'fila': row_num, 'error': str(e)})
+
+        return {
+            'exito': True,
+            'actividades_actualizadas': len(self.actividades_actualizadas),
+            'filas_omitidas': len(self.filas_omitidas),
+            'errores': self.errores,
+            'advertencias': self.advertencias,
+            'columnas_detectadas': list(self.column_indices.keys()),
+        }
+
+    def _detectar_columnas(self, header_row):
+        """Detecta las columnas en la fila de encabezado."""
+        for col_idx, cell_value in enumerate(header_row):
+            if cell_value is None:
+                continue
+            cell_lower = str(cell_value).lower().strip()
+            for field_name, posibles in self.COLUMN_MAPPINGS.items():
+                if cell_lower in posibles and field_name not in self.column_indices:
+                    self.column_indices[field_name] = col_idx
+                    break
+
+        logger.info(f"Avances importer detected columns: {self.column_indices}")
+
+    def _get_cell(self, row, field_name):
+        """Obtiene el valor de una celda por nombre de campo."""
+        if field_name not in self.column_indices:
+            return None
+        idx = self.column_indices[field_name]
+        return row[idx] if idx < len(row) else None
+
+    def _procesar_fila(self, row, row_num):
+        """Procesa una fila del Excel y actualiza la actividad."""
+        from .models import Actividad
+
+        aviso_sap = self._get_cell(row, 'aviso_sap')
+        if not aviso_sap:
+            self.filas_omitidas.append(row_num)
+            return
+
+        aviso_sap = str(aviso_sap).strip()
+        try:
+            actividad = Actividad.objects.get(aviso_sap=aviso_sap)
+        except Actividad.DoesNotExist:
+            self.advertencias.append({
+                'fila': row_num,
+                'mensaje': f'Aviso SAP no encontrado: {aviso_sap}'
+            })
+            self.filas_omitidas.append(row_num)
+            return
+
+        actualizado = False
+
+        porcentaje = self._get_cell(row, 'porcentaje_avance')
+        if porcentaje is not None:
+            try:
+                pct = Decimal(str(porcentaje).replace('%', '').replace(',', '.').strip())
+                actividad.actualizar_avance(pct)
+                actualizado = True
+            except (ValueError, TypeError):
+                self.advertencias.append({
+                    'fila': row_num,
+                    'mensaje': f'Porcentaje inválido para SAP {aviso_sap}: {porcentaje}'
+                })
+
+        estado_raw = self._get_cell(row, 'estado')
+        if estado_raw:
+            estado_mapped = self.ESTADO_MAPPING.get(str(estado_raw).lower().strip())
+            if estado_mapped and estado_mapped in dict(Actividad.Estado.choices):
+                actividad.estado = estado_mapped
+                actividad.save(update_fields=['estado', 'updated_at'])
+                actualizado = True
+
+        obs = self._get_cell(row, 'observaciones')
+        if obs:
+            actividad.observaciones_programacion = str(obs)
+            actividad.save(update_fields=['observaciones_programacion', 'updated_at'])
+            actualizado = True
+
+        if actualizado:
+            self.actividades_actualizadas.append(aviso_sap)
