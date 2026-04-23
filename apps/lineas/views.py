@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 import json
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import Linea, Torre
+from .models import Linea, Torre, Vano
 
 logger = logging.getLogger(__name__)
 
@@ -798,3 +798,71 @@ class TorreUpdateObservacionesView(LoginRequiredMixin, RoleRequiredMixin, View):
             return JsonResponse({'status': 'error', 'message': 'Torre no encontrada'}, status=404)
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+class TorreDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Delete a tower."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def delete(self, request, pk):
+        try:
+            torre = Torre.objects.get(pk=pk)
+            torre.delete()
+            return JsonResponse({'success': True, 'message': 'Torre eliminada'})
+        except Torre.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Torre no encontrada'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+class VanoCreateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Create a new vano."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def post(self, request, linea_id):
+        try:
+            linea = Linea.objects.get(pk=linea_id)
+            data = json.loads(request.body)
+
+            vano = Vano.objects.create(
+                linea=linea,
+                numero=data.get('numero'),
+                observaciones=data.get('observaciones', '')
+            )
+            return JsonResponse({'success': True, 'message': 'Vano creado', 'id': str(vano.id)})
+        except Linea.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Línea no encontrada'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+class VanoEditView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Edit a vano."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def patch(self, request, pk):
+        try:
+            vano = Vano.objects.get(pk=pk)
+            data = json.loads(request.body)
+            vano.observaciones = data.get('observaciones', '')
+            vano.save(update_fields=['observaciones'])
+            return JsonResponse({'success': True, 'message': 'Vano actualizado'})
+        except Vano.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Vano no encontrado'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+class VanoDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Delete a vano."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def delete(self, request, pk):
+        try:
+            vano = Vano.objects.get(pk=pk)
+            vano.delete()
+            return JsonResponse({'success': True, 'message': 'Vano eliminado'})
+        except Vano.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Vano no encontrado'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)

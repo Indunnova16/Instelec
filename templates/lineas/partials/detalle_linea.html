@@ -23,10 +23,6 @@
                     <dd class="font-medium text-gray-900 dark:text-white">{{ linea.tension_kv|default:"-" }} kV</dd>
                 </div>
                 <div>
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Longitud</dt>
-                    <dd class="font-medium text-gray-900 dark:text-white">{{ linea.longitud_km|default:"-" }} km</dd>
-                </div>
-                <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Estado</dt>
                     <dd>
                         {% if linea.activa %}
@@ -76,35 +72,216 @@
         </div>
     </div>
 
-    <!-- Torres Preview -->
+    <!-- Torres Table -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <h3 class="font-semibold text-gray-900 dark:text-white">Torres ({{ total_torres }})</h3>
-            <a href="{% url 'lineas:torres' linea.id %}" class="text-blue-600 hover:text-blue-800 text-sm">Ver todas</a>
-        </div>
-        <div class="divide-y divide-gray-200 dark:divide-gray-700">
-            {% for torre in torres|slice:":5" %}
-            <div class="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">
-                <div>
-                    <span class="font-medium text-gray-900 dark:text-white">{{ torre.numero }}</span>
-                    <span class="text-sm text-gray-500 ml-2">{{ torre.get_tipo_display }}</span>
-                </div>
-                <div class="flex items-center gap-4">
-                    <span class="px-2 py-1 text-xs rounded-full
-                        {% if torre.estado == 'BUENO' %}bg-green-100 text-green-800
-                        {% elif torre.estado == 'REGULAR' %}bg-yellow-100 text-yellow-800
-                        {% elif torre.estado == 'MALO' %}bg-orange-100 text-orange-800
-                        {% else %}bg-red-100 text-red-800{% endif %}">
-                        {{ torre.get_estado_display }}
-                    </span>
-                    <a href="{% url 'lineas:torre_detalle' torre.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
-                        Ver
-                    </a>
-                </div>
+            <div class="flex gap-2">
+                <a href="{% url 'lineas:torres' linea.id %}" class="text-blue-600 hover:text-blue-800 text-sm">Ver todas</a>
+                <button onclick="mostrarFormularioAgregarTorre()" class="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    + Agregar Torre
+                </button>
             </div>
-            {% empty %}
-            <div class="p-4 text-center text-gray-500">No hay torres registradas</div>
-            {% endfor %}
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Número</th>
+                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Tipo</th>
+                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones</th>
+                        <th class="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for torre in linea.torres.all %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ torre.numero }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ torre.get_tipo_display }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ torre.observaciones|default:"-" }}</td>
+                        <td class="px-4 py-3 text-right text-sm flex justify-end gap-2">
+                            <button onclick="editarTorre('{{ torre.id }}')" class="text-blue-600 hover:text-blue-800">Editar</button>
+                            <button onclick="eliminarTorre('{{ torre.id }}')" class="text-red-600 hover:text-red-800">Eliminar</button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-4 py-4 text-center text-gray-500 dark:text-gray-400">No hay torres registradas</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Vanos Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h3 class="font-semibold text-gray-900 dark:text-white">Vanos ({{ linea.vanos.count }})</h3>
+            <button onclick="mostrarFormularioAgregarVano()" class="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
+                + Agregar Vano
+            </button>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Número Vano</th>
+                        <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones</th>
+                        <th class="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for vano in linea.vanos.all %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ vano.numero }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ vano.observaciones|default:"-" }}</td>
+                        <td class="px-4 py-3 text-right text-sm flex justify-end gap-2">
+                            <button onclick="editarVano('{{ vano.id }}')" class="text-blue-600 hover:text-blue-800">Editar</button>
+                            <button onclick="eliminarVano('{{ vano.id }}')" class="text-red-600 hover:text-red-800">Eliminar</button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="px-4 py-4 text-center text-gray-500 dark:text-gray-400">No hay vanos registrados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
+
+<script>
+function mostrarFormularioAgregarTorre() {
+    const numero = prompt('Ingrese el número de la torre:');
+    if (!numero) return;
+
+    const tipo = prompt('Ingrese el tipo de torre (SUSPENSION, ANCLAJE, TERMINAL, REMATE, DERIVACION):');
+    if (!tipo) return;
+
+    const latitud = prompt('Ingrese la latitud:');
+    if (!latitud) return;
+
+    const longitud = prompt('Ingrese la longitud:');
+    if (!longitud) return;
+
+    const observaciones = prompt('Ingrese observaciones (opcional):') || '';
+
+    fetch(`{% url 'lineas:torre_crear' linea.id %}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            numero, tipo, latitud, longitud, observaciones
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo crear la torre'));
+        }
+    })
+    .catch(e => alert('Error: ' + e.message));
+}
+
+function editarTorre(torreId) {
+    const observaciones = prompt('Ingrese nuevas observaciones:');
+    if (observaciones === null) return;
+
+    fetch(`/lineas/torre/${torreId}/editar/`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({observaciones})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+        else alert('Error: ' + (data.error || 'No se pudo actualizar'));
+    });
+}
+
+function eliminarTorre(torreId) {
+    if (!confirm('¿Está seguro?')) return;
+
+    fetch(`/lineas/torre/${torreId}/`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+        else alert('Error: ' + (data.error || 'No se pudo eliminar'));
+    });
+}
+
+function mostrarFormularioAgregarVano() {
+    const numero = prompt('Ingrese el número del vano:');
+    if (!numero) return;
+
+    const observaciones = prompt('Ingrese observaciones (opcional):') || '';
+
+    fetch(`{% url 'lineas:vano_crear' linea.id %}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({numero, observaciones})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+        else alert('Error: ' + (data.error || 'No se pudo crear'));
+    });
+}
+
+function editarVano(vanoId) {
+    const observaciones = prompt('Ingrese nuevas observaciones:');
+    if (observaciones === null) return;
+
+    fetch(`/lineas/vano/${vanoId}/editar/`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({observaciones})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+        else alert('Error');
+    });
+}
+
+function eliminarVano(vanoId) {
+    if (!confirm('¿Está seguro?')) return;
+
+    fetch(`/lineas/vano/${vanoId}/`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+    });
+}
+
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+}
+</script>

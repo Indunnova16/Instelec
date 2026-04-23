@@ -469,3 +469,52 @@ class Tramo(BaseModel):
             raise ValidationError(
                 'Las torres de inicio y fin deben pertenecer a la misma línea del tramo.'
             )
+
+
+class Vano(BaseModel):
+    """
+    Vano = Espacio entre dos torres consecutivas en una línea.
+    Se usa para registrar información específica de cada vano.
+    """
+
+    linea = models.ForeignKey(
+        Linea,
+        on_delete=models.CASCADE,
+        related_name='vanos',
+        verbose_name='Línea'
+    )
+    numero = models.CharField(
+        'Número de vano',
+        max_length=20,
+        help_text='Número o identificador del vano'
+    )
+    torre_inicio = models.ForeignKey(
+        Torre,
+        on_delete=models.CASCADE,
+        related_name='vanos_inicio',
+        verbose_name='Torre inicio',
+        null=True,
+        blank=True
+    )
+    torre_fin = models.ForeignKey(
+        Torre,
+        on_delete=models.CASCADE,
+        related_name='vanos_fin',
+        verbose_name='Torre fin',
+        null=True,
+        blank=True
+    )
+    observaciones = models.TextField(
+        'Observaciones',
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'vanos'
+        verbose_name = 'Vano'
+        verbose_name_plural = 'Vanos'
+        unique_together = ['linea', 'numero']
+        ordering = ['linea', 'numero']
+
+    def __str__(self):
+        return f"Vano {self.numero} - {self.linea.codigo}"
