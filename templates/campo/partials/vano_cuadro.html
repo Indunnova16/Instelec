@@ -1,0 +1,52 @@
+{% load static %}
+<div id="vano-{{ vano.id }}" class="vano-item group cursor-pointer rounded-lg border-2 p-4 text-center transition-all hover:shadow-lg
+    {% if vano.estado == 'ejecutado' %}bg-green-50 border-green-300 hover:bg-green-100
+    {% elif vano.estado == 'sin_permiso' %}bg-orange-50 border-orange-300 hover:bg-orange-100
+    {% elif vano.estado == 'no_ejecutado' %}bg-red-50 border-red-300 hover:bg-red-100
+    {% elif vano.estado == 'en_espera' %}bg-yellow-50 border-yellow-300 hover:bg-yellow-100
+    {% else %}bg-gray-50 border-gray-300 hover:bg-gray-100
+    {% endif %}">
+
+    <div class="text-2xl font-bold mb-2
+        {% if vano.estado == 'ejecutado' %}text-green-700
+        {% elif vano.estado == 'sin_permiso' %}text-orange-700
+        {% elif vano.estado == 'no_ejecutado' %}text-red-700
+        {% elif vano.estado == 'en_espera' %}text-yellow-700
+        {% else %}text-gray-700
+        {% endif %}">
+        Vano {{ vano.numero }}
+    </div>
+
+    <div class="text-xs text-gray-600 mb-3">
+        {{ vano.get_estado_display }}
+    </div>
+
+    <button type="button"
+        @click="showMenu = '{{ vano.id }}';"
+        class="w-full text-xs py-1 px-2 rounded bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 transition">
+        Cambiar estado
+    </button>
+
+    <!-- Dropdown menu -->
+    <div x-cloak
+        x-show="showMenu === '{{ vano.id }}'"
+        @click.away="showMenu = null"
+        class="absolute z-50 mt-2 w-48 rounded-lg shadow-lg border border-gray-200 bg-white">
+        <form hx-post="{% url 'campo:vano_estado' vano.id %}"
+            hx-target="#vano-{{ vano.id }}"
+            hx-swap="outerHTML"
+            @submit="showMenu = null">
+            {% csrf_token %}
+
+            <div class="space-y-1 p-2">
+                {% for value, label in vano.Estado.choices %}
+                    <button type="submit" name="estado" value="{{ value }}"
+                        class="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition
+                        {% if vano.estado == value %}bg-blue-100 font-semibold{% endif %}">
+                        {{ label }}
+                    </button>
+                {% endfor %}
+            </div>
+        </form>
+    </div>
+</div>

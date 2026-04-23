@@ -620,57 +620,81 @@ class MarcarVanoView(LoginRequiredMixin, View):
 
 class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """
-    Formulario para registrar avances en torres.
-    - Trabajadores: ven solo su línea y cuadrilla asignadas
-    - Administradores: pueden seleccionar cualquier línea, torre y cuadrilla
+    Vista de avances por vanos.
+    - Trabajadores: ven solo su línea asignada, con selector de vanos
+    - Administradores: pueden seleccionar cualquier línea y ver sus vanos
     """
     template_name = 'campo/avance_registrar.html'
-    allowed_roles = ['liniero', 'auxiliar', 'supervisor', 'admin', 'director', 'coordinador']
+    allowed_roles = ['liniero', 'auxiliar', 'supervisor', 'admin', 'director', 'coordinador', 'ing_residente']
 
     def get_context_data(self, **kwargs):
+        from apps.lineas.models import Linea, Vano
+        from apps.cuadrillas.models import CuadrillaMiembro
+        from django.db.models import Q, Count
+
         context = super().get_context_data(**kwargs)
         usuario = self.request.user
-        es_admin = usuario.rol in ['admin', 'director', 'coordinador']
+        es_admin = usuario.rol in ['admin', 'director', 'coordinador', 'ing_residente']
+        linea_id = self.request.GET.get('linea_id', '')
 
+        # Get available lines for the user
         if es_admin:
-            # Administradores: pueden ver todas las líneas y cuadrillas
-            from apps.lineas.models import Linea, Torre
-            from apps.cuadrillas.models import Cuadrilla
-
-            context['es_admin'] = True
-            context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
-            context['cuadrillas'] = Cuadrilla.objects.filter(activa=True).order_by('nombre')
-            context['torres'] = Torre.objects.select_related('linea').order_by('linea', 'numero')
+            lineas = Linea.objects.filter(activa=True).order_by('codigo')
         else:
-            # Trabajadores: ven solo su línea y cuadrilla asignadas
-            from apps.cuadrillas.models import CuadrillaMiembro
+            # Get user's assigned cuadrilla and line
             miembro = CuadrillaMiembro.objects.filter(
                 usuario=usuario,
                 activo=True
             ).select_related('cuadrilla').first()
 
-            if not miembro:
-                context['error'] = 'No estás asignado a ninguna cuadrilla activa.'
+            if not miembro or not miembro.cuadrilla.linea_asignada:
+                context['error'] = 'No estás asignado a una cuadrilla con línea.'
                 return context
 
-            cuadrilla = miembro.cuadrilla
-            context['cuadrilla'] = cuadrilla
+            lineas = Linea.objects.filter(id=miembro.cuadrilla.linea_asignada.id)
+            # If worker without admin role and no linea_id, auto-select their line
+            if not linea_id:
+                linea_id = str(miembro.cuadrilla.linea_asignada.id)
 
-            # Obtener línea asignada a la cuadrilla
-            if not cuadrilla.linea_asignada:
-                context['error'] = 'Tu cuadrilla no tiene una línea asignada.'
+        context['lineas'] = lineas
+
+        # If a line is selected, show vanos for that line
+        if linea_id:
+            try:
+                linea = Linea.objects.get(id=linea_id)
+            except Linea.DoesNotExist:
+                context['error'] = 'Línea no encontrada.'
                 return context
 
-            linea = cuadrilla.linea_asignada
+            # Verify permission
+            if not es_admin:
+                miembro = CuadrillaMiembro.objects.filter(
+                    usuario=usuario,
+                    activo=True,
+                    cuadrilla__linea_asignada=linea,
+                    cuadrilla__activa=True
+                ).exists()
+                if not miembro:
+                    context['error'] = 'No tienes permiso para ver esta línea.'
+                    return context
+
+            vanos = Vano.objects.filter(linea=linea).order_by('numero')
             context['linea'] = linea
+            context['vanos'] = vanos
 
-            # Obtener torres de la línea
-            from apps.lineas.models import Torre
-            torres = Torre.objects.filter(linea=linea).order_by('numero')
-            context['torres'] = torres
+            # Calculate stats
+            estados = vanos.values('estado').annotate(count=Count('estado'))
+            stats = {e['estado']: e['count'] for e in estados}
 
-        # Tipos de avance
-        context['tipos_avance'] = RegistroAvance.TipoAvance.choices
+            context['total_vanos'] = vanos.count()
+            context['vanos_ejecutados'] = stats.get(Vano.Estado.EJECUTADO, 0)
+            context['vanos_pendientes'] = stats.get(Vano.Estado.PENDIENTE, 0)
+            context['vanos_sin_permiso'] = stats.get(Vano.Estado.SIN_PERMISO, 0)
+            context['vanos_no_ejecutado'] = stats.get(Vano.Estado.NO_EJECUTADO, 0)
+            context['vanos_en_espera'] = stats.get(Vano.Estado.EN_ESPERA, 0)
+
+            total = context['total_vanos']
+            context['porcentaje'] = round(context['vanos_ejecutados'] / total * 100) if total > 0 else 0
 
         return context
 
@@ -839,3 +863,50 @@ class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
         context['cuadrillas'] = Cuadrilla.objects.filter(activa=True).order_by('nombre')
 
         return context
+
+
+class VanoEstadoUpdateView(LoginRequiredMixin, View):
+    """Update estado of a Vano via HTMX."""
+
+    def post(self, request, pk):
+        from apps.lineas.models import Vano
+        from django.utils import timezone
+        from django.http import HttpResponse
+
+        try:
+            vano = Vano.objects.select_related('linea', 'marcado_por').get(pk=pk)
+        except Vano.DoesNotExist:
+            return HttpResponse('Vano no encontrado', status=404)
+
+        # Authorization: check if user is part of a cuadrilla assigned to this line or is admin
+        usuario = request.user
+        es_admin = usuario.rol in ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+        if not es_admin:
+            from apps.cuadrillas.models import CuadrillaMiembro
+            tiene_acceso = CuadrillaMiembro.objects.filter(
+                usuario=usuario,
+                activo=True,
+                cuadrilla__linea_asignada=vano.linea,
+                cuadrilla__activa=True,
+            ).exists()
+            if not tiene_acceso:
+                return HttpResponse('No tienes permiso', status=403)
+
+        nuevo_estado = request.POST.get('estado', '').strip()
+        observaciones = request.POST.get('observaciones', '').strip()
+
+        if nuevo_estado not in dict(Vano.Estado.choices):
+            return HttpResponse('Estado inválido', status=400)
+
+        vano.estado = nuevo_estado
+        vano.marcado_por = usuario
+        vano.fecha_marcado = timezone.now()
+        if observaciones:
+            vano.observaciones = observaciones
+        vano.save()
+
+        # Return updated vano partial
+        from django.template.loader import render_to_string
+        html = render_to_string('campo/partials/vano_cuadro.html', {'vano': vano})
+        return HttpResponse(html)

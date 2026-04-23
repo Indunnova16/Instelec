@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Registrar Avances - TransMaint{% endblock %}
+{% block title %}Avances de Vanos - TransMaint{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
     <!-- Header -->
     <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Registrar Avances</h1>
-        <p class="text-gray-600 dark:text-gray-400">Registra el avance de trabajo en las torres asignadas a tu cuadrilla</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Avances de Vanos</h1>
+        <p class="text-gray-600 dark:text-gray-400">Registra el estado de ejecución de los vanos de tu línea asignada</p>
     </div>
 
     <!-- Error Message -->
@@ -17,195 +18,151 @@
     </div>
     {% endif %}
 
-    <!-- Success Message -->
-    {% if messages %}
-    {% for message in messages %}
-    <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4">
-        <p class="text-green-800 dark:text-green-200">{{ message }}</p>
+    <!-- Line Selection (if not selected or admin) -->
+    {% if not linea %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for l in lineas %}
+        <a href="?linea_id={{ l.id }}" class="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition p-6 block">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ l.codigo }}</h3>
+            <p class="text-gray-600 dark:text-gray-400 text-sm">{{ l.nombre }}</p>
+            <div class="mt-4 text-xs text-gray-500">
+                {% if l.vanos.all %}
+                    {{ l.vanos.count }} vanos
+                {% else %}
+                    Sin vanos registrados
+                {% endif %}
+            </div>
+        </a>
+        {% empty %}
+        <div class="col-span-full bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+            <p class="text-yellow-800 dark:text-yellow-200">No hay líneas disponibles</p>
+        </div>
+        {% endfor %}
     </div>
-    {% endfor %}
-    {% endif %}
 
-    <!-- Form -->
-    {% if es_admin or cuadrilla and linea %}
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <form method="post" class="space-y-6">
-            {% csrf_token %}
-
-            {% if es_admin %}
-            <!-- ADMIN VIEW: Multiple Selection Options -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Línea Selection -->
-                <div>
-                    <label for="linea_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        Línea *
-                    </label>
-                    <select name="linea_id" id="linea_id" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                        <option value="">-- Selecciona una línea --</option>
-                        {% for linea in lineas %}
-                        <option value="{{ linea.id }}">{{ linea.codigo }} - {{ linea.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <!-- Cuadrilla Selection (Optional) -->
-                <div>
-                    <label for="cuadrilla_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        Cuadrilla (Opcional)
-                    </label>
-                    <select name="cuadrilla_id" id="cuadrilla_id" class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                        <option value="">Sin asignar a cuadrilla</option>
-                        {% for cuadrilla in cuadrillas %}
-                        <option value="{{ cuadrilla.id }}">{{ cuadrilla.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <!-- Torre Selection -->
+    {% else %}
+    <!-- Vanos Grid (when line selected) -->
+    <div x-data="{ showMenu: null }" class="space-y-6">
+        <!-- Back Button -->
+        <div class="flex items-center justify-between">
             <div>
-                <label for="torre_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Torre *
-                </label>
-                <select name="torre_id" id="torre_id" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                    <option value="">-- Selecciona una torre --</option>
-                    {% for torre in torres %}
-                    <option value="{{ torre.id }}" data-linea="{{ torre.linea.id }}">
-                        {{ torre.linea.codigo }} - Torre {{ torre.numero }}
-                    </option>
-                    {% endfor %}
-                </select>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Selecciona primero la línea para filtrar las torres disponibles
-                </p>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">{{ linea.codigo }} - {{ linea.nombre }}</h2>
+                {% if linea.departamento %}
+                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ linea.departamento }}, {{ linea.municipios }}</p>
+                {% endif %}
             </div>
+            <a href="{% url 'campo:avance_registrar' %}" class="text-blue-600 hover:text-blue-800 text-sm">
+                ← Volver
+            </a>
+        </div>
 
+        <!-- Stats Row -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_vanos }}</div>
+                <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">Total Vanos</div>
+            </div>
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-green-600">{{ vanos_ejecutados }}</div>
+                <div class="text-xs text-green-700 dark:text-green-400 mt-1">Ejecutados</div>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">{{ vanos_pendientes }}</div>
+                <div class="text-xs text-gray-700 dark:text-gray-400 mt-1">Pendientes</div>
+            </div>
+            <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-orange-600">{{ vanos_sin_permiso }}</div>
+                <div class="text-xs text-orange-700 dark:text-orange-400 mt-1">Sin Permiso</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ porcentaje }}%</div>
+                <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">Avance</div>
+            </div>
+        </div>
+
+        <!-- Pie Chart -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Distribución de Estados</h3>
+            <div class="flex justify-center">
+                <canvas id="estadoChart" style="max-width: 400px; max-height: 400px;"></canvas>
+            </div>
+        </div>
+
+        <!-- Vanos Grid -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Vanos</h3>
+            {% if vanos %}
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {% for vano in vanos %}
+                    {% include 'campo/partials/vano_cuadro.html' %}
+                {% endfor %}
+            </div>
             {% else %}
-            <!-- WORKER VIEW: Fixed Assignment -->
-            <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p class="text-sm">
-                    <span class="font-semibold text-gray-700 dark:text-gray-300">Cuadrilla:</span>
-                    <span class="text-gray-900 dark:text-white">{{ cuadrilla.nombre }}</span>
-                </p>
-                <p class="text-sm mt-1">
-                    <span class="font-semibold text-gray-700 dark:text-gray-300">Línea:</span>
-                    <span class="text-gray-900 dark:text-white">{{ linea.codigo }} - {{ linea.nombre }}</span>
-                </p>
-            </div>
-
-            <!-- Torre Selection -->
-            <div>
-                <label for="torre_id" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Torre *
-                </label>
-                <select name="torre_id" id="torre_id" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                    <option value="">-- Selecciona una torre --</option>
-                    {% for torre in torres %}
-                    <option value="{{ torre.id }}">Torre {{ torre.numero }}</option>
-                    {% endfor %}
-                </select>
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center">
+                <p class="text-gray-600 dark:text-gray-400">No hay vanos registrados para esta línea</p>
             </div>
             {% endif %}
-
-            <!-- Tipo de Avance -->
-            <div>
-                <label for="tipo_avance" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Tipo de Avance *
-                </label>
-                <select name="tipo_avance" id="tipo_avance" required class="w-full px-4 py-2 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                    {% for value, label in tipos_avance %}
-                    <option value="{{ value }}" {% if value == 'completo' %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Selecciona el estado del trabajo completado en esta torre
-                </p>
-            </div>
-
-            <!-- Porcentaje -->
-            <div>
-                <label for="porcentaje" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Porcentaje Completado (%)
-                </label>
-                <div class="flex items-center gap-4">
-                    <input type="range" name="porcentaje" id="porcentaje"
-                           min="0" max="100" value="100" step="10"
-                           class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer">
-                    <span id="porcentaje_valor" class="text-lg font-semibold text-gray-900 dark:text-white w-16">100%</span>
-                </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Indica qué porcentaje del trabajo se completó en esta torre
-                </p>
-            </div>
-
-            <!-- Observaciones -->
-            <div>
-                <label for="observaciones" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Observaciones
-                </label>
-                <textarea name="observaciones" id="observaciones" rows="4"
-                          placeholder="Describe cualquier detalle importante sobre el trabajo realizado..."
-                          class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400">
-                </textarea>
-            </div>
-
-            <!-- Submit Button -->
-            <div class="flex gap-3">
-                <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold">
-                    Registrar Avance
-                </button>
-                <a href="{% url 'campo:lista' %}" class="px-6 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition font-semibold">
-                    Cancelar
-                </a>
-            </div>
-        </form>
+        </div>
     </div>
 
-    <!-- Mis Avances Link -->
-    <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <p class="text-sm text-blue-900 dark:text-blue-200">
-            <a href="{% url 'campo:mis_avances' %}" class="font-semibold hover:underline">
-                Ver mis avances registrados →
-            </a>
-        </p>
-    </div>
-    {% else %}
-    <div class="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
-        <p class="text-yellow-900 dark:text-yellow-200">
-            {{ error|default:'No puedes registrar avances en este momento. Verifica que tengas una cuadrilla y línea asignadas.' }}
-        </p>
-    </div>
+    <!-- Chart.js Script -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const estadoData = {
+            'pendiente': {{ vanos_pendientes }},
+            'ejecutado': {{ vanos_ejecutados }},
+            'sin_permiso': {{ vanos_sin_permiso }},
+            'no_ejecutado': {{ vanos_no_ejecutado }},
+            'en_espera': {{ vanos_en_espera }},
+        };
+
+        const ctx = document.getElementById('estadoChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Pendiente', 'Ejecutado', 'Sin Permiso', 'No Ejecutado', 'En Espera'],
+                datasets: [{
+                    data: [
+                        estadoData.pendiente,
+                        estadoData.ejecutado,
+                        estadoData.sin_permiso,
+                        estadoData.no_ejecutado,
+                        estadoData.en_espera,
+                    ],
+                    backgroundColor: [
+                        '#d1d5db',  // gray
+                        '#10b981',  // green
+                        '#f97316',  // orange
+                        '#ef4444',  // red
+                        '#eab308',  // yellow
+                    ],
+                    borderColor: '#fff',
+                    borderWidth: 2,
+                }],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            font: { size: 12 },
+                        },
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + ' vanos';
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    </script>
     {% endif %}
 </div>
 
-<script>
-// Update percentage display
-document.getElementById('porcentaje').addEventListener('input', function() {
-    document.getElementById('porcentaje_valor').textContent = this.value + '%';
-});
-
-// Filter towers by line (admin only)
-{% if es_admin %}
-const lineaSelect = document.getElementById('linea_id');
-const torreSelect = document.getElementById('torre_id');
-
-if (lineaSelect && torreSelect) {
-    lineaSelect.addEventListener('change', function() {
-        const selectedLinea = this.value;
-        const options = torreSelect.querySelectorAll('option[data-linea]');
-
-        options.forEach(option => {
-            if (selectedLinea === '' || option.getAttribute('data-linea') === selectedLinea) {
-                option.style.display = 'block';
-            } else {
-                option.style.display = 'none';
-            }
-        });
-
-        // Reset torre selection
-        torreSelect.value = '';
-    });
-}
-{% endif %}
-</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 {% endblock %}

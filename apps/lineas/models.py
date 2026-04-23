@@ -474,8 +474,15 @@ class Tramo(BaseModel):
 class Vano(BaseModel):
     """
     Vano = Espacio entre dos torres consecutivas en una línea.
-    Se usa para registrar información específica de cada vano.
+    Se usa para registrar información específica de cada vano y su estado de ejecución.
     """
+
+    class Estado(models.TextChoices):
+        PENDIENTE = 'pendiente', 'Pendiente'
+        EJECUTADO = 'ejecutado', 'Ejecutado'
+        SIN_PERMISO = 'sin_permiso', 'Sin Permiso'
+        NO_EJECUTADO = 'no_ejecutado', 'No Ejecutado'
+        EN_ESPERA = 'en_espera', 'En Espera'
 
     linea = models.ForeignKey(
         Linea,
@@ -506,6 +513,25 @@ class Vano(BaseModel):
     )
     observaciones = models.TextField(
         'Observaciones',
+        blank=True
+    )
+    estado = models.CharField(
+        'Estado',
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+    marcado_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vanos_linea_marcados',
+        verbose_name='Marcado por'
+    )
+    fecha_marcado = models.DateTimeField(
+        'Fecha marcado',
+        null=True,
         blank=True
     )
 
