@@ -316,7 +316,7 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-gray-900 dark:text-white">
-                            ${{ miembro.costo_dia|add:0|div:30|floatformat:0 }}
+                            ${{ miembro.costo_dia|floatformat:0 }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                             {{ miembro.fecha_inicio|date:"d/m/Y" }}
@@ -346,7 +346,7 @@
                             Total Costo Diario
                         </td>
                         <td class="px-6 py-3 text-right text-sm font-bold text-green-600 dark:text-green-400">
-                            ${{ costo_total_dia|add:0|div:30|floatformat:0 }}
+                            ${{ costo_total_dia|floatformat:0 }}
                         </td>
                         <td colspan="2"></td>
                     </tr>
