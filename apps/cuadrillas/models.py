@@ -471,8 +471,7 @@ class Asistencia(BaseModel):
             (self.he_dominical_diurna or 0) +
             (self.he_dominical_nocturna or 0)
         )
-        if detail_sum > 0 or not self.pk:
-            self.horas_extra = detail_sum
+        self.horas_extra = detail_sum
         super().save(*args, **kwargs)
 
     def __str__(self):
