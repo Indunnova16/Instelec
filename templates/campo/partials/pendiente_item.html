@@ -1,0 +1,43 @@
+<div id="pendiente-{{ pendiente.id }}" class="flex items-start gap-3 p-3 rounded-lg border {% if pendiente.completado %}bg-green-50 border-green-200{% else %}bg-white border-gray-200{% endif %} hover:shadow-sm transition">
+    <!-- Checkbox -->
+    <form hx-post="{% url 'campo:pendiente_toggle' pendiente.id %}"
+        hx-target="#pendiente-{{ pendiente.id }}"
+        hx-swap="outerHTML"
+        class="flex-shrink-0 mt-1">
+        {% csrf_token %}
+        <input type="checkbox"
+            {% if pendiente.completado %}checked{% endif %}
+            onchange="this.form.submit()"
+            class="rounded border-gray-300 text-green-600 cursor-pointer">
+    </form>
+
+    <!-- Content -->
+    <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 justify-between">
+            <p class="text-sm font-medium text-gray-900 {% if pendiente.completado %}line-through text-gray-500{% endif %}">
+                {{ pendiente.descripcion }}
+            </p>
+            <span class="text-xs text-gray-500 flex-shrink-0">
+                {{ pendiente.fecha_vencimiento|date:"d/m/Y" }}
+            </span>
+        </div>
+
+        {% if pendiente.responsable %}
+            <p class="text-xs text-gray-500 mt-1">
+                Asignado a: {{ pendiente.responsable.get_full_name }}
+            </p>
+        {% endif %}
+
+        {% if pendiente.observaciones %}
+            <p class="text-xs text-gray-600 mt-1">
+                {{ pendiente.observaciones }}
+            </p>
+        {% endif %}
+
+        {% if pendiente.completado and pendiente.fecha_completado %}
+            <p class="text-xs text-green-600 mt-1">
+                ✓ Completado: {{ pendiente.fecha_completado|date:"d/m/Y H:i" }}
+            </p>
+        {% endif %}
+    </div>
+</div>

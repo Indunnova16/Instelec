@@ -164,5 +164,81 @@
     {% endif %}
 </div>
 
+<!-- Pendientes Section -->
+{% if linea %}
+<div class="space-y-4 mt-8">
+    <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Pendientes de la Línea</h3>
+        <span class="text-sm text-gray-600 dark:text-gray-400">
+            {% with pendientes_totales=linea.vanos.all|length %}
+                {% with pendientes_count=linea.vanos.all|dictsort:"pendientes__completado"|length %}
+                {% endwith %}
+            {% endwith %}
+        </span>
+    </div>
+
+    {% with all_pendientes=linea.vanos.all %}
+        {% if all_pendientes %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Vano</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Descripción</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Fecha</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Responsable</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-300">Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for vano in linea.vanos.all %}
+                        {% for pendiente in vano.pendientes.all %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                Vano {{ vano.numero }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                <span class="{% if pendiente.completado %}line-through text-gray-400{% endif %}">
+                                    {{ pendiente.descripcion }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                {{ pendiente.fecha_vencimiento|date:"d/m/Y" }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                {% if pendiente.responsable %}
+                                    {{ pendiente.responsable.get_short_name }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <form hx-post="{% url 'campo:pendiente_toggle' pendiente.id %}"
+                                    hx-target="closest tr"
+                                    hx-swap="outerHTML"
+                                    class="flex justify-center">
+                                    {% csrf_token %}
+                                    <input type="checkbox"
+                                        {% if pendiente.completado %}checked{% endif %}
+                                        onchange="this.form.submit()"
+                                        class="rounded border-gray-300 text-green-600 cursor-pointer">
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center">
+            <p class="text-gray-600 dark:text-gray-400">No hay pendientes registrados</p>
+        </div>
+        {% endif %}
+    {% endwith %}
+</div>
+{% endif %}
+
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 {% endblock %}

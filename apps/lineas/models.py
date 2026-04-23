@@ -544,3 +544,59 @@ class Vano(BaseModel):
 
     def __str__(self):
         return f"Vano {self.numero} - {self.linea.codigo}"
+
+
+class PendienteVano(BaseModel):
+    """
+    Tarea o pendiente asociado a un vano específico.
+    Permite registrar tareas a ejecutar con fecha de vencimiento.
+    """
+
+    vano = models.ForeignKey(
+        Vano,
+        on_delete=models.CASCADE,
+        related_name='pendientes',
+        verbose_name='Vano'
+    )
+    descripcion = models.TextField(
+        'Descripción',
+        help_text='Descripción de la tarea pendiente'
+    )
+    fecha_vencimiento = models.DateField(
+        'Fecha de vencimiento',
+        help_text='Fecha límite para completar la tarea'
+    )
+    responsable = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pendientes_vanos',
+        verbose_name='Responsable'
+    )
+    completado = models.BooleanField(
+        'Completado',
+        default=False
+    )
+    fecha_completado = models.DateTimeField(
+        'Fecha completado',
+        null=True,
+        blank=True
+    )
+    observaciones = models.TextField(
+        'Observaciones',
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'pendientes_vanos'
+        verbose_name = 'Pendiente de Vano'
+        verbose_name_plural = 'Pendientes de Vanos'
+        ordering = ['fecha_vencimiento', 'vano']
+        indexes = [
+            models.Index(fields=['vano', 'completado']),
+            models.Index(fields=['fecha_vencimiento']),
+        ]
+
+    def __str__(self):
+        return f"{self.vano.numero} - {self.descripcion[:50]}"

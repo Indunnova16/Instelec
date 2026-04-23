@@ -22,6 +22,8 @@ urlpatterns = [
     path('avances/', views.AvancesCuadrillaView.as_view(), name='avances_cuadrilla'),
     path('vanos/<uuid:vano_id>/marcar/', views.MarcarVanoView.as_view(), name='marcar_vano'),
     path('vanos/<uuid:pk>/estado/', views.VanoEstadoUpdateView.as_view(), name='vano_estado'),
+    path('vanos/<uuid:vano_id>/pendientes/', views.PendienteVanoCreateView.as_view(), name='pendiente_crear'),
+    path('pendientes/<uuid:pendiente_id>/toggle/', views.PendienteVanoToggleView.as_view(), name='pendiente_toggle'),
     # Registro de avances - Agregado 13 abril 2026
     path('avance/registrar/', views.RegistroAvanceCreateView.as_view(), name='avance_registrar'),
     path('mis-avances/', views.MisAvancesListView.as_view(), name='mis_avances'),

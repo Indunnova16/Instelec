@@ -910,3 +910,101 @@ class VanoEstadoUpdateView(LoginRequiredMixin, View):
         from django.template.loader import render_to_string
         html = render_to_string('campo/partials/vano_cuadro.html', {'vano': vano})
         return HttpResponse(html)
+
+
+class PendienteVanoCreateView(LoginRequiredMixin, View):
+    """Create a new pendiente for a vano via HTMX."""
+
+    def post(self, request, vano_id):
+        from apps.lineas.models import Vano, PendienteVano
+        from django.http import HttpResponse
+        from datetime import datetime
+
+        try:
+            vano = Vano.objects.get(id=vano_id)
+        except Vano.DoesNotExist:
+            return HttpResponse('Vano no encontrado', status=404)
+
+        # Authorization check
+        usuario = request.user
+        es_admin = usuario.rol in ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+        if not es_admin:
+            from apps.cuadrillas.models import CuadrillaMiembro
+            tiene_acceso = CuadrillaMiembro.objects.filter(
+                usuario=usuario,
+                activo=True,
+                cuadrilla__linea_asignada=vano.linea,
+                cuadrilla__activa=True,
+            ).exists()
+            if not tiene_acceso:
+                return HttpResponse('No tienes permiso', status=403)
+
+        descripcion = request.POST.get('descripcion', '').strip()
+        fecha_str = request.POST.get('fecha_vencimiento', '').strip()
+
+        if not descripcion or not fecha_str:
+            return HttpResponse('Descripción y fecha requeridas', status=400)
+
+        try:
+            fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            return HttpResponse('Formato de fecha inválido', status=400)
+
+        pendiente = PendienteVano.objects.create(
+            vano=vano,
+            descripcion=descripcion,
+            fecha_vencimiento=fecha,
+            responsable=usuario,
+            observaciones=request.POST.get('observaciones', '')
+        )
+
+        # Return updated pendientes list partial
+        from django.template.loader import render_to_string
+        pendientes = vano.pendientes.filter(completado=False).order_by('fecha_vencimiento')
+        html = render_to_string('campo/partials/pendientes_list.html', {'pendientes': pendientes})
+        return HttpResponse(html)
+
+
+class PendienteVanoToggleView(LoginRequiredMixin, View):
+    """Mark a pendiente as completed or uncompleted via HTMX."""
+
+    def post(self, request, pendiente_id):
+        from apps.lineas.models import PendienteVano
+        from django.utils import timezone
+        from django.http import HttpResponse
+
+        try:
+            pendiente = PendienteVano.objects.select_related('vano').get(id=pendiente_id)
+        except PendienteVano.DoesNotExist:
+            return HttpResponse('Pendiente no encontrado', status=404)
+
+        # Authorization
+        usuario = request.user
+        es_admin = usuario.rol in ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+        if not es_admin:
+            from apps.cuadrillas.models import CuadrillaMiembro
+            tiene_acceso = CuadrillaMiembro.objects.filter(
+                usuario=usuario,
+                activo=True,
+                cuadrilla__linea_asignada=pendiente.vano.linea,
+                cuadrilla__activa=True,
+            ).exists()
+            if not tiene_acceso:
+                return HttpResponse('No tienes permiso', status=403)
+
+        # Toggle completion status
+        if pendiente.completado:
+            pendiente.completado = False
+            pendiente.fecha_completado = None
+        else:
+            pendiente.completado = True
+            pendiente.fecha_completado = timezone.now()
+
+        pendiente.save()
+
+        # Return updated pendiente partial
+        from django.template.loader import render_to_string
+        html = render_to_string('campo/partials/pendiente_item.html', {'pendiente': pendiente})
+        return HttpResponse(html)

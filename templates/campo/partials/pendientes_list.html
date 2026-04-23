@@ -1,0 +1,7 @@
+{% for pendiente in pendientes %}
+    {% include 'campo/partials/pendiente_item.html' %}
+{% empty %}
+    <div class="text-sm text-gray-500 py-2">
+        No hay pendientes para este vano
+    </div>
+{% endfor %}
