@@ -95,6 +95,14 @@ class Usuario(AbstractUser):
         max_length=100,
         blank=True
     )
+    salario_mensual = models.DecimalField(
+        'Salario mensual',
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Salario mensual del trabajador'
+    )
     foto = models.ImageField(
         'Foto de perfil',
         upload_to='usuarios/fotos/',
