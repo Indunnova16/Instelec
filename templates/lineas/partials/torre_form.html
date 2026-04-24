@@ -1,5 +1,5 @@
 {# Modal form para crear/editar torres #}
-<div x-data="{ open: true, loading: false }" x-show="open" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" @click="open = false">
+<div x-data="{ open: true }" x-show="open" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" @click="open = false">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4" @click.stop>
         <!-- Header -->
         <div class="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
@@ -12,7 +12,7 @@
         </div>
 
         <!-- Form -->
-        <form method="post" @submit.prevent="submitForm" class="p-6 space-y-4">
+        <form method="post" action="{{ form_action }}" class="p-6 space-y-4">
             {% csrf_token %}
 
             <!-- Número -->
@@ -73,14 +73,8 @@
 
             <!-- Buttons -->
             <div class="flex gap-3 pt-4">
-                <button type="submit" :disabled="loading" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50">
-                    <span x-show="!loading">{{ accion }}</span>
-                    <span x-show="loading" class="flex items-center justify-center">
-                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </span>
+                <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">
+                    {{ accion }}
                 </button>
                 <button type="button" @click="open = false" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition">
                     Cancelar
@@ -89,35 +83,3 @@
         </form>
     </div>
 </div>
-
-<script>
-function submitForm(e) {
-    const form = e.target;
-    const formData = new FormData(form);
-    const loading = this.loading;
-
-    this.loading = true;
-
-    fetch(form.action || location.href, {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => {
-        if (response.ok) {
-            // Reload page on success
-            setTimeout(() => location.reload(), 500);
-        } else {
-            this.loading = false;
-            alert('Error al guardar la torre. Por favor, revise los datos.');
-        }
-    })
-    .catch(error => {
-        this.loading = false;
-        console.error('Error:', error);
-        alert('Error al guardar la torre.');
-    });
-}
-</script>

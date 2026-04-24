@@ -82,6 +82,8 @@ class Command(BaseCommand):
         self._create_vehiculos()
         self._create_cuadrillas()
         self._create_actividades()
+        self._create_vanos()
+        self._create_pendientes_vanos()
 
         self.stdout.write(self.style.SUCCESS("Database seeded successfully!"))
 
@@ -323,9 +325,9 @@ class Command(BaseCommand):
         """
         Create scheduled activities for demonstration purposes.
 
-        Generates activities for the current month by:
+        Generates activities for multiple months by:
         - Creating monthly programming for each line
-        - Assigning activities to the first 10 towers of each line
+        - Assigning activities to towers with realistic distribution
         - Distributing activity types and crews
         - Setting varied states and priorities for realistic data
         """
@@ -337,38 +339,149 @@ class Command(BaseCommand):
         today = date.today()
         total_activities = 0
 
-        # Create monthly programming and activities for each line
-        for linea in self.lineas.values():
-            # Create or get monthly programming
-            prog, _ = ProgramacionMensual.objects.get_or_create(
-                linea=linea,
-                anio=today.year,
-                mes=today.month,
-                defaults={"estado": "APROBADA"}
-            )
+        tipos = list(self.tipos_actividad.values())
+        cuadrillas = list(self.cuadrillas.values())
+        estados = FORM_OPTIONS["estado_actividad"]
+        prioridades = FORM_OPTIONS["prioridad"]
 
-            # Get first 10 towers for this line
-            torres = Torre.objects.filter(linea=linea)[:10]
-            tipos = list(self.tipos_actividad.values())
-            cuadrillas = list(self.cuadrillas.values())
+        # Create activities for current month and next month for better preview
+        for month_offset in [0, 1]:
+            current_month = today.month + month_offset
+            current_year = today.year
+            if current_month > 12:
+                current_month = 1
+                current_year += 1
 
-            # Create activities with varied states and priorities
-            estados = FORM_OPTIONS["estado_actividad"]
-            prioridades = FORM_OPTIONS["prioridad"]
-
-            for i, torre in enumerate(torres):
-                Actividad.objects.get_or_create(
+            # Create monthly programming and activities for each line
+            for linea in self.lineas.values():
+                # Create or get monthly programming
+                prog, _ = ProgramacionMensual.objects.get_or_create(
                     linea=linea,
-                    torre=torre,
-                    tipo_actividad=tipos[i % len(tipos)],
-                    fecha_programada=today + timedelta(days=(i % 14)),
-                    defaults={
-                        "programacion": prog,
-                        "cuadrilla": cuadrillas[i % len(cuadrillas)],
-                        "estado": estados[i % len(estados)],
-                        "prioridad": prioridades[i % len(prioridades)],
-                    }
+                    anio=current_year,
+                    mes=current_month,
+                    defaults={"aprobado": True}
                 )
-                total_activities += 1
+
+                # Create activities for multiple towers (more examples for preview)
+                torres = Torre.objects.filter(linea=linea)[:20]
+
+                for i, torre in enumerate(torres):
+                    # Calculate activity date within the month
+                    activity_day = min((i % 25) + 1, 28)
+                    activity_date = date(current_year, current_month, activity_day)
+
+                    Actividad.objects.get_or_create(
+                        linea=linea,
+                        torre=torre,
+                        tipo_actividad=tipos[i % len(tipos)],
+                        fecha_programada=activity_date,
+                        defaults={
+                            "programacion": prog,
+                            "cuadrilla": cuadrillas[i % len(cuadrillas)],
+                            "estado": estados[i % len(estados)],
+                            "prioridad": prioridades[i % len(prioridades)],
+                        }
+                    )
+                    total_activities += 1
 
         self.stdout.write(f"    Created {total_activities} activities")
+
+    def _create_vanos(self):
+        """
+        Create vano examples for each transmission line.
+
+        Vanos are sections between consecutive towers. Creates vanos
+        with varied states for realistic field work preview.
+        """
+        from apps.lineas.models import Vano, Torre
+
+        self.stdout.write("  Creating vanos (line sections)...")
+
+        estados = list(Vano.Estado.choices)
+        total_vanos = 0
+
+        # Create vanos for each line
+        for linea in self.lineas.values():
+            torres = Torre.objects.filter(linea=linea).order_by('numero')[:15]
+
+            # Create vanos between consecutive towers
+            for i in range(len(torres) - 1):
+                torre_inicio = torres[i]
+                torre_fin = torres[i + 1]
+                numero_vano = str(i + 1).zfill(3)
+
+                # Use varied states for realistic examples
+                estado_choice = estados[i % len(estados)][0]
+
+                Vano.objects.get_or_create(
+                    linea=linea,
+                    numero=numero_vano,
+                    defaults={
+                        "torre_inicio": torre_inicio,
+                        "torre_fin": torre_fin,
+                        "estado": estado_choice,
+                        "observaciones": f"Vano entre torres {torre_inicio.numero} y {torre_fin.numero}. Estado: {estado_choice}",
+                    }
+                )
+                total_vanos += 1
+
+        self.stdout.write(f"    Created {total_vanos} vanos")
+
+    def _create_pendientes_vanos(self):
+        """
+        Create pending tasks (pendientes) for vanos.
+
+        Creates example pending tasks with varied due dates and
+        responsibility assignments for field crew demonstration.
+        """
+        from apps.lineas.models import Vano, PendienteVano
+        from datetime import timedelta
+
+        self.stdout.write("  Creating pending tasks (pendientes)...")
+
+        supervisores = list(User.objects.filter(rol__in=['supervisor', 'ing_residente']))
+        total_pendientes = 0
+
+        # Sample pending task descriptions
+        descripciones = [
+            "Obtener permiso de propiedad privada",
+            "Hacer limpieza de vegetación",
+            "Inspeccionar estructura de fundación",
+            "Marcar punto de inicio de vano",
+            "Verificar acceso a la zona",
+            "Estudiar suelo y topografía",
+            "Coordinar con propietario del terreno",
+            "Reparar cerca dañada",
+        ]
+
+        today = date.today()
+        vano_counter = 0
+
+        # Create pending tasks for some vanos
+        for vano in Vano.objects.all():
+            vano_counter += 1
+
+            # Create 1-2 pending tasks per vano (not all)
+            if vano_counter % 3 == 0:  # Every 3rd vano
+                for i in range(1 if vano_counter % 5 == 0 else 1):
+                    descripcion = descripciones[(vano_counter + i) % len(descripciones)]
+                    dias_vencimiento = 7 + (vano_counter % 30)
+                    fecha_vencimiento = today + timedelta(days=dias_vencimiento)
+
+                    # Some pending tasks are completed, some are not
+                    completado = vano_counter % 2 == 0
+
+                    responsable = supervisores[vano_counter % len(supervisores)] if supervisores else None
+
+                    PendienteVano.objects.create(
+                        vano=vano,
+                        descripcion=descripcion,
+                        fecha_vencimiento=fecha_vencimiento,
+                        responsable=responsable,
+                        completado=completado,
+                        fecha_completado=today if completado else None,
+                        observaciones="Pendiente de ejemplo para demostración" if not completado else "Completado según programación",
+                    )
+                    total_pendientes += 1
+
+        self.stdout.write(f"    Created {total_pendientes} pending tasks")

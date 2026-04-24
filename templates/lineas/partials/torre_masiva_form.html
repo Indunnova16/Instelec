@@ -1,0 +1,82 @@
+{# Modal form para crear torres masivas #}
+<div x-data="{ open: true }" x-show="open" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" @click="open = false">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4" @click.stop>
+        <!-- Header -->
+        <div class="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white">Crear Torres Masivamente</h3>
+            <button type="button" @click="open = false" class="text-gray-400 hover:text-gray-500">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Form -->
+        <form method="post" action="{{ form_action }}" class="p-6 space-y-4">
+            {% csrf_token %}
+
+            <!-- Cantidad -->
+            <div>
+                <label for="id_cantidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Cantidad de Torres *
+                </label>
+                {% if form.cantidad.errors %}
+                    {{ form.cantidad }}
+                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.cantidad.errors.0 }}</p>
+                {% else %}
+                    {{ form.cantidad }}
+                {% endif %}
+            </div>
+
+            <!-- Número Inicial -->
+            <div>
+                <label for="id_numero_inicial" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Número Inicial *
+                </label>
+                {% if form.numero_inicial.errors %}
+                    {{ form.numero_inicial }}
+                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.numero_inicial.errors.0 }}</p>
+                {% else %}
+                    {{ form.numero_inicial }}
+                {% endif %}
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ej: T-001 (se continuará con T-002, T-003, etc.)</p>
+            </div>
+
+            <!-- Tipo -->
+            <div>
+                <label for="id_tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Tipo de Torre *
+                </label>
+                {% if form.tipo.errors %}
+                    {{ form.tipo }}
+                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.tipo.errors.0 }}</p>
+                {% else %}
+                    {{ form.tipo }}
+                {% endif %}
+            </div>
+
+            <!-- Municipio -->
+            <div>
+                <label for="id_municipio" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Municipio
+                </label>
+                {% if form.municipio.errors %}
+                    {{ form.municipio }}
+                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.municipio.errors.0 }}</p>
+                {% else %}
+                    {{ form.municipio }}
+                {% endif %}
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex gap-3 pt-4">
+                <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">
+                    Crear Torres
+                </button>
+                <button type="button" @click="open = false" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

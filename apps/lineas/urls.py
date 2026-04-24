@@ -16,6 +16,7 @@ urlpatterns = [
     path('<uuid:pk>/torres/', views.TorresLineaView.as_view(), name='torres'),
     path('torre/<uuid:pk>/', views.TorreDetailView.as_view(), name='torre_detalle'),
     path('<uuid:linea_pk>/torre/crear/', views.TorreCreateView.as_view(), name='torre_crear'),
+    path('<uuid:linea_pk>/torres/crear-masivas/', views.TorreMasivaCreateView.as_view(), name='torre_masiva_crear'),
     path('torre/<uuid:pk>/editar/', views.TorreEditView.as_view(), name='torre_editar'),
     path('torre/<uuid:pk>/', views.TorreDeleteView.as_view(), name='torre_eliminar'),
     path('<uuid:linea_id>/vano/crear/', views.VanoCreateView.as_view(), name='vano_crear'),

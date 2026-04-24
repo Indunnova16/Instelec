@@ -678,7 +678,7 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
                     context['error'] = 'No tienes permiso para ver esta línea.'
                     return context
 
-            vanos = Vano.objects.filter(linea=linea).order_by('numero')
+            vanos = Vano.objects.filter(linea=linea).prefetch_related('pendientes', 'pendientes__responsable').order_by('numero')
             context['linea'] = linea
             context['vanos'] = vanos
 

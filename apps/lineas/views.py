@@ -57,7 +57,7 @@ class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailVi
     def get_context_data(self, **kwargs):
         import json
         context = super().get_context_data(**kwargs)
-        context['torres'] = self.object.torres.all()[:50]
+        context['torres'] = self.object.torres.all()
         context['total_torres'] = self.object.torres.count()
         if self.object.kmz_geojson:
             context['kmz_geojson_json'] = json.dumps(self.object.kmz_geojson)
@@ -696,6 +696,7 @@ class TorreCreateView(LoginRequiredMixin, RoleRequiredMixin, View):
             return redirect('lineas:lista')
 
         from .forms import TorreForm
+        from django.db import IntegrityError
         form = TorreForm(request.POST)
 
         if form.is_valid():
@@ -704,9 +705,13 @@ class TorreCreateView(LoginRequiredMixin, RoleRequiredMixin, View):
             # Set default coordinates (can be updated later)
             tower.latitud = 4.5709
             tower.longitud = -74.2973
-            tower.save()
-            messages.success(request, f'Torre {tower.numero} creada exitosamente.')
-            return redirect('lineas:detalle', pk=linea_pk)
+            try:
+                tower.save()
+                messages.success(request, f'Torre {tower.numero} creada exitosamente.')
+                return redirect('lineas:detalle', pk=linea_pk)
+            except IntegrityError:
+                messages.error(request, f'Ya existe una torre con número "{tower.numero}" en esta línea. Use un número diferente.')
+                return self.render_form(request, linea, form)
         else:
             messages.error(request, 'Error al crear la torre. Revise los datos.')
             return self.render_form(request, linea, form)
@@ -715,11 +720,13 @@ class TorreCreateView(LoginRequiredMixin, RoleRequiredMixin, View):
         """Render the tower form."""
         from django.http import HttpResponse
         from django.template.loader import render_to_string
+        from django.urls import reverse
         html = render_to_string('lineas/partials/torre_form.html', {
             'form': form,
             'linea': linea,
-            'accion': 'Crear Torre'
-        })
+            'accion': 'Crear Torre',
+            'form_action': reverse('lineas:torre_crear', kwargs={'linea_pk': linea.id})
+        }, request=request)
         return HttpResponse(html)
 
 
@@ -762,12 +769,102 @@ class TorreEditView(LoginRequiredMixin, RoleRequiredMixin, View):
         """Render the tower form."""
         from django.http import HttpResponse
         from django.template.loader import render_to_string
+        from django.urls import reverse
         html = render_to_string('lineas/partials/torre_form.html', {
             'form': form,
             'linea': torre.linea,
             'torre': torre,
-            'accion': 'Editar Torre'
-        })
+            'accion': 'Editar Torre',
+            'form_action': reverse('lineas:torre_editar', kwargs={'pk': torre.id})
+        }, request=request)
+        return HttpResponse(html)
+
+
+class TorreMasivaCreateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Create multiple towers at once."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get(self, request, linea_pk):
+        """Show the form to create multiple towers."""
+        try:
+            linea = Linea.objects.get(pk=linea_pk)
+        except Linea.DoesNotExist:
+            messages.error(request, 'Línea no encontrada.')
+            return redirect('lineas:lista')
+
+        from .forms import TorreMasivaForm
+        form = TorreMasivaForm()
+        return self.render_form(request, linea, form)
+
+    def post(self, request, linea_pk):
+        """Handle form submission to create multiple towers."""
+        try:
+            linea = Linea.objects.get(pk=linea_pk)
+        except Linea.DoesNotExist:
+            messages.error(request, 'Línea no encontrada.')
+            return redirect('lineas:lista')
+
+        from .forms import TorreMasivaForm
+        from django.db import IntegrityError
+        form = TorreMasivaForm(request.POST)
+
+        if form.is_valid():
+            cantidad = form.cleaned_data['cantidad']
+            numero_inicial = form.cleaned_data['numero_inicial']
+            tipo = form.cleaned_data['tipo']
+            municipio = form.cleaned_data['municipio']
+
+            # Extract prefix and starting number
+            import re
+            match = re.match(r'^([A-Za-z]*)-?(\d+)$', numero_inicial)
+            if not match:
+                messages.error(request, 'Formato de número inválido. Use formato como "T-001".')
+                return self.render_form(request, linea, form)
+
+            prefix = match.group(1) or 'T'
+            start_num = int(match.group(2))
+
+            torres_creadas = 0
+            torres_duplicadas = 0
+
+            for i in range(cantidad):
+                numero = f"{prefix}-{str(start_num + i).zfill(len(match.group(2)))}"
+                try:
+                    torre = Torre.objects.create(
+                        linea=linea,
+                        numero=numero,
+                        tipo=tipo,
+                        municipio=municipio,
+                        latitud=4.5709,
+                        longitud=-74.2973
+                    )
+                    torres_creadas += 1
+                except IntegrityError:
+                    torres_duplicadas += 1
+
+            if torres_creadas > 0:
+                if torres_duplicadas > 0:
+                    messages.success(request, f'Se crearon {torres_creadas} torres. {torres_duplicadas} torres ya existían.')
+                else:
+                    messages.success(request, f'Se crearon {torres_creadas} torres exitosamente.')
+            else:
+                messages.error(request, f'No se crearon torres. {torres_duplicadas} torres ya existían.')
+
+            return redirect('lineas:detalle', pk=linea_pk)
+        else:
+            messages.error(request, 'Error al crear las torres. Revise los datos.')
+            return self.render_form(request, linea, form)
+
+    def render_form(self, request, linea, form):
+        """Render the massive tower form."""
+        from django.http import HttpResponse
+        from django.template.loader import render_to_string
+        from django.urls import reverse
+        html = render_to_string('lineas/partials/torre_masiva_form.html', {
+            'form': form,
+            'linea': linea,
+            'form_action': reverse('lineas:torre_masiva_crear', kwargs={'linea_pk': linea.id})
+        }, request=request)
         return HttpResponse(html)
 
 

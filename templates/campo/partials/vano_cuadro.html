@@ -1,5 +1,5 @@
 {% load static %}
-<div id="vano-{{ vano.id }}" class="vano-item group cursor-pointer rounded-lg border-2 p-4 text-center transition-all hover:shadow-lg
+<div id="vano-{{ vano.id }}" class="vano-item relative group cursor-pointer rounded-lg border-2 p-4 text-center transition-all hover:shadow-lg
     {% if vano.estado == 'ejecutado' %}bg-green-50 border-green-300 hover:bg-green-100
     {% elif vano.estado == 'sin_permiso' %}bg-orange-50 border-orange-300 hover:bg-orange-100
     {% elif vano.estado == 'no_ejecutado' %}bg-red-50 border-red-300 hover:bg-red-100
@@ -31,7 +31,7 @@
     <div x-cloak
         x-show="showMenu === '{{ vano.id }}'"
         @click.away="showMenu = null"
-        class="absolute z-50 mt-2 w-48 rounded-lg shadow-lg border border-gray-200 bg-white">
+        class="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-48 rounded-lg shadow-lg border border-gray-200 bg-white">
         <form hx-post="{% url 'campo:vano_estado' vano.id %}"
             hx-target="#vano-{{ vano.id }}"
             hx-swap="outerHTML"

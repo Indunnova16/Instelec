@@ -10,11 +10,18 @@ from django.db.backends.sqlite3.operations import (
 )
 
 
+class Adapter(str):
+    """Adapter for GIS values to SQLite (stores as TEXT)."""
+    def __new__(cls, value):
+        if value is None:
+            return str.__new__(cls, '')
+        return str.__new__(cls, str(value))
+
+
 class DatabaseOperations(SQLiteOperations):
     """Extended SQLite operations with GIS field type support."""
 
-    # Used by GIS field select_format() to wrap the column SQL.
-    # '%s' means no transformation — read the TEXT value as-is.
+    Adapter = Adapter
     select = '%s'
 
     # Map GIS field types to TEXT for storage
