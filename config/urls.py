@@ -24,6 +24,7 @@ urlpatterns = [
     path('contratos/', include('apps.contratos.urls')),
     path('financiero/', include('apps.financiero.urls')),
     path('indicadores/', include('apps.indicadores.urls')),
+    path('construccion/', include('apps.construccion.urls')),
 ]
 
 # Debug toolbar (only in development)

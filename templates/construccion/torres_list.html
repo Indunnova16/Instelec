@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Torres - {{ proyecto.nombre }} - TransMaint{% endblock %}
+
+{% block breadcrumb %}
+<nav class="flex" aria-label="Breadcrumb">
+    <ol class="flex items-center space-x-2">
+        <li><a href="{% url 'core:home' %}" class="text-primary-600 hover:text-primary-700">Inicio</a></li>
+        <li class="text-gray-500">/</li>
+        <li><a href="{% url 'construccion:lista' %}" class="text-primary-600 hover:text-primary-700">Construcción</a></li>
+        <li class="text-gray-500">/</li>
+        <li><a href="{% url 'construccion:dashboard' proyecto.id %}" class="text-primary-600 hover:text-primary-700">{{ proyecto.nombre }}</a></li>
+        <li class="text-gray-500">/</li>
+        <li class="text-gray-700">Torres</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Torres</h1>
+        <a href="{% url 'construccion:torre_crear' proyecto.id %}" class="btn btn-primary">+ Nueva Torre</a>
+    </div>
+
+    {% if torres %}
+    <div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
+        <table class="w-full">
+            <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                <tr>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Número</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Tipo</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Cimentación</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Peso (kg)</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Cuadrilla Civil</th>
+                    <th class="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-white">Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                {% for torre in torres %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-6 py-4 text-sm text-gray-900 dark:text-white font-medium">{{ torre.numero }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ torre.tipo|default:"-" }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ torre.get_tipo_cimentacion_display|default:"-" }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ torre.peso_kg|floatformat:0|default:"-" }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ torre.cuadrilla_civil|default:"-" }}</td>
+                    <td class="px-6 py-4 text-right text-sm space-x-2">
+                        <a href="{% url 'construccion:torre_editar' proyecto.id torre.id %}" class="text-primary-600 hover:text-primary-700">Editar</a>
+                        <a href="{% url 'construccion:torre_eliminar' proyecto.id torre.id %}" class="text-red-600 hover:text-red-700" onclick="return confirm('¿Eliminar esta torre?')">Eliminar</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="flex justify-center space-x-2">
+        {% if page_obj.has_previous %}
+        <a href="?page=1" class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">Primera</a>
+        <a href="?page={{ page_obj.previous_page_number }}" class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">Anterior</a>
+        {% endif %}
+        <span class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">Siguiente</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}" class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">Última</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
+        <p class="text-gray-600 dark:text-gray-400">No hay torres registradas</p>
+        <a href="{% url 'construccion:torre_crear' proyecto.id %}" class="mt-4 btn btn-primary">Crear Primera Torre</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

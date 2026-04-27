@@ -49,6 +49,7 @@ LOCAL_APPS = [
     'apps.financiero',
     'apps.indicadores',
     'apps.api',
+    'apps.construccion',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -78,6 +79,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.core.context_processors.modulo_context',
             ],
         },
     },

@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ proyecto.nombre }} - Dashboard - TransMaint{% endblock %}
+
+{% block breadcrumb %}
+<nav class="flex" aria-label="Breadcrumb">
+    <ol class="flex items-center space-x-2">
+        <li><a href="{% url 'core:home' %}" class="text-primary-600 hover:text-primary-700">Inicio</a></li>
+        <li class="text-gray-500">/</li>
+        <li><a href="{% url 'construccion:lista' %}" class="text-primary-600 hover:text-primary-700">Construcción</a></li>
+        <li class="text-gray-500">/</li>
+        <li class="text-gray-700">{{ proyecto.nombre }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">{{ proyecto.nombre }}</h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">{{ proyecto.contrato.codigo }}</p>
+        </div>
+        <span class="text-lg font-semibold px-4 py-2 rounded-lg {% if proyecto.estado == 'EJECUCION' %}bg-blue-100 text-blue-800{% elif proyecto.estado == 'CIERRE' %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+            {{ proyecto.get_estado_display }}
+        </span>
+    </div>
+
+    <!-- Quick Navigation Tabs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <a href="{% url 'construccion:seguimiento_diario' proyecto.id %}" class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow text-center">
+            <div class="text-2xl font-bold text-primary-600">📋</div>
+            <p class="text-sm font-medium text-gray-900 dark:text-white mt-2">Seguimiento</p>
+        </a>
+        <a href="{% url 'construccion:torres_lista' proyecto.id %}" class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow text-center">
+            <div class="text-2xl font-bold text-primary-600">🗼</div>
+            <p class="text-sm font-medium text-gray-900 dark:text-white mt-2">Torres</p>
+        </a>
+        <a href="{% url 'construccion:social_predial' proyecto.id %}" class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow text-center">
+            <div class="text-2xl font-bold text-primary-600">👥</div>
+            <p class="text-sm font-medium text-gray-900 dark:text-white mt-2">Social</p>
+        </a>
+        <a href="{% url 'construccion:ambiental' proyecto.id %}" class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow text-center">
+            <div class="text-2xl font-bold text-primary-600">🌿</div>
+            <p class="text-sm font-medium text-gray-900 dark:text-white mt-2">Ambiental</p>
+        </a>
+        <a href="{% url 'construccion:entrega' proyecto.id %}" class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow text-center">
+            <div class="text-2xl font-bold text-primary-600">✓</div>
+            <p class="text-sm font-medium text-gray-900 dark:text-white mt-2">Entrega</p>
+        </a>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Civil Works -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Obra Civil</p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2">{{ proyecto.porcentaje_avance_civil|floatformat:0 }}%</p>
+                </div>
+                <div class="text-4xl">🔨</div>
+            </div>
+            <div class="mt-4">
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                    <div class="bg-green-500 h-3 rounded-full transition-all" style="width: {{ proyecto.porcentaje_avance_civil }}%"></div>
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">{{ proyecto.torres_con_obra_civil_completa }}/{{ proyecto.torres_total }} torres completadas</p>
+            </div>
+        </div>
+
+        <!-- Assembly -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Montaje</p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2">{{ proyecto.porcentaje_avance_montaje|floatformat:0 }}%</p>
+                </div>
+                <div class="text-4xl">⚙️</div>
+            </div>
+            <div class="mt-4">
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                    <div class="bg-blue-500 h-3 rounded-full transition-all" style="width: {{ proyecto.porcentaje_avance_montaje }}%"></div>
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">Avance promedio de montaje</p>
+            </div>
+        </div>
+
+        <!-- Stringing -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Tendido</p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2">{{ proyecto.porcentaje_avance_tendido|floatformat:0 }}%</p>
+                </div>
+                <div class="text-4xl">⚡</div>
+            </div>
+            <div class="mt-4">
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                    <div class="bg-purple-500 h-3 rounded-full transition-all" style="width: {{ proyecto.porcentaje_avance_tendido }}%"></div>
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">Avance promedio de tendido</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Detalles del Proyecto</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Cliente</p>
+                <p class="font-medium text-gray-900 dark:text-white">{{ proyecto.contrato.cliente|default:"-" }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Total de Torres</p>
+                <p class="font-medium text-gray-900 dark:text-white">{{ proyecto.torres_total }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Fecha de Inicio</p>
+                <p class="font-medium text-gray-900 dark:text-white">{{ proyecto.fecha_inicio|date:"d/m/Y"|default:"-" }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Fecha Estimada de Fin</p>
+                <p class="font-medium text-gray-900 dark:text-white">{{ proyecto.fecha_fin_estimada|date:"d/m/Y"|default:"-" }}</p>
+            </div>
+        </div>
+        {% if proyecto.descripcion %}
+        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <p class="text-sm text-gray-600 dark:text-gray-400">Descripción</p>
+            <p class="text-gray-900 dark:text-white mt-2">{{ proyecto.descripcion }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
