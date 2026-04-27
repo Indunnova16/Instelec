@@ -48,14 +48,14 @@ class FaseTorreAdmin(admin.ModelAdmin):
 @admin.register(SocialPredial)
 class SocialPredialAdmin(admin.ModelAdmin):
     list_display = ['torre', 'propietario', 'semaforo']
-    list_filter = ['semaforo']
+    list_filter = ['liberacion_predial_pdo_ok']
     search_fields = ['torre__numero', 'propietario']
 
 
 @admin.register(AmbientalTorre)
 class AmbientalTorreAdmin(admin.ModelAdmin):
     list_display = ['torre', 'semaforo']
-    list_filter = ['semaforo']
+    list_filter = ['ahuyentamiento_ok']
     search_fields = ['torre__numero']
 
 
@@ -81,8 +81,8 @@ class PersonalSSTAdmin(admin.ModelAdmin):
 
 @admin.register(EntregaElectromecanica)
 class EntregaElectromecanicaAdmin(admin.ModelAdmin):
-    list_display = ['torre', 'estado', 'firma_hmv', 'firma_wsp']
-    list_filter = ['estado', 'firma_hmv', 'firma_wsp']
+    list_display = ['torre', 'estado', 'firmo_hmv', 'firmo_wsp']
+    list_filter = ['estado', 'firmo_hmv', 'firmo_wsp']
     search_fields = ['torre__numero']
 
 
