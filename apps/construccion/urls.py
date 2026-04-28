@@ -40,4 +40,22 @@ urlpatterns = [
 
     # Pendientes
     path('<uuid:proyecto_id>/pendientes/', views.PendientesView.as_view(), name='pendientes'),
+
+    # Programación
+    path('<uuid:proyecto_id>/programacion/', views.ProgramacionView.as_view(), name='programacion'),
+
+    # RS Data
+    path('<uuid:proyecto_id>/rs-data/', views.RSDataView.as_view(), name='rs_data'),
+
+    # Hochimin
+    path('<uuid:proyecto_id>/hochimin/', views.HochimimView.as_view(), name='hochimin'),
+
+    # Lectura
+    path('<uuid:proyecto_id>/lectura/', views.LecturaView.as_view(), name='lectura'),
+
+    # Entrega Flechas
+    path('<uuid:proyecto_id>/entrega-flechas/', views.EntregaFlechasView.as_view(), name='entrega_flechas'),
+
+    # Electromecánica
+    path('<uuid:proyecto_id>/electromecanica/', views.ElectromecanicaView.as_view(), name='electromecanica'),
 ]

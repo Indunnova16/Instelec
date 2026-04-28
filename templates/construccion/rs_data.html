@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}RS Data - {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">RS Data</h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-2">{{ proyecto.nombre }}</p>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <p class="text-gray-600 dark:text-gray-400">
+            Datos de sensores remotos y reportes técnicos para el proyecto de construcción.
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -277,3 +277,81 @@ class PendientesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ).select_related('torre').order_by('torre__numero')
 
         return context
+
+
+class ProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Programming and scheduling view."""
+    template_name = 'construccion/programacion.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        return context
+
+
+class RSDataView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """RS Data (Remote Sensing/Reporting) view."""
+    template_name = 'construccion/rs_data.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        return context
+
+
+class HochimimView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Hochimin (Equipment/Materials) tracking view."""
+    template_name = 'construccion/hochimin.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        return context
+
+
+class LecturaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Lectura (Readings/Measurements) view."""
+    template_name = 'construccion/lectura.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'topografo']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        return context
+
+
+class EntregaFlechasView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Delivery Arrows (Cable delivery/stringing) view."""
+    template_name = 'construccion/entrega_flechas.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'interventor']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        return context
+
+
+class ElectromecanicaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Electromechanical assembly view."""
+    template_name = 'construccion/electromecanica.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'interventor']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        return context
