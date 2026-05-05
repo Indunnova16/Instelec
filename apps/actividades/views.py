@@ -32,6 +32,11 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
             'motivo_cancelacion',
         )
 
+        # Filter by business unit (Mantenimiento/Construccion)
+        unidad_negocio = self.request.GET.get('unidad')
+        if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
+            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
+
         # Search by aviso SAP
         buscar_aviso = self.request.GET.get('buscar_aviso', '').strip()
         if buscar_aviso:
@@ -95,6 +100,7 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
         context['tipos'] = TipoActividad.objects.filter(activo=True)
         context['lineas'] = Linea.objects.filter(activa=True)
         context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
+        context['unidad_filter'] = self.request.GET.get('unidad', '')
 
         # Month/year selector options
         context['meses'] = [
@@ -171,6 +177,11 @@ class CalendarioView(LoginRequiredMixin, TemplateView):
             fecha_programada__month=mes
         ).select_related('linea', 'torre', 'tipo_actividad', 'cuadrilla')
 
+        # Filter by business unit
+        unidad_negocio = self.request.GET.get('unidad')
+        if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
+            actividades = actividades.filter(linea__contrato__unidad_negocio=unidad_negocio)
+
         # Group by date
         from collections import defaultdict
         actividades_por_fecha = defaultdict(list)
@@ -180,6 +191,7 @@ class CalendarioView(LoginRequiredMixin, TemplateView):
         context['actividades_por_fecha'] = dict(actividades_por_fecha)
         context['mes'] = mes
         context['anio'] = anio
+        context['unidad_filter'] = self.request.GET.get('unidad', '')
 
         # Generate calendar data
         import calendar
@@ -202,6 +214,11 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         qs = Actividad.objects.select_related(
             'linea', 'torre', 'tipo_actividad', 'cuadrilla'
         ).order_by('linea__codigo', 'tipo_actividad__nombre', 'torre__numero')
+
+        # Filter by business unit (Mantenimiento/Construccion)
+        unidad_negocio = self.request.GET.get('unidad')
+        if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
+            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
 
         # Default to current month/year
         hoy = date.today()
@@ -276,6 +293,7 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
         context['selected_cuadrillas'] = self.request.GET.getlist('cuadrilla')
         context['selected_lineas'] = self.request.GET.getlist('linea')
+        context['unidad_filter'] = self.request.GET.get('unidad', '')
         context['meses'] = [
             (1, 'Enero'), (2, 'Febrero'), (3, 'Marzo'), (4, 'Abril'),
             (5, 'Mayo'), (6, 'Junio'), (7, 'Julio'), (8, 'Agosto'),
@@ -1079,6 +1097,11 @@ class ListaOperativaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
             'torre_inicio', 'torre_fin', 'actividad__tipo_actividad'
         )
 
+        # Filter by business unit (Mantenimiento/Construccion)
+        unidad_negocio = self.request.GET.get('unidad')
+        if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
+            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
+
         # Filtro por línea
         linea_id = self.request.GET.get('linea')
         if linea_id:
@@ -1128,6 +1151,7 @@ class ListaOperativaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
 
         # Valores actuales de filtros
         context['filtros'] = {
+            'unidad': self.request.GET.get('unidad', ''),
             'linea': self.request.GET.get('linea', ''),
             'fecha_desde': self.request.GET.get('fecha_desde', ''),
             'fecha_hasta': self.request.GET.get('fecha_hasta', ''),
