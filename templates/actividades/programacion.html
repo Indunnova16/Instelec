@@ -40,6 +40,16 @@
         <form method="get" id="filter-form" class="space-y-4">
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
                 <div>
+                    <label for="filter-unidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Unidad Negocio</label>
+                    <select name="unidad" id="filter-unidad" onchange="this.form.submit()"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                        <option value="">Todas</option>
+                        <option value="MANTENIMIENTO" {% if unidad_filter == 'MANTENIMIENTO' %}selected{% endif %}>Mantenimiento</option>
+                        <option value="CONSTRUCCION" {% if unidad_filter == 'CONSTRUCCION' %}selected{% endif %}>Construcción</option>
+                    </select>
+                </div>
+
+                <div>
                     <label for="filter-mes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mes</label>
                     <select name="mes" id="filter-mes" onchange="this.form.submit()"
                             class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
@@ -391,7 +401,7 @@
     <div class="flex justify-center">
         <nav class="flex items-center space-x-2">
             {% if page_obj.has_previous %}
-            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.previous_page_number }}{% for lid in selected_lineas %}&linea={{ lid }}{% endfor %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
+            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.previous_page_number }}{% if unidad_filter %}&unidad={{ unidad_filter }}{% endif %}{% for lid in selected_lineas %}&linea={{ lid }}{% endfor %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
                 Anterior
             </a>
@@ -400,7 +410,7 @@
                 Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
             </span>
             {% if page_obj.has_next %}
-            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.next_page_number }}{% for lid in selected_lineas %}&linea={{ lid }}{% endfor %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
+            <a href="?mes={{ selected_mes }}&anio={{ selected_anio }}&page={{ page_obj.next_page_number }}{% if unidad_filter %}&unidad={{ unidad_filter }}{% endif %}{% for lid in selected_lineas %}&linea={{ lid }}{% endfor %}{% if request.GET.tipo_actividad %}&tipo_actividad={{ request.GET.tipo_actividad }}{% endif %}{% if request.GET.estado %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.buscar_aviso %}&buscar_aviso={{ request.GET.buscar_aviso }}{% endif %}{% for cid in selected_cuadrillas %}&cuadrilla={{ cid }}{% endfor %}"
                class="px-3 py-2 text-sm text-gray-700 bg-white border rounded-lg hover:bg-gray-50">
                 Siguiente
             </a>

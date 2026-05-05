@@ -17,6 +17,13 @@
             <p class="text-gray-600 dark:text-gray-400">Vista mensual de actividades programadas</p>
         </div>
         <div class="flex gap-2">
+            <label for="unidad-filter" class="sr-only">Filtrar por unidad de negocio</label>
+            <select id="unidad-filter" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700" aria-label="Filtrar actividades por unidad de negocio">
+                <option value="">Todas las unidades</option>
+                <option value="MANTENIMIENTO" {% if unidad_filter == 'MANTENIMIENTO' %}selected{% endif %}>Mantenimiento</option>
+                <option value="CONSTRUCCION" {% if unidad_filter == 'CONSTRUCCION' %}selected{% endif %}>Construcción</option>
+            </select>
+
             <label for="linea-filter" class="sr-only">Filtrar por linea</label>
             <select id="linea-filter" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700" aria-label="Filtrar actividades por linea de transmision">
                 <option value="">Todas las lineas</option>
@@ -74,6 +81,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const calendarEl = document.getElementById('calendar');
+    const unidadFilter = document.getElementById('unidad-filter');
     const lineaFilter = document.getElementById('linea-filter');
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
@@ -85,8 +93,10 @@ document.addEventListener('DOMContentLoaded', function() {
             right: 'dayGridMonth,timeGridWeek,listWeek'
         },
         events: function(info, successCallback, failureCallback) {
+            const unidad = unidadFilter.value;
             const linea = lineaFilter.value;
             let url = `/actividades/api/eventos/?start=${info.startStr}&end=${info.endStr}`;
+            if (unidad) url += `&unidad=${unidad}`;
             if (linea) url += `&linea=${linea}`;
 
             fetch(url)
@@ -116,7 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
     calendar.render();
 
     // Refresh on filter change
-    lineaFilter.addEventListener('change', function() {
+    function refreshCalendar() {
         calendar.refetchEvents();
         // Announce change to screen readers
         const announcement = document.createElement('div');
@@ -126,7 +136,10 @@ document.addEventListener('DOMContentLoaded', function() {
         announcement.textContent = 'Calendario actualizado';
         document.body.appendChild(announcement);
         setTimeout(() => announcement.remove(), 1000);
-    });
+    }
+
+    unidadFilter.addEventListener('change', refreshCalendar);
+    lineaFilter.addEventListener('change', refreshCalendar);
 
     // Close modal
     document.getElementById('activity-modal').addEventListener('click', function(e) {

@@ -55,6 +55,15 @@
             <!-- Filter grid -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div>
+                    <label for="filter-unidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Unidad Negocio</label>
+                    <select name="unidad" id="filter-unidad" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                        <option value="">Todas</option>
+                        <option value="MANTENIMIENTO" {% if request.GET.unidad == 'MANTENIMIENTO' %}selected{% endif %}>Mantenimiento</option>
+                        <option value="CONSTRUCCION" {% if request.GET.unidad == 'CONSTRUCCION' %}selected{% endif %}>Construcción</option>
+                    </select>
+                </div>
+
+                <div>
                     <label for="filter-linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Linea</label>
                     <select name="linea" id="filter-linea" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         <option value="">Todas las lineas</option>
