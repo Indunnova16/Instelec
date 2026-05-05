@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.utils import timezone
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+from apps.core.cache import get_lineas_activas, get_cuadrillas_activas
 from .models import RegistroCampo, Evidencia, ReporteDano, FotoDano, Procedimiento, RegistroAvance
 
 
@@ -365,7 +366,7 @@ class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
 
         # Datos para filtros
         from apps.lineas.models import Linea
-        context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
+        context['lineas'] = get_lineas_activas()
         context['tipos'] = ReporteDano.TipoDano.choices
         context['severidades'] = ReporteDano.Severidad.choices
 
@@ -639,7 +640,7 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
         # Get available lines for the user
         if es_admin:
-            lineas = Linea.objects.filter(activa=True).order_by('codigo')
+            lineas = get_lineas_activas()
         else:
             # Get user's assigned cuadrilla and line
             miembro = CuadrillaMiembro.objects.filter(
@@ -859,7 +860,7 @@ class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
         from apps.lineas.models import Linea
         from apps.cuadrillas.models import Cuadrilla
 
-        context['lineas'] = Linea.objects.filter(activa=True).order_by('codigo')
+        context['lineas'] = get_lineas_activas()
         context['cuadrillas'] = Cuadrilla.objects.filter(activa=True).order_by('nombre')
 
         return context

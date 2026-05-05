@@ -11,6 +11,7 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+from apps.core.cache import get_lineas_activas, get_cuadrillas_activas
 
 from .models import (
     ArchivoChecklist,
@@ -448,7 +449,7 @@ class ExportarDashboardExcelView(LoginRequiredMixin, RoleRequiredMixin, Template
         # ---- Sheet 2: Detalle por Linea ----
         ws2 = wb.create_sheet('Por Linea')
         from apps.lineas.models import Linea
-        lineas = Linea.objects.filter(activa=True)
+        lineas = get_lineas_activas()
 
         ws2.merge_cells('A1:G1')
         ws2['A1'].value = f'Presupuesto vs Ejecutado por Línea - {titulo_periodo}'
@@ -820,7 +821,7 @@ class ChecklistFacturacionView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin,
         context['periodo_upload_form'] = ArchivoPeriodoForm()
 
         # Filters
-        context['lineas'] = Linea.objects.filter(activa=True)
+        context['lineas'] = get_lineas_activas()
         context['filtro_mes'] = mes
         context['filtro_anio'] = anio
         context['filtro_linea'] = linea_id

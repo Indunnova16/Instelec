@@ -13,6 +13,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+from apps.core.cache import get_lineas_activas, get_cuadrillas_activas, get_tipos_actividad_activos
 from .models import Actividad, ProgramacionMensual, TipoActividad, HistorialIntervencion
 
 
@@ -93,13 +94,10 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
 
-        from apps.lineas.models import Linea
-        from apps.cuadrillas.models import Cuadrilla
-
         context['estados'] = Actividad.Estado.choices
-        context['tipos'] = TipoActividad.objects.filter(activo=True)
-        context['lineas'] = Linea.objects.filter(activa=True)
-        context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
+        context['tipos'] = get_tipos_actividad_activos()
+        context['lineas'] = get_lineas_activas()
+        context['cuadrillas'] = get_cuadrillas_activas()
         context['unidad_filter'] = self.request.GET.get('unidad', '')
 
         # Month/year selector options
@@ -284,13 +282,11 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        from apps.lineas.models import Linea
-        from apps.cuadrillas.models import Cuadrilla
 
-        context['lineas'] = Linea.objects.filter(activa=True)
-        context['tipos'] = TipoActividad.objects.filter(activo=True)
+        context['lineas'] = get_lineas_activas()
+        context['tipos'] = get_tipos_actividad_activos()
         context['estados'] = Actividad.Estado.choices
-        context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
+        context['cuadrillas'] = get_cuadrillas_activas()
         context['selected_cuadrillas'] = self.request.GET.getlist('cuadrilla')
         context['selected_lineas'] = self.request.GET.getlist('linea')
         context['unidad_filter'] = self.request.GET.get('unidad', '')
