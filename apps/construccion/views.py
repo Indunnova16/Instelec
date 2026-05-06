@@ -9,6 +9,7 @@ from django.db.models import Q
 
 from apps.core.mixins import RoleRequiredMixin
 from apps.contratos.models import Contrato
+from .forms import ContratoForm
 from .models import (
     ProyectoConstruccion,
     TorreConstruccion,
@@ -367,8 +368,7 @@ class ContratoView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
     """Contract details for a construction project — editable inline."""
     template_name = 'construccion/contrato.html'
     model = Contrato
-    fields = ['codigo', 'nombre', 'cliente', 'objeto', 'valor',
-              'fecha_inicio', 'fecha_fin', 'estado', 'observaciones']
+    form_class = ContratoForm
     allowed_roles = ['admin', 'director', 'coordinador']
 
     def get_object(self):
