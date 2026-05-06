@@ -27,7 +27,10 @@
         </span>
     </div>
 
-    <!-- Quick Navigation Tabs -->
+    <!-- Project Tabs Navigation -->
+    {% include 'construccion/_proyecto_tabs.html' with active_tab='dashboard' %}
+
+    <!-- Quick Navigation Cards for other sections -->
     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
         <a href="{% url 'construccion:seguimiento_diario' proyecto.id %}" class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow text-center">
             <div class="text-2xl font-bold text-primary-600">📋</div>

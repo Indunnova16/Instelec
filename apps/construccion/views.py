@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
 from apps.core.mixins import RoleRequiredMixin
+from apps.contratos.models import Contrato
 from .models import (
     ProyectoConstruccion,
     TorreConstruccion,
@@ -43,6 +44,11 @@ class ProyectoDashboardView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     template_name = 'construccion/proyecto_dashboard.html'
     context_object_name = 'proyecto'
     allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['active_tab'] = 'dashboard'
+        return context
 
 
 class TorresListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
@@ -354,4 +360,54 @@ class ElectromecanicaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto_id = self.kwargs.get('proyecto_id')
         proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
         context['proyecto'] = proyecto
+        return context
+
+
+class ContratoView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Contract details for a construction project — editable inline."""
+    template_name = 'construccion/contrato.html'
+    model = Contrato
+    fields = ['codigo', 'nombre', 'cliente', 'objeto', 'valor',
+              'fecha_inicio', 'fecha_fin', 'estado', 'observaciones']
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_object(self):
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        return proyecto.contrato
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['proyecto'] = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        context['active_tab'] = 'contrato'
+        return context
+
+    def get_success_url(self):
+        return reverse_lazy('construccion:contrato', kwargs={'proyecto_id': self.kwargs['proyecto_id']})
+
+
+class IngenieriaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Engineering and construction tracking."""
+    template_name = 'construccion/ingenieria.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        context['active_tab'] = 'ingenieria'
+        return context
+
+
+class PreliminaresView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Preliminary work and surveys."""
+    template_name = 'construccion/preliminares.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'topografo']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['proyecto'] = proyecto
+        context['active_tab'] = 'preliminares'
         return context

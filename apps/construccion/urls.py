@@ -11,6 +11,11 @@ urlpatterns = [
     path('', views.ProyectoListView.as_view(), name='lista'),
     path('<uuid:pk>/', views.ProyectoDashboardView.as_view(), name='dashboard'),
 
+    # Project tabs
+    path('<uuid:proyecto_id>/contrato/', views.ContratoView.as_view(), name='contrato'),
+    path('<uuid:proyecto_id>/ingenieria/', views.IngenieriaView.as_view(), name='ingenieria'),
+    path('<uuid:proyecto_id>/preliminares/', views.PreliminaresView.as_view(), name='preliminares'),
+
     # Torres
     path('<uuid:proyecto_id>/torres/', views.TorresListView.as_view(), name='torres_lista'),
     path('<uuid:proyecto_id>/torres/crear/', views.TorreCreateView.as_view(), name='torre_crear'),
