@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Actividades Preliminares{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Actividades Preliminares</h1>
+    <p class="text-gray-600 dark:text-gray-400">Selecciona un contrato de construcción</p>
+
+    {% if contratos %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for contrato in contratos %}
+        <a href="{% url 'preliminares:predial' contrato.id %}"
+           class="bg-white dark:bg-gray-800 rounded-lg shadow p-5 hover:shadow-md transition flex flex-col gap-1">
+            <span class="text-xs font-mono text-blue-600 dark:text-blue-400">{{ contrato.codigo }}</span>
+            <span class="font-semibold text-gray-900 dark:text-white">{{ contrato.nombre }}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ contrato.torres.count }} torres</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+        <p class="text-gray-500 dark:text-gray-400">No hay contratos de construcción registrados.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

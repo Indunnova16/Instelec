@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Act. Preliminares Ambiental - {{ contrato.nombre }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Actividades Preliminares</h1>
+            <p class="text-gray-600 dark:text-gray-400">{{ contrato.codigo }} — {{ contrato.nombre }}</p>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Los cambios se guardan automáticamente</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-gray-200 dark:border-gray-700">
+        <a href="{% url 'preliminares:predial' contrato.id %}"
+           class="px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+            Socio-Predial
+        </a>
+        <a href="{% url 'preliminares:ambiental' contrato.id %}"
+           class="px-5 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+            Socio-Ambiental
+        </a>
+    </div>
+
+    {% if not filas %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+        <p class="text-gray-500 dark:text-gray-400 mb-4">No hay torres registradas para este contrato.</p>
+        <a href="{% url 'contratos:editar' contrato.id %}"
+           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+            Configurar torres en el contrato
+        </a>
+    </div>
+    {% else %}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-xs border-collapse">
+                <thead>
+                    <!-- Fila 1: Grupos -->
+                    <tr class="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold text-center">
+                        <th class="sticky left-0 z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[70px]">Torre</th>
+                        <th colspan="5" class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-emerald-50 dark:bg-emerald-900/30">Flora y Fauna</th>
+                        <th colspan="2" class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-lime-50 dark:bg-lime-900/30">Aprovechamiento</th>
+                        <th colspan="2" class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-indigo-50 dark:bg-indigo-900/30">Arqueología</th>
+                        <th colspan="2" class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-cyan-50 dark:bg-cyan-900/30">Accesos</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-green-50 dark:bg-green-900/30">Liberación PDO</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-orange-50 dark:bg-orange-900/30">Semáforo</th>
+                        <th class="px-2 py-2 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">Observaciones</th>
+                    </tr>
+                    <!-- Fila 2: Nombres de columnas -->
+                    <tr class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-normal">
+                        <th class="sticky left-0 z-20 bg-gray-50 dark:bg-gray-700 border-b border-r border-gray-200 dark:border-gray-600"></th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[100px] text-left">Ahuyentamiento</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[100px] text-left">Conteo epifitas</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[100px] text-left">Traslado vivero</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[100px] text-left">Reubicación</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[100px] text-left">Aprov. sitio</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[100px] text-left">Aprov. vano</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[90px] text-center">Arqueología polígonos</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[100px] text-left">Rescate arqueo.</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[80px] text-right">Adecuación (km)</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[80px] text-right">Accesos (km)</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[80px] text-center">¿Liberado?</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[80px] text-center">Estado</th>
+                        <th class="px-2 py-2 border-b border-gray-200 dark:border-gray-600 min-w-[150px] text-left">Observaciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in filas %}
+                    {% with a=fila.amb t=fila.torre %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700">
+                        <!-- Torre -->
+                        <td class="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-1 font-medium text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-600 whitespace-nowrap">
+                            {{ t.nombre }}
+                        </td>
+
+                        <!-- Ahuyentamiento -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="ahuyentamiento" valor=a.ahuyentamiento tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Conteo epifitas -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="conteo_epifitas" valor=a.conteo_epifitas tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Traslado vivero -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="traslado_vivero" valor=a.traslado_vivero tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Reubicación epifitas -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="reubicacion_epifitas" valor=a.reubicacion_epifitas tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Aprov. sitio -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="aprov_sitio" valor=a.aprov_sitio tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Aprov. vano -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="aprov_vano" valor=a.aprov_vano tipo="bool" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Arqueología polígonos -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="arqueologia_poligonos" valor=a.arqueologia_poligonos tipo="choice" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Rescate arqueológico -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="rescate_arqueologico" valor=a.rescate_arqueologico tipo="bool" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Adecuación accesos -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-right">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="adecuacion_accesos" valor=a.adecuacion_accesos tipo="decimal" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Accesos intervenidos -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-right">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="accesos_intervenidos" valor=a.accesos_intervenidos tipo="decimal" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Liberación PDO -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="liberacion_pdo" valor=a.liberacion_pdo tipo="bool" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+
+                        <!-- Semáforo -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 px-2 py-1 text-center">
+                            <span class="text-gray-400 text-xs italic">—</span>
+                        </td>
+
+                        <!-- Observaciones -->
+                        <td class="border-gray-100 dark:border-gray-700 p-0">
+                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="observaciones" valor=a.observaciones tipo="text" contrato_id=contrato.id torre_id=t.id %}</div>
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">
+        <strong>Fechas:</strong> elige una fecha en el calendar o haz click en "NA" si no aplica
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

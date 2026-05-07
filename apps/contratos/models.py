@@ -20,6 +20,12 @@ class Contrato(BaseModel):
         FINALIZADO = 'FINALIZADO', 'Finalizado'
         SUSPENDIDO = 'SUSPENDIDO', 'Suspendido'
 
+    class TipoContrato(models.TextChoices):
+        LLAVE_EN_MANO = 'LLAVE_EN_MANO', 'Llave en Mano'
+        SUMA_GLOBAL = 'SUMA_GLOBAL', 'Suma Global'
+        ADMINISTRACION = 'ADMINISTRACION', 'Por Administración'
+        PRECIOS_UNITARIOS = 'PRECIOS_UNITARIOS', 'Precios Unitarios'
+
     unidad_negocio = models.CharField(
         'Unidad de negocio',
         max_length=20,
@@ -67,6 +73,35 @@ class Contrato(BaseModel):
     )
     observaciones = models.TextField(
         'Observaciones',
+        blank=True,
+    )
+    tipo_contrato = models.CharField(
+        'Tipo de contrato',
+        max_length=30,
+        choices=TipoContrato.choices,
+        blank=True,
+    )
+    plazo_ejecucion = models.IntegerField(
+        'Plazo de ejecución (días)',
+        null=True,
+        blank=True,
+    )
+    longitud_linea = models.DecimalField(
+        'Longitud de la línea (km)',
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    acta_inicio = models.FileField(
+        'Acta de inicio',
+        upload_to='contratos/actas/',
+        null=True,
+        blank=True,
+    )
+    numero_torres = models.PositiveIntegerField(
+        'Número de torres',
+        null=True,
         blank=True,
     )
 

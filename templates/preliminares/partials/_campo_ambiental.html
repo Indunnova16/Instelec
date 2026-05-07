@@ -1,0 +1,53 @@
+{% comment %}Renderiza un campo ambiental con su valor actualizado{% endcomment %}
+
+{% if tipo == 'date_or_na' %}
+<div class="flex gap-0.5">
+    <input type="date" name="valor" value="{% if valor != 'NA' %}{{ valor }}{% endif %}"
+           hx-post="/preliminares/{{ contrato_id }}/campo-ambiental/"
+           hx-trigger="change" hx-swap="outerHTML" hx-target="closest .campo-flex"
+           hx-vals='{"torre_id": "{{ torre_id }}", "campo": "{{ campo }}"}'
+           class="flex-1 px-1 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+    <button hx-post="/preliminares/{{ contrato_id }}/campo-ambiental/"
+            hx-trigger="click" hx-swap="outerHTML" hx-target="closest .campo-flex"
+            hx-vals='{"torre_id": "{{ torre_id }}", "campo": "{{ campo }}", "valor": "NA"}'
+            class="px-1.5 text-xs bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 rounded {% if valor == 'NA' %}font-bold bg-yellow-200 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300{% endif %}">NA</button>
+</div>
+
+{% elif tipo == 'choice' %}
+<select name="valor" hx-post="/preliminares/{{ contrato_id }}/campo-ambiental/"
+        hx-trigger="change" hx-swap="outerHTML" hx-target="closest .campo-flex"
+        hx-vals='{"torre_id": "{{ torre_id }}", "campo": "{{ campo }}"}'
+        class="w-full px-1 py-1 bg-transparent text-xs border-none focus:outline-none focus:ring-1 focus:ring-blue-400 rounded
+               {% if valor == 'OK' %}text-green-700 dark:text-green-300 font-bold{% elif valor == 'NO_OK' %}text-red-700 dark:text-red-300 font-bold{% elif valor == 'NA' %}text-yellow-700 dark:text-yellow-300{% else %}text-gray-400{% endif %}">
+    <option value="" {% if not valor %}selected{% endif %}>—</option>
+    <option value="OK" {% if valor == 'OK' %}selected{% endif %}>Ok</option>
+    <option value="NO_OK" {% if valor == 'NO_OK' %}selected{% endif %}>No Ok</option>
+    <option value="NA" {% if valor == 'NA' %}selected{% endif %}>N/A</option>
+</select>
+
+{% elif tipo == 'bool' %}
+<select name="valor" hx-post="/preliminares/{{ contrato_id }}/campo-ambiental/"
+        hx-trigger="change" hx-swap="outerHTML" hx-target="closest .campo-flex"
+        hx-vals='{"torre_id": "{{ torre_id }}", "campo": "{{ campo }}"}'
+        class="w-full px-1 py-1 bg-transparent text-xs border-none focus:outline-none focus:ring-1 focus:ring-blue-400 rounded
+               {% if valor == True %}text-green-700 dark:text-green-300 font-bold{% elif valor == False %}text-red-700 dark:text-red-300 font-bold{% else %}text-gray-400{% endif %}">
+    <option value="" {% if valor is None %}selected{% endif %}>—</option>
+    <option value="1" {% if valor == True %}selected{% endif %}>Sí</option>
+    <option value="0" {% if valor == False %}selected{% endif %}>No</option>
+</select>
+
+{% elif tipo == 'decimal' %}
+<input type="number" name="valor" step="0.01" value="{% if valor %}{{ valor }}{% endif %}"
+       hx-post="/preliminares/{{ contrato_id }}/campo-ambiental/"
+       hx-trigger="change" hx-swap="outerHTML" hx-target="closest .campo-flex"
+       hx-vals='{"torre_id": "{{ torre_id }}", "campo": "{{ campo }}"}'
+       class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+
+{% else %}
+<input type="text" name="valor" value="{{ valor }}"
+       hx-post="/preliminares/{{ contrato_id }}/campo-ambiental/"
+       hx-trigger="change" hx-swap="outerHTML" hx-target="closest .campo-flex"
+       hx-vals='{"torre_id": "{{ torre_id }}", "campo": "{{ campo }}"}'
+       placeholder="Observaciones..."
+       class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+{% endif %}

@@ -44,6 +44,20 @@ class ContratoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         return context
 
 
+def _sincronizar_torres(contrato):
+    """Genera torres T1..TN si numero_torres está definido."""
+    from apps.ingenieria.models import TorreContrato
+    n = contrato.numero_torres
+    if not n:
+        return
+    existentes = set(contrato.torres.values_list('nombre', flat=True))
+    nuevas = [f"T{i}" for i in range(1, n + 1) if f"T{i}" not in existentes]
+    TorreContrato.objects.bulk_create([
+        TorreContrato(contrato=contrato, nombre=nombre, orden=int(nombre[1:]))
+        for nombre in nuevas
+    ])
+
+
 class ContratoCreateView(LoginRequiredMixin, RoleRequiredMixin, CreateView):
     """Create a new contract."""
     model = Contrato
@@ -53,8 +67,10 @@ class ContratoCreateView(LoginRequiredMixin, RoleRequiredMixin, CreateView):
     allowed_roles = ['admin', 'director']
 
     def form_valid(self, form):
+        response = super().form_valid(form)
+        _sincronizar_torres(self.object)
         messages.success(self.request, 'Contrato creado exitosamente.')
-        return super().form_valid(form)
+        return response
 
 
 class ContratoUpdateView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
@@ -66,8 +82,10 @@ class ContratoUpdateView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
     allowed_roles = ['admin', 'director']
 
     def form_valid(self, form):
+        response = super().form_valid(form)
+        _sincronizar_torres(self.object)
         messages.success(self.request, 'Contrato actualizado exitosamente.')
-        return super().form_valid(form)
+        return response
 
 
 class ContratoDeleteView(LoginRequiredMixin, RoleRequiredMixin, DeleteView):

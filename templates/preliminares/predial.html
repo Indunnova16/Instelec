@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Act. Preliminares Predial - {{ contrato.nombre }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Actividades Preliminares</h1>
+            <p class="text-gray-600 dark:text-gray-400">{{ contrato.codigo }} — {{ contrato.nombre }}</p>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Los cambios se guardan automáticamente</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-gray-200 dark:border-gray-700">
+        <a href="{% url 'preliminares:predial' contrato.id %}"
+           class="px-5 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+            Socio-Predial
+        </a>
+        <a href="{% url 'preliminares:ambiental' contrato.id %}"
+           class="px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+            Socio-Ambiental
+        </a>
+    </div>
+
+    {% if not filas %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+        <p class="text-gray-500 dark:text-gray-400 mb-4">No hay torres registradas para este contrato.</p>
+        <a href="{% url 'contratos:editar' contrato.id %}"
+           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+            Configurar torres en el contrato
+        </a>
+    </div>
+    {% else %}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-xs border-collapse">
+                <thead>
+                    <!-- Fila 1: Grupos -->
+                    <tr class="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold text-center">
+                        <th class="sticky left-0 z-20 bg-gray-50 dark:bg-gray-700 px-3 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[70px]">Torre</th>
+                        <th colspan="6" class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-purple-50 dark:bg-purple-900/30">Información General</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/30">Socialización</th>
+                        <th colspan="4" class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-teal-50 dark:bg-teal-900/30">Actas Iniciales</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-green-50 dark:bg-green-900/30">Liberación Predial</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 bg-orange-50 dark:bg-orange-900/30">Semáforo Social</th>
+                        <th class="px-2 py-2 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">Observaciones</th>
+                    </tr>
+                    <!-- Fila 2: Nombres de columnas -->
+                    <tr class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-normal">
+                        <th class="sticky left-0 z-20 bg-gray-50 dark:bg-gray-700 border-b border-r border-gray-200 dark:border-gray-600"></th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[110px] text-left">Departamento</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[110px] text-left">Municipio</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[140px] text-left">Unidad Territorial</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[130px] text-left">Predio</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[150px] text-left">Propietario</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[110px] text-left">Teléfono</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[130px] text-left">Fecha</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[130px] text-left">Actas de vecindad</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[140px] text-left">Acta acceso comunitario</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[140px] text-left">Autorización propietario</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[130px] text-left">Acta acceso privado</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[90px] text-center">¿Liberado?</th>
+                        <th class="px-2 py-2 border-b border-r border-gray-200 dark:border-gray-600 min-w-[90px] text-center">Estado</th>
+                        <th class="px-2 py-2 border-b border-gray-200 dark:border-gray-600 min-w-[180px] text-left">Observaciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in filas %}
+                    {% with p=fila.pred t=fila.torre %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700">
+                        <!-- Torre -->
+                        <td class="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-1 font-medium text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-600 whitespace-nowrap">
+                            {{ t.nombre }}
+                        </td>
+
+                        <!-- Texto: Departamento -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="text" value="{{ p.departamento }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "departamento"}'
+                                   name="valor"
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Texto: Municipio -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="text" value="{{ p.municipio }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "municipio"}'
+                                   name="valor"
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Texto: Unidad Territorial -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="text" value="{{ p.unidad_territorial }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "unidad_territorial"}'
+                                   name="valor"
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Texto: Predio -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="text" value="{{ p.predio }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "predio"}'
+                                   name="valor"
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Texto: Propietario -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="text" value="{{ p.propietario }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "propietario"}'
+                                   name="valor"
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Texto: Teléfono -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="text" value="{{ p.telefono }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "telefono"}'
+                                   name="valor"
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Fecha: Socialización -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="date" value="{{ p.socializacion|date:'Y-m-d' }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "socializacion"}'
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Fecha: Acta vecindad -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="date" value="{{ p.acta_vecindad|date:'Y-m-d' }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "acta_vecindad"}'
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Fecha: Acta acceso comunitario -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="date" value="{{ p.acta_acceso_com|date:'Y-m-d' }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "acta_acceso_com"}'
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Fecha: Autorización propietario -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="date" value="{{ p.autorizacion_prop|date:'Y-m-d' }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "autorizacion_prop"}'
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Fecha: Acta acceso privado -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0">
+                            <input type="date" value="{{ p.acta_acceso_priv|date:'Y-m-d' }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "acta_acceso_priv"}'
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+
+                        <!-- Booleano: Liberación Predial -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
+                            <select hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                    hx-trigger="change" hx-swap="none"
+                                    hx-vals='{"torre_id": "{{ t.id }}", "campo": "liberacion_predial"}'
+                                    name="valor"
+                                    class="w-full px-1 py-1 bg-transparent text-xs border-none focus:outline-none focus:ring-1 focus:ring-blue-400 rounded
+                                           {% if p.liberacion_predial == True %}text-green-700 dark:text-green-300 font-bold{% elif p.liberacion_predial == False %}text-red-700 dark:text-red-300 font-bold{% else %}text-gray-400{% endif %}">
+                                <option value="" {% if p.liberacion_predial is None %}selected{% endif %}>—</option>
+                                <option value="1" {% if p.liberacion_predial == True %}selected{% endif %}>Sí</option>
+                                <option value="0" {% if p.liberacion_predial == False %}selected{% endif %}>No</option>
+                            </select>
+                        </td>
+
+                        <!-- Semáforo (calculado, solo lectura por ahora) -->
+                        <td class="border-r border-gray-100 dark:border-gray-700 px-2 py-1 text-center">
+                            <span class="text-gray-400 text-xs italic">—</span>
+                        </td>
+
+                        <!-- Texto: Observaciones -->
+                        <td class="border-gray-100 dark:border-gray-700 p-0">
+                            <input type="text" value="{{ p.observaciones }}"
+                                   hx-post="/preliminares/{{ contrato.id }}/campo/"
+                                   hx-trigger="change" hx-swap="none"
+                                   hx-vals='{"torre_id": "{{ t.id }}", "campo": "observaciones"}'
+                                   name="valor"
+                                   placeholder="Observaciones..."
+                                   class="w-full px-2 py-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 border-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded">
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

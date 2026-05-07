@@ -20,13 +20,13 @@
         <div class="space-y-3">
             <!-- Module Buttons -->
             <div class="flex gap-2">
-                <button @click="modulo = 'mantenimiento'; localStorage.setItem('modulo_activo', 'mantenimiento')"
+                <button @click="modulo = 'mantenimiento'; localStorage.setItem('modulo_activo', 'mantenimiento'); $dispatch('modulo-changed', { modulo: 'mantenimiento' })"
                         :class="modulo === 'mantenimiento' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
                         class="flex-1 px-3 py-2 rounded text-xs font-medium transition-colors"
                         type="button">
                     🔧 Mantenimiento
                 </button>
-                <button @click="modulo = 'construccion'; localStorage.setItem('modulo_activo', 'construccion')"
+                <button @click="modulo = 'construccion'; localStorage.setItem('modulo_activo', 'construccion'); $dispatch('modulo-changed', { modulo: 'construccion' })"
                         :class="modulo === 'construccion' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
                         class="flex-1 px-3 py-2 rounded text-xs font-medium transition-colors"
                         type="button">
@@ -48,7 +48,12 @@
 
             <template x-if="modulo === 'construccion'">
                 <select class="w-full px-3 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        @change="if ($event.target.value) { window.location.href = `/construccion/${$event.target.value.split('-')[1]}/`; }"
+                        @change="if ($event.target.value) {
+                            const id = $event.target.value.split('-')[1];
+                            localStorage.setItem('proyecto_construccion', $event.target.value);
+                            localStorage.setItem('contrato_construccion_id', id);
+                            $dispatch('contrato-changed');
+                        }"
                         x-init="$el.value = localStorage.getItem('proyecto_construccion') || ''">
                     <option value="">🏗️ Seleccionar proyecto...</option>
                     {% for c in contratos_construccion %}
@@ -63,7 +68,7 @@
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-4" role="navigation" aria-label="Menu principal"
          x-data="{ modulo: localStorage.getItem('modulo_activo') || 'mantenimiento' }"
-         @storage.window="modulo = localStorage.getItem('modulo_activo') || 'mantenimiento'">
+         @modulo-changed.window="modulo = $event.detail.modulo">
         <ul class="space-y-1 px-3" role="menubar">
 
             {% if request.user.is_campo %}
@@ -181,8 +186,8 @@
             <!-- Separator (Mantenimiento) -->
             <li class="border-t border-gray-200 dark:border-gray-700 my-4" role="separator" aria-hidden="true" x-show="modulo === 'mantenimiento'"></li>
 
-            <!-- Contratos -->
-            <li role="none">
+            <!-- Contratos (solo Mantenimiento) -->
+            <li role="none" x-show="modulo === 'mantenimiento'">
                 <a href="{% url 'contratos:lista' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -191,8 +196,8 @@
                 </a>
             </li>
 
-            <!-- Ambiental -->
-            <li role="none">
+            <!-- Ambiental (solo Mantenimiento) -->
+            <li role="none" x-show="modulo === 'mantenimiento'">
                 <a href="{% url 'ambiental:lista' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
@@ -201,8 +206,8 @@
                 </a>
             </li>
 
-            <!-- Financiero -->
-            <li x-data="{ open: false }" role="none">
+            <!-- Financiero (solo Mantenimiento) -->
+            <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
                 <button @click="open = !open"
                         class="w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                         aria-haspopup="true"
@@ -228,8 +233,8 @@
                 </ul>
             </li>
 
-            <!-- Indicadores -->
-            <li role="none">
+            <!-- Indicadores (solo Mantenimiento) -->
+            <li role="none" x-show="modulo === 'mantenimiento'">
                 <a href="{% url 'indicadores:dashboard' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -255,179 +260,35 @@
             <!-- CONSTRUCCION MENU -->
             <template x-if="modulo === 'construccion'">
                 <div class="space-y-1">
-                    <!-- Proyectos -->
+                    <!-- Contratos -->
                     <li role="none">
-                        <a href="{% url 'construccion:lista' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                            </svg>
-                            Proyectos
-                        </a>
-                    </li>
-
-                    <!-- CONSTRUCCION PESTAÑAS PRINCIPALES -->
-                    {% if proyecto %}
-                    <!-- Dashboard -->
-                    <li role="none">
-                        <a href="{% url 'construccion:dashboard' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                            </svg>
-                            Dashboard
-                        </a>
-                    </li>
-
-                    <!-- Seguimiento Diario -->
-                    <li role="none">
-                        <a href="{% url 'construccion:seguimiento_diario' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <a href="{% url 'contratos:lista' %}?unidad=CONSTRUCCION" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                             </svg>
-                            Seguimiento Diario
+                            Contratos
                         </a>
                     </li>
 
-                    <!-- Torres -->
+                    <!-- Ingeniería -->
                     <li role="none">
-                        <a href="{% url 'construccion:torres_lista' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <a href="{% url 'ingenieria:seleccionar' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 5h6m-6 0v14a2 2 0 002 2h2a2 2 0 002-2V5m-6 0a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2m-6 0h6"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
                             </svg>
-                            Torres
+                            Ingeniería
                         </a>
                     </li>
 
-                    <!-- Social y Predial -->
+                    <!-- Actividades Preliminares -->
                     <li role="none">
-                        <a href="{% url 'construccion:social_predial' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <a href="{% url 'preliminares:seleccionar' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
                             </svg>
-                            Social y Predial
+                            Actividades Preliminares
                         </a>
                     </li>
-
-                    <!-- Ambiental -->
-                    <li role="none">
-                        <a href="{% url 'construccion:ambiental' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
-                            </svg>
-                            Ambiental
-                        </a>
-                    </li>
-
-                    <!-- Control de Lluvias -->
-                    <li role="none">
-                        <a href="{% url 'construccion:control_lluvia' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                            </svg>
-                            Control de Lluvias
-                        </a>
-                    </li>
-
-                    <!-- Replanteo -->
-                    <li role="none">
-                        <a href="{% url 'construccion:replanteo' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                            </svg>
-                            Replanteo
-                        </a>
-                    </li>
-
-                    <!-- SST -->
-                    <li role="none">
-                        <a href="{% url 'construccion:sst' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            SST
-                        </a>
-                    </li>
-
-                    <!-- Entrega -->
-                    <li role="none">
-                        <a href="{% url 'construccion:entrega' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                            Entrega
-                        </a>
-                    </li>
-
-                    <!-- Pendientes -->
-                    <li role="none">
-                        <a href="{% url 'construccion:pendientes' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            Pendientes
-                        </a>
-                    </li>
-
-                    <!-- PESTAÑAS ADICIONALES DEL EXCEL -->
-                    <!-- Programación -->
-                    <li role="none">
-                        <a href="{% url 'construccion:programacion' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                            </svg>
-                            Programación
-                        </a>
-                    </li>
-
-                    <!-- RS Data -->
-                    <li role="none">
-                        <a href="{% url 'construccion:rs_data' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                            </svg>
-                            RS Data
-                        </a>
-                    </li>
-
-                    <!-- Hochimin -->
-                    <li role="none">
-                        <a href="{% url 'construccion:hochimin' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 015.646 5.646 9.003 9.003 0 0012 2c4.97 0 9.185 3.364 9.88 7.75"/>
-                            </svg>
-                            Hochimin
-                        </a>
-                    </li>
-
-                    <!-- Lectura -->
-                    <li role="none">
-                        <a href="{% url 'construccion:lectura' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z"/>
-                            </svg>
-                            Lectura
-                        </a>
-                    </li>
-
-                    <!-- Entrega Flechas -->
-                    <li role="none">
-                        <a href="{% url 'construccion:entrega_flechas' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                            </svg>
-                            Entrega Flechas
-                        </a>
-                    </li>
-
-                    <!-- Electromecánica -->
-                    <li role="none">
-                        <a href="{% url 'construccion:electromecanica' proyecto.id %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                            </svg>
-                            Electromecánica
-                        </a>
-                    </li>
-                    {% endif %}
                 </div>
             </template>
 

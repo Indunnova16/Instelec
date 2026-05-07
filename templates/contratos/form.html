@@ -23,7 +23,7 @@
 
     <!-- Form -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <form method="post" class="space-y-6">
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
             {% csrf_token %}
 
             {% if form.errors %}
@@ -75,17 +75,17 @@
                 <!-- Nombre (full width) -->
                 <div class="md:col-span-2">
                     <label for="id_nombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Nombre del contrato *
+                        Nombre del proyecto *
                     </label>
                     {{ form.nombre }}
                 </div>
 
-                <!-- Objeto -->
-                <div class="md:col-span-2">
-                    <label for="id_objeto" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Objeto del contrato
+                <!-- Tipo de Contrato -->
+                <div>
+                    <label for="id_tipo_contrato" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Tipo de contrato
                     </label>
-                    {{ form.objeto }}
+                    {{ form.tipo_contrato }}
                 </div>
 
                 <!-- Valor -->
@@ -94,6 +94,31 @@
                         Valor del contrato
                     </label>
                     {{ form.valor }}
+                </div>
+
+                <!-- Plazo de Ejecución -->
+                <div>
+                    <label for="id_plazo_ejecucion" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Plazo de ejecución (días)
+                    </label>
+                    {{ form.plazo_ejecucion }}
+                </div>
+
+                <!-- Longitud de la Línea -->
+                <div>
+                    <label for="id_longitud_linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Longitud de la línea (km)
+                    </label>
+                    {{ form.longitud_linea }}
+                </div>
+
+                <!-- Número de Torres -->
+                <div>
+                    <label for="id_numero_torres" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Número de torres
+                    </label>
+                    {{ form.numero_torres }}
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Se generarán las filas en Ingeniería automáticamente</p>
                 </div>
 
                 <!-- Fecha Inicio -->
@@ -110,6 +135,31 @@
                         Fecha de finalizacion
                     </label>
                     {{ form.fecha_fin }}
+                </div>
+
+                <!-- Acta de Inicio -->
+                <div class="md:col-span-2">
+                    <label for="id_acta_inicio" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Acta de inicio
+                    </label>
+                    {% if object.acta_inicio %}
+                    <div class="mb-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                        </svg>
+                        <a href="{{ object.acta_inicio.url }}" target="_blank" class="text-blue-600 hover:underline">{{ object.acta_inicio.name|slice:"20:" }}</a>
+                    </div>
+                    {% endif %}
+                    {{ form.acta_inicio }}
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">PDF, DOC, DOCX hasta 10MB</p>
+                </div>
+
+                <!-- Objeto -->
+                <div class="md:col-span-2">
+                    <label for="id_objeto" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Objeto del contrato
+                    </label>
+                    {{ form.objeto }}
                 </div>
 
                 <!-- Observaciones -->

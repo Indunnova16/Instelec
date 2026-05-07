@@ -1,0 +1,47 @@
+{% comment %}Celda individual de la tabla de ingeniería{% endcomment %}
+{% load core_tags %}
+{% with obs=fila.celdas|get_item:doc.codigo %}
+{% with estado=obs.estado observacion=obs.observacion %}
+<div class="relative celda-wrapper"
+     data-torre-id="{{ fila.torre.id }}"
+     data-codigo="{{ doc.codigo }}"
+     data-categoria="{{ categoria }}"
+     data-contrato-id="{{ contrato.id }}"
+     data-observacion="{{ observacion|default:''|escapejs }}">
+
+  {% if estado == 'CUMPLE' %}
+  <button
+    hx-post="/ingenieria/{{ contrato_id }}/estado/"
+    hx-vals='{"torre_id": "{{ fila.torre.id }}", "documento_codigo": "{{ doc.codigo }}", "categoria": "{{ categoria }}", "estado": "NO_CUMPLE"}'
+    hx-swap="outerHTML" hx-target="closest .celda-wrapper"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    class="w-full min-w-[2.5rem] py-1 px-1 rounded text-xs font-bold bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 transition-colors">C</button>
+  {% elif estado == 'NO_CUMPLE' %}
+  <button
+    hx-post="/ingenieria/{{ contrato_id }}/estado/"
+    hx-vals='{"torre_id": "{{ fila.torre.id }}", "documento_codigo": "{{ doc.codigo }}", "categoria": "{{ categoria }}", "estado": "NO_APLICA"}'
+    hx-swap="outerHTML" hx-target="closest .celda-wrapper"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    class="w-full min-w-[2.5rem] py-1 px-1 rounded text-xs font-bold bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200 transition-colors">NC</button>
+  {% elif estado == 'NO_APLICA' %}
+  <button
+    hx-post="/ingenieria/{{ contrato_id }}/estado/"
+    hx-vals='{"torre_id": "{{ fila.torre.id }}", "documento_codigo": "{{ doc.codigo }}", "categoria": "{{ categoria }}", "estado": ""}'
+    hx-swap="outerHTML" hx-target="closest .celda-wrapper"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    class="w-full min-w-[2.5rem] py-1 px-1 rounded text-xs font-bold bg-yellow-200 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-200 transition-colors">NA</button>
+  {% else %}
+  <button
+    hx-post="/ingenieria/{{ contrato_id }}/estado/"
+    hx-vals='{"torre_id": "{{ fila.torre.id }}", "documento_codigo": "{{ doc.codigo }}", "categoria": "{{ categoria }}", "estado": "CUMPLE"}'
+    hx-swap="outerHTML" hx-target="closest .celda-wrapper"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    class="w-full min-w-[2.5rem] py-1 px-1 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 transition-colors">-</button>
+  {% endif %}
+
+  {% if observacion %}
+  <span class="absolute top-0 right-0 w-0 h-0 border-t-[7px] border-r-[7px] border-t-transparent border-r-orange-400 pointer-events-none"></span>
+  {% endif %}
+</div>
+{% endwith %}
+{% endwith %}

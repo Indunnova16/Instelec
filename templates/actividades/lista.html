@@ -137,4 +137,14 @@
         {% include "actividades/partials/lista_actividades.html" %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Dispara la carga de filtros automáticamente al cargar la página
+    const form = document.getElementById('filtros-form');
+    if (form && form.getAttribute('hx-trigger')) {
+        htmx.trigger('#filtros-form', 'change');
+    }
+});
+</script>
 {% endblock %}

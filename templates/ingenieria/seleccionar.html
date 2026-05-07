@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Ingeniería - Seleccionar contrato{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Ingeniería</h1>
+        <p class="text-gray-600 dark:text-gray-400">Selecciona un contrato de construcción</p>
+    </div>
+
+    {% if contratos %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for contrato in contratos %}
+        <a href="{% url 'ingenieria:civil' contrato.id %}"
+           class="bg-white dark:bg-gray-800 rounded-lg shadow p-5 hover:shadow-md transition border border-transparent hover:border-blue-300 dark:hover:border-blue-600">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 font-mono">{{ contrato.codigo }}</p>
+                    <h2 class="text-base font-semibold text-gray-900 dark:text-white mt-1">{{ contrato.nombre }}</h2>
+                    {% if contrato.cliente %}<p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{{ contrato.cliente }}</p>{% endif %}
+                </div>
+                <span class="ml-2 px-2 py-0.5 rounded text-xs {% if contrato.estado == 'ACTIVO' %}bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300{% else %}bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400{% endif %}">
+                    {{ contrato.get_estado_display }}
+                </span>
+            </div>
+            <div class="mt-3 flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                {% if contrato.numero_torres %}
+                <span>🏗️ {{ contrato.numero_torres }} torres</span>
+                {% endif %}
+                {% if contrato.longitud_linea %}
+                <span>📏 {{ contrato.longitud_linea }} km</span>
+                {% endif %}
+            </div>
+            <div class="mt-3 flex gap-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
+                <span>Civil</span><span>·</span><span>Montaje</span><span>·</span><span>Tendido</span>
+                <span class="ml-auto">Ver →</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+        <p class="text-gray-500 dark:text-gray-400 mb-4">No hay contratos de construcción registrados.</p>
+        <a href="{% url 'contratos:crear' %}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+            Crear contrato
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
