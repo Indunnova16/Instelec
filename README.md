@@ -28,8 +28,8 @@ TransMaint es una plataforma completa para la gestion de operaciones de mantenim
 
 1. **Clonar el repositorio**
    ```bash
-   git clone https://github.com/indunnova/transmaint.git
-   cd transmaint
+   git clone https://github.com/Indunnova16/Instelec.git
+   cd Instelec
    ```
 
 2. **Crear entorno virtual**
