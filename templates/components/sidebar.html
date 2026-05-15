@@ -13,20 +13,37 @@
     <!-- Module Selector (for admin users) -->
     {% if not request.user.is_campo %}
     <div x-data="{
-        modulo: localStorage.getItem('modulo_activo') || 'mantenimiento'
+        modulo: '{{ unidad_negocio_actual|default:"TODOS"|lower }}' === 'construccion' ? 'construccion' : (localStorage.getItem('modulo_activo') || 'mantenimiento'),
+        async persistir(modulo) {
+            this.modulo = modulo;
+            localStorage.setItem('modulo_activo', modulo);
+            const fd = new FormData();
+            fd.append('unidad_negocio', modulo === 'construccion' ? 'CONSTRUCCION' : 'MANTENIMIENTO');
+            try {
+                await fetch('{% url 'core:set_unidad_negocio' %}', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''},
+                    body: fd,
+                    credentials: 'same-origin',
+                });
+            } catch (e) { /* sesión persiste en próximo request */ }
+            this.$dispatch('modulo-changed', { modulo });
+            window.location.reload();
+        }
     }"
     @storage.window="modulo = localStorage.getItem('modulo_activo') || 'mantenimiento'"
     class="border-b border-gray-200 dark:border-gray-700 px-3 py-3">
+        {% csrf_token %}
         <div class="space-y-3">
             <!-- Module Buttons -->
             <div class="flex gap-2">
-                <button @click="modulo = 'mantenimiento'; localStorage.setItem('modulo_activo', 'mantenimiento'); $dispatch('modulo-changed', { modulo: 'mantenimiento' })"
+                <button @click="persistir('mantenimiento')"
                         :class="modulo === 'mantenimiento' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
                         class="flex-1 px-3 py-2 rounded text-xs font-medium transition-colors"
                         type="button">
                     🔧 Mantenimiento
                 </button>
-                <button @click="modulo = 'construccion'; localStorage.setItem('modulo_activo', 'construccion'); $dispatch('modulo-changed', { modulo: 'construccion' })"
+                <button @click="persistir('construccion')"
                         :class="modulo === 'construccion' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
                         class="flex-1 px-3 py-2 rounded text-xs font-medium transition-colors"
                         type="button">

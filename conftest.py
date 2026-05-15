@@ -86,7 +86,7 @@ def api_client():
 @pytest.fixture
 def authenticated_client(client, admin_user, user_password):
     """Return an authenticated Django test client."""
-    client.login(email=admin_user.email, password=user_password)
+    client.login(username=admin_user.email, password=user_password)
     return client
 
 

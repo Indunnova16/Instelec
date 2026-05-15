@@ -114,6 +114,40 @@ def truncate_string(text: str, max_length: int = 50) -> str:
 
 
 # =============================================================================
+# Unidad de Negocio (Mantenimiento vs Construcción)
+# =============================================================================
+
+UNIDAD_NEGOCIO_TODOS = 'TODOS'
+UNIDAD_NEGOCIO_MANTENIMIENTO = 'MANTENIMIENTO'
+UNIDAD_NEGOCIO_CONSTRUCCION = 'CONSTRUCCION'
+UNIDADES_NEGOCIO_VALIDAS = {
+    UNIDAD_NEGOCIO_TODOS,
+    UNIDAD_NEGOCIO_MANTENIMIENTO,
+    UNIDAD_NEGOCIO_CONSTRUCCION,
+}
+
+
+def get_unidad_negocio(request) -> str:
+    """Devuelve la unidad de negocio activa en la sesión.
+
+    Default `TODOS` para no romper vistas que esperan todo el catálogo.
+    """
+    valor = (request.session.get('unidad_negocio') or '').upper()
+    if valor in UNIDADES_NEGOCIO_VALIDAS:
+        return valor
+    return UNIDAD_NEGOCIO_TODOS
+
+
+def set_unidad_negocio(request, valor: str) -> str:
+    """Persiste la unidad de negocio en la sesión. Devuelve el valor normalizado."""
+    normalizada = (valor or '').upper()
+    if normalizada not in UNIDADES_NEGOCIO_VALIDAS:
+        normalizada = UNIDAD_NEGOCIO_TODOS
+    request.session['unidad_negocio'] = normalizada
+    return normalizada
+
+
+# =============================================================================
 # Google Secret Manager Functions
 # =============================================================================
 

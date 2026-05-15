@@ -26,6 +26,12 @@ class RegistroCampo(BaseModel):
         PROPIETARIO = 'PROPIETARIO', 'Problema con propietario'
         OTRO = 'OTRO', 'Otro'
 
+    class Severidad(models.TextChoices):
+        BAJA = 'BAJA', 'Baja'
+        MEDIA = 'MEDIA', 'Media'
+        ALTA = 'ALTA', 'Alta'
+        CRITICA = 'CRITICA', 'Crítica'
+
     actividad = models.ForeignKey(
         'actividades.Actividad',
         on_delete=models.CASCADE,
@@ -122,6 +128,16 @@ class RegistroCampo(BaseModel):
         'Descripción del pendiente',
         blank=True,
         help_text='Descripción detallada del pendiente o condición especial'
+    )
+
+    # Severidad del hallazgo (#40)
+    severidad = models.CharField(
+        'Severidad del hallazgo',
+        max_length=10,
+        choices=Severidad.choices,
+        blank=True,
+        default='',
+        help_text='Severidad del hallazgo si aplica (inspecciones)'
     )
 
     # Observations

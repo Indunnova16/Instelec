@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Hoja de Vida — {{ linea.codigo }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <a href="{% url 'lineas:detalle' linea.pk %}" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Hoja de Vida — {{ linea.codigo }}</h1>
+                <p class="text-gray-600 dark:text-gray-400">{{ linea.nombre }}</p>
+            </div>
+        </div>
+
+        <!-- Estado de inspección -->
+        <div class="text-right">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Última inspección</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                {% if linea.last_inspection_date %}{{ linea.last_inspection_date|date:"d/m/Y" }} — {{ linea.last_inspection_type|default:"—" }}{% else %}Sin registros{% endif %}
+            </p>
+            {% if inspeccion_vencida %}
+                <span class="inline-block mt-1 px-2 py-1 text-xs rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-semibold">⚠ Vencida</span>
+            {% elif linea.inspection_status == 'CRITICA' %}
+                <span class="inline-block mt-1 px-2 py-1 text-xs rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-semibold">CRÍTICA</span>
+            {% elif linea.inspection_status == 'PROXIMA' %}
+                <span class="inline-block mt-1 px-2 py-1 text-xs rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 font-semibold">Próxima a vencer</span>
+            {% else %}
+                <span class="inline-block mt-1 px-2 py-1 text-xs rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 font-semibold">Al día</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tipo de evento</label>
+            <select name="tipo" class="w-full rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <option value="">Todos</option>
+                {% for codigo, label in tipos_evento %}
+                <option value="{{ codigo }}" {% if filtros.tipo == codigo %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Severidad</label>
+            <select name="severidad" class="w-full rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <option value="">Todas</option>
+                {% for codigo, label in severidades %}
+                <option value="{{ codigo }}" {% if filtros.severidad == codigo %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Desde</label>
+            <input type="date" name="desde" value="{{ filtros.desde }}" class="w-full rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Hasta</label>
+            <input type="date" name="hasta" value="{{ filtros.hasta }}" class="w-full rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition">Filtrar</button>
+        </div>
+    </form>
+
+    <div class="text-sm text-gray-500 dark:text-gray-400">{{ total_eventos }} evento{{ total_eventos|pluralize }} encontrado{{ total_eventos|pluralize }}.</div>
+
+    <!-- Timeline -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        {% if eventos %}
+        <ol class="relative border-l border-gray-200 dark:border-gray-700 ml-6 my-6">
+            {% for e in eventos %}
+            <li class="mb-8 ml-6">
+                <span class="absolute flex items-center justify-center w-8 h-8 rounded-full -left-4 ring-4 ring-white dark:ring-gray-800
+                    {% if e.tipo_evento == 'INTERVENCION' %}bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300
+                    {% elif e.tipo_evento == 'REGISTRO' %}bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300
+                    {% elif e.tipo_evento == 'DANO' %}bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300
+                    {% else %}bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300{% endif %}">
+                    {% if e.tipo_evento == 'INTERVENCION' %}🔧
+                    {% elif e.tipo_evento == 'REGISTRO' %}📋
+                    {% elif e.tipo_evento == 'DANO' %}⚠
+                    {% else %}✓{% endif %}
+                </span>
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ e.titulo }}</h3>
+                    {% if e.severidad %}
+                    <span class="text-xs px-2 py-0.5 rounded
+                        {% if e.severidad == 'CRITICA' %}bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300
+                        {% elif e.severidad == 'ALTA' %}bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300
+                        {% elif e.severidad == 'MEDIA' %}bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300
+                        {% else %}bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                        {{ e.severidad }}
+                    </span>
+                    {% endif %}
+                </div>
+                <time class="block mt-1 text-xs text-gray-500 dark:text-gray-400">{{ e.fecha|date:"d/m/Y H:i" }}</time>
+                {% if e.descripcion %}
+                <p class="mt-2 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ e.descripcion }}</p>
+                {% endif %}
+                <div class="mt-2 text-xs text-gray-500 dark:text-gray-400 space-x-3">
+                    {% if e.usuario %}<span>👤 {{ e.usuario.get_full_name|default:e.usuario }}</span>{% endif %}
+                    {% if e.cuadrilla %}<span>🛠 {{ e.cuadrilla }}</span>{% endif %}
+                    {% if e.torre_inicio and e.torre_fin %}
+                        <span>📍 {{ e.torre_inicio.numero }} → {{ e.torre_fin.numero }}</span>
+                    {% elif e.torre_inicio %}
+                        <span>📍 Torre {{ e.torre_inicio.numero }}</span>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div class="p-12 text-center text-gray-500 dark:text-gray-400">
+            <p>No hay eventos registrados con los filtros seleccionados.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

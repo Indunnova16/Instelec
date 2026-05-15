@@ -1,10 +1,20 @@
 """
 Views for KPIs and SLA dashboard.
 """
+import json
+from datetime import timedelta
+
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.cache import cache
+from django.db.models import Count
+from django.db.models.functions import TruncMonth
+from django.http import HttpResponse
+from django.utils import timezone
+from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+from apps.core.utils import get_unidad_negocio
 
 from .models import ActaSeguimiento, Indicador, MedicionIndicador
 
@@ -201,3 +211,156 @@ class ActaDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     template_name = 'indicadores/acta_detalle.html'
     context_object_name = 'acta'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+
+def _resumen_mantenimiento(unidad: str) -> dict:
+    """Computa métricas del dashboard de mantenimiento. Cacheado 5 min por unidad."""
+    from apps.actividades.models import HistorialIntervencion
+    from apps.campo.models import RegistroCampo
+    from apps.lineas.models import Linea
+
+    cache_key = f'dashboard_mtto:{unidad}'
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    hoy = timezone.now().date()
+    hace_30d = hoy - timedelta(days=30)
+    hace_6m = hoy - timedelta(days=180)
+
+    lineas = Linea.objects.filter(activa=True)
+    registros = RegistroCampo.objects.filter(sincronizado=True)
+    intervenciones = HistorialIntervencion.objects.all()
+    if unidad in ('MANTENIMIENTO', 'CONSTRUCCION'):
+        lineas = lineas.filter(contrato__unidad_negocio=unidad)
+        registros = registros.filter(actividad__linea__contrato__unidad_negocio=unidad)
+        intervenciones = intervenciones.filter(linea__contrato__unidad_negocio=unidad)
+
+    total_lineas = lineas.count()
+    vencidas = lineas.filter(inspection_status='VENCIDA').count()
+    criticas = lineas.filter(inspection_status='CRITICA').count()
+    proximas = lineas.filter(inspection_status='PROXIMA').count()
+
+    # Distribución de severidad de los últimos 30 días.
+    severidad_qs = registros.filter(
+        fecha_inicio__date__gte=hace_30d,
+    ).exclude(severidad='').values('severidad').annotate(n=Count('id'))
+    distribucion_severidad = {row['severidad']: row['n'] for row in severidad_qs}
+
+    # Inspecciones por tipo (últimos 30 días).
+    tipo_qs = registros.filter(
+        fecha_inicio__date__gte=hace_30d,
+    ).values('actividad__tipo_actividad__nombre').annotate(n=Count('id')).order_by('-n')[:10]
+    por_tipo = [(row['actividad__tipo_actividad__nombre'] or 'N/A', row['n']) for row in tipo_qs]
+
+    # Tendencia mensual últimos 6 meses (registros).
+    tendencia_qs = registros.filter(
+        fecha_inicio__date__gte=hace_6m,
+    ).annotate(mes=TruncMonth('fecha_inicio')).values('mes').annotate(n=Count('id')).order_by('mes')
+    tendencia = [(row['mes'].strftime('%Y-%m'), row['n']) for row in tendencia_qs if row['mes']]
+
+    data = {
+        'total_lineas': total_lineas,
+        'vencidas': vencidas,
+        'criticas': criticas,
+        'proximas': proximas,
+        'al_dia': total_lineas - vencidas - criticas - proximas,
+        'distribucion_severidad': distribucion_severidad,
+        'por_tipo': por_tipo,
+        'tendencia': tendencia,
+        'total_registros_30d': registros.filter(fecha_inicio__date__gte=hace_30d).count(),
+        'total_intervenciones_30d': intervenciones.filter(fecha_intervencion__date__gte=hace_30d).count(),
+    }
+    cache.set(cache_key, data, 300)
+    return data
+
+
+class DashboardMantenimientoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Dashboard específico de mantenimiento (#43).
+
+    Métricas: líneas vencidas/críticas, severidad, inspecciones por tipo, tendencia.
+    Filtra por sesión (`get_unidad_negocio`).
+    """
+    template_name = 'indicadores/dashboard_mantenimiento.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor']
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        unidad = get_unidad_negocio(self.request)
+        data = _resumen_mantenimiento(unidad)
+        ctx['data'] = data
+        ctx['unidad_actual'] = unidad
+        # JSON para ECharts.
+        ctx['severidad_json'] = json.dumps([
+            {'name': k, 'value': v} for k, v in data['distribucion_severidad'].items()
+        ])
+        ctx['por_tipo_json'] = json.dumps({
+            'labels': [t[0] for t in data['por_tipo']],
+            'values': [t[1] for t in data['por_tipo']],
+        })
+        ctx['tendencia_json'] = json.dumps({
+            'labels': [t[0] for t in data['tendencia']],
+            'values': [t[1] for t in data['tendencia']],
+        })
+        return ctx
+
+
+class ExportarDashboardMantenimientoExcelView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Exporta el dashboard de mantenimiento a XLSX."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get(self, request, *args, **kwargs):
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+
+        unidad = get_unidad_negocio(request)
+        data = _resumen_mantenimiento(unidad)
+
+        wb = Workbook()
+
+        # Resumen.
+        ws = wb.active
+        ws.title = 'Resumen'
+        bold = Font(bold=True)
+        ws['A1'] = 'Indicador'
+        ws['B1'] = 'Valor'
+        ws['A1'].font = bold
+        ws['B1'].font = bold
+        filas = [
+            ('Unidad de negocio', unidad),
+            ('Total líneas activas', data['total_lineas']),
+            ('Vencidas', data['vencidas']),
+            ('Críticas', data['criticas']),
+            ('Próximas a vencer', data['proximas']),
+            ('Al día', data['al_dia']),
+            ('Registros últimos 30d', data['total_registros_30d']),
+            ('Intervenciones últimos 30d', data['total_intervenciones_30d']),
+        ]
+        for i, (k, v) in enumerate(filas, start=2):
+            ws.cell(row=i, column=1, value=k)
+            ws.cell(row=i, column=2, value=v)
+
+        # Severidad.
+        ws_sev = wb.create_sheet('Severidad')
+        ws_sev.append(['Severidad', 'Registros'])
+        for k, v in data['distribucion_severidad'].items():
+            ws_sev.append([k, v])
+
+        # Por tipo.
+        ws_tipo = wb.create_sheet('Por tipo')
+        ws_tipo.append(['Tipo de actividad', 'Inspecciones'])
+        for label, n in data['por_tipo']:
+            ws_tipo.append([label, n])
+
+        # Tendencia.
+        ws_tend = wb.create_sheet('Tendencia mensual')
+        ws_tend.append(['Mes', 'Registros'])
+        for label, n in data['tendencia']:
+            ws_tend.append([label, n])
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="dashboard_mantenimiento_{unidad}.xlsx"'
+        wb.save(response)
+        return response

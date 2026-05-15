@@ -1077,14 +1077,17 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
 
             row += 1
 
-        # Auto-fit column widths
+        # Auto-fit column widths (MergedCell no tiene column_letter).
+        from openpyxl.utils import get_column_letter
         for col in ws.columns:
             max_len = 0
-            col_letter = col[0].column_letter
+            col_idx = col[0].column
+            if col_idx is None:
+                continue
             for cell in col:
                 if cell.value:
                     max_len = max(max_len, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 35)
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(max_len + 2, 35)
 
         # Write to buffer
         buffer = BytesIO()

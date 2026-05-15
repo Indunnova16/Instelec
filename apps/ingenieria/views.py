@@ -26,7 +26,7 @@ class IngenieriaBaseView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         contrato = get_object_or_404(Contrato, pk=self.kwargs['contrato_id'])
-        torres = TorreContrato.objects.filter(contrato=contrato)
+        torres = TorreContrato.objects.filter(contrato=contrato, archivada=False)
         documentos = DOCUMENTOS_POR_CATEGORIA[self.categoria]
 
         # Agrupar documentos por subcategoría

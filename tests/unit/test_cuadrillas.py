@@ -151,7 +151,8 @@ class TestCuadrillaMiembroModel:
 
         roles = [
             CuadrillaMiembro.RolCuadrilla.SUPERVISOR,
-            CuadrillaMiembro.RolCuadrilla.LINIERO,
+            CuadrillaMiembro.RolCuadrilla.LINIERO_I,
+            CuadrillaMiembro.RolCuadrilla.LINIERO_II,
             CuadrillaMiembro.RolCuadrilla.AYUDANTE,
         ]
         for rol in roles:

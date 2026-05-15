@@ -78,7 +78,7 @@ class TestAuthenticationViews:
 
     def test_login_view_authenticated_user_redirect(self, client, admin_user, user_password):
         """Test authenticated user is redirected from login."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('usuarios:login')
 
         response = client.get(url)
@@ -88,7 +88,7 @@ class TestAuthenticationViews:
 
     def test_logout_view(self, client, admin_user, user_password):
         """Test logout redirects to login page."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('usuarios:logout')
 
         response = client.post(url)
@@ -115,7 +115,7 @@ class TestProfileViews:
 
     def test_perfil_view_authenticated(self, client, admin_user, user_password):
         """Test profile view for authenticated user."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('usuarios:perfil')
 
         response = client.get(url)
@@ -134,7 +134,7 @@ class TestProfileViews:
 
     def test_perfil_edit_view_authenticated(self, client, admin_user, user_password):
         """Test profile edit view for authenticated user."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('usuarios:perfil_edit')
 
         response = client.get(url)
@@ -161,7 +161,7 @@ class TestCoreViews:
 
     def test_home_view_authenticated_admin(self, client, admin_user, user_password):
         """Test home view shows full dashboard for admin."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('core:home')
 
         response = client.get(url)
@@ -171,14 +171,14 @@ class TestCoreViews:
         assert response.context['show_full_dashboard'] is True
 
     def test_home_view_authenticated_liniero(self, client, liniero_user, user_password):
-        """Test home view shows limited dashboard for liniero."""
-        client.login(email=liniero_user.email, password=user_password)
+        """Liniero is redirected from home to campo:lista (HomeView.dispatch)."""
+        client.login(username=liniero_user.email, password=user_password)
         url = reverse('core:home')
 
         response = client.get(url)
 
-        assert response.status_code == 200
-        assert response.context['show_full_dashboard'] is False
+        assert response.status_code == 302
+        assert response.url == reverse('campo:lista')
 
     def test_health_check_simple(self, client):
         """Test simple health check endpoint."""
@@ -208,7 +208,7 @@ class TestLineasViews:
 
     def test_linea_list_view(self, client, admin_user, user_password):
         """Test linea list view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         LineaFactory.create_batch(3)
         url = reverse('lineas:lista')
 
@@ -220,7 +220,7 @@ class TestLineasViews:
 
     def test_linea_list_with_filter(self, client, admin_user, user_password):
         """Test linea list with search filter."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         linea = LineaFactory(nombre="Linea Especial Test")
         url = reverse('lineas:lista')
 
@@ -230,7 +230,7 @@ class TestLineasViews:
 
     def test_linea_detail_view(self, client, admin_user, user_password, linea):
         """Test linea detail view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('lineas:detalle', kwargs={'pk': linea.pk})
 
         response = client.get(url)
@@ -242,7 +242,7 @@ class TestLineasViews:
     def test_linea_detail_404(self, client, admin_user, user_password):
         """Test linea detail view with non-existent ID."""
         import uuid
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('lineas:detalle', kwargs={'pk': uuid.uuid4()})
 
         response = client.get(url)
@@ -251,7 +251,7 @@ class TestLineasViews:
 
     def test_torres_linea_view(self, client, admin_user, user_password, linea):
         """Test torres list for a linea."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         TorreFactory.create_batch(3, linea=linea)
         url = reverse('lineas:torres', kwargs={'pk': linea.pk})
 
@@ -263,7 +263,7 @@ class TestLineasViews:
 
     def test_torre_detail_view(self, client, admin_user, user_password, torre):
         """Test torre detail view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('lineas:torre_detalle', kwargs={'pk': torre.pk})
 
         response = client.get(url)
@@ -274,7 +274,7 @@ class TestLineasViews:
 
     def test_mapa_lineas_view(self, client, admin_user, user_password):
         """Test map view for lines."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         linea = LineaFactory()
         TorreFactory.create_batch(3, linea=linea)
         url = reverse('lineas:mapa')
@@ -305,7 +305,7 @@ class TestCuadrillasViews:
 
     def test_cuadrilla_list_view(self, client, admin_user, user_password):
         """Test cuadrilla list view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         CuadrillaFactory.create_batch(3)
         url = reverse('cuadrillas:lista')
 
@@ -317,7 +317,7 @@ class TestCuadrillasViews:
 
     def test_cuadrilla_detail_view(self, client, admin_user, user_password, cuadrilla):
         """Test cuadrilla detail view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('cuadrillas:detalle', kwargs={'pk': cuadrilla.pk})
 
         response = client.get(url)
@@ -329,7 +329,7 @@ class TestCuadrillasViews:
 
     def test_mapa_cuadrillas_view(self, client, admin_user, user_password):
         """Test real-time map view for crews."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('cuadrillas:mapa')
 
         response = client.get(url)
@@ -356,7 +356,7 @@ class TestActividadesViews:
 
     def test_actividad_list_view(self, client, admin_user, user_password):
         """Test actividad list view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         ActividadFactory.create_batch(3)
         url = reverse('actividades:lista')
 
@@ -370,7 +370,7 @@ class TestActividadesViews:
 
     def test_actividad_list_with_estado_filter(self, client, admin_user, user_password):
         """Test actividad list with estado filter."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         ActividadFactory(estado='PENDIENTE')
         ActividadEnCursoFactory()
         url = reverse('actividades:lista')
@@ -381,7 +381,7 @@ class TestActividadesViews:
 
     def test_actividad_detail_view(self, client, admin_user, user_password, actividad_pendiente):
         """Test actividad detail view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('actividades:detalle', kwargs={'pk': actividad_pendiente.pk})
 
         response = client.get(url)
@@ -394,7 +394,7 @@ class TestActividadesViews:
     def test_actividad_detail_404(self, client, admin_user, user_password):
         """Test actividad detail view with non-existent ID."""
         import uuid
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('actividades:detalle', kwargs={'pk': uuid.uuid4()})
 
         response = client.get(url)
@@ -403,7 +403,7 @@ class TestActividadesViews:
 
     def test_calendario_view(self, client, admin_user, user_password):
         """Test calendar view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('actividades:calendario')
 
         response = client.get(url)
@@ -416,7 +416,7 @@ class TestActividadesViews:
 
     def test_programacion_view_requires_role(self, client, liniero_user, user_password):
         """Test programacion view requires specific roles."""
-        client.login(email=liniero_user.email, password=user_password)
+        client.login(username=liniero_user.email, password=user_password)
         url = reverse('actividades:programacion')
 
         response = client.get(url)
@@ -426,7 +426,7 @@ class TestActividadesViews:
 
     def test_programacion_view_coordinador(self, client, coordinador_user, user_password):
         """Test programacion view for coordinador."""
-        client.login(email=coordinador_user.email, password=user_password)
+        client.login(username=coordinador_user.email, password=user_password)
         ProgramacionMensualFactory.create_batch(2)
         url = reverse('actividades:programacion')
 
@@ -438,7 +438,7 @@ class TestActividadesViews:
 
     def test_importar_programacion_requires_role(self, client, ingeniero_user, user_password):
         """Test import view requires admin/director/coordinador role."""
-        client.login(email=ingeniero_user.email, password=user_password)
+        client.login(username=ingeniero_user.email, password=user_password)
         url = reverse('actividades:importar')
 
         response = client.get(url)
@@ -448,7 +448,7 @@ class TestActividadesViews:
 
     def test_importar_programacion_admin(self, client, admin_user, user_password):
         """Test import view for admin."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('actividades:importar')
 
         response = client.get(url)
@@ -475,7 +475,7 @@ class TestCampoViews:
 
     def test_registro_list_view(self, client, admin_user, user_password):
         """Test registro list view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         RegistroCampoFactory.create_batch(3)
         url = reverse('campo:lista')
 
@@ -487,7 +487,7 @@ class TestCampoViews:
 
     def test_registro_detail_view(self, client, admin_user, user_password, registro_campo):
         """Test registro detail view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('campo:detalle', kwargs={'pk': registro_campo.pk})
 
         response = client.get(url)
@@ -501,7 +501,7 @@ class TestCampoViews:
 
     def test_evidencias_view(self, client, admin_user, user_password, registro_campo):
         """Test evidencias view for a registro."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         EvidenciaFactory.create_batch(3, registro_campo=registro_campo)
         url = reverse('campo:evidencias', kwargs={'pk': registro_campo.pk})
 
@@ -531,7 +531,7 @@ class TestFinancieroViews:
 
     def test_dashboard_financiero_requires_role(self, client, liniero_user, user_password):
         """Test financial dashboard requires specific roles."""
-        client.login(email=liniero_user.email, password=user_password)
+        client.login(username=liniero_user.email, password=user_password)
         url = reverse('financiero:dashboard')
 
         response = client.get(url)
@@ -540,7 +540,7 @@ class TestFinancieroViews:
 
     def test_dashboard_financiero_admin(self, client, admin_user, user_password):
         """Test financial dashboard for admin."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         PresupuestoFactory.create_batch(2)
         url = reverse('financiero:dashboard')
 
@@ -548,12 +548,15 @@ class TestFinancieroViews:
 
         assert response.status_code == 200
         assert 'financiero/dashboard.html' in [t.name for t in response.templates]
-        assert 'total_presupuestado' in response.context
-        assert 'total_ejecutado' in response.context
+        # Tras el refactor a Planeado vs Real, la vista expone cat_* + alertas.
+        assert 'cat_labels' in response.context
+        assert 'cat_planeado' in response.context
+        assert 'cat_real' in response.context
+        assert 'alertas' in response.context
 
     def test_cuadro_costos_view(self, client, admin_user, user_password):
         """Test cuadro de costos view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('financiero:cuadro_costos')
 
         response = client.get(url)
@@ -563,7 +566,7 @@ class TestFinancieroViews:
 
     def test_facturacion_view(self, client, coordinador_user, user_password):
         """Test facturacion view."""
-        client.login(email=coordinador_user.email, password=user_password)
+        client.login(username=coordinador_user.email, password=user_password)
         CicloFacturacionFactory.create_batch(2)
         url = reverse('financiero:facturacion')
 
@@ -592,7 +595,7 @@ class TestIndicadoresViews:
 
     def test_dashboard_indicadores_view(self, client, admin_user, user_password):
         """Test KPI dashboard view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         indicador = IndicadorFactory()
         MedicionIndicadorFactory(indicador=indicador)
         url = reverse('indicadores:dashboard')
@@ -608,7 +611,7 @@ class TestIndicadoresViews:
 
     def test_indicador_detail_view(self, client, admin_user, user_password):
         """Test indicador detail view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         indicador = IndicadorFactory()
         MedicionIndicadorFactory.create_batch(3, indicador=indicador)
         url = reverse('indicadores:detalle', kwargs={'pk': indicador.pk})
@@ -622,7 +625,7 @@ class TestIndicadoresViews:
 
     def test_acta_list_requires_role(self, client, liniero_user, user_password):
         """Test acta list requires specific roles."""
-        client.login(email=liniero_user.email, password=user_password)
+        client.login(username=liniero_user.email, password=user_password)
         url = reverse('indicadores:actas')
 
         response = client.get(url)
@@ -631,7 +634,7 @@ class TestIndicadoresViews:
 
     def test_acta_list_view_coordinador(self, client, coordinador_user, user_password):
         """Test acta list view for coordinador."""
-        client.login(email=coordinador_user.email, password=user_password)
+        client.login(username=coordinador_user.email, password=user_password)
         ActaSeguimientoFactory.create_batch(3)
         url = reverse('indicadores:actas')
 
@@ -643,7 +646,7 @@ class TestIndicadoresViews:
 
     def test_acta_detail_view(self, client, ingeniero_user, user_password):
         """Test acta detail view for ingeniero residente."""
-        client.login(email=ingeniero_user.email, password=user_password)
+        client.login(username=ingeniero_user.email, password=user_password)
         acta = ActaSeguimientoFactory()
         url = reverse('indicadores:acta_detalle', kwargs={'pk': acta.pk})
 
@@ -664,7 +667,7 @@ class TestHTMXViews:
 
     def test_actividad_list_htmx_partial(self, client, admin_user, user_password):
         """Test actividad list returns partial template for HTMX requests."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('actividades:lista')
 
         response = client.get(url, HTTP_HX_REQUEST='true')
@@ -676,7 +679,7 @@ class TestHTMXViews:
 
     def test_linea_list_htmx_partial(self, client, admin_user, user_password):
         """Test linea list returns partial template for HTMX requests."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('lineas:lista')
 
         response = client.get(url, HTTP_HX_REQUEST='true')
@@ -687,7 +690,7 @@ class TestHTMXViews:
 
     def test_cuadrilla_mapa_partial_json(self, client, admin_user, user_password):
         """Test cuadrilla map partial returns JSON for Accept: application/json."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('cuadrillas:mapa_partial')
 
         response = client.get(url, HTTP_ACCEPT='application/json')
@@ -698,7 +701,7 @@ class TestHTMXViews:
 
     def test_actividad_detail_partial(self, client, admin_user, user_password, actividad_pendiente):
         """Test actividad detail partial view."""
-        client.login(email=admin_user.email, password=user_password)
+        client.login(username=admin_user.email, password=user_password)
         url = reverse('actividades:detalle_partial', kwargs={'pk': actividad_pendiente.pk})
 
         response = client.get(url)

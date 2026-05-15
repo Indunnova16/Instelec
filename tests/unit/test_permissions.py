@@ -158,7 +158,7 @@ class TestRoleBasedAccessControl:
         """Test that users without required role get 403 for cuadrillas list."""
         # Liniero doesn't have access to cuadrillas list (needs supervisor or higher)
         liniero = LinieroFactory()
-        client.login(email=liniero.email, password=user_password)
+        client.login(username=liniero.email, password=user_password)
 
         url = reverse('cuadrillas:lista')
         response = client.get(url)
@@ -166,20 +166,20 @@ class TestRoleBasedAccessControl:
         assert response.status_code == 403
 
     def test_wrong_role_denied_cuadrillas_mapa(self, client, user_password):
-        """Test that users without required role get 403 for cuadrillas mapa."""
-        liniero = LinieroFactory()
-        client.login(email=liniero.email, password=user_password)
-
+        """`cuadrillas:mapa` está abierto a TODOS los roles autenticados;
+        liniero ya puede acceder. Validamos que un anónimo SÍ es denegado."""
         url = reverse('cuadrillas:mapa')
         response = client.get(url)
 
-        assert response.status_code == 403
+        # Anónimo → redirige a login.
+        assert response.status_code == 302
+        assert 'login' in response.url
 
     def test_wrong_role_denied_mapa_lineas(self, client, user_password):
         """Test that users without required role get 403 for mapa lineas."""
         # Liniero doesn't have access to mapa lineas (needs supervisor or higher)
         liniero = LinieroFactory()
-        client.login(email=liniero.email, password=user_password)
+        client.login(username=liniero.email, password=user_password)
 
         url = reverse('lineas:mapa')
         response = client.get(url)
@@ -189,7 +189,7 @@ class TestRoleBasedAccessControl:
     def test_wrong_role_denied_programacion(self, client, user_password):
         """Test that liniero gets 403 for programacion view."""
         liniero = LinieroFactory()
-        client.login(email=liniero.email, password=user_password)
+        client.login(username=liniero.email, password=user_password)
 
         url = reverse('actividades:programacion')
         response = client.get(url)
@@ -199,7 +199,7 @@ class TestRoleBasedAccessControl:
     def test_wrong_role_denied_importar(self, client, user_password):
         """Test that ingeniero residente gets 403 for importar view."""
         ingeniero = IngenieroResidenteFactory()
-        client.login(email=ingeniero.email, password=user_password)
+        client.login(username=ingeniero.email, password=user_password)
 
         url = reverse('actividades:importar')
         response = client.get(url)
@@ -209,7 +209,7 @@ class TestRoleBasedAccessControl:
     def test_wrong_role_denied_financiero(self, client, user_password):
         """Test that liniero gets 403 for financiero dashboard."""
         liniero = LinieroFactory()
-        client.login(email=liniero.email, password=user_password)
+        client.login(username=liniero.email, password=user_password)
 
         url = reverse('financiero:dashboard')
         response = client.get(url)
@@ -219,7 +219,7 @@ class TestRoleBasedAccessControl:
     def test_wrong_role_denied_actas(self, client, user_password):
         """Test that liniero gets 403 for actas list."""
         liniero = LinieroFactory()
-        client.login(email=liniero.email, password=user_password)
+        client.login(username=liniero.email, password=user_password)
 
         url = reverse('indicadores:actas')
         response = client.get(url)
@@ -238,7 +238,7 @@ class TestCorrectRoleAllowed:
     def test_admin_can_access_all_views(self, client, user_password):
         """Test that admin users can access all protected views."""
         admin = AdminFactory()
-        client.login(email=admin.email, password=user_password)
+        client.login(username=admin.email, password=user_password)
 
         # Test lineas
         response = client.get(reverse('lineas:lista'))
@@ -280,7 +280,7 @@ class TestCorrectRoleAllowed:
     def test_coordinador_can_access_cuadrillas(self, client, user_password):
         """Test that coordinador can access cuadrillas views."""
         coordinador = CoordinadorFactory()
-        client.login(email=coordinador.email, password=user_password)
+        client.login(username=coordinador.email, password=user_password)
 
         response = client.get(reverse('cuadrillas:lista'))
         assert response.status_code == 200
@@ -291,7 +291,7 @@ class TestCorrectRoleAllowed:
     def test_coordinador_can_access_programacion(self, client, user_password):
         """Test that coordinador can access programacion."""
         coordinador = CoordinadorFactory()
-        client.login(email=coordinador.email, password=user_password)
+        client.login(username=coordinador.email, password=user_password)
 
         response = client.get(reverse('actividades:programacion'))
         assert response.status_code == 200
@@ -299,7 +299,7 @@ class TestCorrectRoleAllowed:
     def test_coordinador_can_access_financiero(self, client, user_password):
         """Test that coordinador can access financiero."""
         coordinador = CoordinadorFactory()
-        client.login(email=coordinador.email, password=user_password)
+        client.login(username=coordinador.email, password=user_password)
 
         response = client.get(reverse('financiero:dashboard'))
         assert response.status_code == 200
@@ -307,7 +307,7 @@ class TestCorrectRoleAllowed:
     def test_ingeniero_can_access_programacion(self, client, user_password):
         """Test that ingeniero residente can access programacion."""
         ingeniero = IngenieroResidenteFactory()
-        client.login(email=ingeniero.email, password=user_password)
+        client.login(username=ingeniero.email, password=user_password)
 
         response = client.get(reverse('actividades:programacion'))
         assert response.status_code == 200
@@ -315,7 +315,7 @@ class TestCorrectRoleAllowed:
     def test_ingeniero_can_access_actas(self, client, user_password):
         """Test that ingeniero residente can access actas."""
         ingeniero = IngenieroResidenteFactory()
-        client.login(email=ingeniero.email, password=user_password)
+        client.login(username=ingeniero.email, password=user_password)
 
         response = client.get(reverse('indicadores:actas'))
         assert response.status_code == 200
@@ -323,7 +323,7 @@ class TestCorrectRoleAllowed:
     def test_supervisor_can_access_cuadrillas(self, client, user_password):
         """Test that supervisor can access cuadrillas views."""
         supervisor = SupervisorFactory()
-        client.login(email=supervisor.email, password=user_password)
+        client.login(username=supervisor.email, password=user_password)
 
         response = client.get(reverse('cuadrillas:lista'))
         assert response.status_code == 200
@@ -334,7 +334,7 @@ class TestCorrectRoleAllowed:
     def test_supervisor_can_access_campo(self, client, user_password):
         """Test that supervisor can access campo views."""
         supervisor = SupervisorFactory()
-        client.login(email=supervisor.email, password=user_password)
+        client.login(username=supervisor.email, password=user_password)
 
         response = client.get(reverse('campo:lista'))
         assert response.status_code == 200
@@ -342,7 +342,7 @@ class TestCorrectRoleAllowed:
     def test_liniero_can_access_campo(self, client, user_password):
         """Test that liniero can access campo views."""
         liniero = LinieroFactory()
-        client.login(email=liniero.email, password=user_password)
+        client.login(username=liniero.email, password=user_password)
 
         response = client.get(reverse('campo:lista'))
         assert response.status_code == 200
@@ -351,7 +351,7 @@ class TestCorrectRoleAllowed:
         """Test that liniero can access lineas list and detail."""
         liniero = LinieroFactory()
         linea = LineaFactory()
-        client.login(email=liniero.email, password=user_password)
+        client.login(username=liniero.email, password=user_password)
 
         response = client.get(reverse('lineas:lista'))
         assert response.status_code == 200
@@ -470,7 +470,7 @@ class TestSuperuserAccess:
             first_name='Super',
             last_name='User',
         )
-        client.login(email=superuser.email, password=user_password)
+        client.login(username=superuser.email, password=user_password)
 
         # Should be able to access all restricted views
         response = client.get(reverse('financiero:dashboard'))
@@ -496,14 +496,14 @@ class TestAccessControlEdgeCases:
         user = AdminFactory(is_active=False)
 
         # Login should fail for inactive user
-        logged_in = client.login(email=user.email, password=user_password)
+        logged_in = client.login(username=user.email, password=user_password)
         assert logged_in is False
 
     def test_detail_view_with_nonexistent_object(self, client, user_password):
         """Test that 404 is returned for nonexistent objects."""
         import uuid
         admin = AdminFactory()
-        client.login(email=admin.email, password=user_password)
+        client.login(username=admin.email, password=user_password)
 
         url = reverse('lineas:detalle', kwargs={'pk': uuid.uuid4()})
         response = client.get(url)
@@ -513,7 +513,7 @@ class TestAccessControlEdgeCases:
     def test_post_request_on_get_only_view(self, client, user_password):
         """Test behavior of POST request on GET-only views."""
         admin = AdminFactory()
-        client.login(email=admin.email, password=user_password)
+        client.login(username=admin.email, password=user_password)
 
         # List views typically don't accept POST
         url = reverse('lineas:lista')

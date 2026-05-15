@@ -4,11 +4,24 @@ Core views.
 import logging
 from typing import Any
 
-from django.views.generic import TemplateView
-from django.http import HttpRequest, JsonResponse
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.views.decorators.http import require_POST
+from django.views.generic import TemplateView
+
+from .utils import set_unidad_negocio
 
 logger = logging.getLogger(__name__)
+
+
+@login_required
+@require_POST
+def set_unidad_negocio_view(request: HttpRequest) -> HttpResponse:
+    """Persiste la unidad de negocio (`MANTENIMIENTO`/`CONSTRUCCION`/`TODOS`) en la sesión."""
+    valor = request.POST.get('unidad_negocio', '')
+    normalizada = set_unidad_negocio(request, valor)
+    return JsonResponse({'unidad_negocio': normalizada})
 
 
 class HomeView(LoginRequiredMixin, TemplateView):

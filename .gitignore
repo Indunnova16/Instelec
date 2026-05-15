@@ -98,6 +98,8 @@ celerybeat.pid
 .env.local
 .env.*.local
 .venv
+.venv-test/
+db.sqlite3
 env/
 venv/
 ENV/

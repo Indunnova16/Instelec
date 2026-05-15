@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Mantenimiento — TransMaint{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Mantenimiento</h1>
+            <p class="text-gray-600 dark:text-gray-400">Unidad activa: <span class="font-semibold">{{ unidad_actual }}</span></p>
+        </div>
+        <a href="{% url 'indicadores:dashboard_mantenimiento_xlsx' %}"
+           class="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition">
+            📊 Exportar a Excel
+        </a>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Líneas activas</p>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ data.total_lineas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Al día</p>
+            <p class="text-3xl font-bold text-green-700 dark:text-green-300">{{ data.al_dia }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-amber-500">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Próximas a vencer</p>
+            <p class="text-3xl font-bold text-amber-700 dark:text-amber-300">{{ data.proximas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-500">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Vencidas</p>
+            <p class="text-3xl font-bold text-red-700 dark:text-red-300">{{ data.vencidas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-900">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Críticas</p>
+            <p class="text-3xl font-bold text-red-900 dark:text-red-200">{{ data.criticas }}</p>
+        </div>
+    </div>
+
+    <!-- Métricas 30d -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Registros últimos 30 días</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ data.total_registros_30d }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Intervenciones últimos 30 días</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ data.total_intervenciones_30d }}</p>
+        </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h2 class="font-semibold text-gray-900 dark:text-white mb-3">Distribución por severidad (últimos 30d)</h2>
+            <div id="chart-severidad" style="height: 300px;"></div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h2 class="font-semibold text-gray-900 dark:text-white mb-3">Inspecciones por tipo (últimos 30d)</h2>
+            <div id="chart-tipo" style="height: 300px;"></div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 md:col-span-2">
+            <h2 class="font-semibold text-gray-900 dark:text-white mb-3">Tendencia mensual de registros (últimos 6 meses)</h2>
+            <div id="chart-tendencia" style="height: 300px;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const severidadData = {{ severidad_json|safe }};
+const tipoData = {{ por_tipo_json|safe }};
+const tendenciaData = {{ tendencia_json|safe }};
+
+const severidadColors = {BAJA: '#94a3b8', MEDIA: '#f59e0b', ALTA: '#ea580c', CRITICA: '#b91c1c'};
+
+const sev = echarts.init(document.getElementById('chart-severidad'));
+sev.setOption({
+    tooltip: {trigger: 'item'},
+    legend: {bottom: 0},
+    series: [{
+        type: 'pie', radius: ['40%', '70%'],
+        data: severidadData.map(d => ({...d, itemStyle: {color: severidadColors[d.name] || '#888'}})),
+    }],
+});
+
+const tipo = echarts.init(document.getElementById('chart-tipo'));
+tipo.setOption({
+    tooltip: {trigger: 'axis'},
+    xAxis: {type: 'category', data: tipoData.labels, axisLabel: {rotate: 30, fontSize: 10}},
+    yAxis: {type: 'value'},
+    series: [{type: 'bar', data: tipoData.values, itemStyle: {color: '#3b82f6'}}],
+});
+
+const tend = echarts.init(document.getElementById('chart-tendencia'));
+tend.setOption({
+    tooltip: {trigger: 'axis'},
+    xAxis: {type: 'category', data: tendenciaData.labels},
+    yAxis: {type: 'value'},
+    series: [{type: 'line', smooth: true, data: tendenciaData.values, itemStyle: {color: '#16a34a'}}],
+});
+
+window.addEventListener('resize', () => { sev.resize(); tipo.resize(); tend.resize(); });
+</script>
+{% endblock %}

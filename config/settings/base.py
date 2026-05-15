@@ -140,6 +140,9 @@ TIME_ZONE = 'America/Bogota'
 USE_I18N = True
 USE_TZ = True
 
+# Acepta ISO primero para que <input type="date"> repinte valores al editar.
+DATE_INPUT_FORMATS = ['%Y-%m-%d', '%d/%m/%Y']
+
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'

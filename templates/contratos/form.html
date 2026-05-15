@@ -113,12 +113,27 @@
                 </div>
 
                 <!-- Número de Torres -->
-                <div>
+                <div x-data="{ original: {{ object.numero_torres|default:0 }}, nuevo: {{ object.numero_torres|default:0 }} }">
                     <label for="id_numero_torres" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Número de torres
                     </label>
-                    {{ form.numero_torres }}
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Se generarán las filas en Ingeniería automáticamente</p>
+                    <div @input="nuevo = parseInt($event.target.value) || 0">
+                        {{ form.numero_torres }}
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Se generarán las filas en Ingeniería automáticamente.
+                    </p>
+                    <div x-show="original > 0 && nuevo < original"
+                         x-cloak
+                         class="mt-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700">
+                        <p class="text-sm text-amber-800 dark:text-amber-200">
+                            ⚠ Al reducir el número de torres se archivarán
+                            <span x-text="original - nuevo" class="font-bold"></span>
+                            torres (de T<span x-text="nuevo + 1"></span> a T<span x-text="original"></span>).
+                            Sus datos en Ingeniería y Preliminares se conservarán
+                            pero quedarán ocultos. Puedes restaurarlas volviendo a subir el número.
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Fecha Inicio -->

@@ -83,6 +83,10 @@ class TorreContrato(BaseModel):
     )
     nombre = models.CharField('Nombre de torre', max_length=20)
     orden = models.PositiveIntegerField('Orden', default=0)
+    # Soft-delete: al reducir `numero_torres` en el contrato, las torres
+    # sobrantes se marcan `archivada=True` para preservar histórico de
+    # IngenieriaEstado / PredialTorre / AmbientalTorre / ActividadEstado.
+    archivada = models.BooleanField('Archivada', default=False, db_index=True)
 
     class Meta:
         db_table = 'ingenieria_torres'

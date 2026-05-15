@@ -157,6 +157,32 @@ class Linea(BaseModel):
         help_text='Contenido del KMZ convertido a GeoJSON para visualización en mapa'
     )
 
+    # Resumen de mantenimiento (#40)
+    class InspectionStatus(models.TextChoices):
+        OK = 'OK', 'Al día'
+        PROXIMA = 'PROXIMA', 'Próxima a vencer'
+        VENCIDA = 'VENCIDA', 'Vencida'
+        CRITICA = 'CRITICA', 'Crítica'
+
+    last_inspection_date = models.DateField(
+        'Última inspección',
+        null=True,
+        blank=True,
+        help_text='Calculada a partir de RegistroCampo / HistorialIntervencion'
+    )
+    last_inspection_type = models.CharField(
+        'Tipo última inspección',
+        max_length=50,
+        blank=True,
+    )
+    inspection_status = models.CharField(
+        'Estado inspección',
+        max_length=10,
+        choices=InspectionStatus.choices,
+        default=InspectionStatus.OK,
+        db_index=True,
+    )
+
     class Meta:
         db_table = 'lineas'
         verbose_name = 'Línea'
@@ -271,6 +297,25 @@ class Torre(BaseModel):
     observaciones = models.TextField(
         'Observaciones',
         blank=True
+    )
+
+    # Resumen de mantenimiento por torre (#40)
+    last_inspection_date = models.DateField(
+        'Última inspección',
+        null=True,
+        blank=True,
+    )
+    last_inspection_type = models.CharField(
+        'Tipo última inspección',
+        max_length=50,
+        blank=True,
+    )
+    inspection_status = models.CharField(
+        'Estado inspección',
+        max_length=10,
+        choices=Linea.InspectionStatus.choices,
+        default=Linea.InspectionStatus.OK,
+        db_index=True,
     )
 
     class Meta:

@@ -275,6 +275,73 @@ def obtener_poligono_torre(
     )
 
 
+@router.get('/torres/geojson')
+def torres_geojson(
+    request: HttpRequest,
+    bbox: Optional[str] = None,
+    tension_kv: Optional[int] = None,
+    inspection_status: Optional[str] = None,
+    unidad_negocio: Optional[str] = None,
+    linea_id: Optional[UUID] = None,
+    limite: int = 5000,
+) -> dict[str, Any]:
+    """FeatureCollection de torres para el mapa (#41).
+
+    - `bbox`: 'lon_min,lat_min,lon_max,lat_max' para limitar a viewport.
+    - `tension_kv`: filtra líneas por voltaje.
+    - `inspection_status`: filtra torres por estado de inspección.
+    - `unidad_negocio`: 'MANTENIMIENTO' o 'CONSTRUCCION' (vía contrato de la línea).
+      Si no se especifica, lee la sesión.
+    """
+    from apps.core.utils import get_unidad_negocio
+
+    qs = Torre.objects.select_related('linea').filter(
+        latitud__isnull=False, longitud__isnull=False,
+    )
+
+    if linea_id:
+        qs = qs.filter(linea_id=linea_id)
+
+    if tension_kv:
+        qs = qs.filter(linea__tension_kv=tension_kv)
+
+    if inspection_status:
+        qs = qs.filter(inspection_status=inspection_status)
+
+    unidad = (unidad_negocio or get_unidad_negocio(request)).upper()
+    if unidad in ('MANTENIMIENTO', 'CONSTRUCCION'):
+        qs = qs.filter(linea__contrato__unidad_negocio=unidad)
+
+    if bbox:
+        try:
+            lon_min, lat_min, lon_max, lat_max = (float(x) for x in bbox.split(','))
+            qs = qs.filter(
+                latitud__gte=lat_min, latitud__lte=lat_max,
+                longitud__gte=lon_min, longitud__lte=lon_max,
+            )
+        except (TypeError, ValueError):
+            pass
+
+    features = []
+    for t in qs[:limite]:
+        features.append({
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [float(t.longitud), float(t.latitud)]},
+            'properties': {
+                'id': str(t.id),
+                'numero': t.numero,
+                'tipo': t.tipo,
+                'estado': t.estado,
+                'inspection_status': t.inspection_status,
+                'linea_id': str(t.linea_id),
+                'linea_codigo': t.linea.codigo,
+                'tension_kv': t.linea.tension_kv,
+            },
+        })
+
+    return {'type': 'FeatureCollection', 'features': features}
+
+
 @router.post('/validar-ubicacion', response=ValidarUbicacionOut)
 def validar_ubicacion(request: HttpRequest, data: ValidarUbicacionIn) -> ValidarUbicacionOut:
     """

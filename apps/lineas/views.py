@@ -2,9 +2,11 @@
 Views for transmission lines.
 """
 import logging
+from datetime import timedelta
 
 from django.shortcuts import redirect
 from django.contrib import messages
+from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -963,3 +965,157 @@ class VanoDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
             return JsonResponse({'success': False, 'error': 'Vano no encontrado'}, status=404)
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+class HojaDeVidaLineaView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Timeline unificada de eventos de mantenimiento por línea (#40).
+
+    Agrega y ordena cronológicamente:
+    - HistorialIntervencion (espina dorsal)
+    - RegistroCampo (los que aún no tienen historial — dedupe por id)
+    - ReporteDano
+    - AvanceVano
+
+    Filtros por GET: tipo, severidad, desde, hasta.
+    """
+    model = Linea
+    template_name = 'lineas/hoja_de_vida.html'
+    context_object_name = 'linea'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor']
+
+    def get_context_data(self, **kwargs):
+        from apps.actividades.models import HistorialIntervencion
+        from apps.campo.models import AvanceVano, RegistroCampo, ReporteDano
+
+        context = super().get_context_data(**kwargs)
+        linea = self.object
+
+        tipo = self.request.GET.get('tipo', '')
+        severidad = self.request.GET.get('severidad', '')
+        desde = self.request.GET.get('desde', '')
+        hasta = self.request.GET.get('hasta', '')
+
+        eventos = []
+
+        # 1) HistorialIntervencion.
+        intervenciones = HistorialIntervencion.objects.filter(linea=linea).select_related(
+            'cuadrilla', 'usuario', 'torre_inicio', 'torre_fin', 'registro_campo'
+        )
+        if desde:
+            intervenciones = intervenciones.filter(fecha_intervencion__date__gte=desde)
+        if hasta:
+            intervenciones = intervenciones.filter(fecha_intervencion__date__lte=hasta)
+        for h in intervenciones:
+            eventos.append({
+                'fecha': h.fecha_intervencion,
+                'tipo_evento': 'INTERVENCION',
+                'titulo': h.tipo_intervencion,
+                'severidad': getattr(h.registro_campo, 'severidad', '') if h.registro_campo else '',
+                'descripcion': h.observaciones,
+                'cuadrilla': h.cuadrilla,
+                'usuario': h.usuario,
+                'torre_inicio': h.torre_inicio,
+                'torre_fin': h.torre_fin,
+                'registro_campo_id': h.registro_campo_id,
+                'objeto': h,
+            })
+
+        # 2) RegistroCampo sin historial asociado (dedupe).
+        registros = RegistroCampo.objects.filter(
+            actividad__linea=linea,
+        ).select_related('actividad', 'actividad__tipo_actividad', 'actividad__torre', 'usuario').exclude(
+            id__in=[e['registro_campo_id'] for e in eventos if e['registro_campo_id']]
+        )
+        if desde:
+            registros = registros.filter(fecha_inicio__date__gte=desde)
+        if hasta:
+            registros = registros.filter(fecha_inicio__date__lte=hasta)
+        if severidad:
+            registros = registros.filter(severidad=severidad)
+        for r in registros:
+            tipo_label = r.actividad.tipo_actividad.nombre if r.actividad.tipo_actividad else 'Registro de campo'
+            eventos.append({
+                'fecha': r.fecha_inicio,
+                'tipo_evento': 'REGISTRO',
+                'titulo': tipo_label,
+                'severidad': r.severidad,
+                'descripcion': r.observaciones,
+                'cuadrilla': None,
+                'usuario': r.usuario,
+                'torre_inicio': r.actividad.torre,
+                'torre_fin': None,
+                'registro_campo_id': r.id,
+                'objeto': r,
+            })
+
+        # 3) ReporteDano.
+        danos = ReporteDano.objects.filter(linea=linea).select_related('torre', 'usuario')
+        if desde:
+            danos = danos.filter(created_at__date__gte=desde)
+        if hasta:
+            danos = danos.filter(created_at__date__lte=hasta)
+        if severidad:
+            danos = danos.filter(severidad=severidad)
+        for d in danos:
+            eventos.append({
+                'fecha': d.created_at,
+                'tipo_evento': 'DANO',
+                'titulo': f'Daño: {d.get_tipo_dano_display()}',
+                'severidad': d.severidad,
+                'descripcion': d.descripcion,
+                'cuadrilla': None,
+                'usuario': d.usuario,
+                'torre_inicio': d.torre,
+                'torre_fin': None,
+                'registro_campo_id': None,
+                'objeto': d,
+            })
+
+        # 4) AvanceVano (vía actividad.linea).
+        avances = AvanceVano.objects.filter(actividad__linea=linea).select_related(
+            'actividad', 'cuadrilla', 'torre_inicio', 'torre_fin'
+        )
+        for a in avances:
+            fecha_marcado = a.fecha_marcado
+            if not fecha_marcado:
+                continue
+            if desde and fecha_marcado.date().isoformat() < desde:
+                continue
+            if hasta and fecha_marcado.date().isoformat() > hasta:
+                continue
+            eventos.append({
+                'fecha': fecha_marcado,
+                'tipo_evento': 'AVANCE_VANO',
+                'titulo': f'Vano {a.numero_vano} → {a.get_estado_display()}',
+                'severidad': '',
+                'descripcion': a.observaciones,
+                'cuadrilla': a.cuadrilla,
+                'usuario': a.marcado_por,
+                'torre_inicio': a.torre_inicio,
+                'torre_fin': a.torre_fin,
+                'registro_campo_id': None,
+                'objeto': a,
+            })
+
+        if tipo:
+            eventos = [e for e in eventos if e['tipo_evento'] == tipo]
+
+        eventos.sort(key=lambda e: e['fecha'], reverse=True)
+
+        context['eventos'] = eventos
+        context['total_eventos'] = len(eventos)
+        context['filtros'] = {'tipo': tipo, 'severidad': severidad, 'desde': desde, 'hasta': hasta}
+        context['tipos_evento'] = [
+            ('INTERVENCION', 'Intervenciones'),
+            ('REGISTRO', 'Registros de campo'),
+            ('DANO', 'Reportes de daño'),
+            ('AVANCE_VANO', 'Avances de vanos'),
+        ]
+        context['severidades'] = [('BAJA', 'Baja'), ('MEDIA', 'Media'), ('ALTA', 'Alta'), ('CRITICA', 'Crítica')]
+
+        # Resumen de severidad / vencimiento para badges.
+        context['inspeccion_vencida'] = (
+            linea.last_inspection_date is not None
+            and (timezone.now().date() - linea.last_inspection_date) > timedelta(days=30)
+        )
+        return context

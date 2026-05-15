@@ -14,6 +14,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from apps.core.cache import get_lineas_activas, get_cuadrillas_activas, get_tipos_actividad_activos
+from apps.core.utils import get_unidad_negocio, UNIDAD_NEGOCIO_TODOS
 from .models import Actividad, ProgramacionMensual, TipoActividad, HistorialIntervencion
 
 
@@ -33,8 +34,8 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
             'motivo_cancelacion',
         )
 
-        # Filter by business unit (Mantenimiento/Construccion)
-        unidad_negocio = self.request.GET.get('unidad')
+        # Filter by business unit (GET param > session > all).
+        unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
             qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
 
@@ -213,8 +214,8 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
             'linea', 'torre', 'tipo_actividad', 'cuadrilla'
         ).order_by('linea__codigo', 'tipo_actividad__nombre', 'torre__numero')
 
-        # Filter by business unit (Mantenimiento/Construccion)
-        unidad_negocio = self.request.GET.get('unidad')
+        # Filter by business unit (GET param > session > all).
+        unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
             qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
 
@@ -1093,8 +1094,8 @@ class ListaOperativaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
             'torre_inicio', 'torre_fin', 'actividad__tipo_actividad'
         )
 
-        # Filter by business unit (Mantenimiento/Construccion)
-        unidad_negocio = self.request.GET.get('unidad')
+        # Filter by business unit (GET param > session > all).
+        unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
             qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
 

@@ -3,6 +3,7 @@
 {% block title %}Evidencias - TransMaint{% endblock %}
 
 {% block content %}
+{% regroup evidencias|dictsort:"tipo" by tipo as evidencias_por_tipo %}
 <div class="space-y-6">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -37,9 +38,7 @@
                 <div class="ml-4">
                     <p class="text-sm text-gray-500 dark:text-gray-400">Fotos ANTES</p>
                     <p class="text-2xl font-bold text-gray-900 dark:text-white">
-                        {% with count=evidencias|dictsort:"tipo"|regroup:"tipo" %}
-                        {% for tipo in count %}{% if tipo.grouper == 'ANTES' %}{{ tipo.list|length }}{% endif %}{% empty %}0{% endfor %}
-                        {% endwith %}
+                        {% for tipo in evidencias_por_tipo %}{% if tipo.grouper == 'ANTES' %}{{ tipo.list|length }}{% endif %}{% empty %}0{% endfor %}
                     </p>
                 </div>
             </div>
@@ -54,9 +53,7 @@
                 <div class="ml-4">
                     <p class="text-sm text-gray-500 dark:text-gray-400">Fotos DURANTE</p>
                     <p class="text-2xl font-bold text-gray-900 dark:text-white">
-                        {% with count=evidencias|dictsort:"tipo"|regroup:"tipo" %}
-                        {% for tipo in count %}{% if tipo.grouper == 'DURANTE' %}{{ tipo.list|length }}{% endif %}{% empty %}0{% endfor %}
-                        {% endwith %}
+                        {% for tipo in evidencias_por_tipo %}{% if tipo.grouper == 'DURANTE' %}{{ tipo.list|length }}{% endif %}{% empty %}0{% endfor %}
                     </p>
                 </div>
             </div>
@@ -71,9 +68,7 @@
                 <div class="ml-4">
                     <p class="text-sm text-gray-500 dark:text-gray-400">Fotos DESPUES</p>
                     <p class="text-2xl font-bold text-gray-900 dark:text-white">
-                        {% with count=evidencias|dictsort:"tipo"|regroup:"tipo" %}
-                        {% for tipo in count %}{% if tipo.grouper == 'DESPUES' %}{{ tipo.list|length }}{% endif %}{% empty %}0{% endfor %}
-                        {% endwith %}
+                        {% for tipo in evidencias_por_tipo %}{% if tipo.grouper == 'DESPUES' %}{{ tipo.list|length }}{% endif %}{% empty %}0{% endfor %}
                     </p>
                 </div>
             </div>
@@ -81,7 +76,6 @@
     </div>
 
     <!-- Photos Grid by Type -->
-    {% regroup evidencias by tipo as evidencias_por_tipo %}
     {% for tipo in evidencias_por_tipo %}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700">

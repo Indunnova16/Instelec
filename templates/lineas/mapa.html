@@ -4,11 +4,19 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
     #map { height: calc(100vh - 200px); min-height: 500px; }
     .tower-marker { background: transparent; border: none; }
     .tower-icon { font-size: 24px; }
+    .tower-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 2px rgba(0,0,0,.5); }
+    .dot-OK       { background: #16a34a; }
+    .dot-PROXIMA  { background: #f59e0b; }
+    .dot-VENCIDA  { background: #dc2626; }
+    .dot-CRITICA  { background: #7f1d1d; }
 </style>
 {% endblock %}
 
@@ -37,6 +45,40 @@
             </span>
         </div>
     </header>
+
+    <!-- Filtros mapa (#41) -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 flex flex-wrap gap-3 items-end"
+             x-data="{ tension: '', status: '' }">
+        <div>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Voltaje (kV)</label>
+            <select x-model="tension"
+                    @change="window.dispatchEvent(new CustomEvent('mapa-filtro', {detail: {tension, status}}))"
+                    class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <option value="">Todos</option>
+                <option value="34.5">34.5</option>
+                <option value="110">110</option>
+                <option value="220">220</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Estado inspección</label>
+            <select x-model="status"
+                    @change="window.dispatchEvent(new CustomEvent('mapa-filtro', {detail: {tension, status}}))"
+                    class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <option value="">Todos</option>
+                <option value="OK">Al día</option>
+                <option value="PROXIMA">Próxima a vencer</option>
+                <option value="VENCIDA">Vencida</option>
+                <option value="CRITICA">Crítica</option>
+            </select>
+        </div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">
+            <p><span class="inline-block tower-dot dot-OK align-middle"></span> Al día
+               <span class="inline-block tower-dot dot-PROXIMA ml-3 align-middle"></span> Próxima
+               <span class="inline-block tower-dot dot-VENCIDA ml-3 align-middle"></span> Vencida
+               <span class="inline-block tower-dot dot-CRITICA ml-3 align-middle"></span> Crítica</p>
+        </div>
+    </section>
 
     <!-- Map -->
     <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" aria-labelledby="map-section-title">
@@ -97,77 +139,105 @@
 
 {% block extra_js %}
 <script>
-const torres = {{ torres_json|safe }};
-const linea = {
-    codigo: "{{ linea.codigo }}",
-    nombre: "{{ linea.nombre }}"
-};
+const torresIniciales = {{ torres_json|safe }};
+const lineaActual = { id: "{{ linea.id|default:'' }}", codigo: "{{ linea.codigo }}", nombre: "{{ linea.nombre }}" };
 
 // Initialize map
-const map = L.map('map').setView([{{ center_lat }}, {{ center_lon }}], 10);
+const map = L.map('map').setView([{{ center_lat }}, {{ center_lon }}], lineaActual.id ? 12 : 7);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Tower icons
-const towerIcons = {
-    SUSPENSION: L.divIcon({
-        className: 'tower-marker',
-        html: '<span class="tower-icon" role="img" aria-label="Torre de suspension">&#128508;</span>',
-        iconSize: [24, 24],
-        iconAnchor: [12, 24]
-    }),
-    ANCLAJE: L.divIcon({
-        className: 'tower-marker',
-        html: '<span class="tower-icon" role="img" aria-label="Torre de anclaje">&#9889;</span>',
-        iconSize: [24, 24],
-        iconAnchor: [12, 24]
-    }),
-    TERMINAL: L.divIcon({
-        className: 'tower-marker',
-        html: '<span class="tower-icon" role="img" aria-label="Torre terminal">&#127981;</span>',
-        iconSize: [24, 24],
-        iconAnchor: [12, 24]
-    })
-};
-
-// Add towers to map
-const markers = [];
-torres.forEach(torre => {
-    const marker = L.marker([torre.lat, torre.lon], {
-        icon: towerIcons[torre.tipo] || towerIcons.SUSPENSION,
-        alt: `Torre ${torre.numero} - ${torre.tipo}`,
-        keyboard: true
-    }).addTo(map);
-
-    marker.bindPopup(`
-        <div class="p-2" role="dialog" aria-label="Informacion de torre ${torre.numero}">
-            <h3 class="font-bold">Torre ${torre.numero}</h3>
-            <p class="text-sm text-gray-600">${torre.tipo}</p>
-            <p class="text-xs mt-1">Lat: ${torre.lat.toFixed(6)}<br>Lon: ${torre.lon.toFixed(6)}</p>
-            ${torre.altitud ? `<p class="text-xs">Altitud: ${torre.altitud} m</p>` : ''}
-        </div>
-    `);
-
-    markers.push(marker);
+// Cluster layer (#41) — para 4586 torres es obligatorio.
+const cluster = L.markerClusterGroup({
+    maxClusterRadius: 80,
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
 });
+map.addLayer(cluster);
 
-// Draw line between towers
-if (torres.length > 1) {
-    const lineCoords = torres.map(t => [t.lat, t.lon]);
-    L.polyline(lineCoords, {
-        color: '#3b82f6',
-        weight: 3,
-        opacity: 0.7
-    }).addTo(map);
+function colorFor(status) {
+    return 'dot-' + (status || 'OK');
 }
 
-// Fit map to show all towers
-if (markers.length > 0) {
-    const group = L.featureGroup(markers);
-    map.fitBounds(group.getBounds().pad(0.1));
+function buildMarker(torre) {
+    const status = torre.inspection_status || 'OK';
+    const icon = L.divIcon({
+        className: 'tower-marker',
+        html: `<div class="tower-dot ${colorFor(status)}" title="${status}"></div>`,
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+    });
+    const lineaCodigo = torre.linea_codigo || lineaActual.codigo;
+    const lineaId = torre.linea_id || lineaActual.id;
+    const popup = `
+        <div class="p-2">
+            <h3 class="font-bold">Torre ${torre.numero || torre.numero}</h3>
+            <p class="text-sm text-gray-600">${torre.tipo} — ${status}</p>
+            <p class="text-xs text-gray-500">Línea ${lineaCodigo}${torre.tension_kv ? ' · ' + torre.tension_kv + ' kV' : ''}</p>
+            ${lineaId ? `<a class="text-blue-600 text-xs underline" href="/lineas/${lineaId}/hoja-de-vida/">Ver hoja de vida</a>` : ''}
+        </div>
+    `;
+    return L.marker([torre.lat, torre.lon], { icon }).bindPopup(popup);
 }
+
+// Carga inicial: si hay torres del contexto (vista por línea), las usamos.
+const markers = [];
+if (torresIniciales.length > 0) {
+    torresIniciales.forEach(t => {
+        const m = buildMarker({
+            ...t,
+            inspection_status: t.inspection_status || 'OK',
+            linea_codigo: lineaActual.codigo,
+            linea_id: lineaActual.id,
+        });
+        cluster.addLayer(m);
+        markers.push(m);
+    });
+    if (markers.length > 1) {
+        const polyCoords = torresIniciales.map(t => [t.lat, t.lon]);
+        L.polyline(polyCoords, { color: '#3b82f6', weight: 3, opacity: 0.7 }).addTo(map);
+    }
+    if (markers.length > 0) {
+        map.fitBounds(L.featureGroup(markers).getBounds().pad(0.1));
+    }
+}
+
+// Fetch global GeoJSON cuando no hay línea seleccionada (o tras filtros).
+async function recargarGeoJSON(filtros = {}) {
+    const params = new URLSearchParams();
+    if (lineaActual.id) params.set('linea_id', lineaActual.id);
+    if (filtros.tension) params.set('tension_kv', filtros.tension);
+    if (filtros.status) params.set('inspection_status', filtros.status);
+    // bbox para evitar mover 4586 features siempre
+    const b = map.getBounds();
+    params.set('bbox', `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`);
+    try {
+        const resp = await fetch(`/api/lineas/torres/geojson?${params}`, {credentials: 'same-origin'});
+        if (!resp.ok) return;
+        const fc = await resp.json();
+        cluster.clearLayers();
+        fc.features.forEach(f => {
+            const [lon, lat] = f.geometry.coordinates;
+            const t = { ...f.properties, lat, lon };
+            cluster.addLayer(buildMarker(t));
+        });
+    } catch (e) { /* silencioso */ }
+}
+
+// Carga global si no hay línea preseleccionada.
+if (!lineaActual.id) {
+    recargarGeoJSON();
+    map.on('moveend', () => recargarGeoJSON({tension: window._filtroTension, status: window._filtroStatus}));
+}
+
+// Filtros desde Alpine.
+window.addEventListener('mapa-filtro', (e) => {
+    window._filtroTension = e.detail.tension;
+    window._filtroStatus = e.detail.status;
+    recargarGeoJSON(e.detail);
+});
 
 // Function to announce to screen readers
 function announceToScreenReader(message) {

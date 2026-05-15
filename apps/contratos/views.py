@@ -7,6 +7,7 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
+from apps.core.utils import get_unidad_negocio
 
 from .forms import ContratoForm
 from .models import Contrato
@@ -21,7 +22,8 @@ class ContratoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        unidad = self.request.GET.get('unidad')
+        # GET param overrides session filter; fallback to session ('TODOS' = sin filtro).
+        unidad = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad in ('MANTENIMIENTO', 'CONSTRUCCION'):
             qs = qs.filter(unidad_negocio=unidad)
         estado = self.request.GET.get('estado')
@@ -45,17 +47,55 @@ class ContratoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
 
 
 def _sincronizar_torres(contrato):
-    """Genera torres T1..TN si numero_torres está definido."""
+    """Sincroniza el set de torres T1..TN del contrato (soft-delete).
+
+    - Faltantes → crea TorreContrato + PredialTorre + AmbientalTorre.
+    - Sobrantes activas → marca archivada=True (preserva histórico).
+    - Reaparecidas (T6 archivada y vuelve a estar en el rango) → archivada=False.
+    """
     from apps.ingenieria.models import TorreContrato
+    from apps.preliminares.models import AmbientalTorre, PredialTorre
+
     n = contrato.numero_torres
     if not n:
         return
-    existentes = set(contrato.torres.values_list('nombre', flat=True))
-    nuevas = [f"T{i}" for i in range(1, n + 1) if f"T{i}" not in existentes]
-    TorreContrato.objects.bulk_create([
-        TorreContrato(contrato=contrato, nombre=nombre, orden=int(nombre[1:]))
-        for nombre in nuevas
-    ])
+
+    esperadas = {f"T{i}": i for i in range(1, n + 1)}
+    existentes = {t.nombre: t for t in contrato.torres.all()}
+
+    # 1) Crear faltantes.
+    nuevas_objs = [
+        TorreContrato(contrato=contrato, nombre=nombre, orden=orden)
+        for nombre, orden in esperadas.items()
+        if nombre not in existentes
+    ]
+    if nuevas_objs:
+        TorreContrato.objects.bulk_create(nuevas_objs)
+        # bulk_create no dispara signals: crear Predial/Ambiental manualmente.
+        nuevas_db = TorreContrato.objects.filter(
+            contrato=contrato,
+            nombre__in=[t.nombre for t in nuevas_objs],
+        )
+        PredialTorre.objects.bulk_create(
+            [PredialTorre(torre=t) for t in nuevas_db],
+            ignore_conflicts=True,
+        )
+        AmbientalTorre.objects.bulk_create(
+            [AmbientalTorre(torre=t) for t in nuevas_db],
+            ignore_conflicts=True,
+        )
+
+    # 2) Archivar sobrantes activas.
+    a_archivar = [t.pk for t in existentes.values()
+                  if t.nombre not in esperadas and not t.archivada]
+    if a_archivar:
+        TorreContrato.objects.filter(pk__in=a_archivar).update(archivada=True)
+
+    # 3) Reactivar torres archivadas que volvieron al rango.
+    a_reactivar = [t.pk for t in existentes.values()
+                   if t.nombre in esperadas and t.archivada]
+    if a_reactivar:
+        TorreContrato.objects.filter(pk__in=a_reactivar).update(archivada=False)
 
 
 class ContratoCreateView(LoginRequiredMixin, RoleRequiredMixin, CreateView):

@@ -231,8 +231,9 @@ def ratelimit(group: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
             # Call the original function
             result = func(request, *args, **kwargs)
 
-            # If result is a Response object, add headers
-            if hasattr(result, '__setitem__'):
+            # Solo agregar headers si es un HttpResponse (no a list/tuple/dict
+            # que también tienen __setitem__ pero no son responses HTTP).
+            if isinstance(result, HttpResponse):
                 add_headers(result)
 
             return result

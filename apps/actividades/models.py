@@ -387,6 +387,13 @@ class Actividad(BaseModel):
         self.motivo_cancelacion = motivo
         self.save(update_fields=['estado', 'motivo_cancelacion', 'updated_at'])
 
+    def reprogramar(self, nueva_fecha, motivo: str):
+        """Reschedule activity with new date and reason."""
+        self.estado = self.Estado.REPROGRAMADA
+        self.fecha_reprogramada = nueva_fecha
+        self.motivo_reprogramacion = motivo
+        self.save(update_fields=['estado', 'fecha_reprogramada', 'motivo_reprogramacion', 'updated_at'])
+
     def recalcular_avance(self):
         """
         Recalcula porcentaje de avance basado en vanos ejecutados.
@@ -509,14 +516,6 @@ class HistorialIntervencion(BaseModel):
             f"{self.linea.codigo if self.linea else 'N/A'} - "
             f"{self.fecha_intervencion.strftime('%Y-%m-%d')}"
         )
-
-    def reprogramar(self, nueva_fecha, motivo: str):
-        """Reschedule activity."""
-        self.estado = self.Estado.REPROGRAMADA
-        self.fecha_reprogramada = nueva_fecha
-        self.motivo_reprogramacion = motivo
-        self.save(update_fields=['estado', 'fecha_reprogramada', 'motivo_reprogramacion', 'updated_at'])
-
 
 class InformeDiario(BaseModel):
     """
