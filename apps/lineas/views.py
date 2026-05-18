@@ -291,6 +291,32 @@ class ImportarKMZView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             messages.error(request, 'El archivo debe ser un KMZ o KML.')
             return redirect('lineas:importar_kmz')
 
+        actualizar = request.POST.get('actualizar_existentes') == 'on'
+        modo_multi = request.POST.get('modo') == 'multi'
+
+        importer = KMZImporter()
+
+        if modo_multi:
+            resultado = importer.importar_multilinea(
+                archivo,
+                opciones={'actualizar_existentes': actualizar},
+            )
+            if resultado.get('exito'):
+                messages.success(request, (
+                    f"Importacion multi-linea exitosa: "
+                    f"{resultado['lineas_creadas']} lineas creadas, "
+                    f"{resultado['lineas_existentes']} ya existentes, "
+                    f"{resultado['torres_creadas']} torres creadas, "
+                    f"{resultado['torres_actualizadas']} actualizadas, "
+                    f"{resultado['torres_saltadas']} saltadas."
+                ))
+                for adv in (resultado.get('advertencias') or [])[:5]:
+                    messages.warning(request, adv)
+            else:
+                messages.error(request, resultado.get('error', 'Error desconocido'))
+            return redirect('lineas:lista')
+
+        # Modo single-línea (comportamiento clásico)
         linea_id = request.POST.get('linea')
         if not linea_id:
             messages.error(request, 'Debe seleccionar una linea.')
@@ -302,9 +328,6 @@ class ImportarKMZView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             messages.error(request, 'Linea no encontrada.')
             return redirect('lineas:importar_kmz')
 
-        actualizar = request.POST.get('actualizar_existentes') == 'on'
-
-        importer = KMZImporter()
         resultado = importer.importar(
             archivo, linea,
             opciones={'actualizar_existentes': actualizar}

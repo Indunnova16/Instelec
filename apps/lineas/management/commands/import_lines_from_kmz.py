@@ -17,9 +17,14 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--archivo', required=True, help='Ruta al archivo KMZ/KML')
-        parser.add_argument('--linea-codigo', help='Código de la Línea destino (si la línea ya existe)')
+        parser.add_argument('--linea-codigo', help='Código de la Línea destino (modo single-linea)')
         parser.add_argument('--linea-nombre', help='Nombre para crear la Línea si no existe')
         parser.add_argument('--contrato-codigo', help='Código del Contrato (opcional, para asociar la línea)')
+        parser.add_argument(
+            '--multi-linea', action='store_true',
+            help='Importar TODAS las líneas (<Document>) del KMZ creando/recuperando '
+                 'cada una por su código LN### extraído del nombre.',
+        )
         parser.add_argument('--actualizar-existentes', action='store_true')
         parser.add_argument('--dry-run', action='store_true')
 
@@ -27,6 +32,10 @@ class Command(BaseCommand):
         ruta = Path(options['archivo']).expanduser()
         if not ruta.exists():
             raise CommandError(f'Archivo no encontrado: {ruta}')
+
+        if options.get('multi_linea'):
+            self._handle_multi(ruta, options)
+            return
 
         codigo = options.get('linea_codigo')
         nombre = options.get('linea_nombre')
@@ -52,7 +61,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'Línea creada: {linea.codigo}'))
 
         if not linea:
-            raise CommandError('Debe proveer --linea-codigo (existente) o --linea-nombre (nueva).')
+            raise CommandError(
+                'Debe proveer --linea-codigo (existente), --linea-nombre (nueva) o --multi-linea.'
+            )
 
         with ruta.open('rb') as fh:
             archivo = File(fh, name=ruta.name)
@@ -72,3 +83,28 @@ class Command(BaseCommand):
         ))
         for adv in resultado.get('advertencias', [])[:10]:
             self.stdout.write(self.style.WARNING(f'  ⚠ {adv}'))
+
+    def _handle_multi(self, ruta, options):
+        """Modo --multi-linea: KMZ con N Documents (40 líneas Transelca, etc.)."""
+        with ruta.open('rb') as fh:
+            archivo = File(fh, name=ruta.name)
+            importer = KMZImporter()
+            resultado = importer.importar_multilinea(
+                archivo,
+                opciones={'actualizar_existentes': options['actualizar_existentes']},
+            )
+
+        if not resultado.get('exito'):
+            raise CommandError(f"Importación falló: {resultado.get('error')}")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Multi-línea OK → líneas creadas: {resultado['lineas_creadas']}, "
+            f"existentes: {resultado['lineas_existentes']}, "
+            f"torres creadas: {resultado['torres_creadas']}, "
+            f"actualizadas: {resultado['torres_actualizadas']}, "
+            f"saltadas: {resultado['torres_saltadas']}"
+        ))
+        for adv in resultado.get('advertencias', [])[:10]:
+            self.stdout.write(self.style.WARNING(f'  ⚠ {adv}'))
+        for err in resultado.get('errores', [])[:5]:
+            self.stdout.write(self.style.ERROR(f'  ✗ {err}'))

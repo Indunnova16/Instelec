@@ -1,14 +1,21 @@
 """
 Importers for geographic data (KMZ/KML files).
 """
+import io
 import os
 import re
 import tempfile
 import logging
+import zipfile
 
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
+
+# Patrón Transelca: "LN588 TEBSA - TRIPLE A 1 34.5 KV"
+RE_LINEA_TRANSELCA = re.compile(
+    r'^(LN\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s*KV', re.IGNORECASE
+)
 
 
 class KMZImporter:
@@ -169,6 +176,211 @@ class KMZImporter:
 
         except Exception as e:
             self.errores.append(f'Error al crear torre {numero}: {str(e)}')
+
+    def importar_multilinea(self, archivo, opciones=None):
+        """Importa N líneas + sus torres desde un KMZ con varios <Document>.
+
+        A diferencia de `importar()` (1 línea fija), itera los `<Document>` del
+        KML, extrae el código `LN###` del `<name>` del Document, y crea/recupera
+        una `Linea` por cada uno. Las torres (Placemarks) se asignan a la línea
+        de su Document.
+
+        Útil para cargas iniciales con formato Transelca (`Torres Transelca.kmz`,
+        40 líneas / 4 586 torres).
+
+        Args:
+            archivo: UploadedFile/File con .kmz (zipped) o .kml plano.
+            opciones: dict opcional con:
+                - actualizar_existentes (bool): si True, sobreescribe coords de
+                  torres ya creadas; si False (default), las salta.
+                - cliente_default (str): valor de `Linea.cliente` para nuevas
+                  líneas (default TRANSELCA).
+
+        Returns:
+            dict con: exito, lineas_creadas, lineas_existentes, torres_creadas,
+            torres_actualizadas, torres_saltadas, advertencias, errores.
+
+        Nota: usa un parser regex porque algunos KMZ Transelca tienen prefijos
+        XML mal cerrados que rompen ElementTree/OGR a mitad del archivo.
+        """
+        from apps.lineas.models import Linea, Torre
+
+        opciones = opciones or {}
+        actualizar = opciones.get('actualizar_existentes', False)
+        cliente_default = opciones.get('cliente_default', Linea.Cliente.TRANSELCA)
+
+        try:
+            content = self._leer_kml_texto(archivo)
+        except Exception as e:
+            return {'exito': False, 'error': f'No se pudo leer el archivo: {e}'}
+
+        doc_blocks = re.findall(r'<Document>(.*?)</Document>', content, re.DOTALL)
+        if not doc_blocks:
+            return {
+                'exito': False,
+                'error': 'El archivo no contiene <Document> (¿formato single-linea? usa importar() en su lugar).',
+            }
+
+        # Parsear todos los Documents → estructura intermedia
+        lineas_kmz = []
+        for block in doc_blocks:
+            m_nombre = re.search(r'<name>([^<]+)</name>', block)
+            if not m_nombre:
+                continue
+            nombre_full = m_nombre.group(1).strip()
+            m = RE_LINEA_TRANSELCA.match(nombre_full)
+            if m:
+                codigo = m.group(1).upper()
+                tension = int(float(m.group(3)))
+            else:
+                codigo = nombre_full.split()[0][:20].upper()
+                tension = None
+
+            torres = []
+            for pm_match in re.finditer(r'<Placemark>(.*?)</Placemark>', block, re.DOTALL):
+                pm = pm_match.group(1)
+                m_pn = re.search(r'<name>([^<]+)</name>', pm)
+                m_coords = re.search(r'<coordinates>\s*([^<]+?)\s*</coordinates>', pm)
+                if not m_pn or not m_coords:
+                    continue
+                numero = m_pn.group(1).strip()[:20]  # Torre.numero max_length=20
+                parts = m_coords.group(1).strip().split(',')
+                if len(parts) < 2:
+                    continue
+                try:
+                    lon = float(parts[0])
+                    lat = float(parts[1])
+                    alt = float(parts[2]) if len(parts) > 2 else 0.0
+                except ValueError:
+                    continue
+                torres.append({'numero': numero, 'lat': lat, 'lon': lon, 'alt': alt})
+
+            lineas_kmz.append({
+                'codigo': codigo,
+                'nombre': nombre_full[:150],
+                'tension_kv': tension,
+                'torres': torres,
+            })
+
+        # Merge Documents que comparten codigo (KMZs raros pueden repetir LN###)
+        merged = {}
+        for l in lineas_kmz:
+            if l['codigo'] in merged:
+                merged[l['codigo']]['torres'].extend(l['torres'])
+            else:
+                merged[l['codigo']] = dict(l)
+        lineas_kmz = list(merged.values())
+
+        # Insertar en BD
+        lineas_creadas = 0
+        lineas_existentes = 0
+        torres_creadas = 0
+        torres_actualizadas = 0
+        torres_saltadas = 0
+
+        from django.contrib.gis.geos import Point
+
+        with transaction.atomic():
+            for l in lineas_kmz:
+                linea_obj, created = Linea.objects.get_or_create(
+                    codigo=l['codigo'],
+                    defaults={
+                        'nombre': l['nombre'],
+                        'cliente': cliente_default,
+                        'tension_kv': l['tension_kv'],
+                    },
+                )
+                if created:
+                    lineas_creadas += 1
+                else:
+                    lineas_existentes += 1
+
+                existing_numeros = set(
+                    Torre.objects.filter(linea=linea_obj).values_list('numero', flat=True)
+                )
+
+                # Dedup intra-línea (mismo KMZ puede repetir torre)
+                seen = set()
+                torres_dedup = []
+                for t in l['torres']:
+                    if t['numero'] in seen:
+                        self.advertencias.append(
+                            f"{l['codigo']}: torre {t['numero']} duplicada en KMZ, omitida"
+                        )
+                        continue
+                    seen.add(t['numero'])
+                    torres_dedup.append(t)
+
+                # Separar existing vs nuevas
+                nuevas = []
+                for t in torres_dedup:
+                    if t['numero'] in existing_numeros:
+                        if actualizar:
+                            Torre.objects.filter(linea=linea_obj, numero=t['numero']).update(
+                                latitud=t['lat'],
+                                longitud=t['lon'],
+                                altitud=t['alt'],
+                                geometria=Point(t['lon'], t['lat'], srid=4326),
+                            )
+                            torres_actualizadas += 1
+                        else:
+                            torres_saltadas += 1
+                        continue
+                    try:
+                        pt = Point(t['lon'], t['lat'], srid=4326)
+                    except Exception as e:
+                        self.errores.append(f"{l['codigo']}/{t['numero']}: {e}")
+                        continue
+                    nuevas.append(Torre(
+                        linea=linea_obj,
+                        numero=t['numero'],
+                        latitud=t['lat'],
+                        longitud=t['lon'],
+                        altitud=t['alt'],
+                        geometria=pt,
+                        tipo=Torre.TipoTorre.SUSPENSION,
+                        estado=Torre.EstadoTorre.BUENO,
+                    ))
+
+                if nuevas:
+                    Torre.objects.bulk_create(nuevas, batch_size=500, ignore_conflicts=True)
+                    # ignore_conflicts puede saltar algunas si carrera o duplicado escape;
+                    # contar las que realmente quedaron en BD.
+                    creadas_real = (
+                        Torre.objects.filter(linea=linea_obj).count() - len(existing_numeros)
+                    )
+                    torres_creadas += creadas_real
+
+        return {
+            'exito': True,
+            'lineas_creadas': lineas_creadas,
+            'lineas_existentes': lineas_existentes,
+            'torres_creadas': torres_creadas,
+            'torres_actualizadas': torres_actualizadas,
+            'torres_saltadas': torres_saltadas,
+            'errores': self.errores,
+            'advertencias': self.advertencias,
+        }
+
+    def _leer_kml_texto(self, archivo):
+        """Lee el contenido KML como string desde un KMZ (zip) o KML plano."""
+        # Detectar tipo por nombre y/o magic bytes
+        nombre = getattr(archivo, 'name', '') or ''
+        if hasattr(archivo, 'read'):
+            archivo.seek(0) if hasattr(archivo, 'seek') else None
+            data = archivo.read() if not hasattr(archivo, 'chunks') else b''.join(archivo.chunks())
+        else:
+            with open(archivo, 'rb') as f:
+                data = f.read()
+
+        if data[:2] == b'PK' or nombre.lower().endswith('.kmz'):
+            zf = zipfile.ZipFile(io.BytesIO(data))
+            kml_name = next((n for n in zf.namelist() if n.lower().endswith('.kml')), None)
+            if not kml_name:
+                raise ValueError(f'KMZ sin .kml dentro: {zf.namelist()}')
+            return zf.read(kml_name).decode('utf-8', errors='replace')
+
+        return data.decode('utf-8', errors='replace')
 
     def _extraer_numero_torre(self, texto):
         """Extract tower number from a text string."""
