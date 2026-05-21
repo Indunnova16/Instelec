@@ -69,8 +69,8 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }},${{ env.IMAGE_NAME }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:cache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:cache,mode=max,image-manifest=true
 
       - name: Create env-vars file
         run: |
