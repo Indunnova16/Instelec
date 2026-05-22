@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}{{ categoria.nombre }} — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <a href="{% url 'construccion:dashboard_financiero' proyecto.id %}"
+       class="text-sm text-blue-600 hover:underline">← Volver al dashboard</a>
+    <h1 class="text-2xl font-bold mt-2">{{ categoria.nombre }}</h1>
+    <p class="text-sm text-gray-500">
+      {{ proyecto.nombre }} — {{ categoria.get_tipo_display }}
+      {% if categoria.categoria_padre %} · Padre: {{ categoria.categoria_padre.nombre }}{% endif %}
+    </p>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500">
+      <p class="text-xs uppercase text-gray-500">Movimientos</p>
+      <p class="text-2xl font-bold">{{ movimientos|length }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-purple-500">
+      <p class="text-xs uppercase text-gray-500">Transacciones detalle</p>
+      <p class="text-2xl font-bold">{{ n_transacciones }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">Total transacciones</p>
+      <p class="text-2xl font-bold">${{ total_transacciones|floatformat:0 }}</p>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="text-lg font-semibold">Movimientos mensuales</h2>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">Período</th>
+          <th class="px-4 py-2 text-center">Tipo</th>
+          <th class="px-4 py-2 text-right">Valor</th>
+          <th class="px-4 py-2">Registrado por</th>
+          <th class="px-4 py-2">Fecha registro</th>
+          <th class="px-4 py-2 text-right">Transacciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in movimientos %}
+        <tr class="border-t {% if m.tipo == 'PRESUPUESTO' %}bg-blue-50/30{% endif %}">
+          <td class="px-4 py-2">{{ m.periodo.mes }}/{{ m.periodo.anio }}</td>
+          <td class="px-4 py-2 text-center">
+            <span class="px-2 py-0.5 text-xs rounded-full
+              {% if m.tipo == 'PRESUPUESTO' %}bg-blue-100 text-blue-800{% else %}bg-red-100 text-red-800{% endif %}">
+              {{ m.tipo }}
+            </span>
+          </td>
+          <td class="px-4 py-2 text-right">${{ m.valor|floatformat:0 }}</td>
+          <td class="px-4 py-2">{{ m.usuario.get_full_name|default:"—" }}</td>
+          <td class="px-4 py-2">{{ m.fecha_registro|date:"d/m/Y" }}</td>
+          <td class="px-4 py-2 text-right">{{ m.transacciones.count }}</td>
+        </tr>
+        {% if m.transacciones.all %}
+          {% for t in m.transacciones.all %}
+          <tr class="border-t border-gray-50 bg-gray-50/50 text-xs">
+            <td class="px-4 py-1 pl-12" colspan="2">↳ {{ t.fecha|date:"d/m/Y" }} · {{ t.descripcion|truncatechars:60 }}</td>
+            <td class="px-4 py-1 text-right">${{ t.valor|floatformat:0 }}</td>
+            <td class="px-4 py-1">{{ t.nombre_proveedor|default:"—" }}</td>
+            <td class="px-4 py-1">{{ t.numero_factura|default:"—" }}</td>
+            <td class="px-4 py-1"></td>
+          </tr>
+          {% endfor %}
+        {% endif %}
+        {% empty %}
+        <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Sin movimientos para esta categoría</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

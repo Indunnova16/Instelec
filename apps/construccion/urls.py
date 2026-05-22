@@ -117,4 +117,10 @@ urlpatterns = [
     # Cilindros pendientes (#55)
     path('<uuid:proyecto_id>/cilindros/',
          views.CilindrosPendientesView.as_view(), name='cilindros_pendientes'),
+
+    # Iteración 2 — deuda técnica
+    path('<uuid:proyecto_id>/financiero/categoria/<uuid:categoria_id>/',
+         views.CategoriaDrilldownView.as_view(), name='categoria_drilldown'),
+    path('<uuid:proyecto_id>/kits/dashboard/',
+         views.DashboardKitsView.as_view(), name='kits_dashboard'),
 ]

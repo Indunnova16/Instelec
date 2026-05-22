@@ -1,0 +1,17 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>IT-380 Instructivo de cimentación</h2>
+  <table class="kv">
+    <tr><td class="lbl">Fecha vaciado</td><td>{{ patas.0.vaciado_fecha|default:"—" }}</td></tr>
+    <tr><td class="lbl">Concreto m³</td><td>{{ patas.0.concreto_m3|default:"—" }}</td></tr>
+    <tr><td class="lbl">Resistencia MPa</td><td>{{ patas.0.resistencia_especificada_mpa|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

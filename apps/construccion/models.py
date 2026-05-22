@@ -221,6 +221,41 @@ class ProyectoConstruccion(BaseModel):
             })
         return resultado
 
+    def curva_s_financiera(self):
+        """Lista de {mes, presupuesto_acum, gastado_acum} para curva S
+        financiera del proyecto (#70 iteración 2)."""
+        from .models import MovimientoFinanciero
+        from decimal import Decimal
+        movs = MovimientoFinanciero.objects.filter(
+            periodo__proyecto=self
+        ).select_related('periodo', 'categoria').order_by(
+            'periodo__anio', 'periodo__mes')
+        if not movs.exists():
+            return []
+        # Agrupa por (año, mes) y tipo
+        from collections import defaultdict
+        from datetime import date
+        agg = defaultdict(lambda: {'PRESUPUESTO': Decimal('0'), 'REAL': Decimal('0')})
+        for m in movs:
+            # solo categorías GASTO se acumulan como "gasto"
+            if m.categoria.tipo != 'GASTO':
+                continue
+            key = (m.periodo.anio, m.periodo.mes)
+            agg[key][m.tipo] += m.valor
+        meses = sorted(agg.keys())
+        resultado = []
+        pres_acum = Decimal('0')
+        real_acum = Decimal('0')
+        for anio, mes in meses:
+            pres_acum += agg[(anio, mes)]['PRESUPUESTO']
+            real_acum += agg[(anio, mes)]['REAL']
+            resultado.append({
+                'mes': date(anio, mes, 1).isoformat(),
+                'presupuesto_acum': float(pres_acum),
+                'gastado_acum': float(real_acum),
+            })
+        return resultado
+
     @property
     def pyg_totales(self):
         """Totales agregados del proyecto: ingresos, gastos, utilidad."""
@@ -1348,6 +1383,45 @@ class KitCerramiento(BaseModel):
         return dias is not None and dias > 30
 
 
+class MovimientoKit(BaseModel):
+    """Histórico de movimientos de un kit entre torres (#65 iteración 2).
+    Generado automáticamente por signal cuando KitCerramiento.torre_actual cambia.
+    Permite auditar dónde estuvo el kit X del 1-mar al 15-mar, etc."""
+
+    class Accion(models.TextChoices):
+        ASIGNAR = 'ASIGNAR', 'Asignar a torre'
+        LIBERAR = 'LIBERAR', 'Liberar de torre'
+        MOVER = 'MOVER', 'Mover entre torres'
+        ESTADO = 'ESTADO', 'Cambio de estado'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kit = models.ForeignKey(KitCerramiento, on_delete=models.CASCADE,
+                            related_name='movimientos')
+    accion = models.CharField('Acción', max_length=10, choices=Accion.choices)
+    torre_origen = models.ForeignKey(
+        TorreConstruccion, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='kits_origen')
+    torre_destino = models.ForeignKey(
+        TorreConstruccion, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='kits_destino')
+    fecha = models.DateTimeField('Fecha del movimiento', auto_now_add=True)
+    estado_previo = models.CharField('Estado previo', max_length=15, blank=True)
+    estado_nuevo = models.CharField('Estado nuevo', max_length=15, blank=True)
+    usuario = models.ForeignKey(
+        'usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='movimientos_kit')
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_movimiento_kit'
+        verbose_name = 'Movimiento de Kit'
+        verbose_name_plural = 'Movimientos de Kits'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"{self.fecha:%Y-%m-%d} | {self.kit.codigo} | {self.accion}"
+
+
 class ProgramacionFase(BaseModel):
     """Cronograma planeado vs real por sección del proyecto (#68).
     El equipo de ingeniería fija las fechas al inicio; el sistema calcula
@@ -1457,6 +1531,12 @@ class CategoriaFinanciera(BaseModel):
                             default=Tipo.GASTO)
     orden = models.PositiveSmallIntegerField('Orden', default=0)
     activa = models.BooleanField('Activa', default=True)
+    categoria_padre = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='hijos',
+        help_text='Permite jerarquía: Ingresos → Operacionales, Egresos → CIF → Materiales')
+    nivel = models.PositiveSmallIntegerField('Nivel jerárquico', default=1,
+        help_text='1 = raíz, 2 = sub-categoría, 3 = detalle')
 
     class Meta:
         db_table = 'construccion_categoria_financiera'
@@ -1526,6 +1606,228 @@ class MovimientoFinanciero(BaseModel):
 
     def __str__(self):
         return f"{self.periodo} | {self.categoria.codigo} | {self.tipo} | ${self.valor:,.0f}"
+
+
+class CerramientoDetalle(BaseModel):
+    """Detalles del bloque 1 Cerramiento (#53 iteración 2)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pata = models.OneToOneField(PataObra, on_delete=models.CASCADE,
+                                related_name='cerramiento_detalle')
+    cantidad_madera = models.PositiveIntegerField('Cantidad de madera (unidades)',
+                                                  null=True, blank=True)
+    metros_lona_pua = models.FloatField('Metros lona/alambre de púa',
+                                        null=True, blank=True)
+    senalizacion_ok = models.BooleanField('Señalización instalada', default=False)
+    punto_ecologico_ok = models.BooleanField('Punto ecológico instalado', default=False)
+    bano_ok = models.BooleanField('Baño instalado', default=False)
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_cerramiento_detalle'
+        verbose_name = 'Detalle Cerramiento'
+
+    def __str__(self):
+        return f"Cerramiento {self.pata}"
+
+
+class ExcavacionDetalle(BaseModel):
+    """Detalles del bloque 2 Excavación (#53 iteración 2)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pata = models.OneToOneField(PataObra, on_delete=models.CASCADE,
+                                related_name='excavacion_detalle')
+    procedimiento_ft022_ok = models.BooleanField('FT-022 Procedimiento aprobado', default=False)
+    sst_ft023_ok = models.BooleanField('FT-023 Doc SST excavaciones', default=False)
+    prueba_penetrometro_ok = models.BooleanField('Prueba de penetrómetro', default=False)
+    entivado_ft058_ok = models.BooleanField('FT-058 Concepto entibado', default=False)
+    monitoreo_arqueologico_ok = models.BooleanField('Monitoreo arqueológico', default=False)
+    subcontratistas = models.CharField('Subcontratistas involucrados', max_length=300, blank=True)
+    # Pilotes — 5 FTs cuando aplica
+    ft925_carga_ok = models.BooleanField('FT-925 Carga pilotes', default=False)
+    ft926_marcacion_ok = models.BooleanField('FT-926 Marcación', default=False)
+    ft927_cantidades_ok = models.BooleanField('FT-927 Cantidades', default=False)
+    ft928_torques_ok = models.BooleanField('FT-928 Torques', default=False)
+    ft929_localizacion_ok = models.BooleanField('FT-929 Localización final', default=False)
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_excavacion_detalle'
+        verbose_name = 'Detalle Excavación'
+
+    def __str__(self):
+        return f"Excavación {self.pata}"
+
+
+class SoladoDetalle(BaseModel):
+    """Detalles del bloque 3 Solado (#53 iteración 2)."""
+    class IngresoMateriales(models.TextChoices):
+        VEHICULAR = 'VEHICULAR', 'Vehicular'
+        MANUAL = 'MANUAL', 'Manual'
+        MULAR = 'MULAR', 'Mular'
+        TELEFERICO = 'TELEFERICO', 'Teleférico'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pata = models.OneToOneField(PataObra, on_delete=models.CASCADE,
+                                related_name='solado_detalle')
+    ingreso_materiales = models.CharField('Ingreso de materiales', max_length=15,
+                                          choices=IngresoMateriales.choices, blank=True)
+    agua_calc_m3 = models.FloatField('Agua calculada (m³)', null=True, blank=True)
+    agua_util_m3 = models.FloatField('Agua utilizada (m³)', null=True, blank=True)
+    arena_calc_m3 = models.FloatField('Arena calculada (m³)', null=True, blank=True)
+    arena_util_m3 = models.FloatField('Arena utilizada (m³)', null=True, blank=True)
+    grava_calc_m3 = models.FloatField('Grava calculada (m³)', null=True, blank=True)
+    grava_util_m3 = models.FloatField('Grava utilizada (m³)', null=True, blank=True)
+    cemento_calc_bultos = models.FloatField('Cemento calculado (bultos)', null=True, blank=True)
+    cemento_util_bultos = models.FloatField('Cemento utilizado (bultos)', null=True, blank=True)
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_solado_detalle'
+        verbose_name = 'Detalle Solado'
+
+    def __str__(self):
+        return f"Solado {self.pata}"
+
+
+class AceroDetalle(BaseModel):
+    """Detalles del bloque 4 Acero (#53 iteración 2)."""
+    class IngresoAcero(models.TextChoices):
+        VEHICULAR = 'VEHICULAR', 'Vehicular'
+        MULAR = 'MULAR', 'Mular'
+        TELEFERICO = 'TELEFERICO', 'Teleférico'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pata = models.OneToOneField(PataObra, on_delete=models.CASCADE,
+                                related_name='acero_detalle')
+    soldadura_prolongas_ok = models.BooleanField('Soldadura prolongas a stub', default=False)
+    ingreso_acero = models.CharField('Ingreso de acero', max_length=15,
+                                     choices=IngresoAcero.choices, blank=True)
+    it028_ok = models.BooleanField('IT-028 Instructivo instalación acero', default=False)
+    ft930_ok = models.BooleanField('FT-930 Revisión acero/formaleta/SPT', default=False)
+    corte_flejado_ok = models.BooleanField('Corte y flejado', default=False)
+    acero_armado_ok = models.BooleanField('Acero armado en sitio', default=False)
+    spt_base_completo_ok = models.BooleanField('SPT base: varilla+cable+conectores', default=False)
+    nivelacion_stub_ft916_ok = models.BooleanField('FT-916 Nivelación stub', default=False)
+    encofrado_ok = models.BooleanField('Encofrado / formaleteado', default=False)
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_acero_detalle'
+        verbose_name = 'Detalle Acero'
+
+    def __str__(self):
+        return f"Acero {self.pata}"
+
+
+class VaciadoDetalle(BaseModel):
+    """Detalles del bloque 5 Vaciado en Concreto (#53 iteración 2)."""
+    class TipoConcreto(models.TextChoices):
+        PREMEZCLADO = 'PREMEZCLADO', 'Premezclado'
+        OBRA = 'OBRA', 'Hecho en obra'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pata = models.OneToOneField(PataObra, on_delete=models.CASCADE,
+                                related_name='vaciado_detalle')
+    it380_ok = models.BooleanField('IT-380 Instructivo cimentación', default=False)
+    ft056_ok = models.BooleanField('FT-056 Control fundaciones', default=False)
+    tipo_concreto = models.CharField('Tipo de concreto', max_length=15,
+                                     choices=TipoConcreto.choices, blank=True)
+    agua_calc_m3 = models.FloatField('Agua calc (m³)', null=True, blank=True)
+    agua_util_m3 = models.FloatField('Agua util (m³)', null=True, blank=True)
+    arena_calc_m3 = models.FloatField('Arena calc (m³)', null=True, blank=True)
+    arena_util_m3 = models.FloatField('Arena util (m³)', null=True, blank=True)
+    grava_calc_m3 = models.FloatField('Grava calc (m³)', null=True, blank=True)
+    grava_util_m3 = models.FloatField('Grava util (m³)', null=True, blank=True)
+    cemento_calc_bultos = models.FloatField('Cemento calc (bultos)', null=True, blank=True)
+    cemento_util_bultos = models.FloatField('Cemento util (bultos)', null=True, blank=True)
+    prueba_slump_ok = models.BooleanField('Prueba de slump', default=False)
+    fecha_fabricacion_cilindros = models.DateField('Fecha fabricación cilindros',
+                                                   null=True, blank=True)
+    inspeccion_nivelacion_stub_post_ok = models.BooleanField(
+        'Inspección nivelación stub post-vaciado', default=False)
+    encargado_puntas_diamante = models.CharField('Encargado puntas de diamante',
+                                                 max_length=200, blank=True)
+    fecha_desencofrado = models.DateField('Fecha desencofrado', null=True, blank=True)
+    hidratacion_pedestales_ok = models.BooleanField('Hidratación de pedestales', default=False)
+    resane_pedestales_ok = models.BooleanField('Resane de pedestales', default=False)
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_vaciado_detalle'
+        verbose_name = 'Detalle Vaciado'
+
+    def __str__(self):
+        return f"Vaciado {self.pata}"
+
+
+class CompactacionDetalle(BaseModel):
+    """Detalles del bloque 6 Compactación (#53 iteración 2)."""
+    class TipoCompactacion(models.TextChoices):
+        NATURAL = 'NATURAL', 'Suelo natural'
+        CEMENTO = 'CEMENTO', 'Suelo + cemento'
+        PRESTAMO = 'PRESTAMO', 'Suelo de préstamo'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pata = models.OneToOneField(PataObra, on_delete=models.CASCADE,
+                                related_name='compactacion_detalle')
+    ft914_ok = models.BooleanField('FT-914 Control compactación', default=False)
+    tipo_compactacion = models.CharField('Tipo de compactación', max_length=15,
+                                         choices=TipoCompactacion.choices, blank=True)
+    volumen_m3 = models.FloatField('Volumen compactación (m³)', null=True, blank=True)
+    proctor_ok = models.BooleanField('Prueba Proctor', default=False)
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_compactacion_detalle'
+        verbose_name = 'Detalle Compactación'
+
+    def __str__(self):
+        return f"Compactación {self.pata}"
+
+
+class TransaccionContable(BaseModel):
+    """Sección 3 del PDEO Excel: cada transacción individual con NIT
+    proveedor, factura, valor (#69 iteración 2).
+
+    Si MovimientoFinanciero es el agregado mensual, TransaccionContable
+    es el detalle: cada factura/comprobante que suma al movimiento.
+    Permite integración futura con SIIGO/Alegra."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    movimiento = models.ForeignKey(
+        MovimientoFinanciero, on_delete=models.CASCADE,
+        related_name='transacciones',
+        help_text='Movimiento mensual al que pertenece (real o presupuesto)')
+    fecha = models.DateField('Fecha de la transacción')
+    descripcion = models.CharField('Descripción', max_length=400)
+    nit_proveedor = models.CharField('NIT proveedor', max_length=30, blank=True)
+    nombre_proveedor = models.CharField('Nombre proveedor', max_length=200, blank=True)
+    numero_factura = models.CharField('Número de factura', max_length=50, blank=True)
+    valor = models.DecimalField('Valor (COP)', max_digits=16, decimal_places=2)
+    iva = models.DecimalField('IVA (COP)', max_digits=14, decimal_places=2, default=0)
+    centro_costo = models.CharField('Centro de costo', max_length=50, blank=True)
+    adjunto = models.FileField('Soporte (factura/comprobante)',
+                               upload_to='construccion/transacciones/',
+                               null=True, blank=True)
+    siigo_id = models.CharField('ID externo SIIGO/Alegra', max_length=50, blank=True,
+        help_text='Para evitar duplicados al sincronizar')
+    usuario = models.ForeignKey(
+        'usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='transacciones_registradas')
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_transaccion_contable'
+        verbose_name = 'Transacción Contable'
+        verbose_name_plural = 'Transacciones Contables'
+        ordering = ['-fecha', '-created_at']
+        indexes = [
+            models.Index(fields=['fecha']),
+            models.Index(fields=['nit_proveedor']),
+            models.Index(fields=['siigo_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.fecha} | {self.descripcion[:50]} | ${self.valor:,.0f}"
 
 
 class SnapshotAvance(BaseModel):

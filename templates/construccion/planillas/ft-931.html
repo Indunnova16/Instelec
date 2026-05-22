@@ -1,0 +1,16 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Control regulación OPGW</h2>
+  <table class="kv">
+    <tr><td class="lbl">OPGW izquierda</td><td>{{ fase.tendido_opgw_izq_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">OPGW derecha</td><td>{{ fase.tendido_opgw_der_ok|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

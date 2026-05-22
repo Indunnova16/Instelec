@@ -82,6 +82,70 @@ def user_es_admin(user):
     return ROL_NIVEL.get(user_rol(user)) == NIVEL_ADMIN
 
 
+# === Sub-módulos del bloque CONSTRUCCION (#62 iteración 2) ===
+# Permite que un especialista sociopredial solo vea Sociopredial,
+# o que un capataz de cuadrilla solo vea Obra Civil + Montaje.
+
+SUBMODULO_INGENIERIA = 'INGENIERIA'
+SUBMODULO_PRELIMINARES = 'PRELIMINARES'  # sociopredial + socioambiental
+SUBMODULO_OBRA_CIVIL = 'OBRA_CIVIL'
+SUBMODULO_MONTAJE = 'MONTAJE'
+SUBMODULO_SPT = 'SPT'
+SUBMODULO_TENDIDO = 'TENDIDO'
+SUBMODULO_PROTECCIONES = 'PROTECCIONES'
+SUBMODULO_PRUEBAS = 'PRUEBAS'
+SUBMODULO_FINANCIERO = 'FINANCIERO'
+SUBMODULO_PROGRAMACION = 'PROGRAMACION'
+SUBMODULO_DASHBOARDS = 'DASHBOARDS'
+
+TODOS_SUBMODULOS = {
+    SUBMODULO_INGENIERIA, SUBMODULO_PRELIMINARES, SUBMODULO_OBRA_CIVIL,
+    SUBMODULO_MONTAJE, SUBMODULO_SPT, SUBMODULO_TENDIDO,
+    SUBMODULO_PROTECCIONES, SUBMODULO_PRUEBAS, SUBMODULO_FINANCIERO,
+    SUBMODULO_PROGRAMACION, SUBMODULO_DASHBOARDS,
+}
+
+# Mapeo rol → sub-módulos CONSTRUCCION accesibles
+ROL_SUBMODULOS = {
+    'admin_general':          TODOS_SUBMODULOS,
+    'coordinador_general':    TODOS_SUBMODULOS,
+    'admin_construccion':     TODOS_SUBMODULOS,
+    'operario_construccion':  {
+        SUBMODULO_OBRA_CIVIL, SUBMODULO_MONTAJE, SUBMODULO_SPT,
+        SUBMODULO_TENDIDO, SUBMODULO_PROTECCIONES,
+    },  # campo ops, sin finanzas / preliminares / pruebas / dashboards
+    'operario_general':       {
+        SUBMODULO_OBRA_CIVIL, SUBMODULO_MONTAJE, SUBMODULO_SPT,
+        SUBMODULO_TENDIDO, SUBMODULO_PROTECCIONES,
+    },
+    # Legacy
+    'admin':         TODOS_SUBMODULOS,
+    'director':      TODOS_SUBMODULOS,
+    'coordinador':   TODOS_SUBMODULOS,
+    'ing_residente': TODOS_SUBMODULOS - {SUBMODULO_FINANCIERO},
+    'ing_ambiental': {SUBMODULO_PRELIMINARES, SUBMODULO_INGENIERIA},
+    'supervisor':    {SUBMODULO_OBRA_CIVIL, SUBMODULO_MONTAJE, SUBMODULO_TENDIDO},
+    'liniero':       {SUBMODULO_OBRA_CIVIL, SUBMODULO_MONTAJE, SUBMODULO_TENDIDO},
+    'auxiliar':      {SUBMODULO_OBRA_CIVIL, SUBMODULO_MONTAJE},
+}
+
+
+def user_submodulos(user):
+    """Conjunto de sub-módulos CONSTRUCCION accesibles. Superuser = todos."""
+    if not user or not user.is_authenticated:
+        return set()
+    if user.is_superuser:
+        return TODOS_SUBMODULOS
+    return ROL_SUBMODULOS.get(user_rol(user), set())
+
+
+def user_can_access_submodulo(user, submodulo):
+    """¿El usuario tiene acceso a este sub-módulo de CONSTRUCCION?"""
+    if not submodulo:
+        return True
+    return submodulo in user_submodulos(user)
+
+
 def url_inicio_para_usuario(user):
     """URL adonde redirigir al usuario tras login según su rol."""
     if not user or not user.is_authenticated:

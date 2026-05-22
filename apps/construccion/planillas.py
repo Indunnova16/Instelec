@@ -33,6 +33,12 @@ PLANILLAS_DISPONIBLES = {
     'FT-929': ('Localización final de pilotes', 'Obra Civil - Excavación'),
     'FT-930': ('Revisión acero/formaleta/SPT base', 'Obra Civil - Acero'),
     'FT-932': ('Control regulación conductor', 'Tendido'),
+    # Iteración 2 — catálogo Transelca extendido
+    'FT-032': ('Control de montaje y revisión', 'Montaje'),
+    'FT-058': ('Concepto técnico de entibado', 'Obra Civil - Excavación'),
+    'FT-380': ('IT-380 Instructivo de cimentación', 'Obra Civil - Vaciado'),
+    'FT-919': ('Pintura — Control general por torre', 'Pintura'),
+    'FT-931': ('Control regulación OPGW', 'Tendido'),
 }
 
 

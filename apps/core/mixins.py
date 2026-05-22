@@ -135,6 +135,30 @@ class NivelAdminRequiredMixin(UserPassesTestMixin):
         )
 
 
+class SubModuloRequiredMixin(UserPassesTestMixin):
+    """Restringe acceso a un sub-módulo CONSTRUCCION (#62 iter 2).
+
+    Uso:
+        class FinancieroGridView(LoginRequiredMixin, SubModuloRequiredMixin, ...):
+            required_submodulo = 'FINANCIERO'
+    """
+    required_submodulo = None
+
+    def test_func(self):
+        from .permissions import user_can_access_submodulo
+        if not self.request.user.is_authenticated:
+            return False
+        return user_can_access_submodulo(self.request.user, self.required_submodulo)
+
+    def handle_no_permission(self):
+        from django.core.exceptions import PermissionDenied
+        if not self.request.user.is_authenticated:
+            return super().handle_no_permission()
+        raise PermissionDenied(
+            f"Su rol no tiene acceso al sub-módulo {self.required_submodulo}."
+        )
+
+
 class HTMXResponseMixin:
     """
     Mixin for handling HTMX responses.

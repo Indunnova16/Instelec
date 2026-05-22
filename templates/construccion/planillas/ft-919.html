@@ -1,0 +1,16 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Pintura — Control general por torre</h2>
+  <table class="kv">
+    <tr><td class="lbl">FT-912 espesor pintura</td><td>{{ fase.pintura_ft912_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Observaciones</td><td>{{ fase.pintura_observaciones|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

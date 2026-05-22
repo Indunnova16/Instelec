@@ -1,0 +1,20 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Control de montaje y revisión</h2>
+  <table class="kv">
+    <tr><td class="lbl">Selección estructura</td><td>{{ fase.seleccion_estructura_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Transporte estructura</td><td>{{ fase.transporte_estructura_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Prearmado</td><td>{{ fase.prearmado_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Montaje</td><td>{{ fase.montaje_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Verificación torsión</td><td>{{ fase.torsion_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Entrega WSP</td><td>{{ fase.entrega_wsp_ok|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

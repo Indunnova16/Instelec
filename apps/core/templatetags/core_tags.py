@@ -24,3 +24,12 @@ def es_admin_rbac(context):
     request = context.get('request')
     user = getattr(request, 'user', None)
     return user_es_admin(user)
+
+
+@register.simple_tag(takes_context=True)
+def puede_submodulo(context, submodulo):
+    """{% puede_submodulo 'FINANCIERO' as ok %} → True/False (#62 iter 2)."""
+    from apps.core.permissions import user_can_access_submodulo
+    request = context.get('request')
+    user = getattr(request, 'user', None)
+    return user_can_access_submodulo(user, submodulo)

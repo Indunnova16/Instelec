@@ -7,7 +7,7 @@ from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404, redirect
 from django.db.models import Q
 
-from apps.core.mixins import RoleRequiredMixin
+from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
 from apps.contratos.models import Contrato
 from .forms import ContratoForm
 from .models import (
@@ -772,13 +772,15 @@ class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         ctx['totales'] = proyecto.pyg_totales
         ctx['resumen'] = proyecto.pyg_resumen_ejecutivo()
         ctx['alertas'] = [r for r in ctx['resumen'] if r['alerta']]
+        ctx['curva_s_fin'] = proyecto.curva_s_financiera()
         return ctx
 
 
-class FinancieroGridView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Grid editable categoría × período × tipo (#69)."""
+class FinancieroGridView(LoginRequiredMixin, RoleRequiredMixin, SubModuloRequiredMixin, TemplateView):
+    """Grid editable categoría × período × tipo (#69). Solo FINANCIERO (#62 iter 2)."""
     template_name = 'construccion/financiero_grid.html'
     allowed_roles = ALL_ADMIN_ROLES
+    required_submodulo = 'FINANCIERO'
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -862,6 +864,65 @@ class MovimientoFinancieroSaveView(LoginRequiredMixin, RoleRequiredMixin, Templa
             return JsonResponse({'ok': False, 'error': str(e),
                                  'blocked': True}, status=409)
         return JsonResponse({'ok': True, 'valor': str(valor)})
+
+
+class CategoriaDrilldownView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Drill-down de una categoría financiera del proyecto (#70 iter 2):
+    movimientos PRESUPUESTO/REAL por período + transacciones contables."""
+    template_name = 'construccion/categoria_drilldown.html'
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        cat = get_object_or_404(CategoriaFinanciera,
+                                id=self.kwargs['categoria_id'])
+        movs = MovimientoFinanciero.objects.filter(
+            periodo__proyecto=proyecto, categoria=cat
+        ).select_related('periodo', 'usuario').order_by('periodo__anio', 'periodo__mes', 'tipo')
+        ctx['proyecto'] = proyecto
+        ctx['categoria'] = cat
+        ctx['movimientos'] = movs
+        ctx['active_tab'] = 'financiero'
+        # Suma transacciones contables si hay
+        from decimal import Decimal
+        total_trans = Decimal('0')
+        n_trans = 0
+        for m in movs:
+            n_trans += m.transacciones.count()
+            for t in m.transacciones.all():
+                total_trans += t.valor
+        ctx['total_transacciones'] = total_trans
+        ctx['n_transacciones'] = n_trans
+        return ctx
+
+
+class DashboardKitsView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Dashboard agregado de kits (#65 iter 2): inventario + alertas + histórico."""
+    template_name = 'construccion/dashboard_kits.html'
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        from .models import MovimientoKit
+        kits = KitCerramiento.objects.filter(proyecto=proyecto).select_related('torre_actual')
+        ctx['proyecto'] = proyecto
+        ctx['active_tab'] = 'kits'
+        ctx['stats'] = {
+            'total': kits.count(),
+            'disponibles': kits.filter(estado='DISPONIBLE').count(),
+            'en_uso': kits.filter(estado='EN_USO').count(),
+            'danados': kits.filter(estado='DAÑADO').count(),
+            'perdidos': kits.filter(estado='PERDIDO').count(),
+            'demora': sum(1 for k in kits if k.alerta_demora),
+        }
+        ctx['movimientos_recientes'] = MovimientoKit.objects.filter(
+            kit__proyecto=proyecto
+        ).select_related('kit', 'torre_origen', 'torre_destino').order_by('-fecha')[:20]
+        return ctx
 
 
 class CilindrosPendientesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):

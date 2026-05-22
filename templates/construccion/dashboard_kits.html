@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard Kits — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold">Dashboard de Kits</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+    </div>
+    <a href="{% url 'construccion:kits_lista' proyecto.id %}"
+       class="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50">Ver lista</a>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+    {% for label, color, valor in stats.items %}{% endfor %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-gray-400">
+      <p class="text-xs uppercase text-gray-500">Total</p>
+      <p class="text-2xl font-bold">{{ stats.total }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">Disponibles</p>
+      <p class="text-2xl font-bold text-green-600">{{ stats.disponibles }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500">
+      <p class="text-xs uppercase text-gray-500">En uso</p>
+      <p class="text-2xl font-bold text-blue-600">{{ stats.en_uso }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-orange-500">
+      <p class="text-xs uppercase text-gray-500">Dañados</p>
+      <p class="text-2xl font-bold text-orange-600">{{ stats.danados }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-500">
+      <p class="text-xs uppercase text-gray-500">Perdidos</p>
+      <p class="text-2xl font-bold text-red-600">{{ stats.perdidos }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-700">
+      <p class="text-xs uppercase text-gray-500">⚠ Demora &gt;30d</p>
+      <p class="text-2xl font-bold text-red-700">{{ stats.demora }}</p>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div class="px-6 py-4 border-b">
+      <h2 class="text-lg font-semibold">Movimientos recientes (últimos 20)</h2>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">Fecha</th>
+          <th class="px-4 py-2 text-left">Kit</th>
+          <th class="px-4 py-2 text-center">Acción</th>
+          <th class="px-4 py-2">Desde</th>
+          <th class="px-4 py-2">Hacia</th>
+          <th class="px-4 py-2">Cambio estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in movimientos_recientes %}
+        <tr class="border-t">
+          <td class="px-4 py-2">{{ m.fecha|date:"d/m/Y H:i" }}</td>
+          <td class="px-4 py-2 font-medium">{{ m.kit.codigo }}</td>
+          <td class="px-4 py-2 text-center">
+            <span class="px-2 py-0.5 text-xs bg-gray-100 rounded-full">{{ m.get_accion_display }}</span>
+          </td>
+          <td class="px-4 py-2">{{ m.torre_origen.numero|default:"—" }}</td>
+          <td class="px-4 py-2">{{ m.torre_destino.numero|default:"—" }}</td>
+          <td class="px-4 py-2 text-xs">
+            {% if m.estado_previo and m.estado_nuevo and m.estado_previo != m.estado_nuevo %}
+              {{ m.estado_previo }} → {{ m.estado_nuevo }}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Sin movimientos registrados</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

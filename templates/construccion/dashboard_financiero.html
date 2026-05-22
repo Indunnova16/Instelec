@@ -59,8 +59,11 @@
       </thead>
       <tbody>
         {% for r in resumen %}
-        <tr class="border-t {% if r.alerta %}bg-red-50 dark:bg-red-900/20{% endif %}">
-          <td class="px-4 py-2 {% if r.categoria.tipo == 'INGRESO' %}font-medium text-green-700{% endif %}">{{ r.categoria.nombre }}</td>
+        <tr class="border-t {% if r.alerta %}bg-red-50 dark:bg-red-900/20{% endif %} hover:bg-gray-50">
+          <td class="px-4 py-2 {% if r.categoria.tipo == 'INGRESO' %}font-medium text-green-700{% endif %}">
+            <a href="{% url 'construccion:categoria_drilldown' proyecto.id r.categoria.id %}"
+               class="text-blue-600 hover:underline">{{ r.categoria.nombre }}</a>
+          </td>
           <td class="px-4 py-2 text-right">${{ r.presupuesto|floatformat:0 }}</td>
           <td class="px-4 py-2 text-right">${{ r.real|floatformat:0 }}</td>
           <td class="px-4 py-2 text-right {% if r.variacion < 0 %}text-green-600{% elif r.variacion > 0 %}text-red-600{% endif %}">
@@ -81,6 +84,27 @@
       </tbody>
     </table>
   </div>
+
+  <!-- Curva S financiera -->
+  {% if curva_s_fin %}
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <h2 class="text-lg font-semibold mb-4">Curva S Financiera (acumulado)</h2>
+    <canvas id="curvaSFin" height="80"></canvas>
+  </div>
+  <script>
+    new Chart(document.getElementById('curvaSFin'), {
+      type: 'line',
+      data: {
+        labels: [{% for m in curva_s_fin %}'{{ m.mes }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+        datasets: [
+          { label: 'Presupuesto acum.', data: [{% for m in curva_s_fin %}{{ m.presupuesto_acum }}{% if not forloop.last %},{% endif %}{% endfor %}], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.3 },
+          { label: 'Gastado acum.', data: [{% for m in curva_s_fin %}{{ m.gastado_acum }}{% if not forloop.last %},{% endif %}{% endfor %}], borderColor: 'rgb(239, 68, 68)', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.3 },
+        ]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+  </script>
+  {% endif %}
 
   <!-- Bar chart presupuesto vs real top 10 -->
   {% if resumen %}
