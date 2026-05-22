@@ -610,6 +610,9 @@ class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
         aviso_sap = request.POST.get('aviso_sap', '').strip()
         orden_sap = request.POST.get('orden_sap', '').strip()
         observaciones = request.POST.get('observaciones_programacion', '').strip()
+        tipo_costo = request.POST.get('tipo_costo', Actividad.TipoCosto.FIJO).strip() or Actividad.TipoCosto.FIJO
+        costo_unitario = request.POST.get('costo_unitario', '0').strip() or '0'
+        presupuesto_planeado = request.POST.get('presupuesto_planeado', '0').strip() or '0'
 
         # If aviso_sap provided but missing other fields, try to fill from existing activity
         tipo_actividad = None
@@ -693,6 +696,18 @@ class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
                 aviso_sap = ''
 
         try:
+            from decimal import Decimal, InvalidOperation
+            try:
+                costo_unitario_dec = Decimal(costo_unitario)
+            except (InvalidOperation, TypeError):
+                costo_unitario_dec = Decimal('0')
+            try:
+                presupuesto_dec = Decimal(presupuesto_planeado)
+            except (InvalidOperation, TypeError):
+                presupuesto_dec = Decimal('0')
+            if tipo_costo not in dict(Actividad.TipoCosto.choices):
+                tipo_costo = Actividad.TipoCosto.FIJO
+
             actividad = Actividad.objects.create(
                 tipo_actividad=tipo_actividad,
                 linea=linea,
@@ -702,10 +717,16 @@ class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
                 aviso_sap=aviso_sap,
                 orden_sap=orden_sap,
                 observaciones_programacion=observaciones,
+                tipo_costo=tipo_costo,
+                costo_unitario=costo_unitario_dec,
+                presupuesto_planeado=presupuesto_dec,
                 estado=Actividad.Estado.PENDIENTE,
                 prioridad=Actividad.Prioridad.NORMAL,
             )
-            messages.success(request, f'Actividad creada exitosamente.')
+            # Si ya viene con cuadrilla principal, sincroniza también el M2M
+            if cuadrilla:
+                actividad.cuadrillas.add(cuadrilla)  # dispara recalculo via signal
+            messages.success(request, 'Actividad creada exitosamente.')
             return redirect('actividades:detalle', pk=actividad.pk)
         except Exception as e:
             messages.error(request, f'Error al guardar: {str(e)}')

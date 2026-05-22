@@ -83,6 +83,73 @@
     </div>
     {% endif %}
 
+    {% if actividad.presupuesto_planeado or actividad.costo_acumulado %}
+    {% with eb=actividad.estado_presupuesto pct=actividad.porcentaje_gastado %}
+    <div class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-3">
+        <div class="flex items-center justify-between">
+            <h4 class="font-medium text-gray-800 dark:text-gray-200 text-sm">Costos y presupuesto</h4>
+            <span class="text-xs px-2 py-0.5 rounded-full
+                {% if eb == 'rojo' %}bg-red-100 text-red-800
+                {% elif eb == 'amarillo' %}bg-yellow-100 text-yellow-800
+                {% elif eb == 'verde' %}bg-green-100 text-green-800
+                {% else %}bg-gray-100 text-gray-700{% endif %}">
+                {{ actividad.get_tipo_costo_display }}
+            </span>
+        </div>
+        <div class="grid grid-cols-3 gap-3 text-sm">
+            <div>
+                <p class="text-[11px] uppercase text-gray-500">Planeado</p>
+                <p class="font-semibold text-gray-900 dark:text-white">${{ actividad.presupuesto_planeado|floatformat:0 }}</p>
+            </div>
+            <div>
+                <p class="text-[11px] uppercase text-gray-500">Gastado</p>
+                <p class="font-semibold text-gray-900 dark:text-white">${{ actividad.costo_acumulado|floatformat:0 }}</p>
+            </div>
+            <div>
+                <p class="text-[11px] uppercase text-gray-500">Restante</p>
+                <p class="font-semibold
+                    {% if eb == 'rojo' %}text-red-600
+                    {% elif eb == 'amarillo' %}text-yellow-600
+                    {% else %}text-green-600{% endif %}">
+                    ${{ actividad.presupuesto_restante|floatformat:0 }}
+                </p>
+            </div>
+        </div>
+        {% if actividad.presupuesto_planeado %}
+        <div>
+            <div class="flex justify-between text-[11px] text-gray-500 mb-1">
+                <span>{{ pct }}% gastado</span>
+                {% if eb == 'rojo' %}<span class="text-red-600 font-medium">⚠️ Presupuesto crítico</span>{% endif %}
+            </div>
+            <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                <div class="h-2 rounded-full
+                    {% if eb == 'rojo' %}bg-red-500
+                    {% elif eb == 'amarillo' %}bg-yellow-500
+                    {% else %}bg-green-500{% endif %}"
+                     style="width: {% if pct > 100 %}100{% else %}{{ pct }}{% endif %}%"></div>
+            </div>
+        </div>
+        {% endif %}
+        {% if actividad.tipo_costo == 'FIJO' and actividad.costo_unitario %}
+        <p class="text-xs text-gray-500">
+            ${{ actividad.costo_unitario|floatformat:0 }} × {{ actividad.cuadrillas.count }} cuadrilla{{ actividad.cuadrillas.count|pluralize }} =
+            ${{ actividad.costo_acumulado|floatformat:0 }} (recalculado automático)
+        </p>
+        {% endif %}
+        {% if actividad.cuadrillas.exists %}
+        <div class="pt-2 border-t border-gray-200 dark:border-gray-600">
+            <p class="text-[11px] uppercase text-gray-500 mb-1">Cuadrillas asignadas</p>
+            <ul class="text-xs text-gray-700 dark:text-gray-300 space-y-0.5">
+                {% for c in actividad.cuadrillas.all %}
+                <li>• {{ c.nombre }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endwith %}
+    {% endif %}
+
     <!-- Acciones -->
     <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-600">
         <a href="{% url 'actividades:detalle' actividad.id %}"

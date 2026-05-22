@@ -278,6 +278,40 @@ class Actividad(BaseModel):
         help_text='Valor total de facturación de la actividad'
     )
 
+    # Cost & budget (#46 + #47)
+    class TipoCosto(models.TextChoices):
+        FIJO = 'FIJO', 'Costo fijo'
+        VARIABLE = 'VARIABLE', 'Costo variable'
+
+    tipo_costo = models.CharField(
+        'Tipo de costo',
+        max_length=10,
+        choices=TipoCosto.choices,
+        default=TipoCosto.FIJO,
+        help_text='FIJO: costo unitario × cuadrillas asignadas. VARIABLE: costo se registra manual.'
+    )
+    costo_unitario = models.DecimalField(
+        'Costo unitario',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Precio por cuadrilla-día (aplica si tipo_costo=FIJO)'
+    )
+    presupuesto_planeado = models.DecimalField(
+        'Presupuesto planeado',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Dinero asignado al aviso para ejecutarlo'
+    )
+    costo_acumulado = models.DecimalField(
+        'Costo acumulado',
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Dinero ya gastado. Calculado automáticamente si tipo_costo=FIJO.'
+    )
+
     # Scheduling
     fecha_programada = models.DateField('Fecha programada')
     fecha_reprogramada = models.DateField(
@@ -362,6 +396,45 @@ class Actividad(BaseModel):
     def rendimiento_esperado_diario(self):
         """Retorna el rendimiento esperado en vanos por día según el tipo de actividad."""
         return self.tipo_actividad.rendimiento_estandar_vanos
+
+    @property
+    def presupuesto_restante(self):
+        from decimal import Decimal
+        planeado = self.presupuesto_planeado or Decimal('0')
+        gastado = self.costo_acumulado or Decimal('0')
+        return planeado - gastado
+
+    @property
+    def porcentaje_gastado(self):
+        """0-100. Devuelve 0 si presupuesto_planeado es 0."""
+        from decimal import Decimal
+        if not self.presupuesto_planeado:
+            return Decimal('0')
+        pct = (self.costo_acumulado / self.presupuesto_planeado) * 100
+        return round(pct, 1)
+
+    @property
+    def estado_presupuesto(self):
+        """sin_presupuesto / verde (<50) / amarillo (50-80) / rojo (>80)."""
+        if not self.presupuesto_planeado:
+            return 'sin_presupuesto'
+        pct = self.porcentaje_gastado
+        if pct < 50:
+            return 'verde'
+        if pct < 80:
+            return 'amarillo'
+        return 'rojo'
+
+    def recalcular_costo(self, dias_por_cuadrilla=1):
+        """Recalcula costo_acumulado para tipo_costo=FIJO.
+        Si tipo_costo=VARIABLE, no toca costo_acumulado (gestión manual)."""
+        from decimal import Decimal
+        if self.tipo_costo != self.TipoCosto.FIJO:
+            return
+        n_cuadrillas = self.cuadrillas.count()
+        unitario = self.costo_unitario or Decimal('0')
+        self.costo_acumulado = unitario * Decimal(n_cuadrillas) * Decimal(dias_por_cuadrilla)
+        self.save(update_fields=['costo_acumulado', 'updated_at'])
 
     def actualizar_avance(self, nuevo_porcentaje):
         """Actualiza el porcentaje de avance de la actividad."""

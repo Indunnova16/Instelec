@@ -92,6 +92,29 @@
                         </span>
                         {% endif %}
                     </p>
+
+                    {% if actividad.presupuesto_planeado %}
+                    {% with eb=actividad.estado_presupuesto pct=actividad.porcentaje_gastado %}
+                    <div class="mt-2 max-w-md" title="Costo acumulado: ${{ actividad.costo_acumulado|floatformat:0 }} | Restante: ${{ actividad.presupuesto_restante|floatformat:0 }}">
+                        <div class="flex justify-between text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">
+                            <span>Presupuesto ${{ actividad.presupuesto_planeado|floatformat:0 }}</span>
+                            <span class="font-medium
+                                {% if eb == 'rojo' %}text-red-600 dark:text-red-400
+                                {% elif eb == 'amarillo' %}text-yellow-600 dark:text-yellow-400
+                                {% else %}text-green-600 dark:text-green-400{% endif %}">
+                                {{ pct }}% gastado
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                            <div class="h-1.5 rounded-full transition-all
+                                {% if eb == 'rojo' %}bg-red-500
+                                {% elif eb == 'amarillo' %}bg-yellow-500
+                                {% else %}bg-green-500{% endif %}"
+                                 style="width: {% if pct > 100 %}100{% else %}{{ pct }}{% endif %}%"></div>
+                        </div>
+                    </div>
+                    {% endwith %}
+                    {% endif %}
                 </div>
             </div>
 
