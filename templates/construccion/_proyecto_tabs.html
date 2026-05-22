@@ -1,29 +1,8 @@
-<!-- Navegación de pestañas persistente para proyecto construcción -->
-<div class="flex flex-wrap border-b border-gray-200 dark:border-gray-700 mb-6 -mx-1">
-  <a href="{% url 'construccion:contrato' proyecto.id %}" class="tab {% if active_tab == 'contrato' %}tab-active{% endif %}">Contrato</a>
-  <a href="{% url 'construccion:ingenieria' proyecto.id %}" class="tab {% if active_tab == 'ingenieria' %}tab-active{% endif %}">Ingeniería</a>
-  <a href="{% url 'construccion:preliminares' proyecto.id %}" class="tab {% if active_tab == 'preliminares' %}tab-active{% endif %}">Preliminares</a>
-  <a href="{% url 'construccion:social_predial' proyecto.id %}" class="tab {% if active_tab == 'social_predial' %}tab-active{% endif %}">🏘️ Sociopredial</a>
-  <a href="{% url 'construccion:ambiental' proyecto.id %}" class="tab {% if active_tab == 'ambiental' %}tab-active{% endif %}">🌳 Ambiental</a>
-  <a href="{% url 'construccion:torres_lista' proyecto.id %}" class="tab {% if active_tab == 'torres_lista' %}tab-active{% endif %}">Torres</a>
-  <a href="{% url 'construccion:obra_civil_lista' proyecto.id %}" class="tab {% if active_tab == 'obra_civil' %}tab-active{% endif %}">🏗️ Obra civil</a>
-  <a href="{% url 'construccion:montaje_lista' proyecto.id %}" class="tab {% if active_tab == 'montaje' %}tab-active{% endif %}">🔩 Montaje</a>
-  <a href="{% url 'construccion:tendido_lista' proyecto.id %}" class="tab {% if active_tab == 'tendido' %}tab-active{% endif %}">⚡ Tendido</a>
-  <a href="{% url 'construccion:protecciones_lista' proyecto.id %}" class="tab {% if active_tab == 'protecciones' %}tab-active{% endif %}">Protecciones</a>
-  <a href="{% url 'construccion:kits_lista' proyecto.id %}" class="tab {% if active_tab == 'kits' %}tab-active{% endif %}">Kits</a>
-  <a href="{% url 'construccion:pruebas_lista' proyecto.id %}" class="tab {% if active_tab == 'pruebas' %}tab-active{% endif %}">Pruebas</a>
-  <a href="{% url 'construccion:cronograma' proyecto.id %}" class="tab {% if active_tab == 'cronograma' %}tab-active{% endif %}">Cronograma</a>
-  <a href="{% url 'construccion:dashboard_avance' proyecto.id %}" class="tab {% if active_tab == 'dashboard_avance' %}tab-active{% endif %}">📊 Avance</a>
-  <a href="{% url 'construccion:financiero_grid' proyecto.id %}" class="tab {% if active_tab == 'financiero' %}tab-active{% endif %}">P&G</a>
-  <a href="{% url 'construccion:dashboard_financiero' proyecto.id %}" class="tab {% if active_tab == 'dashboard_financiero' %}tab-active{% endif %}">💰 Dashboard fin</a>
-  <a href="{% url 'construccion:cilindros_pendientes' proyecto.id %}" class="tab {% if active_tab == 'cilindros' %}tab-active{% endif %}">🧪 Cilindros</a>
+{# Breadcrumb compacto. La navegación principal entre categorías está ahora
+   en el sidebar izquierdo (panel lateral) — issue #71. #}
+<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
+  <a href="{% url 'construccion:lista' %}" class="hover:underline">Proyectos</a>
+  <span>›</span>
+  <a href="{% url 'construccion:dashboard' proyecto.id %}" class="hover:underline font-medium text-gray-900 dark:text-white">{{ proyecto.nombre|truncatechars:60 }}</a>
+  <span class="text-xs text-gray-500 ml-2">· Navega entre categorías desde el panel izquierdo</span>
 </div>
-<style>
-.tab { padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent;
-       color: rgb(75 85 99); transition: all .15s; white-space: nowrap; }
-.tab:hover { color: rgb(17 24 39); }
-.tab-active { border-bottom-color: rgb(37 99 235); color: rgb(37 99 235); }
-.dark .tab { color: rgb(156 163 175); }
-.dark .tab:hover { color: rgb(229 231 235); }
-.dark .tab-active { color: rgb(96 165 250); }
-</style>
