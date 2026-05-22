@@ -1,9 +1,5 @@
 <!-- Navegación de pestañas persistente para proyecto construcción -->
 <div class="flex flex-wrap border-b border-gray-200 dark:border-gray-700 mb-6 -mx-1">
-  {% with tabs="contrato:Contrato,ingenieria:Ingeniería,preliminares:Preliminares,torres_lista:Torres,protecciones_lista:Protecciones,kits_lista:Kits,pruebas_lista:Pruebas,cronograma:Cronograma,dashboard_avance:Dashboard avance,financiero_grid:P&G,dashboard_financiero:Dashboard financiero,cilindros_pendientes:Cilindros" %}
-  {% for entry in tabs|cut:" "|stringformat:"s"|slice:":1000" as_unused %}{% endfor %}
-  {% endwith %}
-  {# Render manual; el bucle anterior es placeholder pero no es trivial en plain template — listamos a mano #}
   <a href="{% url 'construccion:contrato' proyecto.id %}" class="tab {% if active_tab == 'contrato' %}tab-active{% endif %}">Contrato</a>
   <a href="{% url 'construccion:ingenieria' proyecto.id %}" class="tab {% if active_tab == 'ingenieria' %}tab-active{% endif %}">Ingeniería</a>
   <a href="{% url 'construccion:preliminares' proyecto.id %}" class="tab {% if active_tab == 'preliminares' %}tab-active{% endif %}">Preliminares</a>
