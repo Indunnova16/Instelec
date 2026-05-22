@@ -184,11 +184,44 @@ class PataObra(BaseModel):
     nivelacion_ok = models.BooleanField('Nivelación', default=False)
     nivelacion_fecha = models.DateField('Fecha nivelación', null=True, blank=True)
 
+    # Bloque 1: Cerramiento (#53)
+    cerramiento_finalizado_ok = models.BooleanField(
+        'Cerramiento finalizado', default=False,
+        help_text='Habilita inicio de excavación (regla Gabriel Valencia)')
+    cerramiento_fecha = models.DateField('Fecha cerramiento', null=True, blank=True)
+
+    # Bloque 2: Excavación detalles (#53)
+    tipo_excavacion = models.CharField(
+        'Tipo de excavación', max_length=20, blank=True,
+        choices=[('MANUAL', 'Manual'), ('MAQUINA', 'Con máquina')])
+    aplica_pilotes = models.BooleanField('Aplica instalación de pilotes', default=False)
+
+    # Bloque 4: Acero — diseño vs real (control materiales #54)
+    acero_solicitado_kg = models.FloatField('Acero solicitado según planilla (kg)',
+                                            null=True, blank=True)
+    acero_instalado_kg = models.FloatField('Acero instalado (kg)', null=True, blank=True)
+
     # Concrete pour
     vaciado_ok = models.BooleanField('Vaciado de hormigón', default=False)
-    vaciado_fecha = models.DateField('Fecha vaciado', null=True, blank=True)
+    vaciado_fecha = models.DateField('Fecha vaciado', null=True, blank=True,
+        help_text='Trigger para alarmas de cilindros 7/14/21/51 días (#55)')
     concreto_m3 = models.FloatField('Concreto (m3)', null=True, blank=True)
     concreto_psi = models.CharField('Resistencia concreto', max_length=10, blank=True, help_text='1500, 2000, etc.')
+
+    # Bloque 5: Vaciado — diseño vs real concreto (control materiales #54)
+    concreto_solicitado_m3 = models.FloatField('Concreto solicitado (m3)',
+                                               null=True, blank=True)
+    concreto_instalado_m3 = models.FloatField('Concreto instalado (m3)',
+                                              null=True, blank=True)
+    resistencia_especificada_mpa = models.PositiveSmallIntegerField(
+        'Resistencia especificada (MPa)', null=True, blank=True,
+        help_text='Ej: 21, 28')
+
+    # Bloque 5: Cilindros de fallo (resultados de pruebas — alarmas #55)
+    cilindro_7d_mpa = models.FloatField('Cilindro 7 días (MPa)', null=True, blank=True)
+    cilindro_14d_mpa = models.FloatField('Cilindro 14 días (MPa)', null=True, blank=True)
+    cilindro_21d_mpa = models.FloatField('Cilindro 21 días (MPa)', null=True, blank=True)
+    cilindro_51d_mpa = models.FloatField('Cilindro 51 días (MPa)', null=True, blank=True)
 
     # Backfill & compaction
     relleno_compactacion_ok = models.BooleanField('Relleno y compactación', default=False)
@@ -232,6 +265,111 @@ class PataObra(BaseModel):
         ]
         completadas = sum(1 for a in actividades if a)
         return round((completadas / len(actividades)) * 100, 2)
+
+    # === Bloques secuenciales de Obra Civil (#53) ===
+
+    BLOQUES_ORDEN = [
+        ('CERRAMIENTO', 'Cerramiento'),
+        ('EXCAVACION', 'Excavación'),
+        ('SOLADO', 'Solado'),
+        ('ACERO', 'Instalación de Acero'),
+        ('VACIADO', 'Vaciado en Concreto'),
+        ('COMPACTACION', 'Relleno y Compactación'),
+    ]
+
+    @property
+    def bloques_estado(self):
+        """Dict {bloque: bool ok}. Refleja la cascada del issue #53."""
+        return {
+            'CERRAMIENTO': self.cerramiento_finalizado_ok,
+            'EXCAVACION': self.excavacion_ok,
+            'SOLADO': self.solado_ok,
+            'ACERO': self.acero_refuerzo_ok,
+            'VACIADO': self.vaciado_ok,
+            'COMPACTACION': self.relleno_compactacion_ok,
+        }
+
+    @property
+    def bloque_actual(self):
+        """Próximo bloque pendiente. None si todos completos."""
+        estado = self.bloques_estado
+        for codigo, _ in self.BLOQUES_ORDEN:
+            if not estado[codigo]:
+                return codigo
+        return None
+
+    @property
+    def lista_para_montaje(self):
+        """True si los 6 bloques de Obra Civil están completos."""
+        return all(self.bloques_estado.values())
+
+    @property
+    def desviacion_acero_pct(self):
+        """% de desviación instalado vs solicitado. None si falta data. (#54)"""
+        if not self.acero_solicitado_kg or self.acero_solicitado_kg == 0:
+            return None
+        if self.acero_instalado_kg is None:
+            return None
+        return round(
+            ((self.acero_instalado_kg - self.acero_solicitado_kg)
+             / self.acero_solicitado_kg) * 100, 1
+        )
+
+    @property
+    def desviacion_concreto_pct(self):
+        """% de desviación instalado vs solicitado. None si falta data. (#54)"""
+        if not self.concreto_solicitado_m3 or self.concreto_solicitado_m3 == 0:
+            return None
+        if self.concreto_instalado_m3 is None:
+            return None
+        return round(
+            ((self.concreto_instalado_m3 - self.concreto_solicitado_m3)
+             / self.concreto_solicitado_m3) * 100, 1
+        )
+
+    @property
+    def alarma_materiales(self):
+        """True si alguna desviación ≥5% absoluta (regla #54)."""
+        for d in (self.desviacion_acero_pct, self.desviacion_concreto_pct):
+            if d is not None and abs(d) >= 5.0:
+                return True
+        return False
+
+    @property
+    def cilindros_pendientes(self):
+        """Lista de cilindros (7/14/21/51 días) cuya fecha de prueba ya
+        pasó pero el resultado MPa no se cargó. Para alertas (#55)."""
+        if not self.vaciado_fecha:
+            return []
+        from datetime import date
+        hoy = date.today()
+        dias = (hoy - self.vaciado_fecha).days
+        pendientes = []
+        for n_dias, atributo in [(7, 'cilindro_7d_mpa'),
+                                 (14, 'cilindro_14d_mpa'),
+                                 (21, 'cilindro_21d_mpa'),
+                                 (51, 'cilindro_51d_mpa')]:
+            if dias >= n_dias and getattr(self, atributo) is None:
+                pendientes.append(n_dias)
+        return pendientes
+
+    @property
+    def cilindros_proximos(self):
+        """Lista de cilindros cuya prueba está a ≤2 días. Para pre-alertas (#55)."""
+        if not self.vaciado_fecha:
+            return []
+        from datetime import date
+        hoy = date.today()
+        dias = (hoy - self.vaciado_fecha).days
+        proximos = []
+        for n_dias, atributo in [(7, 'cilindro_7d_mpa'),
+                                 (14, 'cilindro_14d_mpa'),
+                                 (21, 'cilindro_21d_mpa'),
+                                 (51, 'cilindro_51d_mpa')]:
+            faltan = n_dias - dias
+            if 0 < faltan <= 2 and getattr(self, atributo) is None:
+                proximos.append((n_dias, faltan))
+        return proximos
 
 
 class FaseTorre(BaseModel):
