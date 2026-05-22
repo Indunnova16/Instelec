@@ -39,6 +39,16 @@ class ProyectoConstruccion(BaseModel):
     )
     observaciones = models.TextField('Observaciones', blank=True)
 
+    # Pesos editables por actividad — para % avance ponderado (#61)
+    # Defaults según Gabriel Acevedo (Reunión 7, 00:11:36):
+    # excavación 30%, vaciado 40%, relleno 20% — ajustables.
+    peso_cerramiento_pct = models.PositiveSmallIntegerField('Peso Cerramiento %', default=5)
+    peso_excavacion_pct = models.PositiveSmallIntegerField('Peso Excavación %', default=30)
+    peso_solado_pct = models.PositiveSmallIntegerField('Peso Solado %', default=5)
+    peso_acero_pct = models.PositiveSmallIntegerField('Peso Acero %', default=15)
+    peso_vaciado_pct = models.PositiveSmallIntegerField('Peso Vaciado %', default=30)
+    peso_compactacion_pct = models.PositiveSmallIntegerField('Peso Compactación %', default=15)
+
     class Meta:
         db_table = 'construccion_proyectos'
         verbose_name = 'Proyecto de Construcción'
@@ -87,6 +97,83 @@ class ProyectoConstruccion(BaseModel):
             return 0
         total_pct = sum(f.porcentaje_tendido for f in self.fases.all())
         return round(total_pct / torres.count(), 2) if torres.exists() else 0
+
+    @property
+    def porcentaje_avance_civil_ponderado(self):
+        """% avance OC ponderado por los pesos editables del proyecto (#61).
+        Cada bloque aporta su peso solo cuando está completo en las 4 patas."""
+        torres = list(self.torres.prefetch_related('pata_obra').all())
+        if not torres:
+            return 0
+        pesos = {
+            'CERRAMIENTO': self.peso_cerramiento_pct,
+            'EXCAVACION': self.peso_excavacion_pct,
+            'SOLADO': self.peso_solado_pct,
+            'ACERO': self.peso_acero_pct,
+            'VACIADO': self.peso_vaciado_pct,
+            'COMPACTACION': self.peso_compactacion_pct,
+        }
+        total_pesos = sum(pesos.values()) or 1
+        pct_por_torre = []
+        for torre in torres:
+            patas = list(torre.pata_obra.all())
+            if not patas:
+                pct_por_torre.append(0)
+                continue
+            peso_acumulado = 0
+            for bloque, peso in pesos.items():
+                patas_ok = sum(1 for p in patas if p.bloques_estado.get(bloque))
+                peso_acumulado += peso * (patas_ok / len(patas))
+            pct_por_torre.append((peso_acumulado / total_pesos) * 100)
+        return round(sum(pct_por_torre) / len(pct_por_torre), 2)
+
+    def curva_s_data(self):
+        """Datos para Chart.js curva S: lista de tuplas (mes, planeado_acum, real_acum)
+        agrupados a nivel proyecto. Lee de ProgramacionFase + valores reales."""
+        from collections import defaultdict
+        from datetime import date
+        from .models import ProgramacionFase
+        fases = ProgramacionFase.objects.filter(proyecto=self)
+        if not fases.exists():
+            return []
+        # Determine project span
+        fechas_inicio = [f.fecha_inicio_planeada for f in fases if f.fecha_inicio_planeada]
+        fechas_fin = [f.fecha_fin_planeada for f in fases if f.fecha_fin_planeada]
+        if not fechas_inicio or not fechas_fin:
+            return []
+        inicio = min(fechas_inicio)
+        fin = max(fechas_fin)
+        # Genera lista mes-a-mes
+        meses = []
+        cursor = date(inicio.year, inicio.month, 1)
+        while cursor <= fin:
+            meses.append(cursor)
+            mes_next = cursor.month + 1
+            anio_next = cursor.year + (1 if mes_next > 12 else 0)
+            mes_next = 1 if mes_next > 12 else mes_next
+            cursor = date(anio_next, mes_next, 1)
+        # Para cada mes, suma % esperado acumulado (lineal por fase)
+        resultado = []
+        for m in meses:
+            esperado = 0
+            for fase in fases:
+                if not fase.fecha_inicio_planeada or not fase.fecha_fin_planeada:
+                    continue
+                if m < fase.fecha_inicio_planeada:
+                    aporte = 0
+                elif m >= fase.fecha_fin_planeada:
+                    aporte = fase.peso_pct
+                else:
+                    total_dias = (fase.fecha_fin_planeada - fase.fecha_inicio_planeada).days
+                    transcurridos = (m - fase.fecha_inicio_planeada).days
+                    aporte = (transcurridos / total_dias) * fase.peso_pct if total_dias else 0
+                esperado += aporte
+            resultado.append({
+                'mes': m.isoformat(),
+                'planeado': round(esperado, 1),
+                'real': None,  # Calcular real con histórico de avances exige snapshots — pendiente
+            })
+        return resultado
 
     # === Financiero (#69 #66 #70) ===
 
