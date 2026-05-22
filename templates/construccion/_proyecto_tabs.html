@@ -1,30 +1,28 @@
 <!-- Navegación de pestañas persistente para proyecto construcción -->
-<div class="flex border-b border-gray-200 dark:border-gray-700 mb-6">
-    <a href="{% url 'construccion:contrato' proyecto.id %}"
-       class="px-6 py-3 text-sm font-medium border-b-2 transition
-              {% if active_tab == 'contrato' %}
-                border-blue-600 text-blue-600 dark:text-blue-400
-              {% else %}
-                border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200
-              {% endif %}">
-        Contrato
-    </a>
-    <a href="{% url 'construccion:ingenieria' proyecto.id %}"
-       class="px-6 py-3 text-sm font-medium border-b-2 transition
-              {% if active_tab == 'ingenieria' %}
-                border-blue-600 text-blue-600 dark:text-blue-400
-              {% else %}
-                border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200
-              {% endif %}">
-        Ingeniería
-    </a>
-    <a href="{% url 'construccion:preliminares' proyecto.id %}"
-       class="px-6 py-3 text-sm font-medium border-b-2 transition
-              {% if active_tab == 'preliminares' %}
-                border-blue-600 text-blue-600 dark:text-blue-400
-              {% else %}
-                border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200
-              {% endif %}">
-        Preliminares
-    </a>
+<div class="flex flex-wrap border-b border-gray-200 dark:border-gray-700 mb-6 -mx-1">
+  {% with tabs="contrato:Contrato,ingenieria:Ingeniería,preliminares:Preliminares,torres_lista:Torres,protecciones_lista:Protecciones,kits_lista:Kits,pruebas_lista:Pruebas,cronograma:Cronograma,dashboard_avance:Dashboard avance,financiero_grid:P&G,dashboard_financiero:Dashboard financiero,cilindros_pendientes:Cilindros" %}
+  {% for entry in tabs|cut:" "|stringformat:"s"|slice:":1000" as_unused %}{% endfor %}
+  {% endwith %}
+  {# Render manual; el bucle anterior es placeholder pero no es trivial en plain template — listamos a mano #}
+  <a href="{% url 'construccion:contrato' proyecto.id %}" class="tab {% if active_tab == 'contrato' %}tab-active{% endif %}">Contrato</a>
+  <a href="{% url 'construccion:ingenieria' proyecto.id %}" class="tab {% if active_tab == 'ingenieria' %}tab-active{% endif %}">Ingeniería</a>
+  <a href="{% url 'construccion:preliminares' proyecto.id %}" class="tab {% if active_tab == 'preliminares' %}tab-active{% endif %}">Preliminares</a>
+  <a href="{% url 'construccion:torres_lista' proyecto.id %}" class="tab {% if active_tab == 'torres_lista' %}tab-active{% endif %}">Torres</a>
+  <a href="{% url 'construccion:protecciones_lista' proyecto.id %}" class="tab {% if active_tab == 'protecciones' %}tab-active{% endif %}">Protecciones</a>
+  <a href="{% url 'construccion:kits_lista' proyecto.id %}" class="tab {% if active_tab == 'kits' %}tab-active{% endif %}">Kits</a>
+  <a href="{% url 'construccion:pruebas_lista' proyecto.id %}" class="tab {% if active_tab == 'pruebas' %}tab-active{% endif %}">Pruebas</a>
+  <a href="{% url 'construccion:cronograma' proyecto.id %}" class="tab {% if active_tab == 'cronograma' %}tab-active{% endif %}">Cronograma</a>
+  <a href="{% url 'construccion:dashboard_avance' proyecto.id %}" class="tab {% if active_tab == 'dashboard_avance' %}tab-active{% endif %}">📊 Avance</a>
+  <a href="{% url 'construccion:financiero_grid' proyecto.id %}" class="tab {% if active_tab == 'financiero' %}tab-active{% endif %}">P&G</a>
+  <a href="{% url 'construccion:dashboard_financiero' proyecto.id %}" class="tab {% if active_tab == 'dashboard_financiero' %}tab-active{% endif %}">💰 Dashboard fin</a>
+  <a href="{% url 'construccion:cilindros_pendientes' proyecto.id %}" class="tab {% if active_tab == 'cilindros' %}tab-active{% endif %}">🧪 Cilindros</a>
 </div>
+<style>
+.tab { padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent;
+       color: rgb(75 85 99); transition: all .15s; white-space: nowrap; }
+.tab:hover { color: rgb(17 24 39); }
+.tab-active { border-bottom-color: rgb(37 99 235); color: rgb(37 99 235); }
+.dark .tab { color: rgb(156 163 175); }
+.dark .tab:hover { color: rgb(229 231 235); }
+.dark .tab-active { color: rgb(96 165 250); }
+</style>

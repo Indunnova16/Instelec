@@ -1,0 +1,16 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Revisión acero/formaleta/SPT base</h2>
+  <table class="kv">
+    <tr><td class="lbl">Acero refuerzo OK</td><td>{{ patas.0.acero_refuerzo_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Acero kg</td><td>{{ patas.0.acero_kg|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Planilla nivelación de stub</h2>
+  <table class="kv">
+    <tr><td class="lbl">Nivelación OK</td><td>{{ patas.0.nivelacion_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Fecha nivelación</td><td>{{ patas.0.nivelacion_fecha|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

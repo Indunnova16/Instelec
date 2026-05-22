@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard avance — {{ proyecto.nombre }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-start">
+    <div>
+      <h1 class="text-2xl font-bold">Dashboard de avance</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+    </div>
+    <a href="{% url 'construccion:cronograma' proyecto.id %}"
+       class="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50">
+       Editar cronograma
+    </a>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-indigo-500">
+      <p class="text-xs uppercase text-gray-500">Obra Civil (ponderado)</p>
+      <p class="text-2xl font-bold text-indigo-600">{{ avance_civil_ponderado }}%</p>
+      <p class="text-xs text-gray-400">Lineal: {{ avance_civil_lineal }}%</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-purple-500">
+      <p class="text-xs uppercase text-gray-500">Montaje</p>
+      <p class="text-2xl font-bold text-purple-600">{{ avance_montaje }}%</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-pink-500">
+      <p class="text-xs uppercase text-gray-500">Tendido</p>
+      <p class="text-2xl font-bold text-pink-600">{{ avance_tendido }}%</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">Torres listas montaje</p>
+      <p class="text-2xl font-bold text-green-600">{{ torres_lista_montaje }} / {{ total_torres }}</p>
+      <p class="text-xs text-gray-400">{{ torres_en_fases_paralelas }} en fases paralelas</p>
+    </div>
+  </div>
+
+  <!-- Curva S -->
+  {% if curva_s %}
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <h2 class="text-lg font-semibold mb-4">Curva S — Planeado acumulado</h2>
+    <canvas id="curvaS" height="80"></canvas>
+  </div>
+  <script>
+    const ctx = document.getElementById('curvaS').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [{% for m in curva_s %}'{{ m.mes }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+        datasets: [{
+          label: 'Planeado %',
+          data: [{% for m in curva_s %}{{ m.planeado|default:0 }}{% if not forloop.last %},{% endif %}{% endfor %}],
+          borderColor: 'rgb(59, 130, 246)',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          fill: true, tension: 0.3,
+        }]
+      },
+      options: {
+        responsive: true, scales: { y: { beginAtZero: true, max: 100 } }
+      }
+    });
+  </script>
+  {% else %}
+  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+    Para ver la curva S, primero define el cronograma con fechas de inicio y fin.
+    <a href="{% url 'construccion:cronograma' proyecto.id %}" class="font-medium underline">Ir al cronograma →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

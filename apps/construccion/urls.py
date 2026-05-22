@@ -69,4 +69,52 @@ urlpatterns = [
     # Planillas PDF para firma de interventoría (#64)
     path('planilla/<str:codigo_ft>/torre/<uuid:torre_id>/',
          login_required(descargar_planilla_torre), name='descargar_planilla'),
+
+    # ====== Modelos nuevos: CRUDs UI ======
+
+    # Obras de protección (#59)
+    path('<uuid:proyecto_id>/protecciones/',
+         views.ObraProteccionListView.as_view(), name='protecciones_lista'),
+    path('<uuid:proyecto_id>/protecciones/crear/',
+         views.ObraProteccionCreateView.as_view(), name='protecciones_crear'),
+    path('<uuid:proyecto_id>/protecciones/<uuid:pk>/editar/',
+         views.ObraProteccionUpdateView.as_view(), name='protecciones_editar'),
+
+    # Pruebas técnicas (#60)
+    path('<uuid:proyecto_id>/pruebas/',
+         views.PruebaTecnicaListView.as_view(), name='pruebas_lista'),
+    path('<uuid:proyecto_id>/pruebas/crear/',
+         views.PruebaTecnicaCreateView.as_view(), name='pruebas_crear'),
+    path('<uuid:proyecto_id>/pruebas/<uuid:pk>/editar/',
+         views.PruebaTecnicaUpdateView.as_view(), name='pruebas_editar'),
+
+    # Kits de cerramiento (#65)
+    path('<uuid:proyecto_id>/kits/',
+         views.KitCerramientoListView.as_view(), name='kits_lista'),
+    path('<uuid:proyecto_id>/kits/crear/',
+         views.KitCerramientoCreateView.as_view(), name='kits_crear'),
+    path('<uuid:proyecto_id>/kits/<uuid:pk>/editar/',
+         views.KitCerramientoUpdateView.as_view(), name='kits_editar'),
+
+    # Cronograma (#68)
+    path('<uuid:proyecto_id>/cronograma/',
+         views.CronogramaView.as_view(), name='cronograma'),
+
+    # Dashboards (#61 #70)
+    path('<uuid:proyecto_id>/dashboard-avance/',
+         views.DashboardAvanceView.as_view(), name='dashboard_avance'),
+    path('<uuid:proyecto_id>/dashboard-financiero/',
+         views.DashboardFinancieroView.as_view(), name='dashboard_financiero'),
+
+    # Financiero PDEO (#69)
+    path('<uuid:proyecto_id>/financiero/',
+         views.FinancieroGridView.as_view(), name='financiero_grid'),
+    path('<uuid:proyecto_id>/financiero/periodo/crear/',
+         views.PeriodoFinancieroCreateView.as_view(), name='periodo_crear'),
+    path('<uuid:proyecto_id>/financiero/movimiento/save/',
+         views.MovimientoFinancieroSaveView.as_view(), name='movimiento_save'),
+
+    # Cilindros pendientes (#55)
+    path('<uuid:proyecto_id>/cilindros/',
+         views.CilindrosPendientesView.as_view(), name='cilindros_pendientes'),
 ]

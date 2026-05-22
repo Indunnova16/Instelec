@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Obras de Protección — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Obras de Protección</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+    </div>
+    <a href="{% url 'construccion:protecciones_crear' proyecto.id %}"
+       class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Nueva obra</a>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">Torre</th>
+          <th class="px-4 py-2 text-left">Tipos</th>
+          <th class="px-4 py-2 text-right">m trinchos</th>
+          <th class="px-4 py-2 text-right">m cunetas</th>
+          <th class="px-4 py-2 text-left">Cuadrilla</th>
+          <th class="px-4 py-2 text-center">Estado</th>
+          <th class="px-4 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in protecciones %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-4 py-2 font-medium">{{ p.torre.numero }}</td>
+          <td class="px-4 py-2 text-xs">{{ p.tipos_medida }}</td>
+          <td class="px-4 py-2 text-right">{{ p.metros_trinchos|default:"—" }}</td>
+          <td class="px-4 py-2 text-right">{{ p.metros_cunetas|default:"—" }}</td>
+          <td class="px-4 py-2">{{ p.cuadrilla.nombre|default:"—" }}</td>
+          <td class="px-4 py-2 text-center">
+            {% if p.completada_ok %}
+              <span class="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">✓ Completada</span>
+            {% else %}
+              <span class="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">En curso</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right">
+            <a href="{% url 'construccion:protecciones_editar' proyecto.id p.id %}"
+               class="text-blue-600 hover:underline">Editar</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">
+          No hay obras de protección registradas.
+          <a href="{% url 'construccion:protecciones_crear' proyecto.id %}" class="text-blue-600 hover:underline">Crear la primera</a>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

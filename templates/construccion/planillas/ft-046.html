@@ -1,0 +1,17 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Control riega y tendido de cable</h2>
+  <table class="kv">
+    <tr><td class="lbl">Riega manila</td><td>{{ fase.riega_manila_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Riega guaya</td><td>{{ fase.riega_guaya_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Tendido conductor C1 fases A/B/C</td><td>{{ fase.tendido_conductor_a_ok|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

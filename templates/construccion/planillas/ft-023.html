@@ -1,0 +1,16 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Documentación SST excavaciones</h2>
+  <table class="kv">
+    <tr><td class="lbl">Procedimiento aprobado interventoría</td><td>{{ patas.0.observaciones|default:"—" }}</td></tr>
+    <tr><td class="lbl">Profundidad &gt;2m requiere documentación SST</td><td>{{ |default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

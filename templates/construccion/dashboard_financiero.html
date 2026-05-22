@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard financiero — {{ proyecto.nombre }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold">Dashboard financiero</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+    </div>
+    <a href="{% url 'construccion:financiero_grid' proyecto.id %}"
+       class="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50">
+       Editar P&G mensual
+    </a>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">Ingresos real</p>
+      <p class="text-2xl font-bold text-green-600">${{ totales.ingresos_real|floatformat:0 }}</p>
+      <p class="text-xs text-gray-400">Presup: ${{ totales.ingresos_presupuesto|floatformat:0 }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-500">
+      <p class="text-xs uppercase text-gray-500">Gastos real</p>
+      <p class="text-2xl font-bold text-red-600">${{ totales.gastos_real|floatformat:0 }}</p>
+      <p class="text-xs text-gray-400">Presup: ${{ totales.gastos_presupuesto|floatformat:0 }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500">
+      <p class="text-xs uppercase text-gray-500">Utilidad real</p>
+      <p class="text-2xl font-bold {% if totales.utilidad_real >= 0 %}text-blue-600{% else %}text-red-600{% endif %}">
+        ${{ totales.utilidad_real|floatformat:0 }}
+      </p>
+      <p class="text-xs text-gray-400">Presup: ${{ totales.utilidad_presupuesto|floatformat:0 }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-orange-500">
+      <p class="text-xs uppercase text-gray-500">Categorías en alerta</p>
+      <p class="text-2xl font-bold text-orange-600">{{ alertas|length }}</p>
+      <p class="text-xs text-gray-400">|variación| ≥ 50%</p>
+    </div>
+  </div>
+
+  <!-- Tabla resumen ejecutivo -->
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+      <h2 class="text-lg font-semibold">Resumen ejecutivo por categoría</h2>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">Categoría</th>
+          <th class="px-4 py-2 text-right">Presupuesto</th>
+          <th class="px-4 py-2 text-right">Real</th>
+          <th class="px-4 py-2 text-right">Variación</th>
+          <th class="px-4 py-2 text-right">% Var</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resumen %}
+        <tr class="border-t {% if r.alerta %}bg-red-50 dark:bg-red-900/20{% endif %}">
+          <td class="px-4 py-2 {% if r.categoria.tipo == 'INGRESO' %}font-medium text-green-700{% endif %}">{{ r.categoria.nombre }}</td>
+          <td class="px-4 py-2 text-right">${{ r.presupuesto|floatformat:0 }}</td>
+          <td class="px-4 py-2 text-right">${{ r.real|floatformat:0 }}</td>
+          <td class="px-4 py-2 text-right {% if r.variacion < 0 %}text-green-600{% elif r.variacion > 0 %}text-red-600{% endif %}">
+            ${{ r.variacion|floatformat:0 }}
+          </td>
+          <td class="px-4 py-2 text-right">
+            {% if r.pct_variacion is None %}—
+            {% else %}
+              <span class="{% if r.alerta %}font-bold text-red-600{% endif %}">{{ r.pct_variacion }}%</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">
+          Sin movimientos. <a href="{% url 'construccion:financiero_grid' proyecto.id %}" class="text-blue-600 hover:underline">Cargar P&G</a>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Bar chart presupuesto vs real top 10 -->
+  {% if resumen %}
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <h2 class="text-lg font-semibold mb-4">Presupuesto vs Real por categoría</h2>
+    <canvas id="barChart" height="100"></canvas>
+  </div>
+  <script>
+    new Chart(document.getElementById('barChart'), {
+      type: 'bar',
+      data: {
+        labels: [{% for r in resumen %}'{{ r.categoria.nombre|escapejs }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+        datasets: [
+          { label: 'Presupuesto', data: [{% for r in resumen %}{{ r.presupuesto|default:0 }}{% if not forloop.last %},{% endif %}{% endfor %}], backgroundColor: 'rgba(59, 130, 246, 0.6)' },
+          { label: 'Real', data: [{% for r in resumen %}{{ r.real|default:0 }}{% if not forloop.last %},{% endif %}{% endfor %}], backgroundColor: 'rgba(239, 68, 68, 0.6)' },
+        ]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+  </script>
+  {% endif %}
+</div>
+{% endblock %}

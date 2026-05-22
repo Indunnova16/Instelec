@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Cilindros — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">Alertas de cilindros</h1>
+    <p class="text-sm text-gray-500">{{ proyecto.nombre }} · Pruebas a los 7, 14, 21 y 51 días desde fecha de vaciado</p>
+  </div>
+
+  <!-- Vencidos sin resultado -->
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div class="px-6 py-4 border-b border-red-200 bg-red-50 dark:bg-red-900/20">
+      <h2 class="text-lg font-semibold text-red-700">⚠ Vencidos sin resultado ({{ pendientes|length }})</h2>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">Torre</th>
+          <th class="px-4 py-2 text-left">Pata</th>
+          <th class="px-4 py-2">Fecha vaciado</th>
+          <th class="px-4 py-2 text-left">Días vencidos sin MPa</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pendientes %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-4 py-2 font-medium">{{ p.pata.torre.numero }}</td>
+          <td class="px-4 py-2">Pata {{ p.pata.pata }}</td>
+          <td class="px-4 py-2">{{ p.pata.vaciado_fecha|date:"d/m/Y" }}</td>
+          <td class="px-4 py-2">
+            {% for d in p.dias %}
+              <span class="inline-block px-2 py-0.5 mr-1 bg-red-100 text-red-800 rounded text-xs font-medium">{{ d }} días</span>
+            {% endfor %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="px-4 py-8 text-center text-green-600">✓ Sin cilindros vencidos</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Próximos (pre-alerta) -->
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div class="px-6 py-4 border-b border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20">
+      <h2 class="text-lg font-semibold text-yellow-700">⏰ Próximos a vencer ({{ proximos|length }})</h2>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">Torre</th>
+          <th class="px-4 py-2 text-left">Pata</th>
+          <th class="px-4 py-2">Próxima prueba</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in proximos %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-4 py-2 font-medium">{{ p.pata.torre.numero }}</td>
+          <td class="px-4 py-2">Pata {{ p.pata.pata }}</td>
+          <td class="px-4 py-2">
+            {% for n, faltan in p.proximos %}
+              <span class="inline-block px-2 py-0.5 mr-1 bg-yellow-100 text-yellow-800 rounded text-xs">{{ n }}d (faltan {{ faltan }})</span>
+            {% endfor %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="px-4 py-8 text-center text-gray-500">Sin próximos en ≤2 días</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

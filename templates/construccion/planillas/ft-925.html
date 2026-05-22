@@ -1,0 +1,16 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Prueba de carga de pilotes</h2>
+  <table class="kv">
+    <tr><td class="lbl">Aplica pilotes</td><td>{{ patas.0.aplica_pilotes|default:"—" }}</td></tr>
+    <tr><td class="lbl">Instalación pilotes OK</td><td>{{ patas.0.instalacion_pilotes_ok|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

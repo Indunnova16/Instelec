@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block title %}Pruebas técnicas — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold">Pruebas técnicas</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+    </div>
+    <a href="{% url 'construccion:pruebas_crear' proyecto.id %}"
+       class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Nueva prueba</a>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">#</th>
+          <th class="px-4 py-2 text-left">Nombre</th>
+          <th class="px-4 py-2 text-left">Laboratorio</th>
+          <th class="px-4 py-2">Fecha programada</th>
+          <th class="px-4 py-2">Fecha ejecución</th>
+          <th class="px-4 py-2 text-center">Resultado</th>
+          <th class="px-4 py-2">Adjunto</th>
+          <th class="px-4 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pruebas %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-4 py-2 font-medium">{{ p.orden }}</td>
+          <td class="px-4 py-2">{{ p.nombre }}</td>
+          <td class="px-4 py-2">{{ p.laboratorio|default:"—" }}</td>
+          <td class="px-4 py-2">{{ p.fecha_programada|date:"d/m/Y"|default:"—" }}</td>
+          <td class="px-4 py-2">{{ p.fecha_ejecucion|date:"d/m/Y"|default:"—" }}</td>
+          <td class="px-4 py-2 text-center">
+            {% if p.resultado == 'CUMPLE' %}<span class="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">✓ Cumple</span>
+            {% elif p.resultado == 'NO_CUMPLE' %}<span class="px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">✗ No cumple</span>
+            {% elif p.resultado == 'NO_APLICA' %}<span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">N/A</span>
+            {% else %}<span class="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">Pendiente</span>{% endif %}
+          </td>
+          <td class="px-4 py-2">
+            {% if p.adjunto %}<a href="{{ p.adjunto.url }}" class="text-blue-600 hover:underline" target="_blank">PDF</a>
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-4 py-2 text-right">
+            <a href="{% url 'construccion:pruebas_editar' proyecto.id p.id %}" class="text-blue-600 hover:underline">Editar</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">
+          No hay pruebas registradas. <a href="{% url 'construccion:pruebas_crear' proyecto.id %}" class="text-blue-600 hover:underline">Crear la primera</a>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Cronograma — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">Cronograma del proyecto</h1>
+    <p class="text-sm text-gray-500">{{ proyecto.nombre }} · Pesos suma: <strong class="{% if suma_pesos != 100 %}text-red-600{% else %}text-green-600{% endif %}">{{ suma_pesos }}%</strong> (debe ser 100)</p>
+  </div>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="px-4 py-2 rounded bg-green-100 text-green-800">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    {% csrf_token %}
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left">Sección</th>
+          <th class="px-3 py-2">Fecha inicio</th>
+          <th class="px-3 py-2">Fecha fin</th>
+          <th class="px-3 py-2 text-right">Torres</th>
+          <th class="px-3 py-2 text-right">Peso %</th>
+          <th class="px-3 py-2 text-right">% esperado hoy</th>
+          <th class="px-3 py-2 text-right">% real</th>
+          <th class="px-3 py-2 text-center">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in fases %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-3 py-2 font-medium">{{ f.get_seccion_display }}</td>
+          <td class="px-3 py-2">
+            <input type="date" name="{{ f.id }}_fecha_inicio_planeada"
+                   value="{{ f.fecha_inicio_planeada|date:'Y-m-d' }}"
+                   class="px-2 py-1 border rounded text-sm">
+          </td>
+          <td class="px-3 py-2">
+            <input type="date" name="{{ f.id }}_fecha_fin_planeada"
+                   value="{{ f.fecha_fin_planeada|date:'Y-m-d' }}"
+                   class="px-2 py-1 border rounded text-sm">
+          </td>
+          <td class="px-3 py-2 text-right">
+            <input type="number" min="0" name="{{ f.id }}_torres_planeadas"
+                   value="{{ f.torres_planeadas|default:'' }}"
+                   class="w-20 px-2 py-1 border rounded text-right text-sm">
+          </td>
+          <td class="px-3 py-2 text-right">
+            <input type="number" min="0" max="100" name="{{ f.id }}_peso_pct"
+                   value="{{ f.peso_pct }}"
+                   class="w-16 px-2 py-1 border rounded text-right text-sm">
+          </td>
+          <td class="px-3 py-2 text-right text-gray-600">{{ f.pct_avance_esperado_hoy|default:"—" }}%</td>
+          <td class="px-3 py-2 text-right text-gray-600">{{ f.pct_avance_real|default:"—" }}%</td>
+          <td class="px-3 py-2 text-center">
+            {% if f.estado == 'ON_TIME' %}<span class="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">A tiempo</span>
+            {% elif f.estado == 'ADELANTADO' %}<span class="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">Adelantado</span>
+            {% elif f.estado == 'RETRASADO' %}<span class="px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">Retrasado</span>
+            {% else %}<span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-end gap-3">
+      <a href="{% url 'construccion:dashboard' proyecto.id %}" class="px-4 py-2 border rounded-lg">Cancelar</a>
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Guardar cronograma</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

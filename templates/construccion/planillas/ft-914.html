@@ -1,0 +1,16 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Control de compactación</h2>
+  <table class="kv">
+    <tr><td class="lbl">Relleno y compactación OK</td><td>{{ patas.0.relleno_compactacion_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Volumen (m³)</td><td>{{ patas.0.relleno_m3|default:"—" }}</td></tr>
+  </table>
+</section>
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

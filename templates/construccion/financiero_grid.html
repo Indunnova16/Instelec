@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% block title %}P&G — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold">P&G mensual</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }} — {{ periodos|length }} períodos</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="{% url 'construccion:periodo_crear' proyecto.id %}"
+         class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">+ Nuevo período</a>
+      <a href="{% url 'construccion:dashboard_financiero' proyecto.id %}"
+         class="px-3 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 text-sm">Dashboard</a>
+    </div>
+  </div>
+
+  {% if not periodos %}
+  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+    <p class="text-yellow-800 mb-4">Aún no hay períodos creados.</p>
+    <a href="{% url 'construccion:periodo_crear' proyecto.id %}"
+       class="px-4 py-2 bg-blue-600 text-white rounded-lg">Crear el primer período</a>
+  </div>
+  {% else %}
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-xs">
+      <thead class="bg-gray-50 dark:bg-gray-700 sticky top-0">
+        <tr>
+          <th class="px-3 py-2 text-left w-48">Categoría</th>
+          {% for p in periodos %}
+          <th class="px-3 py-2 text-center" colspan="2">
+            {{ p.mes }}/{{ p.anio }}{% if p.cerrado %} 🔒{% endif %}
+          </th>
+          {% endfor %}
+        </tr>
+        <tr class="bg-gray-100 dark:bg-gray-600 text-xs">
+          <th></th>
+          {% for p in periodos %}
+            <th class="px-2 py-1 text-blue-700 text-right">Presup</th>
+            <th class="px-2 py-1 text-red-700 text-right">Real</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for cat in categorias %}
+        <tr class="border-t border-gray-100 dark:border-gray-700 {% if cat.tipo == 'INGRESO' %}bg-green-50/30{% endif %}">
+          <td class="px-3 py-2 font-medium">{{ cat.nombre }}</td>
+          {% for p in periodos %}
+            <td class="px-1 py-1">
+              <input type="number" step="0.01" class="cell-input w-full px-1 py-0.5 border text-right text-xs"
+                     data-cat="{{ cat.id }}" data-per="{{ p.id }}" data-tipo="PRESUPUESTO"
+                     value="{{ matriz|default_if_none:'' }}{{ matriz|stringformat:'s' }}{# placeholder: see JS #}"
+                     placeholder="0">
+            </td>
+            <td class="px-1 py-1">
+              <input type="number" step="0.01" class="cell-input w-full px-1 py-0.5 border text-right text-xs"
+                     data-cat="{{ cat.id }}" data-per="{{ p.id }}" data-tipo="REAL"
+                     placeholder="0">
+            </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="text-xs text-gray-500">
+    💡 Edita una celda y presiona <kbd>Tab</kbd> o haz click fuera para auto-guardar.
+  </p>
+
+  <script>
+    // Inicializar valores desde la matriz Python
+    const matriz = {
+      {% for key, val in matriz.items %}'{{ key.0 }}|{{ key.1 }}|{{ key.2 }}': '{{ val }}',{% endfor %}
+    };
+    document.querySelectorAll('.cell-input').forEach(input => {
+      const key = `${input.dataset.cat}|${input.dataset.per}|${input.dataset.tipo}`;
+      if (matriz[key]) input.value = matriz[key];
+
+      input.addEventListener('blur', async () => {
+        const fd = new FormData();
+        fd.append('categoria_id', input.dataset.cat);
+        fd.append('periodo_id', input.dataset.per);
+        fd.append('tipo', input.dataset.tipo);
+        fd.append('valor', input.value || '0');
+        const csrftoken = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1];
+        try {
+          const r = await fetch('{% url "construccion:movimiento_save" proyecto.id %}', {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrftoken},
+            body: fd,
+            credentials: 'same-origin',
+          });
+          if (r.ok) {
+            input.style.background = '#d1fae5';
+            setTimeout(() => input.style.background = '', 600);
+          } else {
+            input.style.background = '#fee2e2';
+          }
+        } catch (e) { input.style.background = '#fee2e2'; }
+      });
+    });
+  </script>
+  {% endif %}
+</div>
+<style>.cell-input{min-width:80px;}</style>
+{% endblock %}
