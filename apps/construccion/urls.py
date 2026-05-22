@@ -118,6 +118,24 @@ urlpatterns = [
     path('<uuid:proyecto_id>/cilindros/',
          views.CilindrosPendientesView.as_view(), name='cilindros_pendientes'),
 
+    # Obra Civil (#53 #54 #55) — UI por torre con 4 patas × 6 bloques
+    path('<uuid:proyecto_id>/obra-civil/',
+         views.ObraCivilListView.as_view(), name='obra_civil_lista'),
+    path('<uuid:proyecto_id>/obra-civil/<uuid:torre_id>/',
+         views.ObraCivilTorreView.as_view(), name='obra_civil_torre'),
+
+    # Montaje + SPT + Pintura (#56 #57) — UI por torre
+    path('<uuid:proyecto_id>/montaje/',
+         views.MontajeListView.as_view(), name='montaje_lista'),
+    path('<uuid:proyecto_id>/montaje/<uuid:torre_id>/',
+         views.MontajeTorreView.as_view(), name='montaje_torre'),
+
+    # Tendido (#58) — UI por torre con 2 circuitos × 3 fases + OPGW + guarda
+    path('<uuid:proyecto_id>/tendido/',
+         views.TendidoListView.as_view(), name='tendido_lista'),
+    path('<uuid:proyecto_id>/tendido/<uuid:torre_id>/',
+         views.TendidoTorreView.as_view(), name='tendido_torre'),
+
     # Iteración 2 — deuda técnica
     path('<uuid:proyecto_id>/financiero/categoria/<uuid:categoria_id>/',
          views.CategoriaDrilldownView.as_view(), name='categoria_drilldown'),

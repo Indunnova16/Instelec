@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block title %}Tendido — Torre {{ torre.numero }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">⚡ Tendido — Torre {{ torre.numero }}</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }} · % Tendido: <span class="font-semibold">{{ fase.porcentaje_tendido }}%</span></p>
+    </div>
+    <a href="{% url 'construccion:tendido_lista' proyecto.id %}" class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  {% if request.GET.saved %}
+    <div class="px-4 py-2 bg-green-100 text-green-800 rounded">✓ Cambios guardados.</div>
+  {% endif %}
+
+  {% if bloqueada %}
+    <div class="px-4 py-3 bg-yellow-100 text-yellow-800 rounded">
+      🔒 Esta torre no tiene marcada "Entrega para carga" en Montaje. Edita el módulo Montaje primero para habilitar el flujo natural de Tendido.
+    </div>
+  {% endif %}
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {# === Vestida + sub-flujo conductor === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Vestida de torres + sub-flujo conductor</summary>
+      <div class="p-4 space-y-3 border-t">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="flex items-center gap-2">{{ form.vestida_torres_ok }} <span>{{ form.vestida_torres_ok.label }}</span></label>
+          <label>{{ form.vestida_torres_fecha.label }}<br>{{ form.vestida_torres_fecha }}</label>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 border-t pt-3">
+          <label class="flex items-center gap-2">{{ form.riega_manila_ok }} <span class="text-xs">{{ form.riega_manila_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.riega_guaya_ok }} <span class="text-xs">{{ form.riega_guaya_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.ft046_ok }} <span class="text-xs">FT-046</span></label>
+          <label class="flex items-center gap-2">{{ form.ft047_ok }} <span class="text-xs">FT-047</span></label>
+          <label class="flex items-center gap-2">{{ form.ft932_ok }} <span class="text-xs">FT-932</span></label>
+          <label class="flex items-center gap-2">{{ form.regulacion_flechado_ok }} <span class="text-xs">{{ form.regulacion_flechado_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.ft918_ok }} <span class="text-xs">FT-918</span></label>
+          <label class="flex items-center gap-2">{{ form.grapado_ok }} <span class="text-xs">{{ form.grapado_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.accesorios_ok }} <span class="text-xs">{{ form.accesorios_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.placas_senalizacion_ok }} <span class="text-xs">{{ form.placas_senalizacion_ok.label }}</span></label>
+          <label class="md:col-span-2">{{ form.distancia_vano_adelante_m.label }}<br>{{ form.distancia_vano_adelante_m }}</label>
+        </div>
+      </div>
+    </details>
+
+    {# === Circuito 1 + OPGW === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 1 (3 fases) + OPGW (izq/der)</summary>
+      <div class="p-4 space-y-3 border-t">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="space-y-2 border rounded p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase A</p>
+            <label class="flex items-center gap-2">{{ form.tendido_conductor_a_ok }} <span>OK</span></label>
+            <label>{{ form.tendido_conductor_a_fecha.label }}<br>{{ form.tendido_conductor_a_fecha }}</label>
+          </div>
+          <div class="space-y-2 border rounded p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase B</p>
+            <label class="flex items-center gap-2">{{ form.tendido_conductor_b_ok }} <span>OK</span></label>
+            <label>{{ form.tendido_conductor_b_fecha.label }}<br>{{ form.tendido_conductor_b_fecha }}</label>
+          </div>
+          <div class="space-y-2 border rounded p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase C</p>
+            <label class="flex items-center gap-2">{{ form.tendido_conductor_c_ok }} <span>OK</span></label>
+            <label>{{ form.tendido_conductor_c_fecha.label }}<br>{{ form.tendido_conductor_c_fecha }}</label>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
+          <div class="space-y-2 border rounded p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">OPGW Izquierda</p>
+            <label class="flex items-center gap-2">{{ form.tendido_opgw_izq_ok }} <span>OK</span></label>
+            <label>{{ form.tendido_opgw_izq_fecha.label }}<br>{{ form.tendido_opgw_izq_fecha }}</label>
+          </div>
+          <div class="space-y-2 border rounded p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">OPGW Derecha</p>
+            <label class="flex items-center gap-2">{{ form.tendido_opgw_der_ok }} <span>OK</span></label>
+            <label>{{ form.tendido_opgw_der_fecha.label }}<br>{{ form.tendido_opgw_der_fecha }}</label>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    {# === Circuito 2 === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 2 (3 fases adicionales)</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-t">
+        <div class="space-y-2 border rounded p-3">
+          <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase A</p>
+          <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_a_ok }} <span>OK</span></label>
+          <label>{{ form.tendido_conductor_c2_a_fecha.label }}<br>{{ form.tendido_conductor_c2_a_fecha }}</label>
+        </div>
+        <div class="space-y-2 border rounded p-3">
+          <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase B</p>
+          <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_b_ok }} <span>OK</span></label>
+          <label>{{ form.tendido_conductor_c2_b_fecha.label }}<br>{{ form.tendido_conductor_c2_b_fecha }}</label>
+        </div>
+        <div class="space-y-2 border rounded p-3">
+          <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase C</p>
+          <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_c_ok }} <span>OK</span></label>
+          <label>{{ form.tendido_conductor_c2_c_fecha.label }}<br>{{ form.tendido_conductor_c2_c_fecha }}</label>
+        </div>
+      </div>
+    </details>
+
+    {# === Cable de guarda + regulación final === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Cable de guarda + regulación final + cuadrilla</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.tendido_guarda_ok }} <span>{{ form.tendido_guarda_ok.label }}</span></label>
+        <label>{{ form.tendido_guarda_fecha.label }}<br>{{ form.tendido_guarda_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.regulacion_ok }} <span>{{ form.regulacion_ok.label }}</span></label>
+        <label>{{ form.regulacion_fecha.label }}<br>{{ form.regulacion_fecha }}</label>
+        <label>{{ form.cuadrilla_tendido.label }}<br>{{ form.cuadrilla_tendido }}</label>
+        <label>{{ form.pct_tendido.label }}<br>{{ form.pct_tendido }}</label>
+        <label>{{ form.pct_facturacion.label }}<br>{{ form.pct_facturacion }}</label>
+        <label class="md:col-span-2">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
+      </div>
+    </details>
+
+    <div class="flex justify-end space-x-2">
+      <a href="{% url 'construccion:tendido_lista' proyecto.id %}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 dark:text-gray-300">Cancelar</a>
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

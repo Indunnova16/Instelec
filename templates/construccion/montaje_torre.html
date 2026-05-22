@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block title %}Montaje — Torre {{ torre.numero }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">🔩 Montaje — Torre {{ torre.numero }}</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }} · % Montaje: <span class="font-semibold">{{ fase.porcentaje_montaje }}%</span></p>
+    </div>
+    <a href="{% url 'construccion:montaje_lista' proyecto.id %}" class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  {% if request.GET.saved %}
+    <div class="px-4 py-2 bg-green-100 text-green-800 rounded">✓ Cambios guardados.</div>
+  {% endif %}
+
+  {% if not torre.obra_civil_completa %}
+    <div class="px-4 py-3 bg-yellow-100 text-yellow-800 rounded">
+      ⚠ La Obra Civil de esta torre aún no está completa. Puedes capturar datos pero el flujo natural es completar OC primero.
+    </div>
+  {% endif %}
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {# === Info estructura === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Info estructura</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-t">
+        <label>{{ form.funcion_torre.label }}<br>{{ form.funcion_torre }}</label>
+        <label>{{ form.tipo_torre_montaje.label }}<br>{{ form.tipo_torre_montaje }}</label>
+        <label>{{ form.cuerpo_torre.label }}<br>{{ form.cuerpo_torre }}</label>
+      </div>
+    </details>
+
+    {# === Selección + transporte + recepción === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Selección, transporte y recepción en patio</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.seleccion_estructura_ok }} <span>{{ form.seleccion_estructura_ok.label }}</span></label>
+        <label>{{ form.seleccion_estructura_fecha.label }}<br>{{ form.seleccion_estructura_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.transporte_estructura_ok }} <span>{{ form.transporte_estructura_ok.label }}</span></label>
+        <label>{{ form.transporte_estructura_fecha.label }}<br>{{ form.transporte_estructura_fecha }}</label>
+        <label>{{ form.fecha_recepcion_patio.label }}<br>{{ form.fecha_recepcion_patio }}</label>
+        <label class="flex items-center gap-2">{{ form.recibida_satisfaccion_ok }} <span>{{ form.recibida_satisfaccion_ok.label }}</span></label>
+        <label>{{ form.pct_completitud_estructura.label }}<br>{{ form.pct_completitud_estructura }}</label>
+        <label class="md:col-span-2">{{ form.observaciones_recepcion.label }}<br>{{ form.observaciones_recepcion }}</label>
+      </div>
+    </details>
+
+    {# === Prearmado === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Prearmado {% if fase.prearmado_ok %}<span class="text-green-600">✓</span>{% else %}<span class="text-xs text-gray-500">{{ fase.prearmado_pct }}%</span>{% endif %}</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.prearmado_ok }} <span>{{ form.prearmado_ok.label }}</span></label>
+        <label>{{ form.prearmado_fecha.label }}<br>{{ form.prearmado_fecha }}</label>
+        <label>{{ form.prearmado_fecha_inicio.label }}<br>{{ form.prearmado_fecha_inicio }}</label>
+        <label>{{ form.prearmado_fecha_fin.label }}<br>{{ form.prearmado_fecha_fin }}</label>
+        <label>{{ form.prearmado_pct.label }}<br>{{ form.prearmado_pct }}</label>
+        <label>{{ form.cuadrilla_prearmado.label }}<br>{{ form.cuadrilla_prearmado }}</label>
+      </div>
+    </details>
+
+    {# === Montaje, torsión, WSP, entrega carga === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Montaje, torsión y entrega para carga (gate Tendido)</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.montaje_ok }} <span>{{ form.montaje_ok.label }}</span></label>
+        <label>{{ form.montaje_fecha.label }}<br>{{ form.montaje_fecha }}</label>
+        <label>{{ form.cuadrilla_montaje.label }}<br>{{ form.cuadrilla_montaje }}</label>
+        <label class="flex items-center gap-2">{{ form.torsion_ok }} <span>{{ form.torsion_ok.label }}</span></label>
+        <label>{{ form.torsion_fecha.label }}<br>{{ form.torsion_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.entrega_wsp_ok }} <span>{{ form.entrega_wsp_ok.label }}</span></label>
+        <label>{{ form.entrega_wsp_fecha.label }}<br>{{ form.entrega_wsp_fecha }}</label>
+        <label class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded">{{ form.entrega_carga_ok }} <span class="font-semibold">{{ form.entrega_carga_ok.label }} (habilita Tendido)</span></label>
+        <label>{{ form.entrega_carga_fecha.label }}<br>{{ form.entrega_carga_fecha }}</label>
+        <label>{{ form.pct_montaje.label }}<br>{{ form.pct_montaje }}</label>
+      </div>
+    </details>
+
+    {# === SPT === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border {% if fase.spt_polvora_sobreconsumo %}border-red-400{% else %}border-gray-200 dark:border-gray-700{% endif %}">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        SPT — Sistema Puesta a Tierra <span class="text-xs text-gray-500 ml-2">{{ fase.spt_pct }}%</span>
+        {% if fase.spt_polvora_sobreconsumo %}<span class="ml-2 text-red-600 text-xs font-semibold">⚠ Sobreconsumo pólvora ({{ fase.spt_polvora_diferencia_cajas }} cajas)</span>{% endif %}
+      </summary>
+      <div class="p-4 space-y-3 border-t">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label>{{ form.spt_cantidad_excavacion_m.label }}<br>{{ form.spt_cantidad_excavacion_m }}</label>
+          <label>{{ form.spt_cable_planos_m.label }}<br>{{ form.spt_cable_planos_m }}</label>
+          <label>{{ form.spt_cable_instalado_m.label }}<br>{{ form.spt_cable_instalado_m }}</label>
+          <label>{{ form.spt_polvora_tiros_planos.label }}<br>{{ form.spt_polvora_tiros_planos }}</label>
+          <label>{{ form.spt_polvora_tiros_por_caja.label }}<br>{{ form.spt_polvora_tiros_por_caja }}</label>
+          <label>{{ form.spt_polvora_consumida_cajas.label }}<br>{{ form.spt_polvora_consumida_cajas }}</label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 border-t pt-3">
+          <label class="flex items-center gap-2">{{ form.spt_ft068_ok }} <span class="text-xs">{{ form.spt_ft068_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.spt_ft029_ok }} <span class="text-xs">{{ form.spt_ft029_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.spt_informe_mediciones_ok }} <span class="text-xs">{{ form.spt_informe_mediciones_ok.label }}</span></label>
+          <label>{{ form.spt_pct.label }}<br>{{ form.spt_pct }}</label>
+        </div>
+        <label class="block">{{ form.spt_observaciones.label }}<br>{{ form.spt_observaciones }}</label>
+      </div>
+    </details>
+
+    {# === Pintura === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Pintura</summary>
+      <div class="p-4 grid grid-cols-1 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.pintura_ft912_ok }} <span>{{ form.pintura_ft912_ok.label }}</span></label>
+        <label>{{ form.pintura_observaciones.label }}<br>{{ form.pintura_observaciones }}</label>
+      </div>
+    </details>
+
+    <div class="flex justify-end space-x-2">
+      <a href="{% url 'construccion:montaje_lista' proyecto.id %}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 dark:text-gray-300">Cancelar</a>
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

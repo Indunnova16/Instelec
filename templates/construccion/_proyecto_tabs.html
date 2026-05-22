@@ -4,6 +4,9 @@
   <a href="{% url 'construccion:ingenieria' proyecto.id %}" class="tab {% if active_tab == 'ingenieria' %}tab-active{% endif %}">Ingeniería</a>
   <a href="{% url 'construccion:preliminares' proyecto.id %}" class="tab {% if active_tab == 'preliminares' %}tab-active{% endif %}">Preliminares</a>
   <a href="{% url 'construccion:torres_lista' proyecto.id %}" class="tab {% if active_tab == 'torres_lista' %}tab-active{% endif %}">Torres</a>
+  <a href="{% url 'construccion:obra_civil_lista' proyecto.id %}" class="tab {% if active_tab == 'obra_civil' %}tab-active{% endif %}">🏗️ Obra civil</a>
+  <a href="{% url 'construccion:montaje_lista' proyecto.id %}" class="tab {% if active_tab == 'montaje' %}tab-active{% endif %}">🔩 Montaje</a>
+  <a href="{% url 'construccion:tendido_lista' proyecto.id %}" class="tab {% if active_tab == 'tendido' %}tab-active{% endif %}">⚡ Tendido</a>
   <a href="{% url 'construccion:protecciones_lista' proyecto.id %}" class="tab {% if active_tab == 'protecciones' %}tab-active{% endif %}">Protecciones</a>
   <a href="{% url 'construccion:kits_lista' proyecto.id %}" class="tab {% if active_tab == 'kits' %}tab-active{% endif %}">Kits</a>
   <a href="{% url 'construccion:pruebas_lista' proyecto.id %}" class="tab {% if active_tab == 'pruebas' %}tab-active{% endif %}">Pruebas</a>

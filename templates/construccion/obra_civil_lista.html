@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}Obra civil — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">🏗️ Obra civil</h1>
+    <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-gray-400">
+      <p class="text-xs uppercase text-gray-500">Total torres</p>
+      <p class="text-2xl font-bold">{{ stats.total }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">OC completas</p>
+      <p class="text-2xl font-bold text-green-600">{{ stats.completas }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500">
+      <p class="text-xs uppercase text-gray-500">En curso</p>
+      <p class="text-2xl font-bold text-blue-600">{{ stats.pendientes }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-500">
+      <p class="text-xs uppercase text-gray-500">⚠ Alarma materiales</p>
+      <p class="text-2xl font-bold text-red-600">{{ stats.alarma }}</p>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-2 text-left">Torre</th>
+          <th class="px-4 py-2 text-left">Cuadrilla</th>
+          <th class="px-4 py-2 text-right">% Avance</th>
+          <th class="px-4 py-2">Bloque actual</th>
+          <th class="px-4 py-2 text-center">Materiales</th>
+          <th class="px-4 py-2 text-center">Cilindros pend.</th>
+          <th class="px-4 py-2 text-center">Estado</th>
+          <th class="px-4 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        <tr class="border-t border-gray-100 dark:border-gray-700
+                   {% if f.alarma_materiales %}bg-red-50 dark:bg-red-900/20{% endif %}">
+          <td class="px-4 py-2 font-medium">{{ f.torre.numero }}</td>
+          <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{{ f.torre.cuadrilla_civil|default:"—" }}</td>
+          <td class="px-4 py-2 text-right">
+            <span class="font-semibold">{{ f.avance }}%</span>
+          </td>
+          <td class="px-4 py-2">
+            {% if f.bloque_actual == 'COMPLETA' %}
+              <span class="text-green-700 dark:text-green-400 font-medium">✓ Lista para montaje</span>
+            {% else %}
+              <span class="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">{{ f.bloque_actual }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-center">
+            {% if f.alarma_materiales %}
+              <span class="text-red-600 font-semibold">⚠</span>
+            {% else %}
+              <span class="text-gray-400">—</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-center">
+            {% if f.cilindros_pendientes %}
+              <span class="text-orange-600 font-semibold">{{ f.cilindros_pendientes }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-4 py-2 text-center">
+            {% if not f.puede_iniciar %}
+              <span class="px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">Sin liberar</span>
+            {% elif f.completa %}
+              <span class="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">Completa</span>
+            {% else %}
+              <span class="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">En obra</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right">
+            <a href="{% url 'construccion:obra_civil_torre' proyecto.id f.torre.id %}" class="text-blue-600 hover:underline">Detalle 4 patas →</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No hay torres registradas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

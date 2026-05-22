@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}Tendido — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">⚡ Tendido</h1>
+    <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-gray-400">
+      <p class="text-xs uppercase text-gray-500">Total torres</p>
+      <p class="text-2xl font-bold">{{ stats.total }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500">
+      <p class="text-xs uppercase text-gray-500">⚡ Habilitadas</p>
+      <p class="text-2xl font-bold text-blue-600">{{ stats.habilitadas }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-yellow-500">
+      <p class="text-xs uppercase text-gray-500">🔒 Bloqueadas</p>
+      <p class="text-2xl font-bold text-yellow-600">{{ stats.bloqueadas }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">Completas</p>
+      <p class="text-2xl font-bold text-green-600">{{ stats.completas }}</p>
+    </div>
+  </div>
+
+  <p class="text-xs text-gray-500">
+    🔒 = "Entrega para carga" del Montaje pendiente · Las torres bloqueadas no permiten editar Tendido hasta que se libere desde Montaje.
+  </p>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-xs">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-2 py-2 text-left">Torre</th>
+          <th class="px-2 py-2">Tramo</th>
+          <th class="px-2 py-2">Cuadrilla</th>
+          <th class="px-2 py-2 text-center">Vestida</th>
+          <th class="px-2 py-2 text-center">Reg.fl.</th>
+          <th class="px-2 py-2 text-center" colspan="3">C1 (A · B · C)</th>
+          <th class="px-2 py-2 text-center" colspan="2">OPGW (I · D)</th>
+          <th class="px-2 py-2 text-center" colspan="3">C2 (A · B · C)</th>
+          <th class="px-2 py-2 text-center">Guarda</th>
+          <th class="px-2 py-2 text-right">% Ten.</th>
+          <th class="px-2 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        <tr class="border-t border-gray-100 dark:border-gray-700 {% if not f.puede_iniciar %}opacity-50{% endif %}">
+          <td class="px-2 py-2 font-medium">{{ f.torre.numero }}</td>
+          <td class="px-2 py-2">{{ f.torre.tramo_tendido|default:"—" }}</td>
+          <td class="px-2 py-2">{{ f.fase.cuadrilla_tendido|default:"—" }}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.vestida_torres_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.regulacion_flechado_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_conductor_a_ok %}<span class="text-green-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_conductor_b_ok %}<span class="text-green-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_conductor_c_ok %}<span class="text-green-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_opgw_izq_ok %}<span class="text-green-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_opgw_der_ok %}<span class="text-green-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_conductor_c2_a_ok %}<span class="text-purple-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_conductor_c2_b_ok %}<span class="text-purple-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_conductor_c2_c_ok %}<span class="text-purple-600">●</span>{% else %}<span class="text-gray-300">●</span>{% endif %}</td>
+          <td class="px-2 py-2 text-center">{% if f.fase.tendido_guarda_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
+          <td class="px-2 py-2 text-right font-semibold">{{ f.fase.porcentaje_tendido|floatformat:0 }}%</td>
+          <td class="px-2 py-2 text-right">
+            {% if f.puede_iniciar %}
+              <a href="{% url 'construccion:tendido_torre' proyecto.id f.torre.id %}" class="text-blue-600 hover:underline">Editar</a>
+            {% else %}
+              <span title="Falta 'Entrega para carga' en Montaje">🔒</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="16" class="px-4 py-8 text-center text-gray-500">No hay torres registradas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

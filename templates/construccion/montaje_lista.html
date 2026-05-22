@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}Montaje — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">🔩 Montaje</h1>
+    <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-gray-400">
+      <p class="text-xs uppercase text-gray-500">Total torres</p>
+      <p class="text-2xl font-bold">{{ stats.total }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">OC completa</p>
+      <p class="text-2xl font-bold text-green-600">{{ stats.oc_completas }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-yellow-500">
+      <p class="text-xs uppercase text-gray-500">Pendientes</p>
+      <p class="text-2xl font-bold text-yellow-600">{{ stats.pendientes }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500">
+      <p class="text-xs uppercase text-gray-500">⚡ Listas para tendido</p>
+      <p class="text-2xl font-bold text-blue-600">{{ stats.listas_tendido }}</p>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left">Torre</th>
+          <th class="px-3 py-2">Función</th>
+          <th class="px-3 py-2">Cuadrilla</th>
+          <th class="px-3 py-2 text-center">Recep. patio</th>
+          <th class="px-3 py-2 text-right">% Complet.</th>
+          <th class="px-3 py-2 text-right">Prearmado</th>
+          <th class="px-3 py-2 text-center">Montaje</th>
+          <th class="px-3 py-2 text-center">Torsión</th>
+          <th class="px-3 py-2 text-center">WSP</th>
+          <th class="px-3 py-2 text-center">Entrega carga</th>
+          <th class="px-3 py-2 text-right">% Mont.</th>
+          <th class="px-3 py-2 text-right">% SPT</th>
+          <th class="px-3 py-2 text-center">FT-912</th>
+          <th class="px-3 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        <tr class="border-t border-gray-100 dark:border-gray-700 {% if not f.oc_completa %}opacity-60{% endif %}">
+          <td class="px-3 py-2 font-medium">{{ f.torre.numero }}</td>
+          <td class="px-3 py-2 text-xs">{{ f.fase.get_funcion_torre_display|default:"—" }}</td>
+          <td class="px-3 py-2 text-xs">{{ f.fase.cuadrilla_montaje|default:"—" }}</td>
+          <td class="px-3 py-2 text-center">
+            {% if f.fase.fecha_recepcion_patio %}<span class="text-green-600">{{ f.fase.fecha_recepcion_patio|date:"d/m" }}</span>{% else %}—{% endif %}
+          </td>
+          <td class="px-3 py-2 text-right">{{ f.fase.pct_completitud_estructura }}%</td>
+          <td class="px-3 py-2 text-right">{{ f.fase.prearmado_pct }}%</td>
+          <td class="px-3 py-2 text-center">{% if f.fase.montaje_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
+          <td class="px-3 py-2 text-center">{% if f.fase.torsion_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
+          <td class="px-3 py-2 text-center">{% if f.fase.entrega_wsp_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
+          <td class="px-3 py-2 text-center">
+            {% if f.fase.entrega_carga_ok %}<span class="text-blue-600 font-semibold">✓ ⚡</span>{% else %}—{% endif %}
+          </td>
+          <td class="px-3 py-2 text-right">{{ f.fase.pct_montaje|floatformat:0 }}%</td>
+          <td class="px-3 py-2 text-right">{{ f.fase.spt_pct }}%</td>
+          <td class="px-3 py-2 text-center">{% if f.fase.pintura_ft912_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
+          <td class="px-3 py-2 text-right">
+            {% if f.oc_completa %}
+              <a href="{% url 'construccion:montaje_torre' proyecto.id f.torre.id %}" class="text-blue-600 hover:underline">Editar</a>
+            {% else %}
+              <span class="text-xs text-gray-400" title="Falta completar Obra Civil">🔒 OC</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="14" class="px-4 py-8 text-center text-gray-500">No hay torres registradas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

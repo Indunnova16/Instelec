@@ -9,7 +9,8 @@ from django.db.models import Q
 
 from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
 from apps.contratos.models import Contrato
-from .forms import ContratoForm
+from .forms import ContratoForm, PataObraForm, FaseTorreMontajeForm, FaseTorreTendidoForm
+from django.http import HttpResponseRedirect
 from .models import (
     ProyectoConstruccion,
     TorreConstruccion,
@@ -955,3 +956,279 @@ class CilindrosPendientesView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         ctx['pendientes'] = pendientes
         ctx['proximos'] = proximos
         return ctx
+
+
+# =========================================================================
+# Obra Civil — Lista de torres + detalle 4 patas con 6 bloques (#53 #54 #55)
+# =========================================================================
+
+def _ensure_torre_relaciones(torre):
+    """Defensa para torres legacy creadas sin pasar por TorreCreateView:
+    asegura 4 PataObra + FaseTorre. Idempotente."""
+    for pata in ['A', 'B', 'C', 'D']:
+        PataObra.objects.get_or_create(torre=torre, pata=pata)
+    FaseTorre.objects.get_or_create(torre=torre, proyecto=torre.proyecto)
+
+
+class ObraCivilListView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Lista torres del proyecto con su estado de Obra Civil agregado por pata."""
+    template_name = 'construccion/obra_civil_lista.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        torres_qs = torres_qs.prefetch_related('pata_obra').order_by('numero')
+
+        filas = []
+        total_alarma = 0
+        total_completas = 0
+        for torre in torres_qs:
+            _ensure_torre_relaciones(torre)
+            patas = list(torre.pata_obra.all())
+            avance = round(sum(p.porcentaje_completado for p in patas) / 4, 1) if patas else 0
+            alarma_mat = any(p.alarma_materiales for p in patas)
+            cilindros_pend = sum(len(p.cilindros_pendientes) for p in patas)
+            bloque_actual = next((p.bloque_actual for p in patas if p.bloque_actual), 'COMPLETA')
+            completa = torre.obra_civil_completa
+            if alarma_mat:
+                total_alarma += 1
+            if completa:
+                total_completas += 1
+            filas.append({
+                'torre': torre,
+                'avance': avance,
+                'bloque_actual': bloque_actual,
+                'alarma_materiales': alarma_mat,
+                'cilindros_pendientes': cilindros_pend,
+                'completa': completa,
+                'puede_iniciar': torre.puede_iniciar_obra_civil,
+            })
+
+        ctx['proyecto'] = proyecto
+        ctx['active_tab'] = 'obra_civil'
+        ctx['filas'] = filas
+        ctx['stats'] = {
+            'total': len(filas),
+            'completas': total_completas,
+            'alarma': total_alarma,
+            'pendientes': len(filas) - total_completas,
+        }
+        return ctx
+
+
+class ObraCivilTorreView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Detalle de una torre con sus 4 patas + 6 bloques OC editables.
+
+    POST acepta `pata` (A|B|C|D) para guardar solo esa pata."""
+    template_name = 'construccion/obra_civil_torre.html'
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def _get_torre(self):
+        return get_object_or_404(
+            TorreConstruccion,
+            id=self.kwargs['torre_id'],
+            proyecto_id=self.kwargs['proyecto_id'],
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        torre = self._get_torre()
+        _ensure_torre_relaciones(torre)
+        patas = list(torre.pata_obra.order_by('pata'))
+        active_pata = kwargs.get('active_pata') or self.request.GET.get('pata') or 'A'
+        if active_pata not in ['A', 'B', 'C', 'D']:
+            active_pata = 'A'
+        pata_actual = next((p for p in patas if p.pata == active_pata), patas[0] if patas else None)
+        form_override = kwargs.get('form_override')
+        form_actual = form_override or PataObraForm(instance=pata_actual,
+                                                    prefix=f'pata_{active_pata}')
+        ctx['proyecto'] = torre.proyecto
+        ctx['torre'] = torre
+        ctx['patas'] = patas
+        ctx['pata_actual'] = pata_actual
+        ctx['form'] = form_actual
+        ctx['active_tab'] = 'obra_civil'
+        ctx['active_pata'] = active_pata
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        torre = self._get_torre()
+        _ensure_torre_relaciones(torre)
+        pata_letra = request.POST.get('pata') or request.GET.get('pata') or 'A'
+        if pata_letra not in ['A', 'B', 'C', 'D']:
+            pata_letra = 'A'
+        try:
+            pata = torre.pata_obra.get(pata=pata_letra)
+        except PataObra.DoesNotExist:
+            pata = PataObra.objects.create(torre=torre, pata=pata_letra)
+        form = PataObraForm(request.POST, instance=pata, prefix=f'pata_{pata_letra}')
+        if form.is_valid():
+            form.save()
+            url = reverse_lazy('construccion:obra_civil_torre',
+                               kwargs={'proyecto_id': torre.proyecto.id,
+                                       'torre_id': torre.id})
+            return HttpResponseRedirect(f'{url}?pata={pata_letra}&saved=1')
+        ctx = self.get_context_data(
+            form_override=form,
+            active_pata=pata_letra,
+        )
+        return self.render_to_response(ctx)
+
+
+# =========================================================================
+# Montaje — Lista de torres + edición FaseTorre (Montaje+SPT+Pintura) (#56 #57)
+# =========================================================================
+
+class MontajeListView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Lista torres con KPI de Montaje."""
+    template_name = 'construccion/montaje_lista.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        torres_qs = torres_qs.select_related('fase').order_by('numero')
+
+        filas = []
+        listas_para_tendido = 0
+        oc_completas = 0
+        for torre in torres_qs:
+            _ensure_torre_relaciones(torre)
+            torre.refresh_from_db()
+            fase = torre.fase
+            if torre.obra_civil_completa:
+                oc_completas += 1
+            if fase.entrega_carga_ok:
+                listas_para_tendido += 1
+            filas.append({
+                'torre': torre,
+                'fase': fase,
+                'puede_iniciar': torre.puede_iniciar_montaje,
+                'oc_completa': torre.obra_civil_completa,
+            })
+        ctx['proyecto'] = proyecto
+        ctx['active_tab'] = 'montaje'
+        ctx['filas'] = filas
+        ctx['stats'] = {
+            'total': len(filas),
+            'oc_completas': oc_completas,
+            'pendientes': len(filas) - oc_completas,
+            'listas_tendido': listas_para_tendido,
+        }
+        return ctx
+
+
+class MontajeTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Edición de FaseTorre (sección Montaje + SPT + Pintura)."""
+    model = FaseTorre
+    form_class = FaseTorreMontajeForm
+    template_name = 'construccion/montaje_torre.html'
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def get_object(self, queryset=None):
+        torre = get_object_or_404(
+            TorreConstruccion,
+            id=self.kwargs['torre_id'],
+            proyecto_id=self.kwargs['proyecto_id'],
+        )
+        _ensure_torre_relaciones(torre)
+        return torre.fase
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        fase = self.object
+        ctx['proyecto'] = fase.torre.proyecto
+        ctx['torre'] = fase.torre
+        ctx['fase'] = fase
+        ctx['active_tab'] = 'montaje'
+        return ctx
+
+    def get_success_url(self):
+        return reverse_lazy('construccion:montaje_torre',
+                            kwargs={'proyecto_id': self.kwargs['proyecto_id'],
+                                    'torre_id': self.kwargs['torre_id']}) + '?saved=1'
+
+
+# =========================================================================
+# Tendido — Lista de torres + edición FaseTorre (sección Tendido) (#58)
+# =========================================================================
+
+class TendidoListView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Lista torres con KPI de Tendido."""
+    template_name = 'construccion/tendido_lista.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        torres_qs = torres_qs.select_related('fase').order_by('numero')
+
+        filas = []
+        habilitadas = 0
+        completas = 0
+        for torre in torres_qs:
+            _ensure_torre_relaciones(torre)
+            torre.refresh_from_db()
+            fase = torre.fase
+            puede = fase.puede_iniciar_tendido
+            if puede:
+                habilitadas += 1
+            if fase.porcentaje_tendido >= 100:
+                completas += 1
+            filas.append({
+                'torre': torre,
+                'fase': fase,
+                'puede_iniciar': puede,
+            })
+        ctx['proyecto'] = proyecto
+        ctx['active_tab'] = 'tendido'
+        ctx['filas'] = filas
+        ctx['stats'] = {
+            'total': len(filas),
+            'habilitadas': habilitadas,
+            'bloqueadas': len(filas) - habilitadas,
+            'completas': completas,
+        }
+        return ctx
+
+
+class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Edición de FaseTorre (sección Tendido)."""
+    model = FaseTorre
+    form_class = FaseTorreTendidoForm
+    template_name = 'construccion/tendido_torre.html'
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def get_object(self, queryset=None):
+        torre = get_object_or_404(
+            TorreConstruccion,
+            id=self.kwargs['torre_id'],
+            proyecto_id=self.kwargs['proyecto_id'],
+        )
+        _ensure_torre_relaciones(torre)
+        return torre.fase
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        fase = self.object
+        ctx['proyecto'] = fase.torre.proyecto
+        ctx['torre'] = fase.torre
+        ctx['fase'] = fase
+        ctx['active_tab'] = 'tendido'
+        ctx['bloqueada'] = not fase.puede_iniciar_tendido
+        return ctx
+
+    def get_success_url(self):
+        return reverse_lazy('construccion:tendido_torre',
+                            kwargs={'proyecto_id': self.kwargs['proyecto_id'],
+                                    'torre_id': self.kwargs['torre_id']}) + '?saved=1'

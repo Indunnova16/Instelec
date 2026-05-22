@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% block title %}Obra civil — Torre {{ torre.numero }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">🏗️ Obra civil — Torre {{ torre.numero }}</h1>
+      <p class="text-sm text-gray-500">
+        {{ proyecto.nombre }} ·
+        {% if torre.obra_civil_completa %}
+          <span class="text-green-700 dark:text-green-400 font-medium">✓ Las 4 patas listas para montaje</span>
+        {% else %}
+          <span>4 patas con avance secuencial por 6 bloques</span>
+        {% endif %}
+      </p>
+    </div>
+    <a href="{% url 'construccion:obra_civil_lista' proyecto.id %}" class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  {% if request.GET.saved %}
+    <div class="px-4 py-2 bg-green-100 text-green-800 rounded">✓ Cambios guardados.</div>
+  {% endif %}
+
+  {# Tabs por pata #}
+  <div class="flex space-x-2 border-b border-gray-200 dark:border-gray-700">
+    {% for p in patas %}
+      <a href="?pata={{ p.pata }}"
+         class="px-4 py-2 text-sm font-medium border-b-2 {% if active_pata == p.pata %}border-blue-600 text-blue-600{% else %}border-transparent text-gray-600 hover:text-gray-900{% endif %}">
+        Pata {{ p.pata }}
+        {% if p.lista_para_montaje %}<span class="ml-1 text-green-600">✓</span>
+        {% elif p.alarma_materiales %}<span class="ml-1 text-red-600">⚠</span>{% endif %}
+        <span class="ml-1 text-xs text-gray-500">{{ p.porcentaje_completado }}%</span>
+      </a>
+    {% endfor %}
+  </div>
+
+  {% if pata_actual %}
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <input type="hidden" name="pata" value="{{ active_pata }}">
+
+    {# === Bloque 1: Cerramiento === #}
+    <details {% if pata_actual.bloque_actual == 'CERRAMIENTO' or pata_actual.cerramiento_finalizado_ok %}open{% endif %}
+             class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        1. Cerramiento {% if pata_actual.cerramiento_finalizado_ok %}<span class="text-green-600">✓</span>{% endif %}
+      </summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.cerramiento_finalizado_ok }} <span>{{ form.cerramiento_finalizado_ok.label }}</span></label>
+        <label>{{ form.cerramiento_fecha.label }}<br>{{ form.cerramiento_fecha }}</label>
+      </div>
+    </details>
+
+    {# === Bloque 2: Excavación === #}
+    <details {% if pata_actual.bloque_actual == 'EXCAVACION' or pata_actual.excavacion_ok %}open{% endif %}
+             class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        2. Excavación {% if pata_actual.excavacion_ok %}<span class="text-green-600">✓</span>{% endif %}
+      </summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label>{{ form.tipo_excavacion.label }}<br>{{ form.tipo_excavacion }}</label>
+        <label class="flex items-center gap-2">{{ form.aplica_pilotes }} <span>{{ form.aplica_pilotes.label }}</span></label>
+        <label class="flex items-center gap-2">{{ form.excavacion_ok }} <span>{{ form.excavacion_ok.label }}</span></label>
+        <label>{{ form.excavacion_fecha.label }}<br>{{ form.excavacion_fecha }}</label>
+        <label>{{ form.excavacion_m3.label }}<br>{{ form.excavacion_m3 }}</label>
+        <label class="flex items-center gap-2">{{ form.instalacion_pilotes_ok }} <span>{{ form.instalacion_pilotes_ok.label }}</span></label>
+        <label>{{ form.instalacion_pilotes_fecha.label }}<br>{{ form.instalacion_pilotes_fecha }}</label>
+      </div>
+    </details>
+
+    {# === Bloque 3: Solado === #}
+    <details {% if pata_actual.bloque_actual == 'SOLADO' or pata_actual.solado_ok %}open{% endif %}
+             class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        3. Solado {% if pata_actual.solado_ok %}<span class="text-green-600">✓</span>{% endif %}
+      </summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.solado_ok }} <span>{{ form.solado_ok.label }}</span></label>
+        <label>{{ form.solado_fecha.label }}<br>{{ form.solado_fecha }}</label>
+        <label>{{ form.solado_m3.label }}<br>{{ form.solado_m3 }}</label>
+      </div>
+    </details>
+
+    {# === Bloque 4: Acero (alerta materiales) === #}
+    <details {% if pata_actual.bloque_actual == 'ACERO' or pata_actual.acero_refuerzo_ok %}open{% endif %}
+             class="bg-white dark:bg-gray-800 rounded-lg shadow border {% if pata_actual.desviacion_acero_pct != None and pata_actual.alarma_materiales %}border-red-400{% else %}border-gray-200 dark:border-gray-700{% endif %}">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        4. Acero {% if pata_actual.acero_refuerzo_ok %}<span class="text-green-600">✓</span>{% endif %}
+        {% if pata_actual.desviacion_acero_pct != None %}
+          <span class="ml-2 text-xs {% if pata_actual.alarma_materiales %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">
+            Desv: {{ pata_actual.desviacion_acero_pct }}%{% if pata_actual.alarma_materiales %} ⚠{% endif %}
+          </span>
+        {% endif %}
+      </summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.acero_refuerzo_ok }} <span>{{ form.acero_refuerzo_ok.label }}</span></label>
+        <label>{{ form.acero_refuerzo_fecha.label }}<br>{{ form.acero_refuerzo_fecha }}</label>
+        <label>{{ form.acero_solicitado_kg.label }}<br>{{ form.acero_solicitado_kg }}</label>
+        <label>{{ form.acero_instalado_kg.label }}<br>{{ form.acero_instalado_kg }}</label>
+        <label>{{ form.acero_kg.label }}<br>{{ form.acero_kg }}</label>
+        <label class="flex items-center gap-2">{{ form.nivelacion_ok }} <span>{{ form.nivelacion_ok.label }}</span></label>
+        <label>{{ form.nivelacion_fecha.label }}<br>{{ form.nivelacion_fecha }}</label>
+      </div>
+    </details>
+
+    {# === Bloque 5: Vaciado + cilindros === #}
+    <details {% if pata_actual.bloque_actual == 'VACIADO' or pata_actual.vaciado_ok %}open{% endif %}
+             class="bg-white dark:bg-gray-800 rounded-lg shadow border {% if pata_actual.cilindros_pendientes %}border-orange-400{% else %}border-gray-200 dark:border-gray-700{% endif %}">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        5. Vaciado en concreto {% if pata_actual.vaciado_ok %}<span class="text-green-600">✓</span>{% endif %}
+        {% if pata_actual.cilindros_pendientes %}<span class="ml-2 text-xs text-orange-600 font-semibold">Cilindros pendientes: {{ pata_actual.cilindros_pendientes|join:", " }}d ⚠</span>{% endif %}
+      </summary>
+      <div class="p-4 space-y-3 border-t">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="flex items-center gap-2">{{ form.vaciado_ok }} <span>{{ form.vaciado_ok.label }}</span></label>
+          <label>{{ form.vaciado_fecha.label }}<br>{{ form.vaciado_fecha }}</label>
+          <label>{{ form.concreto_solicitado_m3.label }}<br>{{ form.concreto_solicitado_m3 }}</label>
+          <label>{{ form.concreto_instalado_m3.label }}<br>{{ form.concreto_instalado_m3 }}</label>
+          <label>{{ form.concreto_m3.label }}<br>{{ form.concreto_m3 }}</label>
+          <label>{{ form.concreto_psi.label }}<br>{{ form.concreto_psi }}</label>
+          <label>{{ form.resistencia_especificada_mpa.label }}<br>{{ form.resistencia_especificada_mpa }}</label>
+        </div>
+        <div class="border-t pt-3">
+          <p class="text-sm font-medium mb-2">Cilindros de fallo (MPa)</p>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <label>{{ form.cilindro_7d_mpa.label }}<br>{{ form.cilindro_7d_mpa }}</label>
+            <label>{{ form.cilindro_14d_mpa.label }}<br>{{ form.cilindro_14d_mpa }}</label>
+            <label>{{ form.cilindro_21d_mpa.label }}<br>{{ form.cilindro_21d_mpa }}</label>
+            <label>{{ form.cilindro_51d_mpa.label }}<br>{{ form.cilindro_51d_mpa }}</label>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    {# === Bloque 6: Compactación + SPT base === #}
+    <details {% if pata_actual.bloque_actual == 'COMPACTACION' or pata_actual.relleno_compactacion_ok %}open{% endif %}
+             class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        6. Relleno, compactación y SPT {% if pata_actual.relleno_compactacion_ok %}<span class="text-green-600">✓</span>{% endif %}
+      </summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.relleno_compactacion_ok }} <span>{{ form.relleno_compactacion_ok.label }}</span></label>
+        <label>{{ form.relleno_compactacion_fecha.label }}<br>{{ form.relleno_compactacion_fecha }}</label>
+        <label>{{ form.relleno_m3.label }}<br>{{ form.relleno_m3 }}</label>
+        <label class="flex items-center gap-2">{{ form.spt_base_ok }} <span>{{ form.spt_base_ok.label }}</span></label>
+        <label>{{ form.spt_base_fecha.label }}<br>{{ form.spt_base_fecha }}</label>
+        <div></div>
+        <label class="flex items-center gap-2">{{ form.spt_modulos_ok }} <span>{{ form.spt_modulos_ok.label }}</span></label>
+        <label>{{ form.spt_modulos_fecha.label }}<br>{{ form.spt_modulos_fecha }}</label>
+      </div>
+    </details>
+
+    {# === Cuadrilla + observaciones === #}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <label>{{ form.cuadrilla_civil.label }}<br>{{ form.cuadrilla_civil }}</label>
+      <label class="md:col-span-2">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
+    </div>
+
+    <div class="flex justify-end space-x-2">
+      <a href="{% url 'construccion:obra_civil_lista' proyecto.id %}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 dark:text-gray-300">Cancelar</a>
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar pata {{ active_pata }}</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
