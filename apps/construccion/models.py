@@ -356,10 +356,15 @@ class SocialPredial(BaseModel):
     )
 
     propietario = models.CharField('Propietario', max_length=300, blank=True)
-    telefono = models.CharField('Teléfono', max_length=50, blank=True)
+    persona_contacto = models.CharField('Persona de contacto', max_length=300, blank=True,
+                                        help_text='Si difiere del propietario')
+    telefono = models.CharField('Teléfono de contacto', max_length=50, blank=True)
     predio = models.CharField('Nombre de la finca', max_length=200, blank=True)
+    departamento = models.CharField('Departamento', max_length=100, blank=True)
     municipio = models.CharField('Municipio', max_length=100, blank=True)
     unidad_territorial = models.CharField('Vereda/corregimiento', max_length=200, blank=True)
+    fecha_socializacion = models.DateField('Fecha de socialización del proyecto a comunidades',
+                                           null=True, blank=True)
 
     # Document tracking: (fecha, ok) pairs
     pipc_municipio_fecha = models.DateField('PIPC Municipio - Fecha', null=True, blank=True)
@@ -398,18 +403,22 @@ class SocialPredial(BaseModel):
 
     @property
     def semaforo(self):
-        """Green if all documents OK, red otherwise."""
-        todos_ok = all([
-            self.pipc_municipio_ok,
-            self.pipc_unidad_ok,
-            self.acta_vecindad_ok,
-            self.acta_acceso_comunitario_ok,
-            self.autorizacion_propietario_ok,
-            self.acta_acceso_privado_ok,
-            self.liberacion_predial_pdo_ok,
-            self.contratacion_monc_ok,
-        ])
-        return 'VERDE' if todos_ok else 'ROJO'
+        """Verde si las 4 actas de liberación tienen fecha; rojo en caso contrario.
+        Regla definida por Ana Sofía Munera (Reunión 10, 00:05:52):
+        'estas cuatro fechas, si están completas, me libere'. Las 4 actas son:
+        Vecindad + Acceso Comunitario + Acta con Propietario (autorizacion) + Acceso Privado.
+        """
+        cuatro_actas = [
+            self.acta_vecindad_fecha,
+            self.acta_acceso_comunitario_fecha,
+            self.autorizacion_propietario_fecha,
+            self.acta_acceso_privado_fecha,
+        ]
+        return 'VERDE' if all(cuatro_actas) else 'ROJO'
+
+    @property
+    def liberado(self):
+        return self.semaforo == 'VERDE'
 
 
 class AmbientalTorre(BaseModel):
@@ -423,31 +432,60 @@ class AmbientalTorre(BaseModel):
         related_name='ambiental',
     )
 
-    # Environmental activities
+    # Ahuyentamiento (puede no aplicar — potrero limpio sin fauna)
+    ahuyentamiento_aplica = models.BooleanField('Aplica ahuyentamiento', default=True)
     ahuyentamiento_fecha = models.DateField('Ahuyentamiento especies - Fecha', null=True, blank=True)
     ahuyentamiento_ok = models.BooleanField('Ahuyentamiento especies - OK', default=False)
 
-    aprov_forestal_torre_fecha = models.DateField('Aprovech. Forestal (torre) - Fecha', null=True, blank=True)
+    # Epífitas (puede no aplicar — sin árboles con epífitas)
+    epifitas_aplica = models.BooleanField('Aplica gestión de epífitas', default=True)
+    conteo_epifitas = models.PositiveIntegerField('Conteo de epífitas a reubicar',
+                                                  null=True, blank=True)
+    conteo_epifitas_fecha = models.DateField('Conteo de epífitas - Fecha',
+                                             null=True, blank=True)
+    traslado_epifitas_fecha = models.DateField('Traslado de epífitas a vivero - Fecha',
+                                               null=True, blank=True)
+    traslado_epifitas_ok = models.BooleanField('Traslado de epífitas - OK', default=False)
+    reubicacion_epifitas_fecha = models.DateField(
+        'Reubicación de epífitas (con corporación) - Fecha', null=True, blank=True)
+    reubicacion_epifitas_ok = models.BooleanField('Reubicación de epífitas - OK', default=False)
+
+    # Aprovechamiento forestal — torre + vanos
+    aprov_forestal_torre_aplica = models.BooleanField('Aplica aprovechamiento forestal (torre)',
+                                                      default=True)
+    aprov_forestal_torre_fecha = models.DateField('Aprovech. Forestal (torre) - Fecha',
+                                                  null=True, blank=True)
     aprov_forestal_torre_ok = models.BooleanField('Aprovech. Forestal (torre) - OK', default=False)
 
-    arqueologia_poligonos_fecha = models.DateField('Arqueología Polígonos - Fecha', null=True, blank=True)
-    arqueologia_poligonos_ok = models.BooleanField('Arqueología Polígonos - OK', default=False)
+    aprov_forestal_vano_aplica = models.BooleanField('Aplica aprovechamiento forestal (vano)',
+                                                     default=True)
+    aprov_forestal_vano_fecha = models.DateField('Aprovech. Forestal (vano) - Fecha',
+                                                 null=True, blank=True)
+    aprov_forestal_vano_ok = models.BooleanField('Aprovech. Forestal (vano) - OK', default=False)
 
+    # Arqueología
+    arqueologia_poligonos_fecha = models.DateField('Polígonos prospección ICAN - Fecha',
+                                                   null=True, blank=True)
+    arqueologia_poligonos_ok = models.BooleanField('Polígonos ICAN - OK', default=False)
     arqueologia_torre_estado = models.CharField('Arqueología Torre', max_length=50, blank=True)
+    rescate_arqueologico_aplica = models.BooleanField('Aplica rescate arqueológico', default=True)
+    rescate_arqueologico_fecha = models.DateField('Rescate Arqueológico - Fecha',
+                                                  null=True, blank=True)
+    rescate_arqueologico_ok = models.BooleanField('Rescate Arqueológico - OK', default=False)
+    monitoreo_arqueologico_aplica = models.BooleanField(
+        'Monitoreo arqueológico durante excavaciones', default=False,
+        help_text='Sí/No — definir si requiere monitoreo continuo')
 
     cambio_menor_la = models.TextField('Cambio Menor L.A.', blank=True)
 
-    adecuacion_accesos_fecha = models.DateField('Adecuación de accesos - Fecha', null=True, blank=True)
+    adecuacion_accesos_fecha = models.DateField('Adecuación de accesos - Fecha',
+                                                null=True, blank=True)
+    adecuacion_accesos_porcentaje = models.PositiveSmallIntegerField(
+        'Adecuación de accesos - % avance', default=0)
     adecuacion_accesos_ok = models.BooleanField('Adecuación de accesos - OK', default=False)
 
     liberacion_pdo_fecha = models.DateField('Liberación PDO - Fecha', null=True, blank=True)
     liberacion_pdo_ok = models.BooleanField('Liberación PDO - OK', default=False)
-
-    aprov_forestal_vano_fecha = models.DateField('Aprovech. Forestal (vano) - Fecha', null=True, blank=True)
-    aprov_forestal_vano_ok = models.BooleanField('Aprovech. Forestal (vano) - OK', default=False)
-
-    rescate_arqueologico_fecha = models.DateField('Rescate Arqueológico - Fecha', null=True, blank=True)
-    rescate_arqueologico_ok = models.BooleanField('Rescate Arqueológico - OK', default=False)
 
     observaciones = models.TextField('Observaciones', blank=True)
 
@@ -461,15 +499,32 @@ class AmbientalTorre(BaseModel):
 
     @property
     def semaforo(self):
-        """Green if all key documents OK, red otherwise."""
-        todos_ok = all([
-            self.ahuyentamiento_ok,
-            self.aprov_forestal_torre_ok,
-            self.arqueologia_poligonos_ok,
-            self.adecuacion_accesos_ok,
-            self.liberacion_pdo_ok,
-        ])
-        return 'VERDE' if todos_ok else 'ROJO'
+        """Verde si todas las actividades QUE APLICAN tienen fecha.
+        Regla definida por Gabriel Valencia (Reunión 10): 'aprovechamientos,
+        traslado de epífitas si se hacen, ahuyentamiento si aplica'.
+        Las actividades con `_aplica=False` se omiten del cálculo
+        (caso: 'potrero limpio sin ahuyentamiento').
+        """
+        condiciones = []
+        if self.ahuyentamiento_aplica:
+            condiciones.append(self.ahuyentamiento_fecha is not None)
+        if self.epifitas_aplica:
+            condiciones.append(self.traslado_epifitas_fecha is not None)
+            condiciones.append(self.reubicacion_epifitas_fecha is not None)
+        if self.aprov_forestal_torre_aplica:
+            condiciones.append(self.aprov_forestal_torre_fecha is not None)
+        if self.aprov_forestal_vano_aplica:
+            condiciones.append(self.aprov_forestal_vano_fecha is not None)
+        if self.rescate_arqueologico_aplica:
+            condiciones.append(self.rescate_arqueologico_fecha is not None)
+        # Si nada aplica → libre automático
+        if not condiciones:
+            return 'VERDE'
+        return 'VERDE' if all(condiciones) else 'ROJO'
+
+    @property
+    def liberado(self):
+        return self.semaforo == 'VERDE'
 
 
 class ControlLluvia(BaseModel):
