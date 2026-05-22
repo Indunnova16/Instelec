@@ -138,6 +138,55 @@ class TorreConstruccion(BaseModel):
     def __str__(self):
         return f"Torre {self.numero} ({self.proyecto.nombre})"
 
+    # === Habilitación paralela por torre (#67) ===
+    @property
+    def puede_iniciar_obra_civil(self):
+        """Habilita OC si los semáforos predial Y ambiental están en VERDE
+        para esta torre. Regla Gabriel Valencia (Reunión 8, 00:02:57)."""
+        social = getattr(self, 'social_predial', None)
+        ambiental = getattr(self, 'ambiental', None)
+        social_ok = social is not None and social.liberado
+        ambiental_ok = ambiental is not None and ambiental.liberado
+        return social_ok and ambiental_ok
+
+    @property
+    def obra_civil_completa(self):
+        """True si las 4 patas tienen lista_para_montaje=True."""
+        patas = list(self.pata_obra.all())
+        if len(patas) < 4:
+            return False
+        return all(p.lista_para_montaje for p in patas)
+
+    @property
+    def puede_iniciar_montaje(self):
+        """Habilita Montaje cuando la OC de esta torre está completa.
+        Regla 'torre por torre, no por finalización total de fase'."""
+        return self.obra_civil_completa
+
+    @property
+    def puede_iniciar_tendido(self):
+        """Habilita Tendido si Montaje entregó para carga."""
+        fase = getattr(self, 'fase', None)
+        return fase is not None and fase.entrega_carga_ok
+
+    @property
+    def fases_en_curso(self):
+        """Lista de fases activas — para dashboard de traslape (#67)."""
+        en_curso = []
+        if self.puede_iniciar_obra_civil and not self.obra_civil_completa:
+            en_curso.append('OBRA_CIVIL')
+        if self.puede_iniciar_montaje:
+            fase = getattr(self, 'fase', None)
+            if fase and not fase.entrega_carga_ok:
+                en_curso.append('MONTAJE')
+            if fase and getattr(fase, 'spt_pct', 0) > 0 and fase.spt_pct < 100:
+                en_curso.append('SPT')
+        if self.puede_iniciar_tendido:
+            fase = getattr(self, 'fase', None)
+            if fase and fase.porcentaje_tendido < 100:
+                en_curso.append('TENDIDO')
+        return en_curso
+
 
 class PataObra(BaseModel):
     """
@@ -980,3 +1029,159 @@ class CorreccionEntrega(BaseModel):
 
     def __str__(self):
         return f"Corrección - Torre {self.torre.numero}"
+
+
+class ObraProteccion(BaseModel):
+    """Obras de protección por torre (#59): trinchos, cunetas, gaviones,
+    revegetalización, geotextil. Se ejecutan en torres en ladera/montaña.
+    Cantidades de materiales derivadas de metros lineales (estándar)."""
+
+    class TipoMedida(models.TextChoices):
+        CUNETAS = 'CUNETAS', 'Cunetas'
+        TRINCHOS = 'TRINCHOS', 'Trinchos'
+        GAVIONES = 'GAVIONES', 'Gaviones'
+        REVEGETALIZACION = 'REVEGETALIZACION', 'Revegetalización'
+        GEOTEXTIL = 'GEOTEXTIL', 'Geotextil'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    torre = models.OneToOneField(
+        TorreConstruccion, on_delete=models.CASCADE,
+        related_name='obra_proteccion',
+    )
+    tipos_medida = models.CharField(
+        'Tipos de medida de manejo', max_length=200, blank=True,
+        help_text='Lista CSV: CUNETAS,TRINCHOS,GAVIONES,REVEGETALIZACION,GEOTEXTIL')
+    metros_trinchos = models.FloatField('Metros lineales trinchos',
+                                        null=True, blank=True)
+    metros_cunetas = models.FloatField('Metros lineales cunetas',
+                                       null=True, blank=True)
+    nota = models.TextField('Nota / descripción', blank=True)
+
+    # Materiales (declarados o calculados; UI puede precalcular desde m_lineales)
+    tubo_metalico_unidades = models.FloatField('Tubo metálico 3x3" zinc 50µ (uds 3m)',
+                                               null=True, blank=True)
+    malla_eslabonada_m2 = models.FloatField('Malla eslabonada galvanizada (m²)',
+                                            null=True, blank=True)
+    alambre_galvanizado_kg = models.FloatField('Alambre galvanizado (kg)',
+                                               null=True, blank=True)
+    geotextil_m2 = models.FloatField('Geotextil (m²)', null=True, blank=True)
+    cemento_bultos = models.FloatField('Cemento general (bultos 50 kg)',
+                                       null=True, blank=True)
+    arena_cunetes = models.FloatField('Arena (cuñetes)', null=True, blank=True,
+                                      help_text='Zona montañosa — no camiones')
+    grava_cunetes = models.FloatField('Grava (cuñetes)', null=True, blank=True)
+    revegetalizacion_m2 = models.FloatField('Revegetalización (m²)',
+                                            null=True, blank=True)
+
+    cuadrilla = models.ForeignKey(
+        'cuadrillas.Cuadrilla', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='obras_proteccion')
+    fecha_ejecucion = models.DateField('Fecha de ejecución', null=True, blank=True)
+    completada_ok = models.BooleanField('Obra completada', default=False)
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'construccion_obra_proteccion'
+        verbose_name = 'Obra de Protección'
+        verbose_name_plural = 'Obras de Protección'
+
+    def __str__(self):
+        return f"Protección - Torre {self.torre.numero}"
+
+
+class PruebaTecnica(BaseModel):
+    """Pruebas técnicas certificadas del proyecto (#60). Configurable:
+    número y nombres definidos por cliente. Ejemplos: empalmes F.O,
+    pruebas comunicación OTDR, parámetros eléctricos LT, certificado Retie,
+    mediciones paso/contacto."""
+
+    class Resultado(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', 'Pendiente'
+        CUMPLE = 'CUMPLE', 'Cumple'
+        NO_CUMPLE = 'NO_CUMPLE', 'No cumple'
+        NO_APLICA = 'NO_APLICA', 'No aplica'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='pruebas_tecnicas')
+    nombre = models.CharField('Nombre de la prueba', max_length=300,
+                              help_text='Editable; ej: "Pruebas comunicación F.O entre subestaciones"')
+    orden = models.PositiveSmallIntegerField('Orden', default=0)
+    fecha_programada = models.DateField('Fecha programada', null=True, blank=True)
+    fecha_ejecucion = models.DateField('Fecha real de ejecución',
+                                       null=True, blank=True)
+    laboratorio = models.CharField('Laboratorio / Empresa certificadora',
+                                   max_length=200, blank=True)
+    resultado = models.CharField('Resultado', max_length=15,
+                                 choices=Resultado.choices,
+                                 default=Resultado.PENDIENTE)
+    adjunto = models.FileField('Documento del resultado',
+                               upload_to='construccion/pruebas/',
+                               null=True, blank=True)
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'construccion_prueba_tecnica'
+        verbose_name = 'Prueba Técnica'
+        verbose_name_plural = 'Pruebas Técnicas'
+        ordering = ['proyecto', 'orden', 'nombre']
+
+    def __str__(self):
+        return f"{self.proyecto.nombre} — {self.nombre}"
+
+
+class KitCerramiento(BaseModel):
+    """Kit reutilizable de cerramiento (#65). Madera/lona/alambre que se mueve
+    de torre en torre. Caso real Gabriel Valencia: 33 torres encerradas porque
+    los kits quedaron empeñados — se compró material extra innecesariamente."""
+
+    class Estado(models.TextChoices):
+        DISPONIBLE = 'DISPONIBLE', 'Disponible'
+        EN_USO = 'EN_USO', 'En uso'
+        DAÑADO = 'DAÑADO', 'Dañado'
+        PERDIDO = 'PERDIDO', 'Perdido'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='kits_cerramiento')
+    codigo = models.CharField('Código del kit', max_length=30,
+                              help_text='Ej: KIT-001, KIT-002')
+    componentes = models.CharField('Tipo de componentes', max_length=200,
+                                   help_text='CSV libre: madera, lona, alambre')
+    cantidad = models.PositiveIntegerField('Cantidad de componentes', default=1)
+    estado = models.CharField('Estado', max_length=15, choices=Estado.choices,
+                              default=Estado.DISPONIBLE)
+    torre_actual = models.ForeignKey(
+        TorreConstruccion, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='kits_en_torre',
+        help_text='Torre donde está actualmente el kit')
+    fecha_ingreso_torre = models.DateField('Fecha de ingreso a esta torre',
+                                           null=True, blank=True)
+    fecha_salida_torre = models.DateField('Fecha de salida de esta torre',
+                                          null=True, blank=True)
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'construccion_kit_cerramiento'
+        verbose_name = 'Kit de Cerramiento'
+        verbose_name_plural = 'Kits de Cerramiento'
+        unique_together = [['proyecto', 'codigo']]
+        ordering = ['proyecto', 'codigo']
+
+    def __str__(self):
+        return f"{self.codigo} ({self.estado})"
+
+    @property
+    def dias_en_torre_actual(self):
+        if not self.torre_actual or not self.fecha_ingreso_torre:
+            return None
+        from datetime import date
+        return (date.today() - self.fecha_ingreso_torre).days
+
+    @property
+    def alerta_demora(self):
+        """True si lleva >30 días en la misma torre — caso 33 torres encerradas."""
+        dias = self.dias_en_torre_actual
+        return dias is not None and dias > 30
