@@ -75,15 +75,13 @@
             <template x-if="modulo === 'construccion'">
                 <select class="w-full px-3 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         @change="if ($event.target.value) {
-                            const id = $event.target.value.split('-')[1];
-                            localStorage.setItem('proyecto_construccion', $event.target.value);
-                            localStorage.setItem('contrato_construccion_id', id);
-                            $dispatch('contrato-changed');
+                            localStorage.setItem('proyecto_construccion_id', $event.target.value);
+                            window.location.href = '/construccion/' + $event.target.value + '/';
                         }"
-                        x-init="$el.value = localStorage.getItem('proyecto_construccion') || ''">
-                    <option value="">🏗️ Seleccionar proyecto...</option>
-                    {% for c in contratos_construccion %}
-                    <option value="const-{{ c.id }}">{{ c.codigo }} - {{ c.nombre|truncatewords:3 }}</option>
+                        x-init="$el.value = localStorage.getItem('proyecto_construccion_id') || ''">
+                    <option value="">🏗️ Ir a proyecto...</option>
+                    {% for p in proyectos_construccion %}
+                    <option value="{{ p.id }}">{{ p.contrato.codigo }} - {{ p.nombre|truncatewords:3 }}</option>
                     {% endfor %}
                 </select>
             </template>
@@ -296,6 +294,16 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                             </svg>
                             Contratos
+                        </a>
+                    </li>
+
+                    <!-- Proyectos -->
+                    <li role="none">
+                        <a href="{% url 'construccion:lista' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                            </svg>
+                            Proyectos
                         </a>
                     </li>
 

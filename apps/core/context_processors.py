@@ -2,6 +2,7 @@
 Global context processors for all templates.
 """
 from apps.contratos.models import Contrato
+from apps.construccion.models import ProyectoConstruccion
 
 from .utils import get_unidad_negocio
 
@@ -17,5 +18,8 @@ def modulo_context(request):
             unidad_negocio='CONSTRUCCION',
             estado='ACTIVO',
         ).order_by('codigo'),
+        'proyectos_construccion': ProyectoConstruccion.objects.filter(
+            estado__in=['PLANIFICACION', 'EJECUCION', 'CIERRE'],
+        ).select_related('contrato').order_by('contrato__codigo'),
         'unidad_negocio_actual': get_unidad_negocio(request),
     }
