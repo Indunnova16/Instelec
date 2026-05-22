@@ -13,7 +13,9 @@ class ContratoForm(forms.ModelForm):
             'unidad_negocio', 'codigo', 'nombre', 'cliente',
             'objeto', 'valor', 'fecha_inicio', 'fecha_fin',
             'estado', 'observaciones',
-            'tipo_contrato', 'plazo_ejecucion', 'longitud_linea', 'numero_torres', 'acta_inicio',
+            'tipo_contrato', 'plazo_ejecucion', 'longitud_linea', 'numero_torres',
+            'voltaje', 'numero_circuitos',
+            'acta_inicio', 'fecha_acta_inicio',
         ]
         widgets = {
             'unidad_negocio': forms.Select(attrs={'class': CSS}),
@@ -27,8 +29,11 @@ class ContratoForm(forms.ModelForm):
             'estado': forms.Select(attrs={'class': CSS}),
             'observaciones': forms.Textarea(attrs={'class': CSS, 'rows': 3}),
             'tipo_contrato': forms.Select(attrs={'class': CSS}),
-            'plazo_ejecucion': forms.NumberInput(attrs={'class': CSS, 'placeholder': 'Ej: 180'}),
+            'plazo_ejecucion': forms.NumberInput(attrs={'class': CSS, 'placeholder': 'Ej: 270'}),
             'longitud_linea': forms.NumberInput(attrs={'class': CSS, 'step': '0.01', 'placeholder': 'Ej: 42.5'}),
             'numero_torres': forms.NumberInput(attrs={'class': CSS, 'placeholder': 'Ej: 64', 'min': '1'}),
+            'voltaje': forms.Select(attrs={'class': CSS}),
+            'numero_circuitos': forms.Select(attrs={'class': CSS}),
             'acta_inicio': forms.ClearableFileInput(attrs={'class': CSS}),
+            'fecha_acta_inicio': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': CSS}),
         }
