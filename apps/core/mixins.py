@@ -26,6 +26,9 @@ class RoleRequiredMixin(UserPassesTestMixin):
     """
     Mixin that requires user to have specific role(s).
     Administrators (admin role) have access to all views.
+    RBAC v2 (#44): cualquier rol nivel `admin` (admin_general, coordinador_general,
+    admin_mantenimiento, admin_construccion) pasa automáticamente — independientemente
+    de la `allowed_roles` legacy que la vista declare.
     """
     allowed_roles = []
 
@@ -40,6 +43,14 @@ class RoleRequiredMixin(UserPassesTestMixin):
         # Check if user has is_admin property (for custom User model)
         try:
             if getattr(self.request.user, 'is_admin', False):
+                return True
+        except Exception:
+            pass
+
+        # RBAC v2 (#44): rol admin nivel → pasa
+        try:
+            from .permissions import user_es_admin
+            if user_es_admin(self.request.user):
                 return True
         except Exception:
             pass
