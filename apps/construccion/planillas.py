@@ -25,7 +25,12 @@ PLANILLAS_DISPONIBLES = {
     'FT-914': ('Control de compactación', 'Obra Civil - Compactación'),
     'FT-916': ('Planilla nivelación de stub', 'Obra Civil - Acero'),
     'FT-918': ('Tabla de cruces post-tendido', 'Tendido'),
+    'FT-922': ('Concepto de entibado', 'Obra Civil - Excavación'),
     'FT-925': ('Prueba de carga de pilotes', 'Obra Civil - Excavación'),
+    'FT-926': ('Marcación de pilotes', 'Obra Civil - Excavación'),
+    'FT-927': ('Registro de cantidades de pilotes', 'Obra Civil - Excavación'),
+    'FT-928': ('Registro de torques de pilotes', 'Obra Civil - Excavación'),
+    'FT-929': ('Localización final de pilotes', 'Obra Civil - Excavación'),
     'FT-930': ('Revisión acero/formaleta/SPT base', 'Obra Civil - Acero'),
     'FT-932': ('Control regulación conductor', 'Tendido'),
 }

@@ -1,0 +1,36 @@
+{% extends "construccion/planillas/_base.html" %}
+{% block contenido %}
+<section>
+  <h2>Concepto de entibado</h2>
+  <table class="kv">
+    <tr><td class="lbl">Aplica entivado</td><td>{{ patas.0.excavacion_ok|default:"—" }}</td></tr>
+    <tr><td class="lbl">Tipo de excavación</td><td>{{ patas.0.tipo_excavacion|default:"—" }}</td></tr>
+    <tr><td class="lbl">Profundidad / m³ generados</td><td>{{ patas.0.excavacion_m3|default:"—" }}</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Tabla por pata</h2>
+  <table class="kv">
+    <tr><td class="lbl" style="background:#ccc">Pata</td>
+        <td class="lbl" style="background:#ccc">Replanteo OK</td>
+        <td class="lbl" style="background:#ccc">Excavación OK</td>
+        <td class="lbl" style="background:#ccc">Pilotes OK</td></tr>
+    {% for p in patas %}
+    <tr>
+      <td><strong>{{ p.pata }}</strong></td>
+      <td>{{ p.replanteo_ok|yesno:"✓,—" }}</td>
+      <td>{{ p.excavacion_ok|yesno:"✓,—" }}</td>
+      <td>{{ p.instalacion_pilotes_ok|yesno:"✓,—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

@@ -171,8 +171,25 @@ class ProyectoConstruccion(BaseModel):
             resultado.append({
                 'mes': m.isoformat(),
                 'planeado': round(esperado, 1),
-                'real': None,  # Calcular real con histórico de avances exige snapshots — pendiente
+                'real': None,
             })
+        # Sobrescribir 'real' con SnapshotAvance histórico (#61)
+        from .models import SnapshotAvance
+        snapshots = SnapshotAvance.objects.filter(
+            proyecto=self, fecha__gte=inicio, fecha__lte=fin
+        ).order_by('fecha')
+        # Para cada mes, busca el último snapshot ≤ ese mes
+        snap_list = [(s.fecha, s.pct_general) for s in snapshots]
+        for row in resultado:
+            from datetime import date as date_cls
+            mes_date = date_cls.fromisoformat(row['mes'])
+            mejor = None
+            for snap_fecha, snap_pct in snap_list:
+                if snap_fecha <= mes_date:
+                    mejor = snap_pct
+                else:
+                    break
+            row['real'] = mejor
         return resultado
 
     # === Financiero (#69 #66 #70) ===
@@ -1509,3 +1526,50 @@ class MovimientoFinanciero(BaseModel):
 
     def __str__(self):
         return f"{self.periodo} | {self.categoria.codigo} | {self.tipo} | ${self.valor:,.0f}"
+
+
+class SnapshotAvance(BaseModel):
+    """Snapshot mensual del % avance por sección de un proyecto (#61).
+
+    Capturado por el management command `snapshot_avance_proyectos`,
+    típicamente vía Celery beat el primer día del mes. Sirve para
+    reconstruir la curva S del avance real histórico (sin snapshots
+    solo tenemos el dato instantáneo)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='snapshots_avance')
+    fecha = models.DateField('Fecha del snapshot')
+    pct_civil = models.FloatField('% Obra Civil (ponderado)', default=0)
+    pct_montaje = models.FloatField('% Montaje', default=0)
+    pct_tendido = models.FloatField('% Tendido', default=0)
+    pct_general = models.FloatField('% General (promedio)', default=0)
+
+    class Meta:
+        db_table = 'construccion_snapshot_avance'
+        verbose_name = 'Snapshot de Avance'
+        verbose_name_plural = 'Snapshots de Avance'
+        unique_together = [['proyecto', 'fecha']]
+        ordering = ['proyecto', 'fecha']
+
+    def __str__(self):
+        return f"{self.proyecto.nombre} @ {self.fecha} ({self.pct_general}%)"
+
+    @classmethod
+    def capturar(cls, proyecto, fecha=None):
+        """Captura un snapshot del estado actual del proyecto."""
+        from datetime import date
+        fecha = fecha or date.today()
+        civil = float(proyecto.porcentaje_avance_civil_ponderado or 0)
+        montaje = float(proyecto.porcentaje_avance_montaje or 0)
+        tendido = float(proyecto.porcentaje_avance_tendido or 0)
+        general = round((civil + montaje + tendido) / 3, 2)
+        snap, _ = cls.objects.update_or_create(
+            proyecto=proyecto, fecha=fecha,
+            defaults={
+                'pct_civil': civil, 'pct_montaje': montaje,
+                'pct_tendido': tendido, 'pct_general': general,
+            },
+        )
+        return snap

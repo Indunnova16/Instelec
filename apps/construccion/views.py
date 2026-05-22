@@ -60,18 +60,22 @@ class ProyectoDashboardView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
 
 
 class TorresListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
-    """List towers in a construction project."""
+    """List towers in a construction project. Si user es operario (#62),
+    filtra solo a las torres con cuadrillas asignadas al usuario."""
     model = TorreConstruccion
     template_name = 'construccion/torres_list.html'
     context_object_name = 'torres'
     paginate_by = 50
-    allowed_roles = ['admin', 'director', 'coordinador']
+    # Operario también puede entrar, pero ve queryset filtrado.
+    allowed_roles = ['admin', 'director', 'coordinador',
+                     'admin_general', 'coordinador_general', 'admin_construccion',
+                     'operario_construccion', 'operario_general']
 
     def get_queryset(self):
         proyecto_id = self.kwargs.get('proyecto_id')
-        return TorreConstruccion.objects.filter(
-            proyecto_id=proyecto_id
-        ).order_by('numero')
+        qs = TorreConstruccion.objects.filter(proyecto_id=proyecto_id)
+        qs = filtrar_torres_por_cuadrilla(qs, self.request.user)
+        return qs.order_by('numero')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -430,6 +434,38 @@ ALL_ADMIN_ROLES = [
 ]
 
 
+# Roles operario que ven solo SUS torres (por cuadrilla asignada) — #62
+OPERARIO_ROLES = [
+    'operario_construccion', 'operario_general',
+    'supervisor', 'liniero', 'auxiliar',
+]
+
+
+def filtrar_torres_por_cuadrilla(qs, user):
+    """Si el user es operario (RBAC v2 o legacy), filtra `qs` (TorreConstruccion
+    queryset) para que solo aparezcan las torres con alguna pata o fase
+    asignada a alguna de sus cuadrillas activas. Admin / superuser → sin filtro.
+    Helper de #62.
+    """
+    if user.is_superuser:
+        return qs
+    if not getattr(user, 'es_operario_campo', False):
+        return qs
+    cuadrillas = user.cuadrillas_activas
+    if not cuadrillas:
+        return qs.none()
+    # cuadrilla_civil + cuadrilla_montaje son CharField (legacy); en MVP filtramos
+    # solo por nombre exacto si las cuadrillas activas matchean.
+    from apps.cuadrillas.models import Cuadrilla
+    nombres = list(Cuadrilla.objects.filter(id__in=cuadrillas).values_list('nombre', flat=True))
+    return qs.filter(
+        Q(pata_obra__cuadrilla_civil__in=nombres) |
+        Q(fase__cuadrilla_montaje__in=nombres) |
+        Q(fase__cuadrilla_tendido__in=nombres) |
+        Q(fase__cuadrilla_prearmado__in=nombres)
+    ).distinct()
+
+
 class ObraProteccionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     """Listado de obras de protección (#59) por proyecto."""
     template_name = 'construccion/protecciones_lista.html'
@@ -437,9 +473,18 @@ class ObraProteccionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     allowed_roles = ALL_ADMIN_ROLES
 
     def get_queryset(self):
-        return ObraProteccion.objects.filter(
+        qs = ObraProteccion.objects.filter(
             torre__proyecto_id=self.kwargs['proyecto_id']
-        ).select_related('torre', 'cuadrilla').order_by('torre__numero')
+        ).select_related('torre', 'cuadrilla')
+        user = self.request.user
+        # #62: operario solo ve obras de torres con sus cuadrillas
+        if getattr(user, 'es_operario_campo', False) and not user.is_superuser:
+            torres_user = filtrar_torres_por_cuadrilla(
+                TorreConstruccion.objects.filter(proyecto_id=self.kwargs['proyecto_id']),
+                user,
+            )
+            qs = qs.filter(torre__in=torres_user)
+        return qs.order_by('torre__numero')
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -784,6 +829,7 @@ class MovimientoFinancieroSaveView(LoginRequiredMixin, RoleRequiredMixin, Templa
     def post(self, request, *args, **kwargs):
         from decimal import Decimal, InvalidOperation
         from django.http import JsonResponse
+        from .signals import PresupuestoBloqueadoError
         try:
             categoria_id = request.POST['categoria_id']
             periodo_id = request.POST['periodo_id']
@@ -793,12 +839,28 @@ class MovimientoFinancieroSaveView(LoginRequiredMixin, RoleRequiredMixin, Templa
             return JsonResponse({'ok': False, 'error': 'bad params'}, status=400)
         if tipo not in ('PRESUPUESTO', 'REAL'):
             return JsonResponse({'ok': False, 'error': 'bad tipo'}, status=400)
-        MovimientoFinanciero.objects.update_or_create(
-            categoria_id=categoria_id,
-            periodo_id=periodo_id,
-            tipo=tipo,
-            defaults={'valor': valor, 'usuario': request.user},
+
+        override = (
+            request.POST.get('override') == '1'
+            and getattr(request.user, 'is_superuser', False)
         )
+        try:
+            obj, _ = MovimientoFinanciero.objects.get_or_create(
+                categoria_id=categoria_id,
+                periodo_id=periodo_id,
+                tipo=tipo,
+                defaults={'valor': valor, 'usuario': request.user},
+            )
+            # Update path (if existing) — pre_save signal puede rechazar
+            if obj.valor != valor:
+                obj.valor = valor
+                obj.usuario = request.user
+                if override:
+                    obj._override_presupuesto = True
+                obj.save()
+        except PresupuestoBloqueadoError as e:
+            return JsonResponse({'ok': False, 'error': str(e),
+                                 'blocked': True}, status=409)
         return JsonResponse({'ok': True, 'valor': str(valor)})
 
 
@@ -814,6 +876,12 @@ class CilindrosPendientesView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         patas = PataObra.objects.filter(
             torre__proyecto=proyecto, vaciado_fecha__isnull=False
         ).select_related('torre')
+        user = self.request.user
+        # #62: operario solo ve cilindros de torres con sus cuadrillas
+        if getattr(user, 'es_operario_campo', False) and not user.is_superuser:
+            torres_user = filtrar_torres_por_cuadrilla(
+                TorreConstruccion.objects.filter(proyecto=proyecto), user)
+            patas = patas.filter(torre__in=torres_user)
         pendientes = []
         proximos = []
         for p in patas:
