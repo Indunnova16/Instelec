@@ -352,3 +352,18 @@ def test_ambiental_guarda_aprovechamiento_forestal(
     assert str(amb.aprov_forestal_torre_fecha) == '2026-05-10'
     assert str(amb.aprov_forestal_vano_fecha) == '2026-05-12'
     assert amb.adecuacion_accesos_porcentaje == 60
+
+
+# ====== Ingeniería redirect (#50) ======
+
+@pytest.mark.django_db
+def test_ingenieria_tab_redirige_a_modulo_ingenieria(
+    authenticated_client, proyecto_construccion
+):
+    """Tab Ingeniería del proyecto redirige a /ingenieria/<contrato>/civil/
+    en lugar de mostrar el stub "En Desarrollo" anterior (#50)."""
+    url = reverse('construccion:ingenieria',
+                  kwargs={'proyecto_id': proyecto_construccion.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 302
+    assert f'/ingenieria/{proyecto_construccion.contrato_id}/civil/' in resp.url

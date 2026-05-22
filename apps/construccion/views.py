@@ -1,6 +1,7 @@
 """
 Views for the construccion (construction) app.
 """
+from django.views import View
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
@@ -494,18 +495,18 @@ class ContratoView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         return reverse_lazy('construccion:contrato', kwargs={'proyecto_id': self.kwargs['proyecto_id']})
 
 
-class IngenieriaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Engineering and construction tracking."""
-    template_name = 'construccion/ingenieria.html'
-    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+class IngenieriaView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Redirige al módulo Ingeniería (apps.ingenieria) usando el contrato del
+    proyecto. El módulo nuevo (#50) opera por contrato con checklist
+    Civil/Montaje/Tendido. Aterrizamos en Civil por defecto; el usuario navega
+    sub-tabs dentro de tabla.html."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente',
+                     'admin_general', 'coordinador_general', 'admin_construccion']
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        proyecto_id = self.kwargs.get('proyecto_id')
-        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
-        context['proyecto'] = proyecto
-        context['active_tab'] = 'ingenieria'
-        return context
+    def get(self, request, *args, **kwargs):
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        return redirect('ingenieria:civil', contrato_id=proyecto.contrato_id)
 
 
 class PreliminaresView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
