@@ -335,6 +335,39 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
     template_name = 'actividades/importar.html'
     allowed_roles = ['admin', 'director', 'coordinador']
 
+    @staticmethod
+    def _es_formato_semanal(archivo):
+        """True si el Excel tiene ≥1 hoja con nombre numérico y headers
+        que incluyen AVISOS+ACTIVIDAD (formato real Instelec)."""
+        from openpyxl import load_workbook
+        try:
+            archivo.seek(0)
+        except Exception:
+            pass
+        try:
+            wb = load_workbook(archivo, read_only=True, data_only=True)
+        except Exception:
+            return False
+        finally:
+            try:
+                archivo.seek(0)
+            except Exception:
+                pass
+        for sheet_name in wb.sheetnames:
+            token = sheet_name.strip().lower().lstrip('s').replace('semana', '').strip()
+            if not token.isdigit():
+                continue
+            ws = wb[sheet_name]
+            rows = ws.iter_rows(min_row=2, max_row=2, values_only=True)
+            try:
+                header = next(rows)
+            except StopIteration:
+                continue
+            header_lower = {str(c).lower().strip() for c in header if c is not None}
+            if 'avisos' in header_lower and 'actividad' in header_lower:
+                return True
+        return False
+
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         from apps.lineas.models import Linea
@@ -349,7 +382,11 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
     def post(self, request, *args, **kwargs):
         """Handle Excel file upload and import."""
-        from .importers import ProgramaTranselcaImporter, AvisosTranselcaImporter
+        from .importers import (
+            ProgramaTranselcaImporter,
+            AvisosTranselcaImporter,
+            ProgramacionSemanalImporter,
+        )
         from apps.lineas.models import Linea
 
         archivo = request.FILES.get('archivo')
@@ -371,6 +408,29 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         # Convertir a int, permitir None para detección automática
         anio = int(anio_str) if anio_str else None
         mes = int(mes_str) if mes_str else None
+
+        # Autodetectar formato: si el Excel tiene hojas con nombre numérico
+        # ('02', '18') y columnas AVISOS+ACTIVIDAD → formato semanal Instelec.
+        if not linea_id and self._es_formato_semanal(archivo):
+            importer = ProgramacionSemanalImporter()
+            resultado = importer.importar(
+                archivo,
+                opciones={'actualizar_existentes': actualizar_existentes},
+            )
+            if resultado['exito']:
+                hojas = ', '.join(resultado.get('sheets_procesadas', []))
+                mensaje = (
+                    f"Programación semanal importada: "
+                    f"{resultado['actividades_creadas']} creadas, "
+                    f"{resultado['actividades_actualizadas']} actualizadas "
+                    f"en hojas [{hojas}]."
+                )
+                if resultado.get('advertencias'):
+                    mensaje += f" {len(resultado['advertencias'])} advertencias."
+                messages.success(request, mensaje)
+            else:
+                messages.error(request, f"Error: {resultado.get('error', 'desconocido')}")
+            return redirect('actividades:programacion')
 
         # Si no hay línea, intentar importar como avisos (detecta línea del Excel)
         if not linea_id:

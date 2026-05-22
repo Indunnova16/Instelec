@@ -877,3 +877,444 @@ class AvancesImporter:
 
         if actualizado:
             self.actividades_actualizadas.append(aviso_sap)
+
+
+class ProgramacionSemanalImporter:
+    """
+    Importa Excel de programación semanal con el formato real de Instelec.
+
+    Formato esperado:
+    - Una pestaña por semana (nombres `02`, `03`, ... `S18`); pestañas no
+      numéricas se ignoran (ej. `vc`, `Hoja1`).
+    - Row 0: banner con 'Fecha de envio:' en algún punto y una fecha.
+    - Row 1: encabezados ('#', 'ACTIVIDAD', 'LINEA', 'TRAMO', 'INICIO',
+      'FIN', 'PERSONAL', 'CEDULA', 'CELULAR', 'CARGO', 'ROL', 'PLACA',
+      'AVISOS', 'ORDEN', 'PT SAP', 'Comentarios').
+    - Row 2+: filas de datos. Una fila con `#` no vacío es ACTIVIDAD; las
+      filas siguientes con `#` vacío son MIEMBROS de la cuadrilla.
+    - AVISOS/ORDEN/LINEA pueden contener múltiples valores separados por
+      saltos de línea.
+
+    Genera una `Actividad` por cada aviso × línea expandida. Asigna las
+    cuadrillas detectadas vía cédulas de los miembros listados.
+    """
+
+    COLUMN_MAPPINGS = {
+        'numero':         ['#', 'no', 'no.', 'item'],
+        'tipo_actividad': ['actividad', 'tipo actividad', 'tipo de actividad'],
+        'linea':          ['linea', 'línea', 'lineas', 'líneas'],
+        'tramo':          ['tramo', 'tramos', 'sector', 'sección'],
+        'fecha_inicio':   ['inicio', 'fecha inicio', 'fecha de inicio'],
+        'fecha_fin':      ['fin', 'fecha fin', 'fecha de fin'],
+        'personal':       ['personal', 'nombre', 'nombres'],
+        'cedula':         ['cedula', 'cédula', 'documento', 'identificacion'],
+        'cargo':          ['cargo', 'rol cuadrilla'],
+        'rol':            ['rol'],
+        'avisos':         ['avisos', 'aviso', 'aviso sap'],
+        'orden':          ['orden', 'orden sap', 'ot'],
+        'pt_sap':         ['pt sap', 'pt', 'puesto trabajo', 'puesto de trabajo'],
+        'observaciones':  ['comentarios', 'observaciones', 'obs', 'notas'],
+    }
+
+    SHEETS_EXCLUIR = {'vc', 'hoja1', 'sheet1', 'resumen', 'instrucciones'}
+
+    def __init__(self):
+        self.errores = []
+        self.advertencias = []
+        self.actividades_creadas = []
+        self.actividades_actualizadas = []
+        self.programaciones_tocadas = set()  # set[(anio, mes, linea_id)]
+        self.resumen_por_hoja = {}
+        self.column_indices = {}
+
+    def importar(self, archivo_excel, opciones=None):
+        """
+        Recorre todas las pestañas válidas del Excel y crea actividades.
+
+        Args:
+            archivo_excel: file-like or path
+            opciones: dict — actualizar_existentes (bool)
+
+        Returns:
+            dict con resumen.
+        """
+        from apps.lineas.models import Linea  # noqa: F401  (lookup arriba)
+
+        opciones = opciones or {}
+
+        try:
+            workbook = load_workbook(archivo_excel, read_only=True, data_only=True)
+        except Exception as e:
+            logger.error(f"Error loading Excel file: {e}")
+            return self._resultado_error(f'Error al cargar archivo Excel: {e}')
+
+        sheets_procesadas = []
+        for sheet_name in workbook.sheetnames:
+            if not self._es_hoja_semanal(sheet_name):
+                logger.info(f"Hoja '{sheet_name}' omitida (no es semana válida)")
+                continue
+            try:
+                resumen_hoja = self._procesar_hoja(workbook[sheet_name], opciones)
+                self.resumen_por_hoja[sheet_name] = resumen_hoja
+                sheets_procesadas.append(sheet_name)
+            except Exception as e:
+                logger.exception(f"Error procesando hoja {sheet_name!r}")
+                self.errores.append({'hoja': sheet_name, 'error': str(e)})
+
+        # Refresco contadores en cada ProgramacionMensual tocada
+        from .models import Actividad, ProgramacionMensual
+        for (anio, mes, linea_id) in self.programaciones_tocadas:
+            ProgramacionMensual.objects.filter(
+                anio=anio, mes=mes, linea_id=linea_id
+            ).update(
+                total_actividades=Actividad.objects.filter(
+                    programacion__anio=anio,
+                    programacion__mes=mes,
+                    programacion__linea_id=linea_id,
+                ).count()
+            )
+
+        return {
+            'exito': True,
+            'sheets_procesadas': sheets_procesadas,
+            'actividades_creadas': len(self.actividades_creadas),
+            'actividades_actualizadas': len(self.actividades_actualizadas),
+            'errores': self.errores,
+            'advertencias': self.advertencias,
+            'resumen_por_hoja': self.resumen_por_hoja,
+        }
+
+    # -- helpers ---------------------------------------------------------
+
+    @staticmethod
+    def _es_hoja_semanal(sheet_name):
+        import re
+        nombre = sheet_name.strip().lower()
+        if nombre in ProgramacionSemanalImporter.SHEETS_EXCLUIR:
+            return False
+        # Aceptar '02', '18', 'S18', 'Semana 18', 'semana_05'
+        return bool(re.fullmatch(r's?(emana)?[\s_]*\d+', nombre))
+
+    def _resultado_error(self, mensaje):
+        return {
+            'exito': False,
+            'error': mensaje,
+            'actividades_creadas': 0,
+            'actividades_actualizadas': 0,
+            'errores': self.errores,
+            'advertencias': self.advertencias,
+        }
+
+    def _detectar_columnas(self, header_row):
+        self.column_indices = {}
+        for col_idx, value in enumerate(header_row):
+            if value is None:
+                continue
+            cell_lower = str(value).lower().strip()
+            for field_name, posibles in self.COLUMN_MAPPINGS.items():
+                if cell_lower in posibles and field_name not in self.column_indices:
+                    self.column_indices[field_name] = col_idx
+                    break
+
+    def _get_cell(self, row, field_name):
+        idx = self.column_indices.get(field_name)
+        if idx is None or idx >= len(row):
+            return None
+        return row[idx]
+
+    def _split_multi(self, value):
+        """Devuelve lista de strings limpios separados por \\n, /, ',' o ';'."""
+        if value is None:
+            return []
+        texto = str(value).strip()
+        if not texto or texto == '-':
+            return []
+        import re
+        partes = [p.strip() for p in re.split(r'[\n/;,]+', texto) if p.strip()]
+        return partes or []
+
+    def _procesar_hoja(self, sheet, opciones):
+        from .models import Actividad, ProgramacionMensual, TipoActividad
+        from apps.lineas.models import Linea
+
+        actualizar_existentes = opciones.get('actualizar_existentes', False)
+
+        rows = list(sheet.iter_rows(values_only=True))
+        if len(rows) < 3:
+            return {'creadas': 0, 'actualizadas': 0, 'omitidas': 0, 'nota': 'hoja vacía'}
+
+        self._detectar_columnas(rows[1])
+        requeridos = {'numero', 'tipo_actividad', 'linea', 'avisos'}
+        faltantes = requeridos - set(self.column_indices)
+        if faltantes:
+            self.advertencias.append({
+                'hoja': sheet.title,
+                'mensaje': f'columnas faltantes: {sorted(faltantes)}; hoja omitida',
+            })
+            return {'creadas': 0, 'actualizadas': 0, 'omitidas': 0, 'nota': 'columnas faltantes'}
+
+        creadas = 0
+        actualizadas = 0
+        omitidas = 0
+        actividades_cuadrilla_pendiente = []  # [(actividad_obj, [cedulas])]
+        current_actividad_idx = None  # idx en actividades_cuadrilla_pendiente
+
+        for row_idx, row in enumerate(rows[2:], start=3):
+            numero = self._get_cell(row, 'numero')
+            cedula = self._get_cell(row, 'cedula')
+
+            if numero is None or str(numero).strip() == '':
+                # Fila de personal — agregar cédula a actividad anterior
+                if current_actividad_idx is not None and cedula:
+                    actividades_cuadrilla_pendiente[current_actividad_idx][1].append(cedula)
+                continue
+
+            # Es fila de ACTIVIDAD
+            tipo_actividad_raw = self._get_cell(row, 'tipo_actividad')
+            avisos_raw = self._get_cell(row, 'avisos')
+            lineas_raw = self._get_cell(row, 'linea')
+            fecha_inicio = self._get_cell(row, 'fecha_inicio')
+            fecha_fin = self._get_cell(row, 'fecha_fin')
+
+            avisos = self._split_multi(avisos_raw)
+            if not avisos:
+                # Sin aviso explícito: skip pero registrar advertencia
+                self.advertencias.append({
+                    'hoja': sheet.title, 'fila': row_idx,
+                    'mensaje': 'fila sin avisos — omitida',
+                })
+                omitidas += 1
+                continue
+
+            codigos_linea = self._split_multi(lineas_raw)
+            if not codigos_linea:
+                self.advertencias.append({
+                    'hoja': sheet.title, 'fila': row_idx,
+                    'mensaje': 'fila sin línea — omitida',
+                })
+                omitidas += 1
+                continue
+
+            # Resolver línea (toma la primera que matchea)
+            linea_obj = self._buscar_linea(codigos_linea)
+            if linea_obj is None:
+                self.advertencias.append({
+                    'hoja': sheet.title, 'fila': row_idx,
+                    'mensaje': f'línea no encontrada para {codigos_linea}',
+                })
+                omitidas += 1
+                continue
+
+            # Resolver torre — primera disponible de la línea
+            torre = linea_obj.torres.order_by('numero').first()
+            if torre is None:
+                self.advertencias.append({
+                    'hoja': sheet.title, 'fila': row_idx,
+                    'mensaje': f'línea {linea_obj.codigo} sin torres — omitida',
+                })
+                omitidas += 1
+                continue
+
+            # Resolver tipo_actividad
+            tipo_obj = self._resolver_tipo_actividad(tipo_actividad_raw)
+
+            # Fecha inicio para calcular mes
+            anio_act, mes_act = self._extraer_anio_mes(fecha_inicio)
+            programacion = self._get_or_create_programacion(linea_obj, anio_act, mes_act)
+            self.programaciones_tocadas.add((anio_act, mes_act, linea_obj.id))
+
+            fecha_inicio_norm = self._normalizar_fecha(fecha_inicio)
+            fecha_fin_norm = self._normalizar_fecha(fecha_fin)
+            observaciones = self._get_cell(row, 'observaciones')
+            tramo_raw = self._get_cell(row, 'tramo')
+            orden_raw = self._get_cell(row, 'orden')
+            pt_raw = self._get_cell(row, 'pt_sap')
+
+            obs_consolidadas = self._tramo_obs(tramo_raw, observaciones, fecha_fin_norm)
+            fecha_prog = fecha_inicio_norm or date.today()
+
+            with transaction.atomic():
+                for aviso in avisos:
+                    actividad, created = Actividad.objects.get_or_create(
+                        aviso_sap=str(aviso).strip(),
+                        defaults={
+                            'linea': linea_obj,
+                            'torre': torre,
+                            'tipo_actividad': tipo_obj,
+                            'programacion': programacion,
+                            'fecha_programada': fecha_prog,
+                            'observaciones_programacion': obs_consolidadas,
+                            'orden_sap': self._first_token(orden_raw),
+                            'pt_sap': self._first_token(pt_raw),
+                            'estado': Actividad.Estado.PROGRAMADA,
+                        },
+                    )
+                    if created:
+                        creadas += 1
+                        self.actividades_creadas.append(actividad.aviso_sap)
+                    elif actualizar_existentes:
+                        actividad.linea = linea_obj
+                        actividad.torre = torre
+                        actividad.tipo_actividad = tipo_obj
+                        actividad.programacion = programacion
+                        actividad.fecha_programada = fecha_prog
+                        actividad.observaciones_programacion = obs_consolidadas
+                        actividad.orden_sap = self._first_token(orden_raw)
+                        actividad.pt_sap = self._first_token(pt_raw)
+                        actividad.save()
+                        actualizadas += 1
+                        self.actividades_actualizadas.append(actividad.aviso_sap)
+                    else:
+                        omitidas += 1
+
+                    # Guardar para asignar cuadrillas tras leer miembros
+                    actividades_cuadrilla_pendiente.append((actividad, []))
+                    current_actividad_idx = len(actividades_cuadrilla_pendiente) - 1
+
+        # Resolver cuadrillas via cédulas acumuladas
+        self._asignar_cuadrillas(actividades_cuadrilla_pendiente)
+
+        return {'creadas': creadas, 'actualizadas': actualizadas, 'omitidas': omitidas}
+
+    def _buscar_linea(self, codigos):
+        from apps.lineas.models import Linea
+        for codigo in codigos:
+            codigo = str(codigo).strip()
+            qs = Linea.objects.filter(codigo__iexact=codigo)
+            if qs.exists():
+                return qs.first()
+            qs = Linea.objects.filter(codigo_transelca__iexact=codigo)
+            if qs.exists():
+                return qs.first()
+            qs = Linea.objects.filter(codigo__icontains=codigo)
+            if qs.exists():
+                return qs.first()
+        return None
+
+    def _resolver_tipo_actividad(self, raw):
+        from .models import TipoActividad
+        nombre = str(raw or '').strip()
+        if not nombre:
+            tipo, _ = TipoActividad.objects.get_or_create(
+                codigo='SIN_TIPO',
+                defaults={'nombre': 'Sin tipo', 'categoria': TipoActividad.Categoria.OTRO},
+            )
+            return tipo
+        qs = TipoActividad.objects.filter(nombre__iexact=nombre)
+        if qs.exists():
+            return qs.first()
+        qs = TipoActividad.objects.filter(codigo__iexact=nombre[:20])
+        if qs.exists():
+            return qs.first()
+        codigo = self._slug_codigo(nombre)
+        categoria = self._inferir_categoria(nombre)
+        tipo, _ = TipoActividad.objects.get_or_create(
+            codigo=codigo,
+            defaults={'nombre': nombre[:100], 'categoria': categoria},
+        )
+        return tipo
+
+    @staticmethod
+    def _slug_codigo(nombre):
+        import re
+        s = re.sub(r'[^A-Z0-9]', '_', nombre.upper())[:20]
+        return s.strip('_') or 'OTRO'
+
+    @staticmethod
+    def _inferir_categoria(nombre):
+        from .models import TipoActividad
+        n = nombre.lower()
+        mapping = [
+            ('servidumbre', TipoActividad.Categoria.SERVIDUMBRE),
+            ('poda', TipoActividad.Categoria.PODA),
+            ('lavado', TipoActividad.Categoria.LAVADO),
+            ('aislador', TipoActividad.Categoria.AISLADORES),
+            ('herraje', TipoActividad.Categoria.HERRAJES),
+            ('inspecci', TipoActividad.Categoria.INSPECCION),
+            ('termograf', TipoActividad.Categoria.TERMOGRAFIA),
+            ('descarga', TipoActividad.Categoria.DESCARGAS),
+            ('electromec', TipoActividad.Categoria.ELECTROMEC),
+            ('puesta tierra', TipoActividad.Categoria.MEDICION_PT),
+            ('permiso', TipoActividad.Categoria.PERMISO),
+        ]
+        for keyword, categoria in mapping:
+            if keyword in n:
+                return categoria
+        return TipoActividad.Categoria.OTRO
+
+    @staticmethod
+    def _normalizar_fecha(valor):
+        if valor is None:
+            return None
+        if isinstance(valor, date):
+            return valor
+        try:
+            from datetime import datetime
+            if isinstance(valor, datetime):
+                return valor.date()
+        except Exception:
+            pass
+        try:
+            from datetime import datetime
+            return datetime.strptime(str(valor)[:10], '%Y-%m-%d').date()
+        except Exception:
+            return None
+
+    def _extraer_anio_mes(self, fecha):
+        fecha_norm = self._normalizar_fecha(fecha)
+        if fecha_norm:
+            return fecha_norm.year, fecha_norm.month
+        hoy = date.today()
+        return hoy.year, hoy.month
+
+    def _get_or_create_programacion(self, linea, anio, mes):
+        from .models import ProgramacionMensual
+        prog, _ = ProgramacionMensual.objects.get_or_create(
+            anio=anio, mes=mes, linea=linea,
+        )
+        return prog
+
+    @staticmethod
+    def _first_token(valor):
+        if valor is None:
+            return ''
+        s = str(valor).strip()
+        if not s or s == '-':
+            return ''
+        return s.split('\n')[0].strip()[:20]
+
+    @staticmethod
+    def _tramo_obs(tramo_raw, obs, fecha_fin=None):
+        partes = []
+        if tramo_raw:
+            partes.append(f'Tramo: {str(tramo_raw).strip()}')
+        if fecha_fin:
+            partes.append(f'Fecha fin: {fecha_fin.isoformat()}')
+        if obs:
+            partes.append(str(obs).strip())
+        return ' | '.join(partes)[:500]
+
+    def _asignar_cuadrillas(self, lista_pendiente):
+        """Resuelve cuadrillas a partir de cédulas acumuladas y las asigna."""
+        from apps.cuadrillas.models import CuadrillaMiembro
+        for actividad, cedulas in lista_pendiente:
+            if not cedulas:
+                continue
+            cuadrillas_ids = set()
+            for cedula in cedulas:
+                cedula_str = str(cedula).strip()
+                miembro = CuadrillaMiembro.objects.filter(
+                    usuario__documento=cedula_str,
+                    activo=True,
+                ).first()
+                if miembro:
+                    cuadrillas_ids.add(miembro.cuadrilla_id)
+                else:
+                    self.advertencias.append({
+                        'mensaje': f'cédula {cedula_str} no vinculada a ninguna cuadrilla — actividad {actividad.aviso_sap}',
+                    })
+            if cuadrillas_ids:
+                actividad.cuadrillas.add(*cuadrillas_ids)
+                if not actividad.cuadrilla_id:
+                    actividad.cuadrilla_id = next(iter(cuadrillas_ids))
+                    actividad.save(update_fields=['cuadrilla', 'updated_at'])
