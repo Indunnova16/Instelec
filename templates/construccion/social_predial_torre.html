@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block title %}Sociopredial — Torre {{ torre.numero }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">🏘️ Sociopredial — Torre {{ torre.numero }}</h1>
+      <p class="text-sm text-gray-500">
+        {{ proyecto.nombre }} ·
+        {% if social.semaforo == 'VERDE' %}
+          <span class="text-green-700 font-medium">🟢 Liberada (4 actas con fecha)</span>
+        {% else %}
+          <span class="text-red-700 font-medium">🔴 Pendiente — faltan actas para liberar</span>
+        {% endif %}
+      </p>
+    </div>
+    <a href="{% url 'construccion:social_predial' proyecto.id %}" class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  {% if request.GET.saved %}
+    <div class="px-4 py-2 bg-green-100 text-green-800 rounded">✓ Cambios guardados.</div>
+  {% endif %}
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {# === Información del predio === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Información del predio y contacto</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label>{{ form.propietario.label }}<br>{{ form.propietario }}</label>
+        <label>{{ form.persona_contacto.label }}<br>{{ form.persona_contacto }}</label>
+        <label>{{ form.telefono.label }}<br>{{ form.telefono }}</label>
+        <label>{{ form.predio.label }}<br>{{ form.predio }}</label>
+        <label>{{ form.departamento.label }}<br>{{ form.departamento }}</label>
+        <label>{{ form.municipio.label }}<br>{{ form.municipio }}</label>
+        <label>{{ form.unidad_territorial.label }}<br>{{ form.unidad_territorial }}</label>
+        <label>{{ form.fecha_socializacion.label }}<br>{{ form.fecha_socializacion }}</label>
+      </div>
+    </details>
+
+    {# === PIPC === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">PIPC (Municipio + Unidad Territorial)</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label>{{ form.pipc_municipio_fecha.label }}<br>{{ form.pipc_municipio_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.pipc_municipio_ok }} <span>{{ form.pipc_municipio_ok.label }}</span></label>
+        <label>{{ form.pipc_unidad_fecha.label }}<br>{{ form.pipc_unidad_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.pipc_unidad_ok }} <span>{{ form.pipc_unidad_ok.label }}</span></label>
+      </div>
+    </details>
+
+    {# === 4 actas — el semáforo === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border-2 {% if social.semaforo == 'VERDE' %}border-green-400{% else %}border-yellow-400{% endif %}">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        4 actas de liberación (semáforo Ana Sofía Munera)
+        {% if social.semaforo == 'VERDE' %}<span class="text-green-600 ml-2">🟢</span>{% else %}<span class="text-red-600 ml-2">🔴</span>{% endif %}
+      </summary>
+      <div class="p-4 space-y-4 border-t">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border rounded p-3">
+          <label class="font-medium md:col-span-2">1. Acta de Vecindad</label>
+          <label>{{ form.acta_vecindad_fecha.label }}<br>{{ form.acta_vecindad_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.acta_vecindad_ok }} <span>{{ form.acta_vecindad_ok.label }}</span></label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border rounded p-3">
+          <label class="font-medium md:col-span-2">2. Acta de Acceso Comunitario</label>
+          <label>{{ form.acta_acceso_comunitario_fecha.label }}<br>{{ form.acta_acceso_comunitario_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.acta_acceso_comunitario_ok }} <span>{{ form.acta_acceso_comunitario_ok.label }}</span></label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border rounded p-3">
+          <label class="font-medium md:col-span-2">3. Autorización del Propietario</label>
+          <label>{{ form.autorizacion_propietario_fecha.label }}<br>{{ form.autorizacion_propietario_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.autorizacion_propietario_ok }} <span>{{ form.autorizacion_propietario_ok.label }}</span></label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border rounded p-3">
+          <label class="font-medium md:col-span-2">4. Acta de Acceso Privado</label>
+          <label>{{ form.acta_acceso_privado_fecha.label }}<br>{{ form.acta_acceso_privado_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.acta_acceso_privado_ok }} <span>{{ form.acta_acceso_privado_ok.label }}</span></label>
+        </div>
+      </div>
+    </details>
+
+    {# === Liberación + MONC === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Liberación predial PDO + Contratación MONC</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
+        <label>{{ form.liberacion_predial_pdo_fecha.label }}<br>{{ form.liberacion_predial_pdo_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.liberacion_predial_pdo_ok }} <span>{{ form.liberacion_predial_pdo_ok.label }}</span></label>
+        <label>{{ form.contratacion_monc_fecha.label }}<br>{{ form.contratacion_monc_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.contratacion_monc_ok }} <span>{{ form.contratacion_monc_ok.label }}</span></label>
+        <label class="md:col-span-2">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
+      </div>
+    </details>
+
+    <div class="flex justify-end space-x-2">
+      <a href="{% url 'construccion:social_predial' proyecto.id %}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 dark:text-gray-300">Cancelar</a>
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

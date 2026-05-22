@@ -27,11 +27,15 @@ urlpatterns = [
     # Seguimiento Diario
     path('<uuid:proyecto_id>/seguimiento/', views.SeguimientoDiarioView.as_view(), name='seguimiento_diario'),
 
-    # Social Predial
+    # Social Predial (#51) — lista + detalle por torre con 4 actas
     path('<uuid:proyecto_id>/social/', views.SocialPredialView.as_view(), name='social_predial'),
+    path('<uuid:proyecto_id>/social/<uuid:torre_id>/',
+         views.SocialPredialTorreView.as_view(), name='social_predial_torre'),
 
-    # Ambiental
+    # Ambiental (#52) — lista + detalle por torre con actividades que aplican
     path('<uuid:proyecto_id>/ambiental/', views.AmbientalView.as_view(), name='ambiental'),
+    path('<uuid:proyecto_id>/ambiental/<uuid:torre_id>/',
+         views.AmbientalTorreView.as_view(), name='ambiental_torre'),
 
     # Control de Lluvia
     path('<uuid:proyecto_id>/lluvia/', views.ControlLluviaView.as_view(), name='control_lluvia'),

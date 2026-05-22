@@ -1,1 +1,93 @@
-{% extends 'base.html' %}{% block content %}<h1>ambiental.html - En Desarrollo</h1>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Ambiental — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">🌳 Ambiental</h1>
+    <p class="text-sm text-gray-500">{{ proyecto.nombre }} · semáforo VERDE cuando todas las actividades que aplican tienen fecha</p>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  <div class="grid grid-cols-3 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-gray-400">
+      <p class="text-xs uppercase text-gray-500">Total torres</p>
+      <p class="text-2xl font-bold">{{ stats.total }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+      <p class="text-xs uppercase text-gray-500">🟢 Liberadas</p>
+      <p class="text-2xl font-bold text-green-600">{{ stats.verdes }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-500">
+      <p class="text-xs uppercase text-gray-500">🔴 Sin liberar</p>
+      <p class="text-2xl font-bold text-red-600">{{ stats.rojos }}</p>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left">Torre</th>
+          <th class="px-3 py-2 text-center">Ahuyent.</th>
+          <th class="px-3 py-2 text-center">Epífitas trasl.</th>
+          <th class="px-3 py-2 text-center">Epífitas reubic.</th>
+          <th class="px-3 py-2 text-center">A.For. torre</th>
+          <th class="px-3 py-2 text-center">A.For. vano</th>
+          <th class="px-3 py-2 text-center">Rescate arq.</th>
+          <th class="px-3 py-2 text-center">Liber. PDO</th>
+          <th class="px-3 py-2 text-center">Semáforo</th>
+          <th class="px-3 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-3 py-2 font-medium">{{ f.torre.numero }}</td>
+          <td class="px-3 py-2 text-center">
+            {% if not f.ambiental.ahuyentamiento_aplica %}<span class="text-gray-400 text-xs">n/a</span>
+            {% elif f.ambiental.ahuyentamiento_fecha %}<span class="text-green-600">✓</span>
+            {% else %}<span class="text-gray-300">○</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-center">
+            {% if not f.ambiental.epifitas_aplica %}<span class="text-gray-400 text-xs">n/a</span>
+            {% elif f.ambiental.traslado_epifitas_fecha %}<span class="text-green-600">✓</span>
+            {% else %}<span class="text-gray-300">○</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-center">
+            {% if not f.ambiental.epifitas_aplica %}<span class="text-gray-400 text-xs">n/a</span>
+            {% elif f.ambiental.reubicacion_epifitas_fecha %}<span class="text-green-600">✓</span>
+            {% else %}<span class="text-gray-300">○</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-center">
+            {% if not f.ambiental.aprov_forestal_torre_aplica %}<span class="text-gray-400 text-xs">n/a</span>
+            {% elif f.ambiental.aprov_forestal_torre_fecha %}<span class="text-green-600">✓</span>
+            {% else %}<span class="text-gray-300">○</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-center">
+            {% if not f.ambiental.aprov_forestal_vano_aplica %}<span class="text-gray-400 text-xs">n/a</span>
+            {% elif f.ambiental.aprov_forestal_vano_fecha %}<span class="text-green-600">✓</span>
+            {% else %}<span class="text-gray-300">○</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-center">
+            {% if not f.ambiental.rescate_arqueologico_aplica %}<span class="text-gray-400 text-xs">n/a</span>
+            {% elif f.ambiental.rescate_arqueologico_fecha %}<span class="text-green-600">✓</span>
+            {% else %}<span class="text-gray-300">○</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-center">{% if f.ambiental.liberacion_pdo_fecha %}<span class="text-green-600">✓</span>{% else %}<span class="text-gray-300">○</span>{% endif %}</td>
+          <td class="px-3 py-2 text-center">
+            {% if f.ambiental.semaforo == 'VERDE' %}<span class="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">🟢 Liberada</span>
+            {% else %}<span class="px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">🔴 Pendiente</span>{% endif %}
+          </td>
+          <td class="px-3 py-2 text-right">
+            <a href="{% url 'construccion:ambiental_torre' proyecto.id f.torre.id %}" class="text-blue-600 hover:underline">Editar</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="px-4 py-8 text-center text-gray-500">No hay torres registradas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-xs text-gray-500">n/a = la actividad fue marcada como "no aplica" en la torre · ○ = pendiente · ✓ = con fecha capturada</p>
+</div>
+{% endblock %}

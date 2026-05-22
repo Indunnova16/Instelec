@@ -1,7 +1,7 @@
 """Forms for construction projects."""
 from django import forms
 from apps.contratos.models import Contrato
-from .models import PataObra, FaseTorre
+from .models import PataObra, FaseTorre, SocialPredial, AmbientalTorre
 
 
 INPUT_CLS = ('mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 '
@@ -218,6 +218,110 @@ class FaseTorreTendidoForm(forms.ModelForm):
         ]
         widgets = {
             'cuadrilla_tendido': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'observaciones': forms.Textarea(attrs={'class': INPUT_CLS, 'rows': 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.setdefault('class', CHECK_CLS)
+            elif isinstance(field.widget, forms.DateInput):
+                field.widget = forms.DateInput(format='%Y-%m-%d', attrs=DATE_ATTRS)
+                field.input_formats = ['%Y-%m-%d']
+            elif isinstance(field.widget, forms.NumberInput):
+                field.widget.attrs.setdefault('class', INPUT_CLS)
+                field.widget.attrs.setdefault('step', 'any')
+            field.required = False
+
+
+# ====== Sociopredial — liberación por torre (#51) ======
+
+class SocialPredialForm(forms.ModelForm):
+    """Form completo de Social Predial por torre.
+
+    Liberación basada en las 4 actas (semáforo VERDE)."""
+
+    class Meta:
+        model = SocialPredial
+        fields = [
+            # Info contacto
+            'propietario', 'persona_contacto', 'telefono',
+            'predio', 'departamento', 'municipio', 'unidad_territorial',
+            'fecha_socializacion',
+            # PIPC
+            'pipc_municipio_fecha', 'pipc_municipio_ok',
+            'pipc_unidad_fecha', 'pipc_unidad_ok',
+            # 4 actas (estas 4 fechas son el semáforo)
+            'acta_vecindad_fecha', 'acta_vecindad_ok',
+            'acta_acceso_comunitario_fecha', 'acta_acceso_comunitario_ok',
+            'autorizacion_propietario_fecha', 'autorizacion_propietario_ok',
+            'acta_acceso_privado_fecha', 'acta_acceso_privado_ok',
+            # Liberación + MONC
+            'liberacion_predial_pdo_fecha', 'liberacion_predial_pdo_ok',
+            'contratacion_monc_fecha', 'contratacion_monc_ok',
+            'observaciones',
+        ]
+        widgets = {
+            'propietario': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'persona_contacto': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'telefono': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'predio': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'departamento': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'municipio': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'unidad_territorial': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'observaciones': forms.Textarea(attrs={'class': INPUT_CLS, 'rows': 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.setdefault('class', CHECK_CLS)
+            elif isinstance(field.widget, forms.DateInput):
+                field.widget = forms.DateInput(format='%Y-%m-%d', attrs=DATE_ATTRS)
+                field.input_formats = ['%Y-%m-%d']
+            field.required = False
+
+
+# ====== Ambiental — liberación por torre (#52) ======
+
+class AmbientalTorreForm(forms.ModelForm):
+    """Form completo de Ambiental por torre.
+
+    Liberación basada en actividades QUE APLICAN (semáforo Gabriel Valencia)."""
+
+    class Meta:
+        model = AmbientalTorre
+        fields = [
+            # Ahuyentamiento
+            'ahuyentamiento_aplica', 'ahuyentamiento_fecha', 'ahuyentamiento_ok',
+            # Epífitas
+            'epifitas_aplica', 'conteo_epifitas', 'conteo_epifitas_fecha',
+            'traslado_epifitas_fecha', 'traslado_epifitas_ok',
+            'reubicacion_epifitas_fecha', 'reubicacion_epifitas_ok',
+            # Aprovechamiento forestal (torre + vano)
+            'aprov_forestal_torre_aplica',
+            'aprov_forestal_torre_fecha', 'aprov_forestal_torre_ok',
+            'aprov_forestal_vano_aplica',
+            'aprov_forestal_vano_fecha', 'aprov_forestal_vano_ok',
+            # Arqueología
+            'arqueologia_poligonos_fecha', 'arqueologia_poligonos_ok',
+            'arqueologia_torre_estado',
+            'rescate_arqueologico_aplica',
+            'rescate_arqueologico_fecha', 'rescate_arqueologico_ok',
+            'monitoreo_arqueologico_aplica',
+            # Cambios LA + accesos
+            'cambio_menor_la',
+            'adecuacion_accesos_fecha', 'adecuacion_accesos_porcentaje',
+            'adecuacion_accesos_ok',
+            # Liberación final
+            'liberacion_pdo_fecha', 'liberacion_pdo_ok',
+            'observaciones',
+        ]
+        widgets = {
+            'arqueologia_torre_estado': forms.TextInput(attrs={'class': INPUT_CLS}),
+            'cambio_menor_la': forms.Textarea(attrs={'class': INPUT_CLS, 'rows': 2}),
             'observaciones': forms.Textarea(attrs={'class': INPUT_CLS, 'rows': 2}),
         }
 

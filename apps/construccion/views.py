@@ -9,7 +9,10 @@ from django.db.models import Q
 
 from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
 from apps.contratos.models import Contrato
-from .forms import ContratoForm, PataObraForm, FaseTorreMontajeForm, FaseTorreTendidoForm
+from .forms import (
+    ContratoForm, PataObraForm, FaseTorreMontajeForm, FaseTorreTendidoForm,
+    SocialPredialForm, AmbientalTorreForm,
+)
 from django.http import HttpResponseRedirect
 from .models import (
     ProyectoConstruccion,
@@ -173,39 +176,133 @@ class SeguimientoDiarioView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
 
 
 class SocialPredialView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Land/social clearance tracking matrix."""
+    """Lista de torres con semáforo Sociopredial (#51)."""
     template_name = 'construccion/social_predial.html'
-    allowed_roles = ['admin', 'director', 'coordinador', 'gestor_social']
+    allowed_roles = ['admin', 'director', 'coordinador', 'gestor_social',
+                     'admin_general', 'coordinador_general', 'admin_construccion']
 
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        proyecto_id = self.kwargs.get('proyecto_id')
-        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        torres = TorreConstruccion.objects.filter(proyecto=proyecto).order_by('numero')
 
-        context['proyecto'] = proyecto
-        context['social_predial'] = SocialPredial.objects.filter(
-            torre__proyecto=proyecto
-        ).select_related('torre').order_by('torre__numero')
+        filas = []
+        verdes = 0
+        for torre in torres:
+            social, _ = SocialPredial.objects.get_or_create(torre=torre)
+            if social.semaforo == 'VERDE':
+                verdes += 1
+            filas.append({
+                'torre': torre,
+                'social': social,
+            })
+        ctx['proyecto'] = proyecto
+        ctx['active_tab'] = 'social_predial'
+        ctx['filas'] = filas
+        ctx['stats'] = {
+            'total': len(filas),
+            'verdes': verdes,
+            'rojos': len(filas) - verdes,
+        }
+        return ctx
 
-        return context
+
+class SocialPredialTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Edición de Sociopredial por torre (#51)."""
+    model = SocialPredial
+    form_class = SocialPredialForm
+    template_name = 'construccion/social_predial_torre.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'gestor_social',
+                     'admin_general', 'coordinador_general', 'admin_construccion']
+
+    def get_object(self, queryset=None):
+        torre = get_object_or_404(
+            TorreConstruccion,
+            id=self.kwargs['torre_id'],
+            proyecto_id=self.kwargs['proyecto_id'],
+        )
+        social, _ = SocialPredial.objects.get_or_create(torre=torre)
+        return social
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        social = self.object
+        ctx['proyecto'] = social.torre.proyecto
+        ctx['torre'] = social.torre
+        ctx['social'] = social
+        ctx['active_tab'] = 'social_predial'
+        return ctx
+
+    def get_success_url(self):
+        return reverse_lazy('construccion:social_predial_torre',
+                            kwargs={'proyecto_id': self.kwargs['proyecto_id'],
+                                    'torre_id': self.kwargs['torre_id']}) + '?saved=1'
 
 
 class AmbientalView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Environmental clearance tracking matrix."""
+    """Lista de torres con semáforo Ambiental (#52)."""
     template_name = 'construccion/ambiental.html'
-    allowed_roles = ['admin', 'director', 'coordinador', 'ambientalista']
+    allowed_roles = ['admin', 'director', 'coordinador', 'ambientalista',
+                     'admin_general', 'coordinador_general', 'admin_construccion']
 
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        proyecto_id = self.kwargs.get('proyecto_id')
-        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        torres = TorreConstruccion.objects.filter(proyecto=proyecto).order_by('numero')
 
-        context['proyecto'] = proyecto
-        context['ambiental'] = AmbientalTorre.objects.filter(
-            torre__proyecto=proyecto
-        ).select_related('torre').order_by('torre__numero')
+        filas = []
+        verdes = 0
+        for torre in torres:
+            amb, _ = AmbientalTorre.objects.get_or_create(torre=torre)
+            if amb.semaforo == 'VERDE':
+                verdes += 1
+            filas.append({
+                'torre': torre,
+                'ambiental': amb,
+            })
+        ctx['proyecto'] = proyecto
+        ctx['active_tab'] = 'ambiental'
+        ctx['filas'] = filas
+        ctx['stats'] = {
+            'total': len(filas),
+            'verdes': verdes,
+            'rojos': len(filas) - verdes,
+        }
+        return ctx
 
-        return context
+
+class AmbientalTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Edición Ambiental por torre (#52)."""
+    model = AmbientalTorre
+    form_class = AmbientalTorreForm
+    template_name = 'construccion/ambiental_torre.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ambientalista',
+                     'admin_general', 'coordinador_general', 'admin_construccion']
+
+    def get_object(self, queryset=None):
+        torre = get_object_or_404(
+            TorreConstruccion,
+            id=self.kwargs['torre_id'],
+            proyecto_id=self.kwargs['proyecto_id'],
+        )
+        amb, _ = AmbientalTorre.objects.get_or_create(torre=torre)
+        return amb
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        amb = self.object
+        ctx['proyecto'] = amb.torre.proyecto
+        ctx['torre'] = amb.torre
+        ctx['ambiental'] = amb
+        ctx['active_tab'] = 'ambiental'
+        return ctx
+
+    def get_success_url(self):
+        return reverse_lazy('construccion:ambiental_torre',
+                            kwargs={'proyecto_id': self.kwargs['proyecto_id'],
+                                    'torre_id': self.kwargs['torre_id']}) + '?saved=1'
 
 
 class ControlLluviaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):

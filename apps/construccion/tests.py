@@ -224,3 +224,131 @@ def test_tendido_torre_guarda_3_fases_circuito_1(
     assert fase.tendido_conductor_b_ok is True
     assert fase.tendido_conductor_c_ok is True
     assert fase.pct_tendido == 40
+
+
+# ====== Sociopredial (#51) ======
+
+from apps.construccion.models import SocialPredial, AmbientalTorre
+
+
+@pytest.mark.django_db
+def test_sociopredial_lista_autocrea_relaciones(
+    authenticated_client, proyecto_construccion, torre_legacy
+):
+    """Lista responde 200 y crea SocialPredial defensivamente para torre legacy."""
+    url = reverse('construccion:social_predial',
+                  kwargs={'proyecto_id': proyecto_construccion.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:300]
+    body = resp.content.decode()
+    assert 'Sociopredial' in body
+    assert 'T-LEGACY-01' in body
+    assert SocialPredial.objects.filter(torre=torre_legacy).exists()
+
+
+@pytest.mark.django_db
+def test_sociopredial_semaforo_verde_con_4_actas(
+    authenticated_client, proyecto_construccion, torre_completa
+):
+    """Las 4 actas con fecha → semáforo VERDE (regla Ana Sofía)."""
+    from datetime import date
+    social, _ = SocialPredial.objects.get_or_create(torre=torre_completa)
+    assert social.semaforo == 'ROJO'
+
+    url = reverse('construccion:social_predial_torre',
+                  kwargs={'proyecto_id': proyecto_construccion.id,
+                          'torre_id': torre_completa.id})
+    data = {
+        'acta_vecindad_fecha': '2026-04-01',
+        'acta_acceso_comunitario_fecha': '2026-04-02',
+        'autorizacion_propietario_fecha': '2026-04-03',
+        'acta_acceso_privado_fecha': '2026-04-04',
+        'propietario': 'Juan Pérez',
+        'predio': 'Finca La Esperanza',
+        'municipio': 'Manizales',
+    }
+    resp = authenticated_client.post(url, data)
+    assert resp.status_code == 302
+    social.refresh_from_db()
+    assert social.semaforo == 'VERDE'
+    assert social.propietario == 'Juan Pérez'
+
+
+@pytest.mark.django_db
+def test_sociopredial_lista_muestra_stats_verdes(
+    authenticated_client, proyecto_construccion, torre_completa
+):
+    """KPI 'Liberadas' suma torres con semáforo VERDE."""
+    from datetime import date
+    social, _ = SocialPredial.objects.get_or_create(torre=torre_completa)
+    social.acta_vecindad_fecha = date(2026, 4, 1)
+    social.acta_acceso_comunitario_fecha = date(2026, 4, 2)
+    social.autorizacion_propietario_fecha = date(2026, 4, 3)
+    social.acta_acceso_privado_fecha = date(2026, 4, 4)
+    social.save()
+
+    url = reverse('construccion:social_predial',
+                  kwargs={'proyecto_id': proyecto_construccion.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert '🟢 Liberada' in body
+
+
+# ====== Ambiental (#52) ======
+
+@pytest.mark.django_db
+def test_ambiental_lista_autocrea_relaciones(
+    authenticated_client, proyecto_construccion, torre_legacy
+):
+    """Lista responde 200 y crea AmbientalTorre defensivamente."""
+    url = reverse('construccion:ambiental',
+                  kwargs={'proyecto_id': proyecto_construccion.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert 'Ambiental' in body
+    assert 'T-LEGACY-01' in body
+    assert AmbientalTorre.objects.filter(torre=torre_legacy).exists()
+
+
+@pytest.mark.django_db
+def test_ambiental_semaforo_verde_si_nada_aplica(
+    authenticated_client, proyecto_construccion, torre_completa
+):
+    """Si todas las actividades están en `_aplica=False`, semáforo es VERDE
+    automáticamente (regla Gabriel Valencia: 'potrero limpio')."""
+    amb, _ = AmbientalTorre.objects.get_or_create(torre=torre_completa)
+    amb.ahuyentamiento_aplica = False
+    amb.epifitas_aplica = False
+    amb.aprov_forestal_torre_aplica = False
+    amb.aprov_forestal_vano_aplica = False
+    amb.rescate_arqueologico_aplica = False
+    amb.save()
+    assert amb.semaforo == 'VERDE'
+
+
+@pytest.mark.django_db
+def test_ambiental_guarda_aprovechamiento_forestal(
+    authenticated_client, proyecto_construccion, torre_completa
+):
+    """POST guarda los campos de aprovechamiento forestal (torre + vano)."""
+    amb, _ = AmbientalTorre.objects.get_or_create(torre=torre_completa)
+    url = reverse('construccion:ambiental_torre',
+                  kwargs={'proyecto_id': proyecto_construccion.id,
+                          'torre_id': torre_completa.id})
+    data = {
+        'aprov_forestal_torre_aplica': 'on',
+        'aprov_forestal_torre_fecha': '2026-05-10',
+        'aprov_forestal_torre_ok': 'on',
+        'aprov_forestal_vano_aplica': 'on',
+        'aprov_forestal_vano_fecha': '2026-05-12',
+        'adecuacion_accesos_porcentaje': '60',
+    }
+    resp = authenticated_client.post(url, data)
+    assert resp.status_code == 302
+    amb.refresh_from_db()
+    assert amb.aprov_forestal_torre_ok is True
+    assert str(amb.aprov_forestal_torre_fecha) == '2026-05-10'
+    assert str(amb.aprov_forestal_vano_fecha) == '2026-05-12'
+    assert amb.adecuacion_accesos_porcentaje == 60

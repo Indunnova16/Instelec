@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% block title %}Ambiental — Torre {{ torre.numero }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">🌳 Ambiental — Torre {{ torre.numero }}</h1>
+      <p class="text-sm text-gray-500">
+        {{ proyecto.nombre }} ·
+        {% if ambiental.semaforo == 'VERDE' %}
+          <span class="text-green-700 font-medium">🟢 Liberada (actividades que aplican completas)</span>
+        {% else %}
+          <span class="text-red-700 font-medium">🔴 Pendiente — faltan actividades para liberar</span>
+        {% endif %}
+      </p>
+    </div>
+    <a href="{% url 'construccion:ambiental' proyecto.id %}" class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
+  </div>
+  {% include 'construccion/_proyecto_tabs.html' %}
+
+  {% if request.GET.saved %}
+    <div class="px-4 py-2 bg-green-100 text-green-800 rounded">✓ Cambios guardados.</div>
+  {% endif %}
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    {# === Ahuyentamiento === #}
+    <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        Ahuyentamiento de fauna
+        {% if not ambiental.ahuyentamiento_aplica %}<span class="text-gray-500 text-xs ml-2">(no aplica)</span>{% endif %}
+      </summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 border-t">
+        <label class="flex items-center gap-2">{{ form.ahuyentamiento_aplica }} <span>{{ form.ahuyentamiento_aplica.label }}</span></label>
+        <label>{{ form.ahuyentamiento_fecha.label }}<br>{{ form.ahuyentamiento_fecha }}</label>
+        <label class="flex items-center gap-2">{{ form.ahuyentamiento_ok }} <span>{{ form.ahuyentamiento_ok.label }}</span></label>
+      </div>
+    </details>
+
+    {# === Epífitas === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">
+        Gestión de epífitas
+        {% if not ambiental.epifitas_aplica %}<span class="text-gray-500 text-xs ml-2">(no aplica)</span>{% endif %}
+      </summary>
+      <div class="p-4 space-y-3 border-t">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label class="flex items-center gap-2">{{ form.epifitas_aplica }} <span>{{ form.epifitas_aplica.label }}</span></label>
+          <label>{{ form.conteo_epifitas.label }}<br>{{ form.conteo_epifitas }}</label>
+          <label>{{ form.conteo_epifitas_fecha.label }}<br>{{ form.conteo_epifitas_fecha }}</label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
+          <label>{{ form.traslado_epifitas_fecha.label }}<br>{{ form.traslado_epifitas_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.traslado_epifitas_ok }} <span>{{ form.traslado_epifitas_ok.label }}</span></label>
+          <label>{{ form.reubicacion_epifitas_fecha.label }}<br>{{ form.reubicacion_epifitas_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.reubicacion_epifitas_ok }} <span>{{ form.reubicacion_epifitas_ok.label }}</span></label>
+        </div>
+      </div>
+    </details>
+
+    {# === Aprovechamiento forestal === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Aprovechamiento forestal (torre + vano)</summary>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 border-t">
+        <div class="border rounded p-3 space-y-2">
+          <p class="text-xs font-semibold uppercase text-gray-500">Torre</p>
+          <label class="flex items-center gap-2">{{ form.aprov_forestal_torre_aplica }} <span>{{ form.aprov_forestal_torre_aplica.label }}</span></label>
+          <label>{{ form.aprov_forestal_torre_fecha.label }}<br>{{ form.aprov_forestal_torre_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.aprov_forestal_torre_ok }} <span>{{ form.aprov_forestal_torre_ok.label }}</span></label>
+        </div>
+        <div class="border rounded p-3 space-y-2">
+          <p class="text-xs font-semibold uppercase text-gray-500">Vano</p>
+          <label class="flex items-center gap-2">{{ form.aprov_forestal_vano_aplica }} <span>{{ form.aprov_forestal_vano_aplica.label }}</span></label>
+          <label>{{ form.aprov_forestal_vano_fecha.label }}<br>{{ form.aprov_forestal_vano_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.aprov_forestal_vano_ok }} <span>{{ form.aprov_forestal_vano_ok.label }}</span></label>
+        </div>
+      </div>
+    </details>
+
+    {# === Arqueología === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Arqueología (ICAN + rescate + monitoreo)</summary>
+      <div class="p-4 space-y-3 border-t">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label>{{ form.arqueologia_poligonos_fecha.label }}<br>{{ form.arqueologia_poligonos_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.arqueologia_poligonos_ok }} <span>{{ form.arqueologia_poligonos_ok.label }}</span></label>
+          <label>{{ form.arqueologia_torre_estado.label }}<br>{{ form.arqueologia_torre_estado }}</label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3">
+          <label class="flex items-center gap-2">{{ form.rescate_arqueologico_aplica }} <span>{{ form.rescate_arqueologico_aplica.label }}</span></label>
+          <label>{{ form.rescate_arqueologico_fecha.label }}<br>{{ form.rescate_arqueologico_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.rescate_arqueologico_ok }} <span>{{ form.rescate_arqueologico_ok.label }}</span></label>
+        </div>
+        <div>
+          <label class="flex items-center gap-2">{{ form.monitoreo_arqueologico_aplica }} <span>{{ form.monitoreo_arqueologico_aplica.label }}</span></label>
+        </div>
+      </div>
+    </details>
+
+    {# === Cambios LA + accesos + liberación === #}
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Cambio menor L.A. · Adecuación de accesos · Liberación PDO</summary>
+      <div class="p-4 space-y-3 border-t">
+        <label class="block">{{ form.cambio_menor_la.label }}<br>{{ form.cambio_menor_la }}</label>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3">
+          <label>{{ form.adecuacion_accesos_fecha.label }}<br>{{ form.adecuacion_accesos_fecha }}</label>
+          <label>{{ form.adecuacion_accesos_porcentaje.label }}<br>{{ form.adecuacion_accesos_porcentaje }}</label>
+          <label class="flex items-center gap-2">{{ form.adecuacion_accesos_ok }} <span>{{ form.adecuacion_accesos_ok.label }}</span></label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
+          <label>{{ form.liberacion_pdo_fecha.label }}<br>{{ form.liberacion_pdo_fecha }}</label>
+          <label class="flex items-center gap-2">{{ form.liberacion_pdo_ok }} <span>{{ form.liberacion_pdo_ok.label }}</span></label>
+          <label class="md:col-span-2">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
+        </div>
+      </div>
+    </details>
+
+    <div class="flex justify-end space-x-2">
+      <a href="{% url 'construccion:ambiental' proyecto.id %}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 dark:text-gray-300">Cancelar</a>
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
