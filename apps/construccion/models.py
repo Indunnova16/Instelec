@@ -88,6 +88,63 @@ class ProyectoConstruccion(BaseModel):
         total_pct = sum(f.porcentaje_tendido for f in self.fases.all())
         return round(total_pct / torres.count(), 2) if torres.exists() else 0
 
+    # === Financiero (#69 #66 #70) ===
+
+    def pyg_resumen_ejecutivo(self):
+        """Devuelve lista de dicts:
+        [{categoria, presupuesto, real, variacion, pct_variacion}, ...]
+        Una fila por categoría, agregando todos los períodos del proyecto."""
+        from django.db.models import Sum, Q
+        from decimal import Decimal
+        from .models import CategoriaFinanciera, MovimientoFinanciero
+        resultado = []
+        for cat in CategoriaFinanciera.objects.filter(activa=True).order_by('orden'):
+            presupuesto = MovimientoFinanciero.objects.filter(
+                periodo__proyecto=self, categoria=cat, tipo='PRESUPUESTO'
+            ).aggregate(s=Sum('valor'))['s'] or Decimal('0')
+            real = MovimientoFinanciero.objects.filter(
+                periodo__proyecto=self, categoria=cat, tipo='REAL'
+            ).aggregate(s=Sum('valor'))['s'] or Decimal('0')
+            variacion = real - presupuesto
+            pct = (variacion / presupuesto * 100) if presupuesto else None
+            resultado.append({
+                'categoria': cat,
+                'presupuesto': presupuesto,
+                'real': real,
+                'variacion': variacion,
+                'pct_variacion': round(pct, 1) if pct is not None else None,
+                'alerta': pct is not None and abs(pct) >= 50,
+            })
+        return resultado
+
+    @property
+    def pyg_totales(self):
+        """Totales agregados del proyecto: ingresos, gastos, utilidad."""
+        from django.db.models import Sum
+        from decimal import Decimal
+        from .models import MovimientoFinanciero
+        movs = MovimientoFinanciero.objects.filter(periodo__proyecto=self)
+        ingresos_pres = movs.filter(
+            categoria__tipo='INGRESO', tipo='PRESUPUESTO'
+        ).aggregate(s=Sum('valor'))['s'] or Decimal('0')
+        ingresos_real = movs.filter(
+            categoria__tipo='INGRESO', tipo='REAL'
+        ).aggregate(s=Sum('valor'))['s'] or Decimal('0')
+        gastos_pres = movs.filter(
+            categoria__tipo='GASTO', tipo='PRESUPUESTO'
+        ).aggregate(s=Sum('valor'))['s'] or Decimal('0')
+        gastos_real = movs.filter(
+            categoria__tipo='GASTO', tipo='REAL'
+        ).aggregate(s=Sum('valor'))['s'] or Decimal('0')
+        return {
+            'ingresos_presupuesto': ingresos_pres,
+            'ingresos_real': ingresos_real,
+            'gastos_presupuesto': gastos_pres,
+            'gastos_real': gastos_real,
+            'utilidad_presupuesto': ingresos_pres - gastos_pres,
+            'utilidad_real': ingresos_real - gastos_real,
+        }
+
 
 class TorreConstruccion(BaseModel):
     """
@@ -1272,3 +1329,96 @@ class ProgramacionFase(BaseModel):
         if abs(diff) < 5:
             return 'ON_TIME'
         return 'ADELANTADO' if diff > 0 else 'RETRASADO'
+
+
+# ====================================================================
+# Módulo Financiero PDEO (#69 #66 #70) — replica estructura del Excel
+# PDEO - Detalle 2024-2025-2026.xlsx
+# ====================================================================
+
+class CategoriaFinanciera(BaseModel):
+    """Master de categorías de costos/ingresos del P&G (#69).
+    Seedeable: las 21 categorías estándar del Excel PDEO."""
+
+    class Tipo(models.TextChoices):
+        INGRESO = 'INGRESO', 'Ingreso'
+        GASTO = 'GASTO', 'Gasto'
+        CALCULADO = 'CALCULADO', 'Calculado (totales)'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    codigo = models.CharField('Código', max_length=30, unique=True,
+                              help_text='Slug interno, ej: SUBCONTRATISTAS, GASTOS_VIAJE')
+    nombre = models.CharField('Nombre', max_length=100)
+    tipo = models.CharField('Tipo', max_length=15, choices=Tipo.choices,
+                            default=Tipo.GASTO)
+    orden = models.PositiveSmallIntegerField('Orden', default=0)
+    activa = models.BooleanField('Activa', default=True)
+
+    class Meta:
+        db_table = 'construccion_categoria_financiera'
+        verbose_name = 'Categoría Financiera'
+        verbose_name_plural = 'Categorías Financieras'
+        ordering = ['orden', 'nombre']
+
+    def __str__(self):
+        return f"[{self.tipo}] {self.nombre}"
+
+
+class PeriodoFinanciero(BaseModel):
+    """Período mensual del proyecto (#69). Año fiscal puede no coincidir
+    con año calendario."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='periodos_financieros')
+    anio = models.PositiveSmallIntegerField('Año')
+    mes = models.PositiveSmallIntegerField('Mes')
+    cerrado = models.BooleanField('Período cerrado', default=False,
+        help_text='Si está cerrado, no se aceptan nuevos movimientos REAL')
+
+    class Meta:
+        db_table = 'construccion_periodo_financiero'
+        verbose_name = 'Período Financiero'
+        verbose_name_plural = 'Períodos Financieros'
+        unique_together = [['proyecto', 'anio', 'mes']]
+        ordering = ['proyecto', 'anio', 'mes']
+
+    def __str__(self):
+        return f"{self.proyecto.nombre} — {self.mes:02d}/{self.anio}"
+
+
+class MovimientoFinanciero(BaseModel):
+    """Movimiento P&G: presupuesto o real, por categoría × período (#69).
+    Para una celda de la matriz P&G existen 2 movimientos: PRESUPUESTO + REAL.
+    """
+
+    class Tipo(models.TextChoices):
+        PRESUPUESTO = 'PRESUPUESTO', 'Presupuesto'
+        REAL = 'REAL', 'Real'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    periodo = models.ForeignKey(
+        PeriodoFinanciero, on_delete=models.CASCADE,
+        related_name='movimientos')
+    categoria = models.ForeignKey(
+        CategoriaFinanciera, on_delete=models.PROTECT,
+        related_name='movimientos')
+    tipo = models.CharField('Tipo', max_length=15, choices=Tipo.choices)
+    valor = models.DecimalField('Valor (COP)', max_digits=18, decimal_places=2,
+                                default=0)
+    fecha_registro = models.DateTimeField('Fecha registro', auto_now_add=True)
+    usuario = models.ForeignKey(
+        'usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='movimientos_financieros')
+    notas = models.TextField('Notas', blank=True)
+
+    class Meta:
+        db_table = 'construccion_movimiento_financiero'
+        verbose_name = 'Movimiento Financiero'
+        verbose_name_plural = 'Movimientos Financieros'
+        unique_together = [['periodo', 'categoria', 'tipo']]
+        ordering = ['periodo', 'categoria__orden']
+
+    def __str__(self):
+        return f"{self.periodo} | {self.categoria.codigo} | {self.tipo} | ${self.valor:,.0f}"
