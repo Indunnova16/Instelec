@@ -1185,3 +1185,90 @@ class KitCerramiento(BaseModel):
         """True si lleva >30 días en la misma torre — caso 33 torres encerradas."""
         dias = self.dias_en_torre_actual
         return dias is not None and dias > 30
+
+
+class ProgramacionFase(BaseModel):
+    """Cronograma planeado vs real por sección del proyecto (#68).
+    El equipo de ingeniería fija las fechas al inicio; el sistema calcula
+    avance real consumiendo los modelos de ejecución."""
+
+    class Seccion(models.TextChoices):
+        INGENIERIA = 'INGENIERIA', 'Ingeniería'
+        SOCIOPREDIAL = 'SOCIOPREDIAL', 'Actividades Preliminares — Sociopredial'
+        SOCIOAMBIENTAL = 'SOCIOAMBIENTAL', 'Actividades Preliminares — Socioambiental'
+        OBRA_CIVIL = 'OBRA_CIVIL', 'Obra Civil'
+        MONTAJE = 'MONTAJE', 'Montaje'
+        SPT = 'SPT', 'SPT y Pintura'
+        TENDIDO = 'TENDIDO', 'Tendido'
+        PROTECCIONES = 'PROTECCIONES', 'Trinchos y Cunetas'
+        PRUEBAS = 'PRUEBAS', 'Pruebas y Actividades Finales'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='programacion_fases')
+    seccion = models.CharField('Sección', max_length=20, choices=Seccion.choices)
+    fecha_inicio_planeada = models.DateField('Fecha inicio planeada',
+                                             null=True, blank=True)
+    fecha_fin_planeada = models.DateField('Fecha fin planeada',
+                                          null=True, blank=True)
+    torres_planeadas = models.PositiveIntegerField('Torres / cantidad planeada',
+                                                   null=True, blank=True)
+    peso_pct = models.PositiveSmallIntegerField(
+        'Peso % de la sección', default=0,
+        help_text='Suma de pesos por proyecto debe ≈ 100; editable para curva S')
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'construccion_programacion_fase'
+        verbose_name = 'Programación de Fase'
+        verbose_name_plural = 'Programaciones de Fases'
+        unique_together = [['proyecto', 'seccion']]
+        ordering = ['proyecto', 'seccion']
+
+    def __str__(self):
+        return f"{self.proyecto.nombre} — {self.get_seccion_display()}"
+
+    @property
+    def dias_planeados(self):
+        if not self.fecha_inicio_planeada or not self.fecha_fin_planeada:
+            return None
+        return (self.fecha_fin_planeada - self.fecha_inicio_planeada).days
+
+    @property
+    def pct_avance_esperado_hoy(self):
+        """Avance lineal esperado a la fecha actual según fechas planeadas."""
+        if not self.fecha_inicio_planeada or not self.fecha_fin_planeada:
+            return None
+        from datetime import date
+        hoy = date.today()
+        if hoy < self.fecha_inicio_planeada:
+            return 0
+        if hoy >= self.fecha_fin_planeada:
+            return 100
+        total = (self.fecha_fin_planeada - self.fecha_inicio_planeada).days
+        transcurridos = (hoy - self.fecha_inicio_planeada).days
+        return round((transcurridos / total) * 100, 1) if total > 0 else 0
+
+    @property
+    def pct_avance_real(self):
+        """Lee el % real desde el ProyectoConstruccion según la sección."""
+        p = self.proyecto
+        mapeo = {
+            'OBRA_CIVIL': p.porcentaje_avance_civil,
+            'MONTAJE': p.porcentaje_avance_montaje,
+            'TENDIDO': p.porcentaje_avance_tendido,
+        }
+        return mapeo.get(self.seccion)
+
+    @property
+    def estado(self):
+        """ON_TIME / ADELANTADO / RETRASADO según comparación esperado vs real."""
+        esp = self.pct_avance_esperado_hoy
+        real = self.pct_avance_real
+        if esp is None or real is None:
+            return 'SIN_DATA'
+        diff = real - esp
+        if abs(diff) < 5:
+            return 'ON_TIME'
+        return 'ADELANTADO' if diff > 0 else 'RETRASADO'

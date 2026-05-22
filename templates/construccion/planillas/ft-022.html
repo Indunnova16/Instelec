@@ -1,0 +1,39 @@
+{% extends "construccion/planillas/_base.html" %}
+
+{% block contenido %}
+<section>
+  <h2>Procedimiento de excavación</h2>
+  <table class="kv">
+    <tr><td class="lbl">Tipo de cimentación</td><td>{{ torre.tipo_cimentacion|default:"—" }}</td></tr>
+    <tr><td class="lbl">Tipo de excavación</td>
+        <td>{% with p=patas|first %}{{ p.get_tipo_excavacion_display|default:"—" }}{% endwith %}</td></tr>
+    <tr><td class="lbl">Aplica pilotes</td>
+        <td>{% with p=patas|first %}{{ p.aplica_pilotes|yesno:"Sí,No" }}{% endwith %}</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Ejecución por pata</h2>
+  <table class="kv">
+    <tr><td class="lbl" style="background:#ccc">Pata</td>
+        <td class="lbl" style="background:#ccc">Excavación OK</td>
+        <td class="lbl" style="background:#ccc">Fecha</td>
+        <td class="lbl" style="background:#ccc">m³ generados</td></tr>
+    {% for p in patas %}
+    <tr>
+      <td><strong>{{ p.pata }}</strong></td>
+      <td>{{ p.excavacion_ok|yesno:"✓,—" }}</td>
+      <td>{{ p.excavacion_fecha|date:"d/m/Y"|default:"—" }}</td>
+      <td>{{ p.excavacion_m3|default:"—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section>
+  <h2>Observaciones de campo</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ patas.0.observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

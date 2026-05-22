@@ -2,7 +2,9 @@
 URL patterns for the construccion (construction) app.
 """
 from django.urls import path
+from django.contrib.auth.decorators import login_required
 from . import views
+from .planillas import descargar_planilla_torre
 
 app_name = 'construccion'
 
@@ -63,4 +65,8 @@ urlpatterns = [
 
     # Electromecánica
     path('<uuid:proyecto_id>/electromecanica/', views.ElectromecanicaView.as_view(), name='electromecanica'),
+
+    # Planillas PDF para firma de interventoría (#64)
+    path('planilla/<str:codigo_ft>/torre/<uuid:torre_id>/',
+         login_required(descargar_planilla_torre), name='descargar_planilla'),
 ]

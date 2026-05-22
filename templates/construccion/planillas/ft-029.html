@@ -1,0 +1,34 @@
+{% extends "construccion/planillas/_base.html" %}
+
+{% block contenido %}
+<section>
+  <h2>Medición de puesta a tierra</h2>
+  <table class="kv">
+    <tr><td class="lbl">Cantidad excavación SPT</td>
+        <td>{{ fase.spt_cantidad_excavacion_m|default:"—" }} m</td></tr>
+    <tr><td class="lbl">Cable según planos</td>
+        <td>{{ fase.spt_cable_planos_m|default:"—" }} m</td></tr>
+    <tr><td class="lbl">Cable instalado</td>
+        <td>{{ fase.spt_cable_instalado_m|default:"—" }} m</td></tr>
+    <tr><td class="lbl">Diferencia cable</td>
+        <td>{{ fase.spt_cable_diferencia_m|default:"—" }} m</td></tr>
+    <tr><td class="lbl">Pólvora tiros (planos)</td>
+        <td>{{ fase.spt_polvora_tiros_planos|default:"—" }}</td></tr>
+    <tr><td class="lbl">Pólvora cajas teóricas</td>
+        <td>{{ fase.spt_polvora_cajas_teoricas|default:"—" }}</td></tr>
+    <tr><td class="lbl">Pólvora cajas consumidas</td>
+        <td>{{ fase.spt_polvora_consumida_cajas|default:"—" }}</td></tr>
+    <tr><td class="lbl">FT-068 (compensación)</td>
+        <td>{{ fase.spt_ft068_ok|yesno:"✓,—" }}</td></tr>
+    <tr><td class="lbl">% Avance SPT</td>
+        <td>{{ fase.spt_pct|default:"0" }}%</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Observaciones SPT</h2>
+  <p style="border:1px solid #aaa; min-height:20mm; padding:4mm;">
+    {{ fase.spt_observaciones|default:"" }}
+  </p>
+</section>
+{% endblock %}

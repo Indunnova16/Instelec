@@ -183,6 +183,23 @@ class Usuario(AbstractUser):
         ).select_related('cuadrilla').first()
         return miembro.cuadrilla if miembro else None
 
+    @property
+    def cuadrillas_activas(self):
+        """Todas las cuadrillas activas del usuario (puede pertenecer a varias).
+        Para #62 — filtrado de querysets por cuadrilla del capataz/liniero."""
+        from apps.cuadrillas.models import CuadrillaMiembro
+        ids = CuadrillaMiembro.objects.filter(
+            usuario=self, activo=True
+        ).values_list('cuadrilla_id', flat=True)
+        return list(ids)
+
+    @property
+    def es_operario_campo(self):
+        """True si el rol RBAC v2 lo marca como operario (de cualquier módulo).
+        Las vistas pueden usar esto para filtrar querysets por cuadrilla."""
+        from apps.core.permissions import ROL_NIVEL, NIVEL_OPERARIO
+        return ROL_NIVEL.get(self.rol) == NIVEL_OPERARIO
+
     def has_role(self, roles):
         """Check if user has any of the specified roles."""
         if isinstance(roles, str):

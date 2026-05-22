@@ -1,0 +1,44 @@
+{# Template base de planillas FT-XXX para firma en sitio (#64) #}
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>{{ codigo_ft }} — {{ nombre_planilla }}</title>
+<style>
+@page { size: A4; margin: 18mm 15mm; }
+body { font-family: 'Helvetica', sans-serif; font-size: 10pt; color: #111; }
+header { border-bottom: 2px solid #000; padding-bottom: 6mm; margin-bottom: 6mm; }
+header h1 { font-size: 14pt; margin: 0; text-transform: uppercase; }
+header .codigo { font-size: 11pt; color: #555; }
+.proyecto { font-size: 10pt; margin: 2mm 0; }
+table.kv { width: 100%; border-collapse: collapse; margin: 4mm 0; }
+table.kv td { border: 1px solid #aaa; padding: 4px 6px; }
+table.kv td.lbl { background: #eee; width: 35%; font-weight: bold; }
+section h2 { background: #ddd; padding: 4px 6px; font-size: 11pt; margin-top: 6mm; }
+.firmas { margin-top: 18mm; display: flex; justify-content: space-between; }
+.firma { width: 30%; text-align: center; }
+.firma .linea { border-top: 1px solid #000; margin-top: 22mm; padding-top: 2mm; font-size: 9pt; }
+.fts { font-size: 8pt; color: #666; margin-top: 4mm; text-align: right; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ nombre_planilla }}</h1>
+  <div class="codigo">Código: <strong>{{ codigo_ft }}</strong> · Módulo: {{ modulo }}</div>
+  <div class="proyecto">
+    <strong>Proyecto:</strong> {{ proyecto.nombre }} · <strong>Contrato:</strong> {{ contrato.codigo }}<br>
+    <strong>Torre:</strong> {{ torre.numero }}
+  </div>
+</header>
+
+{% block contenido %}{% endblock %}
+
+<div class="firmas">
+  <div class="firma"><div class="linea">Ejecutó (cuadrilla)</div></div>
+  <div class="firma"><div class="linea">Supervisó (encargado)</div></div>
+  <div class="firma"><div class="linea">Aprobó (interventoría)</div></div>
+</div>
+
+<div class="fts">Generado por TransMaint — {{ codigo_ft }}</div>
+</body>
+</html>
