@@ -32,6 +32,22 @@ class HomeView(LoginRequiredMixin, TemplateView):
         if request.user.is_authenticated and request.user.is_campo:
             from django.shortcuts import redirect
             return redirect('campo:lista')
+        # RBAC #44: redirigir a módulo único si el usuario solo tiene uno
+        if request.user.is_authenticated:
+            from django.shortcuts import redirect
+            from apps.core.permissions import (
+                user_modulos,
+                MODULO_CONSTRUCCION,
+                MODULO_MANTENIMIENTO,
+                MODULO_CONFIG,
+            )
+            modulos = user_modulos(request.user)
+            # Solo redirigir si NO es admin general (que debe ver el home completo)
+            if MODULO_CONFIG not in modulos:
+                if modulos == {MODULO_CONSTRUCCION}:
+                    return redirect('/construccion/')
+                if modulos == {MODULO_MANTENIMIENTO}:
+                    return redirect('actividades:lista')
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:

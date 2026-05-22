@@ -1,0 +1,98 @@
+"""RBAC permissions (#44).
+
+Matriz rol → módulos y nivel de acceso. Mantiene retro-compatibilidad
+con los roles legacy del modelo `Usuario.Rol`.
+"""
+
+MODULO_MANTENIMIENTO = 'MANTENIMIENTO'
+MODULO_CONSTRUCCION = 'CONSTRUCCION'
+MODULO_CONFIG = 'CONFIG'  # gestión de usuarios, parametrización, sistema
+
+NIVEL_ADMIN = 'admin'
+NIVEL_OPERARIO = 'operario'
+
+# rol → set de módulos accesibles
+ROL_MODULOS = {
+    # RBAC v2 (#44)
+    'admin_general':          {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION, MODULO_CONFIG},
+    'coordinador_general':    {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION},
+    'admin_mantenimiento':    {MODULO_MANTENIMIENTO},
+    'admin_construccion':     {MODULO_CONSTRUCCION},
+    'operario_mantenimiento': {MODULO_MANTENIMIENTO},
+    'operario_construccion':  {MODULO_CONSTRUCCION},
+    'operario_general':       {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION},
+    # Legacy — heredan acceso amplio para no romper datos existentes
+    'admin':         {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION, MODULO_CONFIG},
+    'director':      {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION},
+    'coordinador':   {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION},
+    'ing_residente': {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION},
+    'ing_ambiental': {MODULO_MANTENIMIENTO},
+    'supervisor':    {MODULO_MANTENIMIENTO},
+    'liniero':       {MODULO_MANTENIMIENTO},
+    'auxiliar':      {MODULO_MANTENIMIENTO},
+}
+
+# rol → nivel (admin = puede crear/editar/borrar; operario = ops solo)
+ROL_NIVEL = {
+    'admin_general':          NIVEL_ADMIN,
+    'coordinador_general':    NIVEL_ADMIN,
+    'admin_mantenimiento':    NIVEL_ADMIN,
+    'admin_construccion':     NIVEL_ADMIN,
+    'operario_mantenimiento': NIVEL_OPERARIO,
+    'operario_construccion':  NIVEL_OPERARIO,
+    'operario_general':       NIVEL_OPERARIO,
+    # Legacy
+    'admin':         NIVEL_ADMIN,
+    'director':      NIVEL_ADMIN,
+    'coordinador':   NIVEL_ADMIN,
+    'ing_residente': NIVEL_ADMIN,
+    'ing_ambiental': NIVEL_ADMIN,
+    'supervisor':    NIVEL_OPERARIO,
+    'liniero':       NIVEL_OPERARIO,
+    'auxiliar':      NIVEL_OPERARIO,
+}
+
+
+def user_rol(user):
+    return getattr(user, 'rol', '') or ''
+
+
+def user_modulos(user):
+    """Conjunto de módulos accesibles para el usuario. Superuser = todos."""
+    if not user or not user.is_authenticated:
+        return set()
+    if user.is_superuser:
+        return {MODULO_MANTENIMIENTO, MODULO_CONSTRUCCION, MODULO_CONFIG}
+    return ROL_MODULOS.get(user_rol(user), set())
+
+
+def user_can_access_modulo(user, modulo):
+    """¿El usuario tiene acceso al módulo? (MANTENIMIENTO / CONSTRUCCION / CONFIG)"""
+    if not modulo:
+        return True
+    return modulo in user_modulos(user)
+
+
+def user_es_admin(user):
+    """True si el usuario es nivel admin en cualquiera de sus módulos."""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return ROL_NIVEL.get(user_rol(user)) == NIVEL_ADMIN
+
+
+def url_inicio_para_usuario(user):
+    """URL adonde redirigir al usuario tras login según su rol."""
+    if not user or not user.is_authenticated:
+        return '/usuarios/login/'
+    modulos = user_modulos(user)
+    if MODULO_CONFIG in modulos:
+        return '/'  # admin general → home con todo visible
+    if MODULO_MANTENIMIENTO in modulos and MODULO_CONSTRUCCION in modulos:
+        return '/'  # operario_general / coordinador → home selector
+    if MODULO_CONSTRUCCION in modulos:
+        return '/construccion/'
+    if MODULO_MANTENIMIENTO in modulos:
+        return '/actividades/'
+    return '/'

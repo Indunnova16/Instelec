@@ -17,8 +17,14 @@ class UsuarioManager(BaseUserManager):
 
         # Asignar is_staff=True automáticamente para roles administrativos
         # Fix 1 abril 2026: Usuarios admin/director/coordinador necesitan is_staff=True
+        # RBAC #44: incluir nuevos roles admin
         rol = extra_fields.get('rol', '')
-        if rol in ['admin', 'director', 'coordinador']:
+        roles_staff = [
+            'admin', 'director', 'coordinador',
+            'admin_general', 'coordinador_general',
+            'admin_mantenimiento', 'admin_construccion',
+        ]
+        if rol in roles_staff:
             extra_fields.setdefault('is_staff', True)
 
         user = self.model(email=email, **extra_fields)
@@ -47,14 +53,23 @@ class Usuario(AbstractUser):
     """
 
     class Rol(models.TextChoices):
-        ADMIN = 'admin', 'Administrador'
-        DIRECTOR = 'director', 'Director de Proyecto'
-        COORDINADOR = 'coordinador', 'Coordinador'
-        ING_RESIDENTE = 'ing_residente', 'Ingeniero Residente'
-        ING_AMBIENTAL = 'ing_ambiental', 'Ingeniero Ambiental'
-        SUPERVISOR = 'supervisor', 'Supervisor de Cuadrilla'
-        LINIERO = 'liniero', 'Liniero'
-        AUXILIAR = 'auxiliar', 'Auxiliar'
+        # Roles RBAC v2 (#44) — usar para usuarios nuevos
+        ADMIN_GENERAL = 'admin_general', 'Administrador General'
+        COORDINADOR_GENERAL = 'coordinador_general', 'Coordinador General'
+        ADMIN_MANTENIMIENTO = 'admin_mantenimiento', 'Administrador de Mantenimiento'
+        ADMIN_CONSTRUCCION = 'admin_construccion', 'Administrador de Construcción'
+        OPERARIO_MANTENIMIENTO = 'operario_mantenimiento', 'Operario de Mantenimiento'
+        OPERARIO_CONSTRUCCION = 'operario_construccion', 'Operario de Construcción'
+        OPERARIO_GENERAL = 'operario_general', 'Operario General'
+        # Roles legacy (mantenidos por compatibilidad con datos existentes)
+        ADMIN = 'admin', 'Administrador (legacy)'
+        DIRECTOR = 'director', 'Director de Proyecto (legacy)'
+        COORDINADOR = 'coordinador', 'Coordinador (legacy)'
+        ING_RESIDENTE = 'ing_residente', 'Ingeniero Residente (legacy)'
+        ING_AMBIENTAL = 'ing_ambiental', 'Ingeniero Ambiental (legacy)'
+        SUPERVISOR = 'supervisor', 'Supervisor de Cuadrilla (legacy)'
+        LINIERO = 'liniero', 'Liniero (legacy)'
+        AUXILIAR = 'auxiliar', 'Auxiliar (legacy)'
 
     # Override id to use UUID
     id = models.UUIDField(
@@ -81,9 +96,9 @@ class Usuario(AbstractUser):
     )
     rol = models.CharField(
         'Rol',
-        max_length=20,
+        max_length=30,
         choices=Rol.choices,
-        default=Rol.LINIERO
+        default=Rol.OPERARIO_GENERAL
     )
     documento = models.CharField(
         'Documento de identidad',

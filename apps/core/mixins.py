@@ -80,6 +80,50 @@ class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
         return self.request.user.is_staff
 
 
+class ModuloRequiredMixin(UserPassesTestMixin):
+    """Restringe acceso a una vista al módulo MANTENIMIENTO o CONSTRUCCION (#44).
+
+    Uso:
+        class MiVista(LoginRequiredMixin, ModuloRequiredMixin, ListView):
+            required_modulo = 'CONSTRUCCION'
+
+    Si `required_modulo` es None la vista queda abierta a cualquier autenticado
+    (igual que LoginRequiredMixin).
+    """
+    required_modulo = None
+
+    def test_func(self):
+        from .permissions import user_can_access_modulo
+        if not self.request.user.is_authenticated:
+            return False
+        return user_can_access_modulo(self.request.user, self.required_modulo)
+
+    def handle_no_permission(self):
+        from django.core.exceptions import PermissionDenied
+        if not self.request.user.is_authenticated:
+            return super().handle_no_permission()
+        raise PermissionDenied(
+            f"Acceso denegado al módulo {self.required_modulo}. "
+            f"Su rol ({getattr(self.request.user, 'rol', 'sin rol')}) no tiene permisos."
+        )
+
+
+class NivelAdminRequiredMixin(UserPassesTestMixin):
+    """Restringe acceso a usuarios con nivel `admin` (no operarios)."""
+
+    def test_func(self):
+        from .permissions import user_es_admin
+        return user_es_admin(self.request.user)
+
+    def handle_no_permission(self):
+        from django.core.exceptions import PermissionDenied
+        if not self.request.user.is_authenticated:
+            return super().handle_no_permission()
+        raise PermissionDenied(
+            "Esta acción requiere un rol administrativo."
+        )
+
+
 class HTMXResponseMixin:
     """
     Mixin for handling HTMX responses.

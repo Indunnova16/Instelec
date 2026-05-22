@@ -1,3 +1,8 @@
+{% load core_tags %}
+{% puede_acceder 'MANTENIMIENTO' as ok_mant %}
+{% puede_acceder 'CONSTRUCCION' as ok_cons %}
+{% puede_acceder 'CONFIG' as ok_config %}
+{% es_admin_rbac as es_admin %}
 <!-- Sidebar component -->
 <div class="flex flex-col h-full">
     <!-- Logo -->
@@ -37,18 +42,22 @@
         <div class="space-y-3">
             <!-- Module Buttons -->
             <div class="flex gap-2">
+                {% if ok_mant %}
                 <button @click="persistir('mantenimiento')"
                         :class="modulo === 'mantenimiento' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
                         class="flex-1 px-3 py-2 rounded text-xs font-medium transition-colors"
                         type="button">
                     🔧 Mantenimiento
                 </button>
+                {% endif %}
+                {% if ok_cons %}
                 <button @click="persistir('construccion')"
                         :class="modulo === 'construccion' ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
                         class="flex-1 px-3 py-2 rounded text-xs font-medium transition-colors"
                         type="button">
                     🏗️ Construcción
                 </button>
+                {% endif %}
             </div>
 
             <!-- Project/Contract Selector -->
@@ -200,6 +209,7 @@
                 </a>
             </li>
 
+            {% if ok_mant %}
             <!-- Separator (Mantenimiento) -->
             <li class="border-t border-gray-200 dark:border-gray-700 my-4" role="separator" aria-hidden="true" x-show="modulo === 'mantenimiento'"></li>
 
@@ -270,7 +280,9 @@
                     Mapa en Vivo
                 </a>
             </li>
+            {% endif %}{# ok_mant #}
 
+            {% if ok_cons %}
             <!-- Separator -->
             <li class="border-t border-gray-200 dark:border-gray-700 my-4" role="separator" aria-hidden="true" x-show="modulo === 'construccion'"></li>
 
@@ -308,8 +320,9 @@
                     </li>
                 </div>
             </template>
+            {% endif %}{# ok_cons #}
 
-            {% if request.user.is_admin %}
+            {% if ok_config %}
             <!-- Separator -->
             <li class="border-t border-gray-200 dark:border-gray-700 my-4" role="separator" aria-hidden="true"></li>
 
