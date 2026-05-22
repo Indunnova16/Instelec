@@ -388,6 +388,18 @@ class FaseTorre(BaseModel):
         related_name='fases',
     )
 
+    # ===== INFO ESTRUCTURA (#56) =====
+    class FuncionTorre(models.TextChoices):
+        RETENCION = 'RETENCION', 'Retención'
+        AMARRE = 'AMARRE', 'Amarre'
+        SUSPENSION = 'SUSPENSION', 'Suspensión'
+
+    funcion_torre = models.CharField('Función de la torre', max_length=15,
+                                     choices=FuncionTorre.choices, blank=True)
+    tipo_torre_montaje = models.CharField('Tipo de torre (nomenclatura proyecto)',
+                                          max_length=30, blank=True)
+    cuerpo_torre = models.CharField('Cuerpo / tramo de cuerpo', max_length=30, blank=True)
+
     # ===== MONTAJE (Assembly) =====
     seleccion_estructura_ok = models.BooleanField('Selección de estructura', default=False)
     seleccion_estructura_fecha = models.DateField(null=True, blank=True)
@@ -395,8 +407,23 @@ class FaseTorre(BaseModel):
     transporte_estructura_ok = models.BooleanField('Transporte de estructura', default=False)
     transporte_estructura_fecha = models.DateField(null=True, blank=True)
 
+    # Recepción en patio (#56 — agregada en Reunión 8)
+    fecha_recepcion_patio = models.DateField('Fecha recepción en patio',
+                                             null=True, blank=True)
+    recibida_satisfaccion_ok = models.BooleanField(
+        'Recibida a satisfacción (sin pendientes)', default=False)
+    pct_completitud_estructura = models.PositiveSmallIntegerField(
+        '% completitud estructura recibida', default=100,
+        help_text='100 si llegó completa; <100 si faltan piezas')
+    observaciones_recepcion = models.TextField('Observaciones piezas pendientes', blank=True)
+
     prearmado_ok = models.BooleanField('Prearmado', default=False)
     prearmado_fecha = models.DateField(null=True, blank=True)
+    prearmado_fecha_inicio = models.DateField('Fecha inicio prearmado',
+                                              null=True, blank=True)
+    prearmado_fecha_fin = models.DateField('Fecha fin prearmado',
+                                           null=True, blank=True)
+    prearmado_pct = models.PositiveSmallIntegerField('% avance prearmado', default=0)
     cuadrilla_prearmado = models.CharField(max_length=100, blank=True)
 
     montaje_ok = models.BooleanField('Montaje', default=False)
@@ -409,11 +436,62 @@ class FaseTorre(BaseModel):
     entrega_wsp_ok = models.BooleanField('Entrega WSP', default=False)
     entrega_wsp_fecha = models.DateField(null=True, blank=True)
 
+    # Entrega para carga (#56 — gate de Tendido #58)
+    entrega_carga_ok = models.BooleanField(
+        'Entrega para carga', default=False,
+        help_text='Habilita inicio del módulo Tendido para esta torre')
+    entrega_carga_fecha = models.DateField('Fecha entrega para carga',
+                                           null=True, blank=True)
+
     pct_montaje = models.FloatField('% Montaje', default=0)
+
+    # ===== SPT — Sistema Puesta a Tierra (#57) =====
+    spt_cantidad_excavacion_m = models.FloatField(
+        'SPT — Cantidad excavación (m)', null=True, blank=True)
+    spt_cable_planos_m = models.FloatField(
+        'SPT — Cable según planos (m)', null=True, blank=True)
+    spt_cable_instalado_m = models.FloatField(
+        'SPT — Cable instalado (m)', null=True, blank=True)
+    spt_polvora_tiros_planos = models.PositiveIntegerField(
+        'SPT — Pólvora: tiros según planos', null=True, blank=True,
+        help_text='Ej: 145 tiros por torre')
+    spt_polvora_tiros_por_caja = models.PositiveSmallIntegerField(
+        'Tiros por caja de pólvora', default=100,
+        help_text='Para calcular cajas teóricas')
+    spt_polvora_consumida_cajas = models.FloatField(
+        'SPT — Pólvora real consumida (cajas)', null=True, blank=True)
+    spt_observaciones = models.TextField('SPT — Observaciones', blank=True)
+    spt_ft068_ok = models.BooleanField('FT-068 Control compensación', default=False)
+    spt_ft029_ok = models.BooleanField('FT-029 Lectura medición PT', default=False)
+    spt_informe_mediciones_ok = models.BooleanField(
+        'Informe mediciones entregado', default=False)
+    spt_pct = models.PositiveSmallIntegerField('% Avance SPT', default=0)
+
+    # ===== PINTURA (#57) =====
+    pintura_ft912_ok = models.BooleanField('FT-912 Control espesor pintura patas',
+                                           default=False)
+    pintura_observaciones = models.TextField('Pintura — Observaciones', blank=True)
 
     # ===== TENDIDO (Stringing) =====
     vestida_torres_ok = models.BooleanField('Vestida de torres', default=False)
     vestida_torres_fecha = models.DateField(null=True, blank=True)
+
+    # Sub-flujo conductor (#58)
+    riega_manila_ok = models.BooleanField('Riega de manila', default=False)
+    riega_guaya_ok = models.BooleanField('Riega de guaya', default=False)
+    ft046_ok = models.BooleanField('FT-046 Control riega y tendido', default=False)
+    ft047_ok = models.BooleanField('FT-047 Control empalmes y terminales', default=False)
+    ft932_ok = models.BooleanField('FT-932 Control regulación conductor', default=False)
+    regulacion_flechado_ok = models.BooleanField('Regulación y flechado conductor',
+                                                 default=False)
+    ft918_ok = models.BooleanField('FT-918 Tabla cruces post-tendido', default=False)
+    grapado_ok = models.BooleanField('Grapado / amarre final', default=False)
+    accesorios_ok = models.BooleanField('Accesorios instalados (puentes, palizas)',
+                                        default=False)
+    placas_senalizacion_ok = models.BooleanField('Placas de señalización',
+                                                 default=False)
+    distancia_vano_adelante_m = models.FloatField('Distancia vano adelante (m)',
+                                                  null=True, blank=True)
 
     # Conductor per phase (3 phases: A, B, C for single circuit)
     tendido_conductor_a_ok = models.BooleanField('Tendido conductor Fase A', default=False)
@@ -431,6 +509,21 @@ class FaseTorre(BaseModel):
 
     tendido_opgw_der_ok = models.BooleanField('Tendido OPGW derecha', default=False)
     tendido_opgw_der_fecha = models.DateField(null=True, blank=True)
+
+    # Circuito 2 — 3 fases adicionales (#58: 2 circuitos × 3 fases)
+    tendido_conductor_c2_a_ok = models.BooleanField(
+        'Tendido conductor Circuito 2 Fase A', default=False)
+    tendido_conductor_c2_a_fecha = models.DateField(null=True, blank=True)
+    tendido_conductor_c2_b_ok = models.BooleanField(
+        'Tendido conductor Circuito 2 Fase B', default=False)
+    tendido_conductor_c2_b_fecha = models.DateField(null=True, blank=True)
+    tendido_conductor_c2_c_ok = models.BooleanField(
+        'Tendido conductor Circuito 2 Fase C', default=False)
+    tendido_conductor_c2_c_fecha = models.DateField(null=True, blank=True)
+
+    # Cable de guarda
+    tendido_guarda_ok = models.BooleanField('Tendido cable de guarda', default=False)
+    tendido_guarda_fecha = models.DateField(null=True, blank=True)
 
     # Regulation & finish
     regulacion_ok = models.BooleanField('Regulación y flechado', default=False)
@@ -480,6 +573,45 @@ class FaseTorre(BaseModel):
         ]
         completadas = sum(1 for a in actividades if a)
         return round((completadas / len(actividades)) * 100, 2) if actividades else 0
+
+    # === Gate Tendido (#58) ===
+    @property
+    def puede_iniciar_tendido(self):
+        """True si esta torre ya tiene 'Entrega para carga' del módulo Montaje.
+        Regla Gabriel Valencia (Reunión 7): el tendido se habilita por
+        la columna 'Entrega para carga' del módulo Montaje."""
+        return self.entrega_carga_ok
+
+    # === SPT properties (#57) ===
+    @property
+    def spt_cable_diferencia_m(self):
+        """instalado - planos. None si falta data."""
+        if self.spt_cable_planos_m is None or self.spt_cable_instalado_m is None:
+            return None
+        return round(self.spt_cable_instalado_m - self.spt_cable_planos_m, 2)
+
+    @property
+    def spt_polvora_cajas_teoricas(self):
+        """tiros_planos / tiros_por_caja. None si falta data."""
+        if not self.spt_polvora_tiros_planos or not self.spt_polvora_tiros_por_caja:
+            return None
+        return round(self.spt_polvora_tiros_planos / self.spt_polvora_tiros_por_caja, 2)
+
+    @property
+    def spt_polvora_diferencia_cajas(self):
+        """consumida - teórica. Positivo = sobreconsumo (alerta de escasez)."""
+        teoricas = self.spt_polvora_cajas_teoricas
+        if teoricas is None or self.spt_polvora_consumida_cajas is None:
+            return None
+        return round(self.spt_polvora_consumida_cajas - teoricas, 2)
+
+    @property
+    def spt_polvora_sobreconsumo(self):
+        """True si consumida > teórica (regla Gabriel Valencia, Reunión 7:
+        'en todas las obras siempre hace falta pólvora ... al final ya cuando
+        se va a ejecutar las últimas torres no hay pólvora')."""
+        diff = self.spt_polvora_diferencia_cajas
+        return diff is not None and diff > 0
 
 
 class SocialPredial(BaseModel):
