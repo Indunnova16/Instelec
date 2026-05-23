@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Propuesta UI — Ingeniería</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .tower-btn { transition: all 0.15s; }
+    .tower-btn.active { background: #2563eb; color: white; }
+    .pill-cumple   { background:#bbf7d0; color:#166534; }
+    .pill-nocumple { background:#fecaca; color:#991b1b; }
+    .pill-noaplica { background:#fef9c3; color:#854d0e; }
+    .pill-vacio    { background:#f3f4f6; color:#9ca3af; border:1px solid #e5e7eb; }
+    .doc-card:hover { box-shadow: 0 0 0 2px #2563eb33; }
+    .progress-bar { height:4px; border-radius:2px; background:#e5e7eb; overflow:hidden; }
+    .progress-fill { height:100%; border-radius:2px; transition: width 0.4s; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-sm">
+
+<!-- ── HEADER ── -->
+<header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+  <button class="text-gray-400 hover:text-gray-700">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+  </button>
+  <div>
+    <h1 class="font-bold text-gray-900 text-base leading-tight">Ingeniería — CON-2025-001</h1>
+    <p class="text-gray-500 text-xs">Construcción Línea 500 kV Chichimene–Friato · 18 torres</p>
+  </div>
+
+  <!-- Progreso global en header -->
+  <div class="ml-auto flex items-center gap-6">
+    <div class="text-center">
+      <div class="text-xs text-gray-400 mb-0.5">Cumple</div>
+      <div class="font-bold text-green-600 text-lg">61%</div>
+    </div>
+    <div class="text-center">
+      <div class="text-xs text-gray-400 mb-0.5">Sin estado</div>
+      <div class="font-bold text-gray-400 text-lg">24%</div>
+    </div>
+    <div class="text-center">
+      <div class="text-xs text-gray-400 mb-0.5">No Cumple</div>
+      <div class="font-bold text-red-500 text-lg">15%</div>
+    </div>
+  </div>
+</header>
+
+<!-- ── LAYOUT PRINCIPAL ── -->
+<div class="flex h-[calc(100vh-57px)] overflow-hidden">
+
+  <!-- ═══ COLUMNA IZQUIERDA: Lista de torres ═══ -->
+  <aside class="w-52 shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+
+    <!-- Buscador rápido -->
+    <div class="px-3 pt-3 pb-2">
+      <input type="text" placeholder="Buscar torre..." class="w-full text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
+    </div>
+
+    <!-- Lista scroll -->
+    <div class="overflow-y-auto flex-1 px-2 pb-3 space-y-0.5">
+
+      <!-- Torre activa -->
+      <button onclick="selectTower(this, 'T1')"
+              class="tower-btn active w-full text-left px-3 py-2.5 rounded-lg">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-semibold text-sm">T1</span>
+          <span class="text-xs bg-white/20 px-1.5 py-0.5 rounded">8/55</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill bg-white/60" style="width:15%"></div>
+        </div>
+      </button>
+
+      <!-- Torres con datos -->
+      <button onclick="selectTower(this, 'T2')"
+              class="tower-btn w-full text-left px-3 py-2.5 rounded-lg hover:bg-blue-50">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-semibold text-sm text-gray-700">T2</span>
+          <span class="text-xs text-gray-400">42/55</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill bg-green-400" style="width:76%"></div>
+        </div>
+      </button>
+
+      <button onclick="selectTower(this, 'T3')"
+              class="tower-btn w-full text-left px-3 py-2.5 rounded-lg hover:bg-blue-50">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-semibold text-sm text-gray-700">T3</span>
+          <span class="text-xs text-gray-400">55/55</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill bg-green-500" style="width:100%"></div>
+        </div>
+      </button>
+
+      <button onclick="selectTower(this, 'T4')"
+              class="tower-btn w-full text-left px-3 py-2.5 rounded-lg hover:bg-blue-50">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-semibold text-sm text-gray-700">T4</span>
+          <span class="text-xs text-red-400">3 NC</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill bg-red-400" style="width:40%"></div>
+        </div>
+      </button>
+
+      <!-- Torres vacías -->
+      <button onclick="selectTower(this, 'T5')"
+              class="tower-btn w-full text-left px-3 py-2.5 rounded-lg hover:bg-blue-50">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-semibold text-sm text-gray-500">T5</span>
+          <span class="text-xs text-gray-300">0/55</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill bg-gray-300" style="width:0%"></div>
+        </div>
+      </button>
+
+      <!-- Más torres representativas -->
+      <script>
+        for(let i=6; i<=18; i++) {
+          document.write(`
+          <button onclick="selectTower(this,'T${i}')"
+                  class="tower-btn w-full text-left px-3 py-2.5 rounded-lg hover:bg-blue-50">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-semibold text-sm text-gray-500">T${i}</span>
+              <span class="text-xs text-gray-300">0/55</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill bg-gray-300" style="width:0%"></div></div>
+          </button>`);
+        }
+      </script>
+    </div>
+  </aside>
+
+  <!-- ═══ PANEL DERECHO: Editor de la torre seleccionada ═══ -->
+  <main class="flex-1 overflow-y-auto bg-gray-50">
+
+    <!-- Sub-header: torre activa + tabs -->
+    <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 pt-4 pb-0">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm">T1</div>
+          <div>
+            <div class="font-semibold text-gray-900">Torre T1</div>
+            <div class="text-xs text-gray-400">8 de 55 documentos marcados · 3 observaciones</div>
+          </div>
+        </div>
+        <!-- Pills de resumen por categoría -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">Civil: 4/25</span>
+          <span class="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium">Montaje: 3/6</span>
+          <span class="text-xs px-2 py-1 rounded-full bg-teal-50 text-teal-700 font-medium">Tendido: 1/24</span>
+        </div>
+      </div>
+
+      <!-- Tabs categoría -->
+      <div class="flex gap-0">
+        <button onclick="switchTab('CIVIL')" id="tab-CIVIL"
+                class="tab-btn px-6 py-2.5 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+          Civil
+        </button>
+        <button onclick="switchTab('MONTAJE')" id="tab-MONTAJE"
+                class="tab-btn px-6 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+          Montaje
+        </button>
+        <button onclick="switchTab('TENDIDO')" id="tab-TENDIDO"
+                class="tab-btn px-6 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+          Tendido
+        </button>
+      </div>
+    </div>
+
+    <!-- ══ Contenido: Categoría CIVIL ══ -->
+    <div id="panel-CIVIL" class="p-6 space-y-6">
+
+      <!-- Grupo: Suelos -->
+      <section>
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-1 h-5 bg-blue-400 rounded"></div>
+          <h3 class="font-semibold text-gray-700">Suelos</h3>
+          <span class="ml-auto text-xs text-gray-400">1 / 2</span>
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+
+          <!-- Documento: Estudio de suelos -->
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1">
+              <div class="font-medium text-gray-800 text-sm">Diseño de estudio de suelos</div>
+              <!-- Observación inline visible -->
+              <input type="text" placeholder="Observación (opcional)..."
+                     value="Pendiente firma del geotécnico"
+                     class="mt-1.5 w-full text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:bg-white">
+            </div>
+            <!-- Botones de estado — más grandes y claros -->
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-cumple transition-all doc-state-btn">
+                ✓ Cumple
+              </button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio transition-all doc-state-btn">
+                ✗ No Cumple
+              </button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio transition-all doc-state-btn">
+                — N/A
+              </button>
+            </div>
+          </div>
+
+          <!-- Documento: Informe geotécnico (sin estado) -->
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1">
+              <div class="font-medium text-gray-800 text-sm">Informe Geotécnico sitios de torre</div>
+              <input type="text" placeholder="Observación (opcional)..."
+                     class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:bg-white">
+            </div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio transition-all doc-state-btn">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio transition-all doc-state-btn">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio transition-all doc-state-btn">— N/A</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Grupo: Replanteo Topográfico -->
+      <section>
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-1 h-5 bg-indigo-400 rounded"></div>
+          <h3 class="font-semibold text-gray-700">Replanteo Topográfico</h3>
+          <span class="ml-auto text-xs text-gray-400">2 / 9</span>
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1">
+              <div class="font-medium text-gray-800 text-sm">Cartera de campo</div>
+              <input type="text" placeholder="Observación (opcional)..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:bg-white">
+            </div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-nocumple">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+            </div>
+          </div>
+
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1">
+              <div class="font-medium text-gray-800 text-sm">Croquis de acceso</div>
+              <input type="text" placeholder="Observación (opcional)..."
+                     value="Acceso por vía sin pavimentar, coordinar con cuadrilla"
+                     class="mt-1.5 w-full text-xs text-gray-500 bg-gray-50 border border-orange-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:bg-white">
+            </div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-cumple">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+            </div>
+          </div>
+
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1">
+              <div class="font-medium text-gray-800 text-sm">Diagonales de patas</div>
+              <input type="text" placeholder="Observación (opcional)..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:bg-white">
+            </div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-noaplica">— N/A</button>
+            </div>
+          </div>
+
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1">
+              <div class="font-medium text-gray-800 text-sm">Formato de cruces de líneas</div>
+              <input type="text" placeholder="Observación (opcional)..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:bg-white">
+            </div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+            </div>
+          </div>
+
+          <!-- Colapsado: 5 más -->
+          <button onclick="this.parentElement.querySelector('.more-docs').classList.toggle('hidden'); this.textContent = this.textContent.includes('Ver') ? '▲ Ocultar' : '▼ Ver 5 documentos más'"
+                  class="text-xs text-blue-600 hover:text-blue-800 text-left px-1">▼ Ver 5 documentos más</button>
+          <div class="more-docs hidden space-y-2">
+            <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+              <div class="flex-1"><div class="font-medium text-gray-800 text-sm">Fotografías</div><input type="text" placeholder="Observación..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none"></div>
+              <div class="flex gap-1.5 items-center shrink-0">
+                <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✓ Cumple</button>
+                <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✗ No Cumple</button>
+                <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Grupo: Cimentaciones -->
+      <section>
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-1 h-5 bg-cyan-500 rounded"></div>
+          <h3 class="font-semibold text-gray-700">Cimentaciones</h3>
+          <span class="ml-auto text-xs text-gray-400">0 / 6</span>
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4 opacity-70">
+            <div class="flex-1"><div class="font-medium text-gray-700 text-sm">Criterios de diseño de obra civil</div><input type="text" placeholder="Observación..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none"></div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /panel-CIVIL -->
+
+    <!-- ══ Contenido: Categoría MONTAJE (oculto) ══ -->
+    <div id="panel-MONTAJE" class="p-6 space-y-6 hidden">
+      <section>
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-1 h-5 bg-purple-500 rounded"></div>
+          <h3 class="font-semibold text-gray-700">Memorias estructurales</h3>
+          <span class="ml-auto text-xs text-gray-400">3 / 6</span>
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1"><div class="font-medium text-gray-800 text-sm">Memorias de diseño estructural tipo A</div><input type="text" placeholder="Observación..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none"></div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-cumple">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+            </div>
+          </div>
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1"><div class="font-medium text-gray-800 text-sm">Memorias de diseño estructural tipo B</div><input type="text" placeholder="Observación..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none"></div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-nocumple">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+            </div>
+          </div>
+          <div class="doc-card bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start gap-4">
+            <div class="flex-1"><div class="font-medium text-gray-800 text-sm">Planos según el tipo de torre</div><input type="text" placeholder="Observación..." class="mt-1.5 w-full text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none"></div>
+            <div class="flex gap-1.5 items-center shrink-0">
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-cumple">✓ Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">✗ No Cumple</button>
+              <button class="px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio">— N/A</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div><!-- /panel-MONTAJE -->
+
+    <!-- ══ Contenido: Categoría TENDIDO (oculto) ══ -->
+    <div id="panel-TENDIDO" class="p-6 hidden">
+      <p class="text-gray-400 text-sm">Selecciona la pestaña Tendido para ver sus documentos.</p>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── TOAST de guardado ── -->
+<div id="toast"
+     class="fixed bottom-5 right-5 bg-gray-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none flex items-center gap-2">
+  <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+  </svg>
+  Guardado automáticamente
+</div>
+
+<script>
+  // Cambiar torre seleccionada
+  function selectTower(btn, name) {
+    document.querySelectorAll('.tower-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector('header h1').textContent = `Ingeniería — CON-2025-001`;
+    document.querySelector('main .sticky div .font-semibold').textContent = `Torre ${name}`;
+  }
+
+  // Cambiar tab de categoría
+  function switchTab(cat) {
+    ['CIVIL','MONTAJE','TENDIDO'].forEach(c => {
+      document.getElementById(`panel-${c}`).classList.add('hidden');
+      document.getElementById(`tab-${c}`).className = 'tab-btn px-6 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700';
+    });
+    document.getElementById(`panel-${cat}`).classList.remove('hidden');
+    document.getElementById(`tab-${cat}`).className = 'tab-btn px-6 py-2.5 text-sm font-medium border-b-2 border-blue-600 text-blue-600';
+  }
+
+  // Botones de estado: toggle activo
+  document.querySelectorAll('.doc-card').forEach(card => {
+    const btns = card.querySelectorAll('.doc-state-btn');
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pills = { '✓ Cumple': 'pill-cumple', '✗ No Cumple': 'pill-nocumple', '— N/A': 'pill-noaplica' };
+        const isActive = !btn.classList.contains('pill-vacio');
+        btns.forEach(b => { b.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold pill-vacio transition-all doc-state-btn'; });
+        if (!isActive) {
+          const label = btn.textContent.trim();
+          const pill = pills[label] || 'pill-vacio';
+          btn.className = `px-3 py-1.5 rounded-lg text-xs font-semibold ${pill} transition-all doc-state-btn`;
+        }
+        showToast();
+      });
+    });
+  });
+
+  // Toast
+  function showToast() {
+    const t = document.getElementById('toast');
+    t.style.opacity = '1';
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => t.style.opacity = '0', 2000);
+  }
+  document.querySelectorAll('input[type=text]').forEach(i => i.addEventListener('change', showToast));
+</script>
+
+</body>
+</html>

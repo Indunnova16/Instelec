@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Instelec - Avance de Proyecto</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            color: white;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        /* KPI CARDS */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+
+        .kpi-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid #667eea;
+        }
+
+        .kpi-card.success {
+            border-left-color: #10b981;
+        }
+
+        .kpi-card.warning {
+            border-left-color: #f59e0b;
+        }
+
+        .kpi-card.danger {
+            border-left-color: #ef4444;
+        }
+
+        .kpi-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+
+        .kpi-card.success .kpi-value {
+            color: #10b981;
+        }
+
+        .kpi-card.warning .kpi-value {
+            color: #f59e0b;
+        }
+
+        .kpi-card.danger .kpi-value {
+            color: #ef4444;
+        }
+
+        .kpi-label {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* PROGRESS BARS */
+        .etapa {
+            margin-bottom: 30px;
+        }
+
+        .etapa-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .etapa-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .etapa-percentage {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .progress-container {
+            background: #f0f0f0;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            margin-bottom: 8px;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.85em;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .progress-bar.complete {
+            background: linear-gradient(90deg, #10b981, #059669);
+        }
+
+        .progress-bar.warning {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+
+        .progress-bar.danger {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+        }
+
+        .comparison {
+            display: flex;
+            gap: 10px;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+
+        .comparison-item {
+            flex: 1;
+            background: #f9f9f9;
+            padding: 8px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+        }
+
+        .comparison-label {
+            color: #666;
+            font-size: 0.8em;
+            text-transform: uppercase;
+        }
+
+        .comparison-value {
+            font-weight: bold;
+            color: #333;
+            font-size: 1em;
+        }
+
+        /* VARIANCE */
+        .variance {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .variance.positive {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .variance.negative {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .variance.neutral {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        /* CHART SECTION */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 30px;
+        }
+
+        .chart-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 1024px) {
+            .chart-wrapper {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .chart-card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        /* STATUS BADGE */
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-badge.on-track {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .status-badge.at-risk {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .status-badge.off-track {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        /* SUMMARY */
+        .summary-section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .summary-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .summary-item {
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .summary-item h3 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1em;
+        }
+
+        .summary-item p {
+            color: #666;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+
+        /* FOOTER */
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            padding: 20px;
+            opacity: 0.8;
+        }
+
+        /* ANIMATIONS */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .card {
+            animation: fadeIn 0.6s ease;
+        }
+
+        .chart-card {
+            animation: fadeIn 0.6s ease;
+        }
+
+        .summary-section {
+            animation: fadeIn 0.6s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <header>
+            <h1>📊 Dashboard Instelec</h1>
+            <p>Seguimiento de Avance - Mantenimiento de Líneas de Transmisión</p>
+        </header>
+
+        <!-- KPI CARDS -->
+        <div class="kpi-grid">
+            <div class="kpi-card success">
+                <div class="kpi-label">Avance General</div>
+                <div class="kpi-value">68%</div>
+                <p style="color: #666; font-size: 0.9em;">Proyecto en marcha</p>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Etapas Completadas</div>
+                <div class="kpi-value">2/5</div>
+                <p style="color: #666; font-size: 0.9em;">En calendario</p>
+            </div>
+            <div class="kpi-card warning">
+                <div class="kpi-label">En Riesgo</div>
+                <div class="kpi-value">1</div>
+                <p style="color: #666; font-size: 0.9em;">Requiere atención</p>
+            </div>
+            <div class="kpi-card success">
+                <div class="kpi-label">Desviación</div>
+                <div class="kpi-value">+3 días</div>
+                <p style="color: #666; font-size: 0.9em;">Dentro de tolerancia</p>
+            </div>
+        </div>
+
+        <!-- PROGRESS BY STAGE -->
+        <div class="card">
+            <h2>📈 Avance por Etapa</h2>
+
+            <!-- ETAPA 1 -->
+            <div class="etapa">
+                <div class="etapa-header">
+                    <div class="etapa-title">Etapa 1: Inspecciones de Campo</div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span class="status-badge on-track">ON TRACK</span>
+                        <span class="etapa-percentage">95%</span>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar complete" style="width: 95%;">95%</div>
+                </div>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="comparison-label">Planeado</div>
+                        <div class="comparison-value">100 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="comparison-label">Ejecutado</div>
+                        <div class="comparison-value">95 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="variance positive">✓ +5 días</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETAPA 2 -->
+            <div class="etapa">
+                <div class="etapa-header">
+                    <div class="etapa-title">Etapa 2: Análisis y Clasificación</div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span class="status-badge on-track">ON TRACK</span>
+                        <span class="etapa-percentage">78%</span>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: 78%;">78%</div>
+                </div>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="comparison-label">Planeado</div>
+                        <div class="comparison-value">95 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="comparison-label">Ejecutado</div>
+                        <div class="comparison-value">74 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="variance neutral">⚠ -2 días</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETAPA 3 -->
+            <div class="etapa">
+                <div class="etapa-header">
+                    <div class="etapa-title">Etapa 3: Planes de Mantenimiento</div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span class="status-badge at-risk">AT RISK</span>
+                        <span class="etapa-percentage">45%</span>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar warning" style="width: 45%;">45%</div>
+                </div>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="comparison-label">Planeado</div>
+                        <div class="comparison-value">80 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="comparison-label">Ejecutado</div>
+                        <div class="comparison-value">36 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="variance negative">✗ -5 días</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETAPA 4 -->
+            <div class="etapa">
+                <div class="etapa-header">
+                    <div class="etapa-title">Etapa 4: Implementación de Mejoras</div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span class="status-badge off-track">OFF TRACK</span>
+                        <span class="etapa-percentage">22%</span>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar danger" style="width: 22%;">22%</div>
+                </div>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="comparison-label">Planeado</div>
+                        <div class="comparison-value">50 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="comparison-label">Ejecutado</div>
+                        <div class="comparison-value">11 líneas</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="variance negative">✗ -10 días</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETAPA 5 -->
+            <div class="etapa">
+                <div class="etapa-header">
+                    <div class="etapa-title">Etapa 5: Cierre y Documentación</div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span class="status-badge off-track">NOT STARTED</span>
+                        <span class="etapa-percentage">0%</span>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: 0%; background: #ddd;">0%</div>
+                </div>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <div class="comparison-label">Planeado</div>
+                        <div class="comparison-value">Inicio en Jun 15</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="comparison-label">Ejecutado</div>
+                        <div class="comparison-value">Pendiente</div>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="variance neutral">Según cronograma</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHARTS -->
+        <div class="chart-wrapper">
+            <!-- CUMULATIVE PROGRESS -->
+            <div class="chart-card">
+                <h2>Progreso Acumulado vs Planeado</h2>
+                <div class="chart-container">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </div>
+
+            <!-- STAGE COMPARISON -->
+            <div class="chart-card">
+                <h2>Comparativa: Planeado vs Ejecutado</h2>
+                <div class="chart-container">
+                    <canvas id="comparisonChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- TIMELINE & SUMMARY -->
+        <div class="summary-section">
+            <h2>📋 Resumen Ejecutivo</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <h3>🟢 Fortalezas</h3>
+                    <p>
+                        ✓ Etapa 1 completada ahead of schedule<br>
+                        ✓ Equipo de campo muy productivo<br>
+                        ✓ Calidad de datos excelente
+                    </p>
+                </div>
+                <div class="summary-item">
+                    <h3>🟡 Riesgos</h3>
+                    <p>
+                        ⚠ Etapa 3 con 5 días de retraso<br>
+                        ⚠ Etapa 4 crítica (22% avance)<br>
+                        ⚠ Recursos limitados para implementación
+                    </p>
+                </div>
+                <div class="summary-item">
+                    <h3>🎯 Acciones Recomendadas</h3>
+                    <p>
+                        → Reforzar equipo en Etapa 3<br>
+                        → Iniciar Etapa 4 ya (solapamiento)<br>
+                        → Revisar cronograma Etapa 5
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Dashboard Instelec © 2026 | Actualizado: 15 mayo 2026 | Próxima actualización: 17 mayo 2026</p>
+        </footer>
+    </div>
+
+    <script>
+        // Progreso Acumulado vs Planeado
+        const progressCtx = document.getElementById('progressChart').getContext('2d');
+        new Chart(progressCtx, {
+            type: 'line',
+            data: {
+                labels: ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4', 'Semana 5', 'Semana 6'],
+                datasets: [
+                    {
+                        label: 'Planeado',
+                        data: [15, 30, 45, 60, 75, 90],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 6,
+                        pointBackgroundColor: '#667eea',
+                        pointBorderColor: 'white',
+                        pointBorderWidth: 2,
+                    },
+                    {
+                        label: 'Ejecutado',
+                        data: [18, 35, 48, 55, 64, 68],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 6,
+                        pointBackgroundColor: '#10b981',
+                        pointBorderColor: 'white',
+                        pointBorderWidth: 2,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            usePointStyle: true,
+                            padding: 15,
+                            font: { size: 12 }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) { return value + '%'; }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Comparativa Planeado vs Ejecutado
+        const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+        new Chart(comparisonCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Etapa 1', 'Etapa 2', 'Etapa 3', 'Etapa 4', 'Etapa 5'],
+                datasets: [
+                    {
+                        label: 'Planeado',
+                        data: [100, 95, 80, 50, 30],
+                        backgroundColor: '#667eea',
+                        borderRadius: 6,
+                    },
+                    {
+                        label: 'Ejecutado',
+                        data: [95, 74, 36, 11, 0],
+                        backgroundColor: '#10b981',
+                        borderRadius: 6,
+                    },
+                    {
+                        label: 'Varianza',
+                        data: [-5, -21, -44, -39, -30],
+                        backgroundColor: '#ef4444',
+                        borderRadius: 6,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            usePointStyle: true,
+                            padding: 15,
+                            font: { size: 12 }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: function(value) { return value; }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
