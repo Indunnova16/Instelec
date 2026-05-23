@@ -78,7 +78,7 @@ jobs:
 
       - name: Create env-vars file
         run: |
-          cat > /tmp/env-vars.yaml << EOF
+          cat > "$RUNNER_TEMP/env-vars.yaml" << EOF
           DEBUG: "False"
           DJANGO_SETTINGS_MODULE: "config.settings.production"
           ALLOWED_HOSTS: "*"
@@ -98,7 +98,7 @@ jobs:
             --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --region ${{ env.REGION }} \
             --tasks 1 \
-            --env-vars-file=/tmp/env-vars.yaml \
+            --env-vars-file="$RUNNER_TEMP/env-vars.yaml" \
             --set-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
             --command "python" \
             --args "manage.py,migrate,--noinput" \
@@ -116,7 +116,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --add-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
-            --env-vars-file=/tmp/env-vars.yaml \
+            --env-vars-file="$RUNNER_TEMP/env-vars.yaml" \
             --memory 512Mi \
             --cpu 1 \
             --timeout 300 \
