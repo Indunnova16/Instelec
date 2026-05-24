@@ -25,6 +25,7 @@ from .models import (
     PinturaPatasTorre,
     PinturaAeronauticaTorre,
     PinturaFranja,
+    TendidoTorre,
     FaseTorre,
     SocialPredial,
     AmbientalTorre,
@@ -1869,6 +1870,180 @@ class SPTPinturaTorreUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
             })
 
         return JsonResponse({'error': f'Sección inválida: {seccion!r}'}, status=400)
+
+
+# ==========================================================================
+# CANT TENDIDO (#79) — matriz torre × actividades conductor + fibra OPGW
+# ==========================================================================
+
+TENDIDO_CONDUCTOR_FIELDS = {
+    'riega_manila_conductor', 'riega_guaya_conductor', 'tendido_conductor',
+    'grapado_amarre_conductor', 'accesorios_puentes', 'balizas_desviadores',
+}
+TENDIDO_FIBRA_FIELDS = {
+    'riega_manila_fibra', 'riega_guaya_opgw', 'tendido_opgw',
+    'grapado_amarre_fibra', 'empalmes_opgw',
+}
+TENDIDO_EXTRA_BOOL = {
+    'vestida_conductor', 'placas_senalizacion', 'facturadas_hmv',
+    'vestida_fibra',
+}
+TENDIDO_TODOS_BOOL = TENDIDO_CONDUCTOR_FIELDS | TENDIDO_FIBRA_FIELDS | TENDIDO_EXTRA_BOOL
+
+
+class TendidoMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Matriz CANT TENDIDO con sección Conductor (7 cols + 2 admin) + Fibra (6 cols)."""
+    template_name = 'construccion/tendido_matriz.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        torres_qs = torres_qs.select_related().order_by('numero')
+
+        existentes = {t.torre_id: t for t in TendidoTorre.objects.filter(proyecto=proyecto)}
+        filas = []
+        for torre in torres_qs:
+            t = existentes.get(torre.id)
+            if t is None:
+                t = TendidoTorre.objects.create(proyecto=proyecto, torre=torre)
+            filas.append(t)
+
+        pesos_conductor = {
+            'riega_manila_conductor': proyecto.peso_tend_riega_manila_pct,
+            'riega_guaya_conductor': proyecto.peso_tend_riega_guaya_pct,
+            'tendido_conductor': proyecto.peso_tend_tendido_conductor_pct,
+            'grapado_amarre_conductor': proyecto.peso_tend_grapado_pct,
+            'accesorios_puentes': proyecto.peso_tend_accesorios_pct,
+            'balizas_desviadores': proyecto.peso_tend_balizas_pct,
+        }
+        pesos_fibra = {
+            'riega_manila_fibra': proyecto.peso_tend_riega_manila_fibra_pct,
+            'riega_guaya_opgw': proyecto.peso_tend_riega_guaya_opgw_pct,
+            'tendido_opgw': proyecto.peso_tend_tendido_opgw_pct,
+            'grapado_amarre_fibra': proyecto.peso_tend_grapado_fibra_pct,
+            'empalmes_opgw': proyecto.peso_tend_empalmes_opgw_pct,
+        }
+        suma_c = sum(pesos_conductor.values())
+        suma_f = sum(pesos_fibra.values())
+
+        if filas:
+            avance_general_conductor = round(
+                sum(t.avance_conductor for t in filas) / len(filas) * 100, 1)
+            avance_general_fibra = round(
+                sum(t.avance_fibra for t in filas) / len(filas) * 100, 1)
+        else:
+            avance_general_conductor = avance_general_fibra = 0
+
+        ctx.update({
+            'proyecto': proyecto,
+            'filas': filas,
+            'pesos_conductor': pesos_conductor,
+            'pesos_fibra': pesos_fibra,
+            'suma_conductor': suma_c,
+            'suma_fibra': suma_f,
+            'suma_conductor_ok': suma_c == 100,
+            'suma_fibra_ok': suma_f == 100,
+            'columnas_conductor': TendidoTorre.COLUMNAS_CONDUCTOR,
+            'columnas_fibra': TendidoTorre.COLUMNAS_FIBRA,
+            'avance_general_conductor': avance_general_conductor,
+            'avance_general_fibra': avance_general_fibra,
+            'active_tab': 'tendido',
+        })
+        return ctx
+
+
+class TendidoPesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — actualiza pesos Conductor o Fibra (cada uno suma 100 independiente)."""
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        seccion = request.POST.get('seccion', '').strip()
+        if seccion not in ('conductor', 'fibra'):
+            return JsonResponse({'error': 'seccion debe ser conductor o fibra'}, status=400)
+
+        if seccion == 'conductor':
+            mapeo = {
+                'riega_manila': 'peso_tend_riega_manila_pct',
+                'riega_guaya': 'peso_tend_riega_guaya_pct',
+                'tendido': 'peso_tend_tendido_conductor_pct',
+                'grapado': 'peso_tend_grapado_pct',
+                'accesorios': 'peso_tend_accesorios_pct',
+                'balizas': 'peso_tend_balizas_pct',
+            }
+        else:
+            mapeo = {
+                'riega_manila_fibra': 'peso_tend_riega_manila_fibra_pct',
+                'riega_guaya_opgw': 'peso_tend_riega_guaya_opgw_pct',
+                'tendido_opgw': 'peso_tend_tendido_opgw_pct',
+                'grapado_fibra': 'peso_tend_grapado_fibra_pct',
+                'empalmes_opgw': 'peso_tend_empalmes_opgw_pct',
+            }
+        try:
+            valores = {k: int(request.POST.get(k, 0)) for k in mapeo}
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Los pesos deben ser enteros 0-100.'}, status=400)
+        for k, v in valores.items():
+            if v < 0 or v > 100:
+                return JsonResponse({'error': f'Peso fuera de rango: {k}={v}'}, status=400)
+        if sum(valores.values()) != 100:
+            return JsonResponse(
+                {'error': f'La suma de pesos {seccion} debe ser 100 (actual: {sum(valores.values())}).'},
+                status=400)
+
+        for clave, campo in mapeo.items():
+            setattr(proyecto, campo, valores[clave])
+        proyecto.save(update_fields=list(mapeo.values()))
+        return JsonResponse({'ok': True, 'seccion': seccion})
+
+
+class TendidoToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — toggle de una actividad bool de una torre del módulo Tendido."""
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+        campo = request.POST.get('campo', '').strip()
+        if campo not in TENDIDO_TODOS_BOOL:
+            return JsonResponse({'error': f'Campo inválido: {campo!r}'}, status=400)
+        valor = request.POST.get('valor', '').strip() in ('1', 'true', 'on', 'True')
+
+        # Cuadrillas también se actualizan por este endpoint
+        t, _ = TendidoTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+        setattr(t, campo, valor)
+        t.save(update_fields=[campo, 'updated_at'])
+        return JsonResponse({
+            'ok': True,
+            'avance_conductor': t.avance_conductor,
+            'avance_conductor_pct': t.avance_conductor_pct,
+            'avance_fibra': t.avance_fibra,
+            'avance_fibra_pct': t.avance_fibra_pct,
+        })
+
+
+class TendidoRealizoUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — actualiza cuadrilla 'realizó' (conductor o fibra) para una torre."""
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+        seccion = request.POST.get('seccion', '').strip()
+        if seccion not in ('conductor', 'fibra'):
+            return JsonResponse({'error': 'seccion inválida'}, status=400)
+        valor = request.POST.get('valor', '').strip()[:100]
+        campo = 'realizo_conductor' if seccion == 'conductor' else 'realizo_fibra'
+        t, _ = TendidoTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+        setattr(t, campo, valor)
+        t.save(update_fields=[campo, 'updated_at'])
+        return JsonResponse({'ok': True})
 
 
 # ==========================================================================

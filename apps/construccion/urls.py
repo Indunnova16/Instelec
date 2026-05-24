@@ -156,7 +156,18 @@ urlpatterns = [
 
     # Tendido (#58) — UI por torre con 2 circuitos × 3 fases + OPGW + guarda
     path('<uuid:proyecto_id>/tendido/',
-         views.TendidoListView.as_view(), name='tendido_lista'),
+         views.TendidoMatrizView.as_view(), name='tendido_lista'),
+    # CANT TENDIDO AJAX #79
+    path('<uuid:proyecto_id>/tendido/pesos/',
+         views.TendidoPesosUpdateView.as_view(), name='tendido_pesos_update'),
+    path('<uuid:proyecto_id>/tendido/torres/<uuid:torre_id>/toggle/',
+         views.TendidoToggleView.as_view(), name='tendido_toggle'),
+    path('<uuid:proyecto_id>/tendido/torres/<uuid:torre_id>/realizo/',
+         views.TendidoRealizoUpdateView.as_view(), name='tendido_realizo_update'),
+    path('<uuid:proyecto_id>/tendido-legacy/',
+         views.TendidoListView.as_view(), name='tendido_lista_legacy'),
+    path('<uuid:proyecto_id>/tendido/<uuid:torre_id>/fase/',
+         views.TendidoTorreView.as_view(), name='tendido_torre_fase'),
     path('<uuid:proyecto_id>/tendido/<uuid:torre_id>/',
          views.TendidoTorreView.as_view(), name='tendido_torre'),
 
