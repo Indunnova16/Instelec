@@ -149,22 +149,28 @@ function dashboardCurvaS(cfg) {
         form: { semana: '', prog: 0, cons: 0, torres_prog: '' },
         mensaje: '', mensajeTipo: '',
         init() {
-            // Diferir render hasta que el canvas esté en el DOM (Alpine init() corre antes).
-            this.$nextTick(() => this.renderChart(this.chartInicial));
+            // Diferir render: Alpine init() corre antes del paint del canvas.
+            // requestAnimationFrame asegura que el navegador ya pintó el DOM.
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    this.renderChart(this.chartInicial);
+                });
+            });
         },
         renderChart(datos) {
-            const canvas = document.getElementById('curva-s-chart');
-            if (!canvas) {
-                console.warn('curva-s-chart canvas no encontrado, omitiendo render');
-                return;
-            }
-            // Confirmar que es <canvas> y no otro elemento con ese id
-            if (canvas.tagName !== 'CANVAS' || !canvas.getContext) {
-                console.warn('curva-s-chart no es un canvas válido');
-                return;
-            }
-            if (this.chart) this.chart.destroy();
-            this.chart = new Chart(canvas, {
+            try {
+                const canvas = document.getElementById('curva-s-chart');
+                if (!canvas || canvas.tagName !== 'CANVAS' || !canvas.getContext) {
+                    console.warn('curva-s-chart canvas no disponible');
+                    return;
+                }
+                // Si el canvas todavía no tiene dimensiones (offsetParent null en display:none), aplazar.
+                if (!canvas.offsetParent && canvas.offsetWidth === 0) {
+                    console.warn('curva-s-chart sin dimensiones todavía, omitiendo');
+                    return;
+                }
+                if (this.chart) this.chart.destroy();
+                this.chart = new Chart(canvas, {
                 type: 'line',
                 data: {
                     labels: datos.labels,
@@ -184,6 +190,9 @@ function dashboardCurvaS(cfg) {
                     plugins: { legend: { position: 'top' } },
                 },
             });
+            } catch (e) {
+                console.warn('Chart.js render falló:', e && e.message);
+            }
         },
         async refrescarChart() {
             const r = await fetch(this.urlChart + '?fase=' + this.faseActiva);
