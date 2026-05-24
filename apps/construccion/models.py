@@ -1267,6 +1267,102 @@ class TrinchoCuneta(BaseModel):
         return 'Completo' if self.completado else 'Incompleto'
 
 
+# ==========================================================================
+# Dashboards Curva S (#75 #77) — Avance semanal Programado vs Ejecutado
+# ==========================================================================
+
+class DashboardAvanceSemanal(BaseModel):
+    """Captura semanal del avance Programado vs Ejecutado para los
+    dashboards Curva S (#75 #77). Un registro por (proyecto, fase, semana).
+    """
+    class Fase(models.TextChoices):
+        OOCC = 'OOCC', 'Obra Civil'
+        MONTAJE = 'MONTAJE', 'Montaje'
+        TENDIDO = 'TENDIDO', 'Tendido'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='dashboards_semanales',
+    )
+    fase = models.CharField('Fase', max_length=10, choices=Fase.choices)
+    semana = models.DateField('Semana (lunes)')
+
+    # PROGRAMADAS
+    torres_programadas_semana = models.PositiveSmallIntegerField(
+        'Torres programadas (semana)', default=0,
+    )
+    torres_programadas_acum = models.PositiveSmallIntegerField(
+        'Torres programadas (acum)', default=0,
+    )
+    pct_programado = models.DecimalField(
+        '% Programado', max_digits=5, decimal_places=2, default=0,
+    )
+    torres_incluidas_prog = models.CharField(
+        'Torres incluidas (prog)', max_length=300, blank=True,
+        help_text='Lista separada por coma, ej "1, 38, 39"',
+    )
+
+    # EJECUTADAS / CONSTRUIDAS
+    torres_construidas_semana = models.PositiveSmallIntegerField(
+        'Torres ejecutadas (semana)', default=0,
+    )
+    torres_construidas_acum = models.PositiveSmallIntegerField(
+        'Torres ejecutadas (acum)', default=0,
+    )
+    pct_construido = models.DecimalField(
+        '% Ejecutado', max_digits=5, decimal_places=2, default=0,
+    )
+    torres_incluidas_cons = models.CharField(
+        'Torres incluidas (cons)', max_length=300, blank=True,
+    )
+
+    class Meta:
+        db_table = 'construccion_dashboard_semanal'
+        verbose_name = 'Dashboard — Avance semanal'
+        verbose_name_plural = 'Dashboard — Avances semanales'
+        unique_together = [['proyecto', 'fase', 'semana']]
+        ordering = ['semana']
+
+    def __str__(self):
+        return f"{self.fase} {self.semana}"
+
+    @property
+    def varianza_semana(self):
+        return int(self.torres_construidas_semana) - int(self.torres_programadas_semana)
+
+    @property
+    def varianza_acum(self):
+        return int(self.torres_construidas_acum) - int(self.torres_programadas_acum)
+
+
+def recalcular_dashboard_acumulados(proyecto, fase):
+    """Recalcula los acumulados de toda la serie de una fase del dashboard.
+
+    Para cada semana en orden cronológico: prog_acum = prev.prog_acum +
+    semana, igual cons_acum. pct_programado y pct_construido se computan
+    contra el total de torres del proyecto.
+    """
+    semanas = list(DashboardAvanceSemanal.objects
+        .filter(proyecto=proyecto, fase=fase)
+        .order_by('semana'))
+    total_torres = proyecto.torres.count() or 1
+    prog_acum = 0
+    cons_acum = 0
+    from decimal import Decimal
+    for s in semanas:
+        prog_acum += int(s.torres_programadas_semana)
+        cons_acum += int(s.torres_construidas_semana)
+        s.torres_programadas_acum = prog_acum
+        s.torres_construidas_acum = cons_acum
+        s.pct_programado = Decimal(prog_acum * 100) / Decimal(total_torres)
+        s.pct_construido = Decimal(cons_acum * 100) / Decimal(total_torres)
+        s.save(update_fields=[
+            'torres_programadas_acum', 'torres_construidas_acum',
+            'pct_programado', 'pct_construido', 'updated_at',
+        ])
+
+
 class FaseTorre(BaseModel):
     """
     Assembly (montaje) and stringing (tendido) phases per tower.

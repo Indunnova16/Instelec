@@ -178,14 +178,17 @@ urlpatterns = [
          views.DashboardKitsView.as_view(), name='kits_dashboard'),
 
     # Sidebar #73 — placeholders para módulos pendientes (se reemplazan en Fases 2 y 3)
+    # Dashboards Curva S (#75 #77)
     path('<uuid:proyecto_id>/dashboard-obra-civil/',
-         views.ModuloPlaceholderView.as_view(
-             extra_context={'modulo_titulo': 'Dashboard Obra Civil', 'modulo_slug': 'dashboard-obra-civil'}),
-         name='dashboard_obra_civil'),
+         views.DashboardObraCivilView.as_view(), name='dashboard_obra_civil'),
     path('<uuid:proyecto_id>/dashboard-montaje/',
-         views.ModuloPlaceholderView.as_view(
-             extra_context={'modulo_titulo': 'Dashboard Montaje', 'modulo_slug': 'dashboard-montaje'}),
-         name='dashboard_montaje'),
+         views.DashboardMontajeView.as_view(), name='dashboard_montaje'),
+    path('<uuid:proyecto_id>/dashboard/semana/',
+         views.DashboardSemanaUpsertView.as_view(), name='dashboard_semana_upsert'),
+    path('<uuid:proyecto_id>/dashboard/semana/<uuid:pk>/delete/',
+         views.DashboardSemanaDeleteView.as_view(), name='dashboard_semana_delete'),
+    path('<uuid:proyecto_id>/dashboard/chart/',
+         views.DashboardChartDataView.as_view(), name='dashboard_chart_data'),
     # SPT y Pintura — captura por torre #78
     path('<uuid:proyecto_id>/spt-pintura/',
          views.SPTPinturaIndexView.as_view(), name='spt_pintura'),

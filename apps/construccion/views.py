@@ -27,6 +27,7 @@ from .models import (
     PinturaFranja,
     TendidoTorre,
     TrinchoCuneta,
+    DashboardAvanceSemanal,
     FaseTorre,
     SocialPredial,
     AmbientalTorre,
@@ -2176,6 +2177,171 @@ class TrinchosCunetasDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
         obra = get_object_or_404(TrinchoCuneta, id=pk, proyecto_id=proyecto_id)
         obra.delete()
         return JsonResponse({'ok': True})
+
+
+# ==========================================================================
+# Dashboards Curva S (#75 Obra Civil · #77 Montaje)
+# ==========================================================================
+
+class _DashboardCurvaSBase(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Vista común para Dashboards Curva S. Subclases definen FASE_DEFAULT,
+    template_name y nombre de URL update."""
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+    FASE_DEFAULT = None  # override
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        fase = self.request.GET.get('fase', self.FASE_DEFAULT).upper()
+        if fase not in {f for f, _ in DashboardAvanceSemanal.Fase.choices}:
+            fase = self.FASE_DEFAULT
+
+        semanas = list(DashboardAvanceSemanal.objects
+            .filter(proyecto=proyecto, fase=fase)
+            .order_by('semana'))
+        total_torres = proyecto.torres.count() or 0
+
+        # Indicadores
+        if semanas:
+            ultimo = semanas[-1]
+            varianza_acum = ultimo.varianza_acum
+            pct_prog = float(ultimo.pct_programado)
+            pct_cons = float(ultimo.pct_construido)
+            tasa = (sum(int(s.torres_construidas_semana) for s in semanas) / len(semanas)
+                    if semanas else 0)
+            torres_restantes = max(0, total_torres - int(ultimo.torres_construidas_acum))
+            semanas_restantes = (torres_restantes / tasa) if tasa else None
+        else:
+            varianza_acum = pct_prog = pct_cons = tasa = 0
+            semanas_restantes = None
+
+        ctx.update({
+            'proyecto': proyecto,
+            'fase_activa': fase,
+            'fases_disponibles': DashboardAvanceSemanal.Fase.choices,
+            'semanas': semanas,
+            'total_torres': total_torres,
+            'varianza_acum': varianza_acum,
+            'pct_programado_total': round(pct_prog, 1),
+            'pct_construido_total': round(pct_cons, 1),
+            'tasa_torres_semana': round(tasa, 2),
+            'semanas_restantes': (round(semanas_restantes, 1) if semanas_restantes else None),
+            'datos_chart': self._build_chart_data(semanas),
+            'active_tab': self.FASE_DEFAULT.lower() if self.FASE_DEFAULT else 'dashboard',
+        })
+        return ctx
+
+    @staticmethod
+    def _build_chart_data(semanas):
+        import json
+        return json.dumps({
+            'labels': [s.semana.isoformat() for s in semanas],
+            'planeado': [float(s.pct_programado) for s in semanas],
+            'ejecutado': [float(s.pct_construido) for s in semanas],
+        })
+
+
+class DashboardObraCivilView(_DashboardCurvaSBase):
+    """Dashboard Curva S de Obra Civil (#75)."""
+    template_name = 'construccion/dashboard_curva_s.html'
+    FASE_DEFAULT = 'OOCC'
+
+
+class DashboardMontajeView(_DashboardCurvaSBase):
+    """Dashboard Curva S de Montaje (#77)."""
+    template_name = 'construccion/dashboard_curva_s.html'
+    FASE_DEFAULT = 'MONTAJE'
+
+
+class DashboardSemanaUpsertView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — crea o actualiza una semana del dashboard. Recalcula
+    acumulados y porcentajes para toda la serie de la fase.
+    """
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, *args, **kwargs):
+        from datetime import date
+        from django.http import JsonResponse
+        from .models import recalcular_dashboard_acumulados
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        fase = request.POST.get('fase', '').upper()
+        if fase not in {f for f, _ in DashboardAvanceSemanal.Fase.choices}:
+            return JsonResponse({'error': f'fase inválida: {fase!r}'}, status=400)
+        semana_str = request.POST.get('semana', '').strip()
+        try:
+            semana = date.fromisoformat(semana_str)
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'semana debe ser ISO YYYY-MM-DD'}, status=400)
+        try:
+            prog = int(request.POST.get('torres_programadas_semana', '0') or 0)
+            cons = int(request.POST.get('torres_construidas_semana', '0') or 0)
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'valores deben ser enteros'}, status=400)
+        total_torres = proyecto.torres.count()
+        if prog < 0 or cons < 0:
+            return JsonResponse({'error': 'no se permiten valores negativos'}, status=400)
+        if total_torres and prog > total_torres:
+            return JsonResponse(
+                {'error': f'prog ({prog}) > total torres del proyecto ({total_torres})'},
+                status=400)
+        if total_torres and cons > total_torres:
+            return JsonResponse(
+                {'error': f'cons ({cons}) > total torres del proyecto ({total_torres})'},
+                status=400)
+
+        obj, created = DashboardAvanceSemanal.objects.update_or_create(
+            proyecto=proyecto, fase=fase, semana=semana,
+            defaults={
+                'torres_programadas_semana': prog,
+                'torres_construidas_semana': cons,
+                'torres_incluidas_prog': request.POST.get('torres_incluidas_prog', '').strip()[:300],
+                'torres_incluidas_cons': request.POST.get('torres_incluidas_cons', '').strip()[:300],
+            },
+        )
+        recalcular_dashboard_acumulados(proyecto, fase)
+        obj.refresh_from_db()
+        return JsonResponse({
+            'ok': True,
+            'created': created,
+            'id': str(obj.id),
+            'prog_acum': int(obj.torres_programadas_acum),
+            'cons_acum': int(obj.torres_construidas_acum),
+            'pct_programado': float(obj.pct_programado),
+            'pct_construido': float(obj.pct_construido),
+        })
+
+
+class DashboardSemanaDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, pk, *args, **kwargs):
+        from django.http import JsonResponse
+        from .models import recalcular_dashboard_acumulados
+        sem = get_object_or_404(DashboardAvanceSemanal, id=pk, proyecto_id=proyecto_id)
+        proyecto = sem.proyecto
+        fase = sem.fase
+        sem.delete()
+        recalcular_dashboard_acumulados(proyecto, fase)
+        return JsonResponse({'ok': True})
+
+
+class DashboardChartDataView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """GET JSON con los datos de la Curva S para Chart.js."""
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get(self, request, proyecto_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        fase = request.GET.get('fase', 'OOCC').upper()
+        if fase not in {f for f, _ in DashboardAvanceSemanal.Fase.choices}:
+            return JsonResponse({'error': 'fase inválida'}, status=400)
+        semanas = DashboardAvanceSemanal.objects.filter(
+            proyecto=proyecto, fase=fase).order_by('semana')
+        return JsonResponse({
+            'labels': [s.semana.isoformat() for s in semanas],
+            'planeado': [float(s.pct_programado) for s in semanas],
+            'ejecutado': [float(s.pct_construido) for s in semanas],
+        })
 
 
 # ==========================================================================
