@@ -59,6 +59,32 @@ class ProyectoConstruccion(BaseModel):
     peso_mont_revisada_pct = models.PositiveSmallIntegerField(
         'Peso Revisada %', default=25)
 
+    # Pesos editables CANT TENDIDO (#79) — Conductor: 6 actividades (suma=100)
+    peso_tend_riega_manila_pct = models.PositiveSmallIntegerField(
+        'Tend. Riega manila %', default=10)
+    peso_tend_riega_guaya_pct = models.PositiveSmallIntegerField(
+        'Tend. Riega guaya conductor %', default=30)
+    peso_tend_tendido_conductor_pct = models.PositiveSmallIntegerField(
+        'Tend. Tendido conductor %', default=30)
+    peso_tend_grapado_pct = models.PositiveSmallIntegerField(
+        'Tend. Grapado/amarre %', default=10)
+    peso_tend_accesorios_pct = models.PositiveSmallIntegerField(
+        'Tend. Accesorios/puentes %', default=10)
+    peso_tend_balizas_pct = models.PositiveSmallIntegerField(
+        'Tend. Balizas/desviadores %', default=10)
+
+    # Pesos editables CANT TENDIDO Fibra (OPGW) — 5 actividades (suma=100)
+    peso_tend_riega_manila_fibra_pct = models.PositiveSmallIntegerField(
+        'OPGW Riega manila fibra %', default=10)
+    peso_tend_riega_guaya_opgw_pct = models.PositiveSmallIntegerField(
+        'OPGW Riega guaya %', default=20)
+    peso_tend_tendido_opgw_pct = models.PositiveSmallIntegerField(
+        'OPGW Tendido %', default=40)
+    peso_tend_grapado_fibra_pct = models.PositiveSmallIntegerField(
+        'OPGW Grapado/amarre fibra %', default=20)
+    peso_tend_empalmes_opgw_pct = models.PositiveSmallIntegerField(
+        'OPGW Empalmes %', default=10)
+
     class Meta:
         db_table = 'construccion_proyectos'
         verbose_name = 'Proyecto de Construcción'
@@ -1016,6 +1042,153 @@ class PinturaFranja(BaseModel):
         if self.cantidad_color_proyectada is not None and self.cantidad_color_consumida is not None:
             return self.cantidad_color_proyectada - self.cantidad_color_consumida
         return None
+
+
+# ==========================================================================
+# CANT TENDIDO (#79) — captura del Excel `TENDIDO.xlsx`
+# ==========================================================================
+
+class TendidoTorre(BaseModel):
+    """Matriz CANT TENDIDO torre × 13 actividades (#79).
+
+    Dos secciones con SUMPRODUCT independiente:
+    - **Conductor** (6 actividades ponderadas suma=100): riega manila,
+      riega guaya conductor, tendido conductor, grapado, accesorios,
+      balizas. + 2 checks no ponderados: placas señalización, facturadas HMV.
+    - **Fibra OPGW** (5 actividades ponderadas suma=100): riega manila
+      fibra, riega guaya OPGW, tendido OPGW, grapado/amarre fibra,
+      empalmes OPGW.
+
+    FaseTorre legacy se conserva como capa granular con dos circuitos +
+    cable de guarda. TendidoTorre es la matriz agregada que el cliente
+    edita en CANT TENDIDO.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='tendido_torres',
+    )
+    torre = models.OneToOneField(
+        'TorreConstruccion', on_delete=models.CASCADE,
+        related_name='tendido',
+    )
+
+    # Conductor — 7 actividades (6 ponderadas + Vestida que es gate inicial)
+    vestida_conductor = models.BooleanField('Vestida (conductor)', default=False)
+    riega_manila_conductor = models.BooleanField('Riega de manila', default=False)
+    riega_guaya_conductor = models.BooleanField('Riega guaya conductor', default=False)
+    tendido_conductor = models.BooleanField('Tendido de conductor', default=False)
+    grapado_amarre_conductor = models.BooleanField('Grapado / amarre', default=False)
+    accesorios_puentes = models.BooleanField('Accesorios y puentes', default=False)
+    balizas_desviadores = models.BooleanField('Balizas / desviadores de vuelo', default=False)
+    # Control administrativo (no ponderado en SUMPRODUCT)
+    placas_senalizacion = models.BooleanField('Placas de señalización', default=False)
+    facturadas_hmv = models.BooleanField('Facturadas HMV', default=False)
+
+    # Fibra OPGW — 6 actividades (5 ponderadas + Vestida gate)
+    vestida_fibra = models.BooleanField('Vestida (fibra)', default=False)
+    riega_manila_fibra = models.BooleanField('Riega manila (fibra)', default=False)
+    riega_guaya_opgw = models.BooleanField('Riega guaya OPGW', default=False)
+    tendido_opgw = models.BooleanField('Tendido OPGW', default=False)
+    grapado_amarre_fibra = models.BooleanField('Grapado / amarre fibra', default=False)
+    empalmes_opgw = models.BooleanField('Empalmes OPGW', default=False)
+
+    # Cuadrilla
+    realizo_conductor = models.CharField('Realizó (conductor)', max_length=100, blank=True)
+    realizo_fibra = models.CharField('Realizó (fibra)', max_length=100, blank=True)
+
+    class Meta:
+        db_table = 'construccion_tendido_torre'
+        verbose_name = 'Tendido — Torre'
+        verbose_name_plural = 'Tendido — Torres'
+        ordering = ['torre__numero']
+
+    def __str__(self):
+        return f"Tendido {self.torre.numero}"
+
+    COLUMNAS_CONDUCTOR = [
+        ('riega_manila_conductor', 'Riega manila'),
+        ('riega_guaya_conductor', 'Riega guaya'),
+        ('tendido_conductor', 'Tendido conductor'),
+        ('grapado_amarre_conductor', 'Grapado'),
+        ('accesorios_puentes', 'Accesorios'),
+        ('balizas_desviadores', 'Balizas'),
+    ]
+    COLUMNAS_FIBRA = [
+        ('riega_manila_fibra', 'Riega manila fibra'),
+        ('riega_guaya_opgw', 'Riega guaya OPGW'),
+        ('tendido_opgw', 'Tendido OPGW'),
+        ('grapado_amarre_fibra', 'Grapado fibra'),
+        ('empalmes_opgw', 'Empalmes OPGW'),
+    ]
+
+    @property
+    def funcion(self):
+        """Determina Suspensión vs Retención según tipo de torre (#79)."""
+        tipo = (self.torre.tipo or '').strip().upper()
+        if tipo in {'A', 'A ESPECIAL'}:
+            return 'Suspensión'
+        return 'Retención'
+
+    @property
+    def avance_conductor(self):
+        """SUMPRODUCT(pesos conductor, valores). Valor 0-1."""
+        p = self.proyecto
+        pesos = {
+            'riega_manila_conductor': p.peso_tend_riega_manila_pct,
+            'riega_guaya_conductor': p.peso_tend_riega_guaya_pct,
+            'tendido_conductor': p.peso_tend_tendido_conductor_pct,
+            'grapado_amarre_conductor': p.peso_tend_grapado_pct,
+            'accesorios_puentes': p.peso_tend_accesorios_pct,
+            'balizas_desviadores': p.peso_tend_balizas_pct,
+        }
+        total = sum(pesos.values()) or 1
+        suma = sum(peso * (1 if getattr(self, f) else 0) for f, peso in pesos.items())
+        return suma / total
+
+    @property
+    def avance_fibra(self):
+        """SUMPRODUCT(pesos fibra, valores). Valor 0-1."""
+        p = self.proyecto
+        pesos = {
+            'riega_manila_fibra': p.peso_tend_riega_manila_fibra_pct,
+            'riega_guaya_opgw': p.peso_tend_riega_guaya_opgw_pct,
+            'tendido_opgw': p.peso_tend_tendido_opgw_pct,
+            'grapado_amarre_fibra': p.peso_tend_grapado_fibra_pct,
+            'empalmes_opgw': p.peso_tend_empalmes_opgw_pct,
+        }
+        total = sum(pesos.values()) or 1
+        suma = sum(peso * (1 if getattr(self, f) else 0) for f, peso in pesos.items())
+        return suma / total
+
+    @property
+    def avance_conductor_pct(self):
+        return round(self.avance_conductor * 100, 1)
+
+    @property
+    def avance_fibra_pct(self):
+        return round(self.avance_fibra * 100, 1)
+
+
+def _pesos_tendido_conductor_validos(proyecto):
+    return (
+        proyecto.peso_tend_riega_manila_pct
+        + proyecto.peso_tend_riega_guaya_pct
+        + proyecto.peso_tend_tendido_conductor_pct
+        + proyecto.peso_tend_grapado_pct
+        + proyecto.peso_tend_accesorios_pct
+        + proyecto.peso_tend_balizas_pct
+    ) == 100
+
+
+def _pesos_tendido_fibra_validos(proyecto):
+    return (
+        proyecto.peso_tend_riega_manila_fibra_pct
+        + proyecto.peso_tend_riega_guaya_opgw_pct
+        + proyecto.peso_tend_tendido_opgw_pct
+        + proyecto.peso_tend_grapado_fibra_pct
+        + proyecto.peso_tend_empalmes_opgw_pct
+    ) == 100
 
 
 class FaseTorre(BaseModel):

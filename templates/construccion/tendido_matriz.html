@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}CANT TENDIDO — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6"
+     x-data='tendidoMatriz({
+        proyectoId: "{{ proyecto.id }}",
+        urlPesos: "{% url "construccion:tendido_pesos_update" proyecto_id=proyecto.id %}",
+        urlBase: "{% url "construccion:tendido_lista" proyecto_id=proyecto.id %}",
+        csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+        pesosConductor: {
+            riega_manila: {{ pesos_conductor.riega_manila_conductor }},
+            riega_guaya: {{ pesos_conductor.riega_guaya_conductor }},
+            tendido: {{ pesos_conductor.tendido_conductor }},
+            grapado: {{ pesos_conductor.grapado_amarre_conductor }},
+            accesorios: {{ pesos_conductor.accesorios_puentes }},
+            balizas: {{ pesos_conductor.balizas_desviadores }}
+        },
+        pesosFibra: {
+            riega_manila_fibra: {{ pesos_fibra.riega_manila_fibra }},
+            riega_guaya_opgw: {{ pesos_fibra.riega_guaya_opgw }},
+            tendido_opgw: {{ pesos_fibra.tendido_opgw }},
+            grapado_fibra: {{ pesos_fibra.grapado_amarre_fibra }},
+            empalmes_opgw: {{ pesos_fibra.empalmes_opgw }}
+        }
+     })'>
+
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">⚡ CANT TENDIDO</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Torres: <span class="font-medium">{{ filas|length }}</span>
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg px-3 py-2 text-center">
+                <p class="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">Conductor</p>
+                <p class="text-lg font-bold text-blue-700 dark:text-blue-300">{{ avance_general_conductor }}%</p>
+            </div>
+            <div class="bg-purple-50 dark:bg-purple-900/30 rounded-lg px-3 py-2 text-center">
+                <p class="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Fibra OPGW</p>
+                <p class="text-lg font-bold text-purple-700 dark:text-purple-300">{{ avance_general_fibra }}%</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel pesos: Conductor + Fibra (cada uno suma 100 independiente) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Conductor -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="font-semibold text-sm">Pesos Conductor (suma=100)</h3>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs"
+                          :class="sumaConductor === 100 ? 'text-green-600' : 'text-red-600'"
+                          x-text="sumaConductor === 100 ? '✓ 100%' : '✗ ' + sumaConductor + '%'"></span>
+                    <button type="button" @click="guardarPesos('conductor')"
+                            :disabled="sumaConductor !== 100"
+                            :class="sumaConductor === 100 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
+                            class="px-3 py-1 rounded text-xs">Guardar</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-xs">
+                <label class="flex flex-col"><span class="text-gray-500">Riega manila</span><input type="number" min="0" max="100" x-model.number="pesosConductor.riega_manila" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Riega guaya</span><input type="number" min="0" max="100" x-model.number="pesosConductor.riega_guaya" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Tendido</span><input type="number" min="0" max="100" x-model.number="pesosConductor.tendido" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Grapado</span><input type="number" min="0" max="100" x-model.number="pesosConductor.grapado" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Accesorios</span><input type="number" min="0" max="100" x-model.number="pesosConductor.accesorios" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Balizas</span><input type="number" min="0" max="100" x-model.number="pesosConductor.balizas" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+            </div>
+        </div>
+
+        <!-- Fibra OPGW -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="font-semibold text-sm">Pesos Fibra OPGW (suma=100)</h3>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs"
+                          :class="sumaFibra === 100 ? 'text-green-600' : 'text-red-600'"
+                          x-text="sumaFibra === 100 ? '✓ 100%' : '✗ ' + sumaFibra + '%'"></span>
+                    <button type="button" @click="guardarPesos('fibra')"
+                            :disabled="sumaFibra !== 100"
+                            :class="sumaFibra === 100 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
+                            class="px-3 py-1 rounded text-xs">Guardar</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-xs">
+                <label class="flex flex-col"><span class="text-gray-500">Manila fibra</span><input type="number" min="0" max="100" x-model.number="pesosFibra.riega_manila_fibra" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Guaya OPGW</span><input type="number" min="0" max="100" x-model.number="pesosFibra.riega_guaya_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Tendido OPGW</span><input type="number" min="0" max="100" x-model.number="pesosFibra.tendido_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Grapado fibra</span><input type="number" min="0" max="100" x-model.number="pesosFibra.grapado_fibra" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Empalmes OPGW</span><input type="number" min="0" max="100" x-model.number="pesosFibra.empalmes_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla matriz -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-xs">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th rowspan="2" class="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">Torre</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold">Func.</th>
+                        <th rowspan="2" class="px-1 py-2 text-center font-semibold" title="Vestida conductor">Vest.</th>
+                        <th colspan="6" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30">Conductor</th>
+                        <th rowspan="2" class="px-1 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700" title="Placas señalización">PS</th>
+                        <th rowspan="2" class="px-1 py-2 text-center font-semibold" title="Facturadas HMV">HMV</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-blue-50 dark:bg-blue-900/30">% Cond.</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (C)</th>
+                        <th rowspan="2" class="px-1 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700" title="Vestida fibra">VestF</th>
+                        <th colspan="5" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Fibra OPGW</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-purple-50 dark:bg-purple-900/30">% Fibra</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (F)</th>
+                    </tr>
+                    <tr>
+                        {% for slug, label in columnas_conductor %}
+                        <th class="px-1 py-1 text-center font-medium text-gray-500" title="{{ label }}"
+                            x-text="abrev('{{ label }}') + ' (' + pesosConductor.{{ slug|cut:'_conductor'|cut:'_amarre'|cut:'_puentes'|cut:'_desviadores' }} + '%)'">{{ label }}</th>
+                        {% endfor %}
+                        {% for slug, label in columnas_fibra %}
+                        <th class="px-1 py-1 text-center font-medium text-gray-500" title="{{ label }}">{{ label|truncatewords:1 }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in filas %}
+                    <tr x-data='filaTendido("{{ fila.torre.id }}", {
+                            vestida_conductor: {% if fila.vestida_conductor %}true{% else %}false{% endif %},
+                            riega_manila_conductor: {% if fila.riega_manila_conductor %}true{% else %}false{% endif %},
+                            riega_guaya_conductor: {% if fila.riega_guaya_conductor %}true{% else %}false{% endif %},
+                            tendido_conductor: {% if fila.tendido_conductor %}true{% else %}false{% endif %},
+                            grapado_amarre_conductor: {% if fila.grapado_amarre_conductor %}true{% else %}false{% endif %},
+                            accesorios_puentes: {% if fila.accesorios_puentes %}true{% else %}false{% endif %},
+                            balizas_desviadores: {% if fila.balizas_desviadores %}true{% else %}false{% endif %},
+                            placas_senalizacion: {% if fila.placas_senalizacion %}true{% else %}false{% endif %},
+                            facturadas_hmv: {% if fila.facturadas_hmv %}true{% else %}false{% endif %},
+                            vestida_fibra: {% if fila.vestida_fibra %}true{% else %}false{% endif %},
+                            riega_manila_fibra: {% if fila.riega_manila_fibra %}true{% else %}false{% endif %},
+                            riega_guaya_opgw: {% if fila.riega_guaya_opgw %}true{% else %}false{% endif %},
+                            tendido_opgw: {% if fila.tendido_opgw %}true{% else %}false{% endif %},
+                            grapado_amarre_fibra: {% if fila.grapado_amarre_fibra %}true{% else %}false{% endif %},
+                            empalmes_opgw: {% if fila.empalmes_opgw %}true{% else %}false{% endif %}
+                        })'
+                        class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10">{{ fila.torre.numero }}</td>
+                        <td class="px-2 py-1 text-center text-gray-600 dark:text-gray-400">{{ fila.funcion|slice:":3" }}</td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.vestida_conductor" @change="toggle('vestida_conductor', $event.target.checked)"></td>
+                        {% for slug, _ in columnas_conductor %}
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.{{ slug }}" @change="toggle('{{ slug }}', $event.target.checked)"></td>
+                        {% endfor %}
+                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.placas_senalizacion" @change="toggle('placas_senalizacion', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.facturadas_hmv" @change="toggle('facturadas_hmv', $event.target.checked)"></td>
+                        <td class="px-2 py-1 text-center font-semibold"
+                            :class="avanceConductor() >= 0.75 ? 'text-green-600' : (avanceConductor() >= 0.5 ? 'text-amber-600' : 'text-red-600')"
+                            x-text="(avanceConductor() * 100).toFixed(0) + '%'"></td>
+                        <td class="px-2 py-1 border-l border-gray-200 dark:border-gray-700">
+                            <input type="text" value="{{ fila.realizo_conductor }}"
+                                   @change="actualizarRealizo('conductor', $event.target.value)"
+                                   class="w-24 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                        </td>
+                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.vestida_fibra" @change="toggle('vestida_fibra', $event.target.checked)"></td>
+                        {% for slug, _ in columnas_fibra %}
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.{{ slug }}" @change="toggle('{{ slug }}', $event.target.checked)"></td>
+                        {% endfor %}
+                        <td class="px-2 py-1 text-center font-semibold"
+                            :class="avanceFibra() >= 0.75 ? 'text-green-600' : (avanceFibra() >= 0.5 ? 'text-amber-600' : 'text-red-600')"
+                            x-text="(avanceFibra() * 100).toFixed(0) + '%'"></td>
+                        <td class="px-2 py-1 border-l border-gray-200 dark:border-gray-700">
+                            <input type="text" value="{{ fila.realizo_fibra }}"
+                                   @change="actualizarRealizo('fibra', $event.target.value)"
+                                   class="w-24 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="20" class="px-3 py-8 text-center text-gray-500">No hay torres en este proyecto.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p x-show="mensaje" x-text="mensaje" class="px-4 py-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20" style="display:none"></p>
+    </div>
+</div>
+
+<script>
+window.__tendido_matriz__ = null;
+function tendidoMatriz(cfg) {
+    return {
+        urlPesos: cfg.urlPesos,
+        urlBase: cfg.urlBase,
+        csrfToken: cfg.csrfToken,
+        pesosConductor: { ...cfg.pesosConductor },
+        pesosFibra: { ...cfg.pesosFibra },
+        mensaje: '',
+        init() { window.__tendido_matriz__ = this; },
+        get sumaConductor() {
+            return Object.values(this.pesosConductor).reduce((a, b) => a + (b || 0), 0);
+        },
+        get sumaFibra() {
+            return Object.values(this.pesosFibra).reduce((a, b) => a + (b || 0), 0);
+        },
+        async guardarPesos(seccion) {
+            const fd = new FormData();
+            fd.append('seccion', seccion);
+            const pesos = seccion === 'conductor' ? this.pesosConductor : this.pesosFibra;
+            Object.entries(pesos).forEach(([k, v]) => fd.append(k, v));
+            try {
+                const r = await fetch(this.urlPesos, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                const data = await r.json();
+                this.mensaje = r.ok ? '✓ Pesos guardados.' : (data.error || 'Error');
+                setTimeout(() => { this.mensaje = ''; }, 3000);
+            } catch (e) {
+                this.mensaje = 'Error de red';
+            }
+        },
+        mostrar(msg) { this.mensaje = msg; setTimeout(() => { this.mensaje = ''; }, 3000); },
+        abrev(s) {
+            return s.length > 12 ? s.substring(0, 10) + '…' : s;
+        },
+    };
+}
+
+function filaTendido(torreId, campos) {
+    return {
+        torreId: torreId,
+        campos: { ...campos },
+        avanceConductor() {
+            const m = window.__tendido_matriz__;
+            if (!m) return 0;
+            const p = m.pesosConductor;
+            const tot = (p.riega_manila || 0) + (p.riega_guaya || 0) + (p.tendido || 0)
+                      + (p.grapado || 0) + (p.accesorios || 0) + (p.balizas || 0) || 1;
+            return (
+                (this.campos.riega_manila_conductor ? p.riega_manila : 0)
+              + (this.campos.riega_guaya_conductor ? p.riega_guaya : 0)
+              + (this.campos.tendido_conductor ? p.tendido : 0)
+              + (this.campos.grapado_amarre_conductor ? p.grapado : 0)
+              + (this.campos.accesorios_puentes ? p.accesorios : 0)
+              + (this.campos.balizas_desviadores ? p.balizas : 0)
+            ) / tot;
+        },
+        avanceFibra() {
+            const m = window.__tendido_matriz__;
+            if (!m) return 0;
+            const p = m.pesosFibra;
+            const tot = (p.riega_manila_fibra || 0) + (p.riega_guaya_opgw || 0) + (p.tendido_opgw || 0)
+                      + (p.grapado_fibra || 0) + (p.empalmes_opgw || 0) || 1;
+            return (
+                (this.campos.riega_manila_fibra ? p.riega_manila_fibra : 0)
+              + (this.campos.riega_guaya_opgw ? p.riega_guaya_opgw : 0)
+              + (this.campos.tendido_opgw ? p.tendido_opgw : 0)
+              + (this.campos.grapado_amarre_fibra ? p.grapado_fibra : 0)
+              + (this.campos.empalmes_opgw ? p.empalmes_opgw : 0)
+            ) / tot;
+        },
+        async toggle(campo, valor) {
+            const previo = this.campos[campo];
+            this.campos[campo] = valor;
+            const m = window.__tendido_matriz__;
+            try {
+                const fd = new FormData();
+                fd.append('campo', campo);
+                fd.append('valor', valor ? '1' : '0');
+                const r = await fetch(m.urlBase + 'torres/' + this.torreId + '/toggle/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': m.csrfToken },
+                    body: fd,
+                });
+                if (!r.ok) {
+                    this.campos[campo] = previo;
+                    const data = await r.json();
+                    m.mostrar(data.error || 'Error guardando');
+                }
+            } catch (e) {
+                this.campos[campo] = previo;
+                m.mostrar('Error de red');
+            }
+        },
+        async actualizarRealizo(seccion, valor) {
+            const m = window.__tendido_matriz__;
+            try {
+                const fd = new FormData();
+                fd.append('seccion', seccion);
+                fd.append('valor', valor);
+                await fetch(m.urlBase + 'torres/' + this.torreId + '/realizo/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': m.csrfToken },
+                    body: fd,
+                });
+            } catch (e) { m.mostrar('Error de red'); }
+        },
+    };
+}
+</script>
+{% endblock %}
