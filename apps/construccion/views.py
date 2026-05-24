@@ -19,6 +19,7 @@ from .models import (
     ProyectoConstruccion,
     TorreConstruccion,
     PataObra,
+    ObraCivilTorre,
     FaseTorre,
     SocialPredial,
     AmbientalTorre,
@@ -1330,6 +1331,149 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         return reverse_lazy('construccion:tendido_torre',
                             kwargs={'proyecto_id': self.kwargs['proyecto_id'],
                                     'torre_id': self.kwargs['torre_id']}) + '?saved=1'
+
+
+# ==========================================================================
+# Obra Civil — matriz torre × columna (#74)
+# ==========================================================================
+
+class ObraCivilMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Matriz Obra Civil del proyecto: torres × 6 columnas (Cerramiento,
+    Excavación, Solado, Acero, Vaciado, Compactación) con avance ponderado
+    SUMPRODUCT por torre. Cada celda es editable inline (0-100%).
+
+    Reemplaza la vista ObraCivilListView legacy para el cliente. La
+    granularidad pata×actividad sigue accesible vía ObraCivilTorreView
+    (modelo PataObra) para uso interno.
+    """
+    template_name = 'construccion/obra_civil_matriz.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        torres_qs = torres_qs.select_related().order_by('numero')
+
+        # Asegurar OC para cada torre (crear si no existe — idempotente).
+        existentes = {oc.torre_id: oc for oc in ObraCivilTorre.objects.filter(proyecto=proyecto)}
+        filas = []
+        for torre in torres_qs:
+            oc = existentes.get(torre.id)
+            if oc is None:
+                oc = ObraCivilTorre.objects.create(proyecto=proyecto, torre=torre)
+            filas.append(oc)
+
+        pesos = {
+            'cerramiento': proyecto.peso_cerramiento_pct,
+            'excavacion': proyecto.peso_excavacion_pct,
+            'solado': proyecto.peso_solado_pct,
+            'acero': proyecto.peso_acero_pct,
+            'vaciado': proyecto.peso_vaciado_pct,
+            'compactacion': proyecto.peso_compactacion_pct,
+        }
+        suma_pesos = sum(pesos.values())
+
+        # Totales por columna (promedio entre torres).
+        if filas:
+            totales = {
+                k: round(
+                    sum(float(getattr(oc, f'avance_{k}')) for oc in filas)
+                    / len(filas) * 100, 1)
+                for k in pesos
+            }
+            avance_general = round(
+                sum(float(oc.avance_ponderado) for oc in filas) / len(filas) * 100, 1
+            )
+        else:
+            totales = {k: 0 for k in pesos}
+            avance_general = 0
+
+        ctx['proyecto'] = proyecto
+        ctx['filas'] = filas
+        ctx['pesos'] = pesos
+        ctx['suma_pesos'] = suma_pesos
+        ctx['suma_pesos_ok'] = suma_pesos == 100
+        ctx['totales'] = totales
+        ctx['avance_general'] = avance_general
+        ctx['columnas'] = ObraCivilTorre.COLUMNAS
+        ctx['active_tab'] = 'obra-civil'
+        return ctx
+
+
+class ObraCivilPesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX para actualizar los 6 pesos del proyecto (#74).
+
+    Valida que la suma sea exactamente 100; devuelve 400 si no.
+    """
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        try:
+            valores = {
+                'peso_cerramiento_pct': int(request.POST.get('cerramiento', 0)),
+                'peso_excavacion_pct': int(request.POST.get('excavacion', 0)),
+                'peso_solado_pct': int(request.POST.get('solado', 0)),
+                'peso_acero_pct': int(request.POST.get('acero', 0)),
+                'peso_vaciado_pct': int(request.POST.get('vaciado', 0)),
+                'peso_compactacion_pct': int(request.POST.get('compactacion', 0)),
+            }
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Los pesos deben ser enteros 0-100.'}, status=400)
+
+        for k, v in valores.items():
+            if v < 0 or v > 100:
+                return JsonResponse({'error': f'Peso fuera de rango: {k}={v}'}, status=400)
+        if sum(valores.values()) != 100:
+            return JsonResponse(
+                {'error': f'La suma de pesos debe ser 100 (actual: {sum(valores.values())}).'},
+                status=400)
+
+        for campo, valor in valores.items():
+            setattr(proyecto, campo, valor)
+        proyecto.save(update_fields=list(valores.keys()))
+        return JsonResponse({'ok': True, 'suma': sum(valores.values())})
+
+
+class ObraCivilAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX para actualizar un avance individual de una torre (#74).
+
+    Body: columna ∈ {cerramiento,excavacion,solado,acero,vaciado,compactacion},
+    valor ∈ [0,1] (decimal). Devuelve el nuevo avance ponderado de la torre.
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    COLUMNAS_VALIDAS = {c[0] for c in ObraCivilTorre.COLUMNAS}
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from decimal import Decimal, InvalidOperation
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+        columna = request.POST.get('columna', '').strip()
+        if columna not in self.COLUMNAS_VALIDAS:
+            return JsonResponse({'error': f'Columna inválida: {columna!r}'}, status=400)
+        try:
+            valor = Decimal(request.POST.get('valor', '0'))
+        except (TypeError, InvalidOperation):
+            return JsonResponse({'error': 'Valor inválido.'}, status=400)
+        if valor < Decimal('0') or valor > Decimal('1'):
+            return JsonResponse(
+                {'error': f'El avance debe estar entre 0 y 1 (recibido {valor}).'},
+                status=400)
+
+        oc, _ = ObraCivilTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+        setattr(oc, f'avance_{columna}', valor)
+        oc.save(update_fields=[f'avance_{columna}', 'updated_at'])
+        return JsonResponse({
+            'ok': True,
+            'avance_ponderado': float(oc.avance_ponderado),
+            'avance_ponderado_pct': oc.avance_ponderado_pct,
+        })
 
 
 # ==========================================================================

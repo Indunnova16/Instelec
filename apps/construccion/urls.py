@@ -124,7 +124,17 @@ urlpatterns = [
 
     # Obra Civil (#53 #54 #55) — UI por torre con 4 patas × 6 bloques
     path('<uuid:proyecto_id>/obra-civil/',
-         views.ObraCivilListView.as_view(), name='obra_civil_lista'),
+         views.ObraCivilMatrizView.as_view(), name='obra_civil_lista'),
+    # AJAX endpoints para matriz #74
+    path('<uuid:proyecto_id>/obra-civil/pesos/',
+         views.ObraCivilPesosUpdateView.as_view(), name='obra_civil_pesos_update'),
+    path('<uuid:proyecto_id>/obra-civil/torres/<uuid:torre_id>/avance/',
+         views.ObraCivilAvanceUpdateView.as_view(), name='obra_civil_avance_update'),
+    # Detalle pata×actividad (vista legacy granular)
+    path('<uuid:proyecto_id>/obra-civil/<uuid:torre_id>/patas/',
+         views.ObraCivilTorreView.as_view(), name='obra_civil_torre_patas'),
+    path('<uuid:proyecto_id>/obra-civil-legacy/',
+         views.ObraCivilListView.as_view(), name='obra_civil_lista_legacy'),
     path('<uuid:proyecto_id>/obra-civil/<uuid:torre_id>/',
          views.ObraCivilTorreView.as_view(), name='obra_civil_torre'),
 
