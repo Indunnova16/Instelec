@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}SPT y Pintura — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🔌⚡ SPT y Pintura</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Torres: <span class="font-medium">{{ filas|length }}</span>
+            </p>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-200">Torre</th>
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">SPT %</th>
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Controles SPT</th>
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Pintura Patas</th>
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Franjas Aero (de 7)</th>
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in filas %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td class="px-3 py-2 font-medium text-gray-900 dark:text-white">{{ fila.torre.numero }}</td>
+                        <td class="px-3 py-2 text-center"
+                            class="{% if fila.spt_pct >= 75 %}text-green-600{% elif fila.spt_pct >= 50 %}text-amber-600{% else %}text-red-600{% endif %}">
+                            {{ fila.spt_pct }}%
+                        </td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ fila.spt_controles }} / 3</td>
+                        <td class="px-3 py-2 text-center">
+                            {% if fila.patas_completa %}
+                                <span class="text-green-600 dark:text-green-400">✓</span>
+                            {% else %}
+                                <span class="text-gray-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ fila.aero_franjas_completas }} / 7</td>
+                        <td class="px-3 py-2 text-center">
+                            <a href="{% url 'construccion:spt_pintura_torre' proyecto_id=proyecto.id torre_id=fila.torre.id %}"
+                               class="text-blue-600 dark:text-blue-400 hover:underline">Editar</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">No hay torres en este proyecto.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -857,6 +857,167 @@ def _pesos_montaje_validos(proyecto):
     ) == 100
 
 
+# ==========================================================================
+# SPT y Pintura (#78) — captura por torre del Excel `SPT PINTURA.xlsx`
+# ==========================================================================
+
+class SPTTorre(BaseModel):
+    """Sistema de Puesta a Tierra por torre (#78 sección 1)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE, related_name='spt_torres',
+    )
+    torre = models.OneToOneField(
+        'TorreConstruccion', on_delete=models.CASCADE, related_name='spt',
+    )
+    # Cable SPT
+    excavacion_m = models.DecimalField('Excavación (m)',
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    cable_planos_m = models.DecimalField('Cable según planos (m)',
+        max_digits=10, decimal_places=2, null=True, blank=True)
+    cable_instalado_m = models.DecimalField('Cable instalado (m)',
+        max_digits=10, decimal_places=2, null=True, blank=True)
+    cuadrilla_spt = models.CharField('Cuadrilla SPT', max_length=100, blank=True)
+    observaciones_cable = models.TextField('Observaciones cable', blank=True)
+    # Pólvora
+    cantidad_tiros = models.PositiveSmallIntegerField('Cantidad de tiros',
+        null=True, blank=True)
+    polvora_teorica_cajas = models.DecimalField('Pólvora teórica (cajas)',
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    polvora_real_kg = models.DecimalField('Pólvora real (kg)',
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    observaciones_polvora = models.TextField('Observaciones pólvora', blank=True)
+    # Control y avance
+    porcentaje_avance = models.PositiveSmallIntegerField('Avance SPT %', default=0)
+    control_compensacion = models.BooleanField('FT-068 Control compensación', default=False)
+    control_medicion = models.BooleanField('FT-029 Lectura medición', default=False)
+    informe_mediciones = models.BooleanField('Informe de mediciones entregado', default=False)
+
+    class Meta:
+        db_table = 'construccion_spt_torre'
+        verbose_name = 'SPT — Torre'
+        verbose_name_plural = 'SPT — Torres'
+        ordering = ['torre__numero']
+
+    def __str__(self):
+        return f"SPT {self.torre.numero}"
+
+    @property
+    def diferencia_cable(self):
+        if self.cable_planos_m is not None and self.cable_instalado_m is not None:
+            return self.cable_planos_m - self.cable_instalado_m
+        return None
+
+    @property
+    def diferencia_polvora(self):
+        if self.polvora_teorica_cajas is not None and self.polvora_real_kg is not None:
+            return self.polvora_teorica_cajas - self.polvora_real_kg
+        return None
+
+
+class PinturaPatasTorre(BaseModel):
+    """Pintura de patas (#78 sección 2)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE, related_name='pintura_patas_torres',
+    )
+    torre = models.OneToOneField(
+        'TorreConstruccion', on_delete=models.CASCADE, related_name='pintura_patas',
+    )
+    control_espesor = models.BooleanField('FT-912 Control espesor', default=False)
+    torres_pintadas = models.BooleanField('Torres pintadas', default=False)
+    medicion_espesor = models.BooleanField('Medición de espesor', default=False)
+    entrega_pintura = models.BooleanField('Entrega de pintura', default=False)
+    cuadrilla = models.CharField('Cuadrilla', max_length=100, blank=True)
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'construccion_pintura_patas_torre'
+        verbose_name = 'Pintura Patas — Torre'
+        verbose_name_plural = 'Pintura Patas — Torres'
+        ordering = ['torre__numero']
+
+    def __str__(self):
+        return f"Pintura patas {self.torre.numero}"
+
+
+class PinturaAeronauticaTorre(BaseModel):
+    """Pintura aeronáutica (#78 sección 3) — contiene 7 PinturaFranja."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE, related_name='pintura_aero_torres',
+    )
+    torre = models.OneToOneField(
+        'TorreConstruccion', on_delete=models.CASCADE, related_name='pintura_aeronautica',
+    )
+    revision_espesor_micras = models.BooleanField('Revisión espesor en micras', default=False)
+    entrega_pintura = models.BooleanField('Entrega de pintura', default=False)
+
+    class Meta:
+        db_table = 'construccion_pintura_aero_torre'
+        verbose_name = 'Pintura Aeronáutica — Torre'
+        verbose_name_plural = 'Pintura Aeronáutica — Torres'
+        ordering = ['torre__numero']
+
+    def __str__(self):
+        return f"Pintura aero {self.torre.numero}"
+
+
+class PinturaFranja(BaseModel):
+    """Una de las 7 franjas de pintura aeronáutica. Base siempre gris;
+    color complementario alterna NARANJA (1,3,5,7) y BLANCO (2,4,6).
+    """
+    class Color(models.TextChoices):
+        NARANJA = 'NARANJA', 'Naranja'
+        BLANCO = 'BLANCO', 'Blanco'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pintura_aeronautica = models.ForeignKey(
+        PinturaAeronauticaTorre, on_delete=models.CASCADE, related_name='franjas',
+    )
+    numero_franja = models.PositiveSmallIntegerField(
+        'Número de franja',
+        choices=[(i, f'Franja {i}') for i in range(1, 8)],
+    )
+    color = models.CharField('Color', max_length=10, choices=Color.choices)
+    # Base gris
+    porcentaje_base = models.PositiveSmallIntegerField('Avance base gris (%)', default=0)
+    cantidad_base_proyectada = models.DecimalField('Base proyectada (L)',
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    cantidad_base_consumida = models.DecimalField('Base consumida (L)',
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    observaciones_base = models.TextField('Observaciones base', blank=True)
+    # Color
+    porcentaje_color = models.PositiveSmallIntegerField('Avance color (%)', default=0)
+    cantidad_color_proyectada = models.DecimalField('Color proyectado (L)',
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    cantidad_color_consumida = models.DecimalField('Color consumido (L)',
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    observaciones_color = models.TextField('Observaciones color', blank=True)
+
+    class Meta:
+        db_table = 'construccion_pintura_franja'
+        verbose_name = 'Franja de pintura'
+        verbose_name_plural = 'Franjas de pintura'
+        unique_together = [['pintura_aeronautica', 'numero_franja']]
+        ordering = ['numero_franja']
+
+    def __str__(self):
+        return f"Franja {self.numero_franja} ({self.color})"
+
+    @property
+    def diferencia_base(self):
+        if self.cantidad_base_proyectada is not None and self.cantidad_base_consumida is not None:
+            return self.cantidad_base_proyectada - self.cantidad_base_consumida
+        return None
+
+    @property
+    def diferencia_color(self):
+        if self.cantidad_color_proyectada is not None and self.cantidad_color_consumida is not None:
+            return self.cantidad_color_proyectada - self.cantidad_color_consumida
+        return None
+
+
 class FaseTorre(BaseModel):
     """
     Assembly (montaje) and stringing (tendido) phases per tower.

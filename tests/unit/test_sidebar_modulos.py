@@ -61,7 +61,7 @@ class TestPlaceholdersResponden200:
     PLACEHOLDERS = [
         "construccion:dashboard_obra_civil",
         "construccion:dashboard_montaje",
-        "construccion:spt_pintura",
+        # spt_pintura ahora es vista real (#78 Fase 2C).
         "construccion:trinchos_cunetas",
         "construccion:actividades_finales",
         "construccion:indicadores_financieros",

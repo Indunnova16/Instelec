@@ -21,6 +21,10 @@ from .models import (
     PataObra,
     ObraCivilTorre,
     MontajeEstructuraTorre,
+    SPTTorre,
+    PinturaPatasTorre,
+    PinturaAeronauticaTorre,
+    PinturaFranja,
     FaseTorre,
     SocialPredial,
     AmbientalTorre,
@@ -1620,6 +1624,251 @@ class MontajeAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
             'avance_ponderado': float(m.avance_ponderado),
             'avance_ponderado_pct': m.avance_ponderado_pct,
         })
+
+
+# ==========================================================================
+# SPT y Pintura (#78) — captura por torre del Excel `SPT PINTURA.xlsx`
+# ==========================================================================
+
+SPT_FIELDS_NUMERICOS = [
+    'excavacion_m', 'cable_planos_m', 'cable_instalado_m',
+    'cantidad_tiros', 'polvora_teorica_cajas', 'polvora_real_kg',
+    'porcentaje_avance',
+]
+SPT_FIELDS_TEXTO = ['cuadrilla_spt', 'observaciones_cable', 'observaciones_polvora']
+SPT_FIELDS_BOOL = ['control_compensacion', 'control_medicion', 'informe_mediciones']
+
+PINTURA_PATAS_FIELDS_BOOL = ['control_espesor', 'torres_pintadas', 'medicion_espesor', 'entrega_pintura']
+PINTURA_PATAS_FIELDS_TEXTO = ['cuadrilla', 'observaciones']
+
+PINTURA_AERO_FIELDS_BOOL = ['revision_espesor_micras', 'entrega_pintura']
+
+FRANJA_FIELDS_NUMERICOS = [
+    'porcentaje_base', 'cantidad_base_proyectada', 'cantidad_base_consumida',
+    'porcentaje_color', 'cantidad_color_proyectada', 'cantidad_color_consumida',
+]
+FRANJA_FIELDS_TEXTO = ['observaciones_base', 'observaciones_color']
+
+
+class SPTPinturaIndexView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Lista de torres del proyecto con su estado SPT / Pintura agregado."""
+    template_name = 'construccion/spt_pintura_index.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        torres_qs = torres_qs.select_related().prefetch_related(
+            'spt', 'pintura_patas', 'pintura_aeronautica__franjas',
+        ).order_by('numero')
+
+        filas = []
+        for torre in torres_qs:
+            try:
+                spt = torre.spt
+            except SPTTorre.DoesNotExist:
+                spt = None
+            try:
+                patas = torre.pintura_patas
+            except PinturaPatasTorre.DoesNotExist:
+                patas = None
+            try:
+                aero = torre.pintura_aeronautica
+                franjas_completas = sum(
+                    1 for f in aero.franjas.all()
+                    if f.porcentaje_base >= 100 and f.porcentaje_color >= 100
+                )
+            except PinturaAeronauticaTorre.DoesNotExist:
+                aero = None
+                franjas_completas = 0
+            filas.append({
+                'torre': torre,
+                'spt_pct': spt.porcentaje_avance if spt else 0,
+                'spt_controles': sum(int(getattr(spt, c, False)) for c in SPT_FIELDS_BOOL) if spt else 0,
+                'patas_completa': all(getattr(patas, c, False) for c in PINTURA_PATAS_FIELDS_BOOL) if patas else False,
+                'aero_franjas_completas': franjas_completas,
+            })
+        ctx['proyecto'] = proyecto
+        ctx['filas'] = filas
+        ctx['active_tab'] = 'spt-pintura'
+        return ctx
+
+
+class SPTPinturaTorreView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Detalle SPT + Pintura Patas + Pintura Aeronáutica (7 franjas) para una torre."""
+    template_name = 'construccion/spt_pintura_torre.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def _get_or_create_estructuras(self, proyecto, torre):
+        spt, _ = SPTTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+        patas, _ = PinturaPatasTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+        aero, _ = PinturaAeronauticaTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+        # Signal post_save crea las 7 franjas si la aero es nueva; defensivo si fallaron.
+        for n in range(1, 8):
+            color = PinturaFranja.Color.NARANJA if n % 2 == 1 else PinturaFranja.Color.BLANCO
+            PinturaFranja.objects.get_or_create(
+                pintura_aeronautica=aero, numero_franja=n,
+                defaults={'color': color},
+            )
+        return spt, patas, aero
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        torre = get_object_or_404(TorreConstruccion, id=self.kwargs['torre_id'], proyecto=proyecto)
+        spt, patas, aero = self._get_or_create_estructuras(proyecto, torre)
+        franjas = list(aero.franjas.order_by('numero_franja'))
+
+        # Navegación prev/next (por orden alfabético de numero)
+        torres = list(TorreConstruccion.objects.filter(proyecto=proyecto).order_by('numero'))
+        idx = next((i for i, t in enumerate(torres) if t.id == torre.id), None)
+        prev_t = torres[idx - 1] if idx is not None and idx > 0 else None
+        next_t = torres[idx + 1] if idx is not None and idx < len(torres) - 1 else None
+
+        ctx.update({
+            'proyecto': proyecto,
+            'torre': torre,
+            'spt': spt,
+            'patas': patas,
+            'aero': aero,
+            'franjas': franjas,
+            'prev_torre': prev_t,
+            'next_torre': next_t,
+            'posicion': (idx + 1) if idx is not None else 0,
+            'total_torres': len(torres),
+            'active_tab': 'spt-pintura',
+        })
+        return ctx
+
+
+class SPTPinturaTorreUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — actualiza una sección de SPT/Pintura para la torre.
+
+    Body: seccion ∈ {spt, patas, aero, franja_<N>}, y los campos a actualizar.
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from decimal import Decimal, InvalidOperation
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+        seccion = request.POST.get('seccion', '').strip()
+
+        def _set_decimal(obj, field, raw):
+            if raw == '' or raw is None:
+                setattr(obj, field, None)
+                return None
+            try:
+                v = Decimal(raw)
+            except (TypeError, InvalidOperation):
+                return f'{field}: valor decimal inválido'
+            setattr(obj, field, v)
+            return None
+
+        def _set_int(obj, field, raw, lo=None, hi=None):
+            if raw == '' or raw is None:
+                setattr(obj, field, 0 if field == 'porcentaje_avance' else None)
+                return None
+            try:
+                v = int(raw)
+            except (TypeError, ValueError):
+                return f'{field}: valor entero inválido'
+            if lo is not None and v < lo:
+                return f'{field}: debe ser ≥ {lo}'
+            if hi is not None and v > hi:
+                return f'{field}: debe ser ≤ {hi}'
+            setattr(obj, field, v)
+            return None
+
+        def _set_bool(obj, field, raw):
+            setattr(obj, field, raw in ('1', 'true', 'on', 'True'))
+
+        if seccion == 'spt':
+            spt, _ = SPTTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+            for f in ['excavacion_m', 'cable_planos_m', 'cable_instalado_m',
+                      'polvora_teorica_cajas', 'polvora_real_kg']:
+                if f in request.POST:
+                    err = _set_decimal(spt, f, request.POST.get(f, '').strip())
+                    if err:
+                        return JsonResponse({'error': err}, status=400)
+            if 'cantidad_tiros' in request.POST:
+                err = _set_int(spt, 'cantidad_tiros', request.POST.get('cantidad_tiros', '').strip())
+                if err:
+                    return JsonResponse({'error': err}, status=400)
+            if 'porcentaje_avance' in request.POST:
+                err = _set_int(spt, 'porcentaje_avance', request.POST.get('porcentaje_avance', '0'), 0, 100)
+                if err:
+                    return JsonResponse({'error': err}, status=400)
+            for f in SPT_FIELDS_TEXTO:
+                if f in request.POST:
+                    setattr(spt, f, request.POST[f])
+            for f in SPT_FIELDS_BOOL:
+                if f in request.POST:
+                    _set_bool(spt, f, request.POST[f])
+            spt.save()
+            return JsonResponse({
+                'ok': True,
+                'diferencia_cable': float(spt.diferencia_cable) if spt.diferencia_cable is not None else None,
+                'diferencia_polvora': float(spt.diferencia_polvora) if spt.diferencia_polvora is not None else None,
+            })
+
+        if seccion == 'patas':
+            patas, _ = PinturaPatasTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+            for f in PINTURA_PATAS_FIELDS_BOOL:
+                if f in request.POST:
+                    _set_bool(patas, f, request.POST[f])
+            for f in PINTURA_PATAS_FIELDS_TEXTO:
+                if f in request.POST:
+                    setattr(patas, f, request.POST[f])
+            patas.save()
+            return JsonResponse({'ok': True})
+
+        if seccion == 'aero':
+            aero, _ = PinturaAeronauticaTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+            for f in PINTURA_AERO_FIELDS_BOOL:
+                if f in request.POST:
+                    _set_bool(aero, f, request.POST[f])
+            aero.save()
+            return JsonResponse({'ok': True})
+
+        if seccion.startswith('franja_'):
+            try:
+                numero = int(seccion.split('_', 1)[1])
+            except ValueError:
+                return JsonResponse({'error': 'Número de franja inválido'}, status=400)
+            if not 1 <= numero <= 7:
+                return JsonResponse({'error': 'Franja debe estar entre 1 y 7'}, status=400)
+            aero, _ = PinturaAeronauticaTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+            color = PinturaFranja.Color.NARANJA if numero % 2 == 1 else PinturaFranja.Color.BLANCO
+            franja, _ = PinturaFranja.objects.get_or_create(
+                pintura_aeronautica=aero, numero_franja=numero,
+                defaults={'color': color},
+            )
+            for f in ['porcentaje_base', 'porcentaje_color']:
+                if f in request.POST:
+                    err = _set_int(franja, f, request.POST.get(f, '0'), 0, 100)
+                    if err:
+                        return JsonResponse({'error': err}, status=400)
+            for f in ['cantidad_base_proyectada', 'cantidad_base_consumida',
+                      'cantidad_color_proyectada', 'cantidad_color_consumida']:
+                if f in request.POST:
+                    err = _set_decimal(franja, f, request.POST.get(f, '').strip())
+                    if err:
+                        return JsonResponse({'error': err}, status=400)
+            for f in FRANJA_FIELDS_TEXTO:
+                if f in request.POST:
+                    setattr(franja, f, request.POST[f])
+            franja.save()
+            return JsonResponse({
+                'ok': True,
+                'diferencia_base': float(franja.diferencia_base) if franja.diferencia_base is not None else None,
+                'diferencia_color': float(franja.diferencia_color) if franja.diferencia_color is not None else None,
+            })
+
+        return JsonResponse({'error': f'Sección inválida: {seccion!r}'}, status=400)
 
 
 # ==========================================================================
