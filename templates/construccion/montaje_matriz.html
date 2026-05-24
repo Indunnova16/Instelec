@@ -105,10 +105,10 @@
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     {% for fila in filas %}
                     <tr x-data="filaMontaje('{{ fila.torre.id }}', {
-                            estructura_sitio: {{ fila.avance_estructura_sitio|floatformat:4|default:"0" }},
-                            prearamada: {{ fila.avance_prearamada|floatformat:4|default:"0" }},
-                            torre_montada: {{ fila.avance_torre_montada|floatformat:4|default:"0" }},
-                            revisada: {{ fila.avance_revisada|floatformat:4|default:"0" }}
+                            estructura_sitio: {{ fila.avance_estructura_sitio|unlocalize }},
+                            prearamada: {{ fila.avance_prearamada|unlocalize }},
+                            torre_montada: {{ fila.avance_torre_montada|unlocalize }},
+                            revisada: {{ fila.avance_revisada|unlocalize }}
                         })"
                         class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-3 py-2 font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10">

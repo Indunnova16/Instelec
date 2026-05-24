@@ -98,12 +98,12 @@
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     {% for fila in filas %}
                     <tr x-data="filaTorre('{{ fila.torre.id }}', {
-                            cerramiento: {{ fila.avance_cerramiento|floatformat:4|default:"0" }},
-                            excavacion: {{ fila.avance_excavacion|floatformat:4|default:"0" }},
-                            solado: {{ fila.avance_solado|floatformat:4|default:"0" }},
-                            acero: {{ fila.avance_acero|floatformat:4|default:"0" }},
-                            vaciado: {{ fila.avance_vaciado|floatformat:4|default:"0" }},
-                            compactacion: {{ fila.avance_compactacion|floatformat:4|default:"0" }}
+                            cerramiento: {{ fila.avance_cerramiento|unlocalize }},
+                            excavacion: {{ fila.avance_excavacion|unlocalize }},
+                            solado: {{ fila.avance_solado|unlocalize }},
+                            acero: {{ fila.avance_acero|unlocalize }},
+                            vaciado: {{ fila.avance_vaciado|unlocalize }},
+                            compactacion: {{ fila.avance_compactacion|unlocalize }}
                         })"
                         class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-3 py-2 font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10">
