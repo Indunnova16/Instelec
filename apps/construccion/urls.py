@@ -193,10 +193,13 @@ urlpatterns = [
          views.SPTPinturaTorreView.as_view(), name='spt_pintura_torre'),
     path('<uuid:proyecto_id>/spt-pintura/<uuid:torre_id>/update/',
          views.SPTPinturaTorreUpdateView.as_view(), name='spt_pintura_update'),
+    # Trinchos y Cunetas (#80)
     path('<uuid:proyecto_id>/trinchos-cunetas/',
-         views.ModuloPlaceholderView.as_view(
-             extra_context={'modulo_titulo': 'Trinchos y Cunetas', 'modulo_slug': 'trinchos-cunetas'}),
-         name='trinchos_cunetas'),
+         views.TrinchosCunetasListView.as_view(), name='trinchos_cunetas'),
+    path('<uuid:proyecto_id>/trinchos-cunetas/upsert/',
+         views.TrinchosCunetasUpsertView.as_view(), name='trinchos_cunetas_upsert'),
+    path('<uuid:proyecto_id>/trinchos-cunetas/<uuid:pk>/delete/',
+         views.TrinchosCunetasDeleteView.as_view(), name='trinchos_cunetas_delete'),
     path('<uuid:proyecto_id>/actividades-finales/',
          views.ModuloPlaceholderView.as_view(
              extra_context={'modulo_titulo': 'Actividades Finales', 'modulo_slug': 'actividades-finales'}),

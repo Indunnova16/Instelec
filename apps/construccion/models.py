@@ -1191,6 +1191,82 @@ def _pesos_tendido_fibra_validos(proyecto):
     ) == 100
 
 
+# ==========================================================================
+# Trinchos y Cunetas (#80) — Excel `trinchos y cunetas.xlsx`
+# ==========================================================================
+
+class TrinchoCuneta(BaseModel):
+    """Obras de protección (trincho/cuneta) por torre con consumo de
+    materiales (#80). Reemplaza a `ObraProteccion` (legacy) con campos
+    directos según Excel del cliente.
+    """
+    class TipoObra(models.TextChoices):
+        CUNETA = 'CUNETA', 'Cuneta'
+        TRINCHO = 'TRINCHO', 'Trincho'
+        AMBAS = 'AMBAS', 'Cuneta y Trincho'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion, on_delete=models.CASCADE,
+        related_name='trinchos_cunetas',
+    )
+    torre = models.ForeignKey(
+        'TorreConstruccion', on_delete=models.CASCADE,
+        related_name='trinchos_cunetas',
+    )
+
+    # Tipo y cantidades
+    medida_manejo = models.CharField(
+        'Medida de manejo', max_length=10, choices=TipoObra.choices,
+    )
+    metros_trinchos = models.DecimalField(
+        'Metros lineales trinchos', max_digits=8, decimal_places=2,
+        null=True, blank=True,
+    )
+    metros_cunetas = models.DecimalField(
+        'Metros lineales cunetas', max_digits=8, decimal_places=2,
+        null=True, blank=True,
+    )
+    notas = models.TextField('Notas / especificaciones', blank=True)
+
+    # 7 materiales del Excel
+    tubo_metalico = models.DecimalField('Tubo metálico 3mx3" (un)',
+        max_digits=10, decimal_places=2, default=0)
+    malla_eslabonada = models.DecimalField('Malla eslabonada (un)',
+        max_digits=10, decimal_places=2, default=0)
+    alambre_galvanizado = models.DecimalField('Alambre galvanizado (kg)',
+        max_digits=10, decimal_places=2, default=0)
+    geotextil = models.DecimalField('Geotextil (m)',
+        max_digits=10, decimal_places=2, default=0)
+    cemento = models.DecimalField('Cemento (bultos 50K)',
+        max_digits=10, decimal_places=2, default=0)
+    arena = models.DecimalField('Arena (cuñetes)',
+        max_digits=10, decimal_places=2, default=0)
+    grava = models.DecimalField('Grava (cuñetes)',
+        max_digits=10, decimal_places=2, default=0)
+
+    cuadrilla = models.CharField('Cuadrilla / encargado', max_length=100, blank=True)
+    completado = models.BooleanField('Completado', default=False)
+
+    class Meta:
+        db_table = 'construccion_trincho_cuneta'
+        verbose_name = 'Trincho / Cuneta'
+        verbose_name_plural = 'Trinchos y Cunetas'
+        unique_together = [['proyecto', 'torre']]
+        ordering = ['torre__numero']
+
+    def __str__(self):
+        return f"{self.torre.numero} - {self.get_medida_manejo_display()}"
+
+    @property
+    def total_metros_obra(self):
+        return (self.metros_trinchos or 0) + (self.metros_cunetas or 0)
+
+    @property
+    def estado(self):
+        return 'Completo' if self.completado else 'Incompleto'
+
+
 class FaseTorre(BaseModel):
     """
     Assembly (montaje) and stringing (tendido) phases per tower.

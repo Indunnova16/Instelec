@@ -26,6 +26,7 @@ from .models import (
     PinturaAeronauticaTorre,
     PinturaFranja,
     TendidoTorre,
+    TrinchoCuneta,
     FaseTorre,
     SocialPredial,
     AmbientalTorre,
@@ -2043,6 +2044,137 @@ class TendidoRealizoUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
         t, _ = TendidoTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
         setattr(t, campo, valor)
         t.save(update_fields=[campo, 'updated_at'])
+        return JsonResponse({'ok': True})
+
+
+# ==========================================================================
+# Trinchos y Cunetas (#80) — captura por torre con materiales
+# ==========================================================================
+
+TRINCHO_MATERIALES = [
+    'tubo_metalico', 'malla_eslabonada', 'alambre_galvanizado',
+    'geotextil', 'cemento', 'arena', 'grava',
+]
+
+
+class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Lista de obras de protección (trinchos/cunetas) del proyecto."""
+    template_name = 'construccion/trinchos_cunetas_lista.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+
+        obras = list(TrinchoCuneta.objects.filter(proyecto=proyecto)
+                     .select_related('torre').order_by('torre__numero'))
+        # Totales y resumen por cuadrilla
+        total_metros = sum(o.total_metros_obra for o in obras)
+        completadas = sum(1 for o in obras if o.completado)
+        por_cuadrilla = {}
+        for o in obras:
+            por_cuadrilla.setdefault(o.cuadrilla or '—', []).append(o)
+
+        ctx.update({
+            'proyecto': proyecto,
+            'obras': obras,
+            'torres_disponibles': torres_qs.order_by('numero'),
+            'total_metros': total_metros,
+            'completadas': completadas,
+            'por_cuadrilla': por_cuadrilla,
+            'active_tab': 'trinchos-cunetas',
+            'tipo_choices': TrinchoCuneta.TipoObra.choices,
+        })
+        return ctx
+
+
+class TrinchosCunetasUpsertView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — crea o actualiza una obra de protección.
+
+    Body: torre_id (uuid), medida_manejo, metros_trinchos, metros_cunetas,
+    7 materiales, cuadrilla, completado, notas.
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def post(self, request, proyecto_id, *args, **kwargs):
+        from decimal import Decimal, InvalidOperation
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre_id = request.POST.get('torre_id', '').strip()
+        if not torre_id:
+            return JsonResponse({'error': 'torre_id requerido'}, status=400)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+
+        tipo = request.POST.get('medida_manejo', '').strip()
+        if tipo not in dict(TrinchoCuneta.TipoObra.choices):
+            return JsonResponse({'error': f'medida_manejo inválida: {tipo!r}'}, status=400)
+
+        # Lecturas
+        def to_decimal(raw, allow_null=False):
+            raw = (raw or '').strip()
+            if not raw:
+                return None if allow_null else Decimal('0')
+            try:
+                return Decimal(raw)
+            except InvalidOperation:
+                return 'INVALID'
+
+        metros_t = to_decimal(request.POST.get('metros_trinchos'), allow_null=True)
+        metros_c = to_decimal(request.POST.get('metros_cunetas'), allow_null=True)
+        if metros_t == 'INVALID' or metros_c == 'INVALID':
+            return JsonResponse({'error': 'metros inválidos'}, status=400)
+
+        # Validación: si tipo requiere trincho, debe haber metros_trinchos>0
+        if tipo == TrinchoCuneta.TipoObra.TRINCHO and not (metros_t and metros_t > 0):
+            return JsonResponse({'error': 'Tipo TRINCHO requiere metros_trinchos > 0.'}, status=400)
+        if tipo == TrinchoCuneta.TipoObra.CUNETA and not (metros_c and metros_c > 0):
+            return JsonResponse({'error': 'Tipo CUNETA requiere metros_cunetas > 0.'}, status=400)
+        if tipo == TrinchoCuneta.TipoObra.AMBAS:
+            if not (metros_t and metros_t > 0):
+                return JsonResponse({'error': 'Tipo AMBAS requiere metros_trinchos > 0.'}, status=400)
+            if not (metros_c and metros_c > 0):
+                return JsonResponse({'error': 'Tipo AMBAS requiere metros_cunetas > 0.'}, status=400)
+
+        # Materiales
+        materiales = {}
+        for f in TRINCHO_MATERIALES:
+            v = to_decimal(request.POST.get(f))
+            if v == 'INVALID':
+                return JsonResponse({'error': f'{f}: valor inválido'}, status=400)
+            if v < 0:
+                return JsonResponse({'error': f'{f}: no puede ser negativo'}, status=400)
+            materiales[f] = v
+
+        obj, created = TrinchoCuneta.objects.update_or_create(
+            proyecto=proyecto, torre=torre,
+            defaults={
+                'medida_manejo': tipo,
+                'metros_trinchos': metros_t,
+                'metros_cunetas': metros_c,
+                'notas': request.POST.get('notas', '').strip(),
+                'cuadrilla': request.POST.get('cuadrilla', '').strip()[:100],
+                'completado': request.POST.get('completado', '').strip() in ('1', 'true', 'on'),
+                **materiales,
+            },
+        )
+        return JsonResponse({
+            'ok': True,
+            'created': created,
+            'id': str(obj.id),
+            'total_metros': float(obj.total_metros_obra),
+            'estado': obj.estado,
+        })
+
+
+class TrinchosCunetasDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, pk, *args, **kwargs):
+        from django.http import JsonResponse
+        obra = get_object_or_404(TrinchoCuneta, id=pk, proyecto_id=proyecto_id)
+        obra.delete()
         return JsonResponse({'ok': True})
 
 
