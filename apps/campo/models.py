@@ -466,7 +466,7 @@ class Procedimiento(BaseModel):
     )
     tipo_archivo = models.CharField(
         'Tipo de archivo',
-        max_length=50,
+        max_length=150,
         blank=True,
     )
     tamanio = models.PositiveIntegerField(
@@ -498,6 +498,10 @@ class Procedimiento(BaseModel):
     @property
     def es_pdf(self):
         return self.extension == '.pdf'
+
+    @property
+    def es_excel(self):
+        return self.extension in ('.xls', '.xlsx')
 
     @property
     def tamanio_legible(self):

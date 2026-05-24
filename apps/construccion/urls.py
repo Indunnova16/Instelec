@@ -145,4 +145,30 @@ urlpatterns = [
          views.CategoriaDrilldownView.as_view(), name='categoria_drilldown'),
     path('<uuid:proyecto_id>/kits/dashboard/',
          views.DashboardKitsView.as_view(), name='kits_dashboard'),
+
+    # Sidebar #73 — placeholders para módulos pendientes (se reemplazan en Fases 2 y 3)
+    path('<uuid:proyecto_id>/dashboard-obra-civil/',
+         views.ModuloPlaceholderView.as_view(
+             extra_context={'modulo_titulo': 'Dashboard Obra Civil', 'modulo_slug': 'dashboard-obra-civil'}),
+         name='dashboard_obra_civil'),
+    path('<uuid:proyecto_id>/dashboard-montaje/',
+         views.ModuloPlaceholderView.as_view(
+             extra_context={'modulo_titulo': 'Dashboard Montaje', 'modulo_slug': 'dashboard-montaje'}),
+         name='dashboard_montaje'),
+    path('<uuid:proyecto_id>/spt-pintura/',
+         views.ModuloPlaceholderView.as_view(
+             extra_context={'modulo_titulo': 'SPT y Pintura', 'modulo_slug': 'spt-pintura'}),
+         name='spt_pintura'),
+    path('<uuid:proyecto_id>/trinchos-cunetas/',
+         views.ModuloPlaceholderView.as_view(
+             extra_context={'modulo_titulo': 'Trinchos y Cunetas', 'modulo_slug': 'trinchos-cunetas'}),
+         name='trinchos_cunetas'),
+    path('<uuid:proyecto_id>/actividades-finales/',
+         views.ModuloPlaceholderView.as_view(
+             extra_context={'modulo_titulo': 'Actividades Finales', 'modulo_slug': 'actividades-finales'}),
+         name='actividades_finales'),
+    path('<uuid:proyecto_id>/indicadores-financieros/',
+         views.ModuloPlaceholderView.as_view(
+             extra_context={'modulo_titulo': 'Indicadores Financieros', 'modulo_slug': 'indicadores-financieros'}),
+         name='indicadores_financieros'),
 ]

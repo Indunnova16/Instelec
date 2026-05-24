@@ -423,7 +423,12 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
     template_name = 'campo/procedimiento_crear.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
-    ALLOWED_EXTENSIONS = {'.pdf', '.xlsx', '.xls', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp'}
+    ALLOWED_EXTENSIONS = {'.pdf', '.xls', '.xlsx'}
+    ALLOWED_MIME_TYPES = {
+        'application/pdf',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
     def post(self, request, *args, **kwargs):
@@ -442,7 +447,13 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         _, ext = os.path.splitext(archivo.name)
         if ext.lower() not in self.ALLOWED_EXTENSIONS:
             context = self.get_context_data(**kwargs)
-            context['error'] = f'Tipo de archivo no permitido: {ext}'
+            context['error'] = 'Solo se aceptan archivos PDF, XLS o XLSX.'
+            return self.render_to_response(context)
+
+        content_type = (archivo.content_type or '').lower()
+        if content_type and content_type not in self.ALLOWED_MIME_TYPES:
+            context = self.get_context_data(**kwargs)
+            context['error'] = 'El archivo no es un PDF o Excel válido (tipo MIME no permitido).'
             return self.render_to_response(context)
 
         if archivo.size > self.MAX_FILE_SIZE:
@@ -480,8 +491,8 @@ class ProcedimientoViewerView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
         context = super().get_context_data(**kwargs)
         procedimiento = self.get_object()
 
-        # Verificar si es PDF para visualización inline
         context['es_pdf'] = procedimiento.es_pdf
+        context['es_excel'] = procedimiento.es_excel
         context['url_archivo'] = procedimiento.archivo.url if procedimiento.archivo else None
 
         return context

@@ -1330,3 +1330,24 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         return reverse_lazy('construccion:tendido_torre',
                             kwargs={'proyecto_id': self.kwargs['proyecto_id'],
                                     'torre_id': self.kwargs['torre_id']}) + '?saved=1'
+
+
+# ==========================================================================
+# Placeholders para módulos pendientes (sidebar #73)
+# ==========================================================================
+
+class ModuloPlaceholderView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Vista placeholder para módulos del sidebar que aún están en construcción.
+
+    Cada URL la usa con `extra_context = {'modulo_titulo': '...', 'modulo_slug': '...'}`.
+    """
+    template_name = 'construccion/placeholder.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        proyecto_id = self.kwargs.get('proyecto_id')
+        context['proyecto'] = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        context['modulo_titulo'] = self.extra_context.get('modulo_titulo') if self.extra_context else 'Módulo'
+        context['modulo_slug'] = self.extra_context.get('modulo_slug') if self.extra_context else ''
+        return context
