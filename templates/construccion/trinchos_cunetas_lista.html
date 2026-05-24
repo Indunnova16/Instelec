@@ -132,23 +132,23 @@
                             {% if o.completado %}<span class="text-green-600 dark:text-green-400">✓ Completo</span>{% else %}<span class="text-gray-500">Incompleto</span>{% endif %}
                         </td>
                         <td class="px-3 py-2 text-center">
-                            <button @click='editar({{ o.id|stringformat:"s"|safe|escapejs }} && false ? null : {
-                                id: "{{ o.id }}",
-                                torre_id: "{{ o.torre.id }}",
-                                medida_manejo: "{{ o.medida_manejo }}",
-                                metros_trinchos: "{{ o.metros_trinchos|default_if_none:"" }}",
-                                metros_cunetas: "{{ o.metros_cunetas|default_if_none:"" }}",
-                                notas: "{{ o.notas|escapejs }}",
-                                tubo_metalico: "{{ o.tubo_metalico }}",
-                                malla_eslabonada: "{{ o.malla_eslabonada }}",
-                                alambre_galvanizado: "{{ o.alambre_galvanizado }}",
-                                geotextil: "{{ o.geotextil }}",
-                                cemento: "{{ o.cemento }}",
-                                arena: "{{ o.arena }}",
-                                grava: "{{ o.grava }}",
-                                cuadrilla: "{{ o.cuadrilla|escapejs }}",
+                            <button @click="editar({
+                                id: '{{ o.id }}',
+                                torre_id: '{{ o.torre.id }}',
+                                medida_manejo: '{{ o.medida_manejo }}',
+                                metros_trinchos: '{{ o.metros_trinchos|default_if_none:""|unlocalize }}',
+                                metros_cunetas: '{{ o.metros_cunetas|default_if_none:""|unlocalize }}',
+                                notas: '{{ o.notas|escapejs }}',
+                                tubo_metalico: '{{ o.tubo_metalico|unlocalize }}',
+                                malla_eslabonada: '{{ o.malla_eslabonada|unlocalize }}',
+                                alambre_galvanizado: '{{ o.alambre_galvanizado|unlocalize }}',
+                                geotextil: '{{ o.geotextil|unlocalize }}',
+                                cemento: '{{ o.cemento|unlocalize }}',
+                                arena: '{{ o.arena|unlocalize }}',
+                                grava: '{{ o.grava|unlocalize }}',
+                                cuadrilla: '{{ o.cuadrilla|escapejs }}',
                                 completado: {% if o.completado %}true{% else %}false{% endif %}
-                            })' class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Editar</button>
+                            })" class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Editar</button>
                         </td>
                     </tr>
                     {% empty %}
