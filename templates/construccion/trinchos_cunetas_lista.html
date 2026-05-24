@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}Trinchos y Cunetas — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6"
+     x-data='trinchosCunetas({
+        urlUpsert: "{% url "construccion:trinchos_cunetas_upsert" proyecto_id=proyecto.id %}",
+        urlBase: "{% url "construccion:trinchos_cunetas" proyecto_id=proyecto.id %}",
+        csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}"
+     })'>
+
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🌿 Trinchos y Cunetas</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Obras: <span class="font-medium">{{ obras|length }}</span>
+                · Total metros: <span class="font-medium">{{ total_metros }} m</span>
+                · Completadas: <span class="font-medium text-green-600 dark:text-green-400">{{ completadas }}/{{ obras|length }}</span>
+            </p>
+        </div>
+        <button @click="abrirForm()"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">+ Nueva obra</button>
+    </div>
+
+    <!-- Form modal (inline) -->
+    <div x-show="formAbierto" x-transition class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4" style="display:none">
+        <form @submit.prevent="guardar($event.target)" class="space-y-4">
+            <h2 class="text-lg font-semibold" x-text="editando ? 'Editar obra' : 'Nueva obra'">Nueva obra</h2>
+            <!-- Información general -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                <label class="flex flex-col">
+                    <span class="text-gray-500 mb-1">Torre</span>
+                    <select name="torre_id" x-model="form.torre_id" required
+                            class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                        <option value="">--</option>
+                        {% for t in torres_disponibles %}
+                        <option value="{{ t.id }}">{{ t.numero }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 mb-1">Medida de manejo</span>
+                    <select name="medida_manejo" x-model="form.medida_manejo" required
+                            class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                        {% for valor, label in tipo_choices %}
+                        <option value="{{ valor }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 mb-1">Metros trinchos</span>
+                    <input type="number" step="0.01" name="metros_trinchos" x-model="form.metros_trinchos"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 mb-1">Metros cunetas</span>
+                    <input type="number" step="0.01" name="metros_cunetas" x-model="form.metros_cunetas"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                </label>
+            </div>
+            <label class="flex flex-col text-sm">
+                <span class="text-gray-500 mb-1">Notas (revegetalizar, agrotextil, semilla…)</span>
+                <input type="text" name="notas" x-model="form.notas"
+                       class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+            </label>
+
+            <!-- Materiales -->
+            <h3 class="text-sm font-semibold pt-2 border-t border-gray-200 dark:border-gray-700">Materiales consumidos</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <label class="flex flex-col"><span class="text-xs text-gray-500">Tubo 3mx3" (un)</span><input type="number" step="0.01" name="tubo_metalico" x-model="form.tubo_metalico" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-xs text-gray-500">Malla esl. (un)</span><input type="number" step="0.01" name="malla_eslabonada" x-model="form.malla_eslabonada" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-xs text-gray-500">Alambre galv. (kg)</span><input type="number" step="0.01" name="alambre_galvanizado" x-model="form.alambre_galvanizado" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-xs text-gray-500">Geotextil (m)</span><input type="number" step="0.01" name="geotextil" x-model="form.geotextil" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-xs text-gray-500">Cemento (bultos)</span><input type="number" step="0.01" name="cemento" x-model="form.cemento" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-xs text-gray-500">Arena (cuñetes)</span><input type="number" step="0.01" name="arena" x-model="form.arena" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-xs text-gray-500">Grava (cuñetes)</span><input type="number" step="0.01" name="grava" x-model="form.grava" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+            </div>
+
+            <!-- Responsable -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
+                <label class="flex flex-col">
+                    <span class="text-gray-500 mb-1">Cuadrilla / encargado</span>
+                    <input type="text" name="cuadrilla" x-model="form.cuadrilla"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                </label>
+                <label class="flex items-center gap-2 pt-5">
+                    <input type="checkbox" name="completado" x-model="form.completado" value="1">
+                    <span>Marcar como completado</span>
+                </label>
+                <div class="flex items-center gap-2 pt-5">
+                    <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">Guardar</button>
+                    <button type="button" @click="formAbierto = false; editando = false"
+                            class="px-4 py-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm">Cancelar</button>
+                </div>
+            </div>
+            <p x-show="error" x-text="error" class="text-red-600 dark:text-red-400 text-sm" style="display:none"></p>
+            <p x-show="okMsg" x-text="okMsg" class="text-green-600 dark:text-green-400 text-sm" style="display:none"></p>
+        </form>
+    </div>
+
+    <!-- Tabla obras -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-semibold">Torre</th>
+                        <th class="px-3 py-2 text-center font-semibold">Tipo</th>
+                        <th class="px-3 py-2 text-right font-semibold">Trinchos (m)</th>
+                        <th class="px-3 py-2 text-right font-semibold">Cunetas (m)</th>
+                        <th class="px-3 py-2 text-left font-semibold">Notas</th>
+                        <th class="px-3 py-2 text-left font-semibold">Cuadrilla</th>
+                        <th class="px-3 py-2 text-center font-semibold">Estado</th>
+                        <th class="px-3 py-2 text-center font-semibold">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for o in obras %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td class="px-3 py-2 font-medium">{{ o.torre.numero }}</td>
+                        <td class="px-3 py-2 text-center">{{ o.get_medida_manejo_display }}</td>
+                        <td class="px-3 py-2 text-right">{{ o.metros_trinchos|default:"—" }}</td>
+                        <td class="px-3 py-2 text-right">{{ o.metros_cunetas|default:"—" }}</td>
+                        <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{{ o.notas|truncatewords:8 }}</td>
+                        <td class="px-3 py-2">{{ o.cuadrilla|default:"—" }}</td>
+                        <td class="px-3 py-2 text-center">
+                            {% if o.completado %}<span class="text-green-600 dark:text-green-400">✓ Completo</span>{% else %}<span class="text-gray-500">Incompleto</span>{% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-center">
+                            <button @click='editar({{ o.id|stringformat:"s"|safe|escapejs }} && false ? null : {
+                                id: "{{ o.id }}",
+                                torre_id: "{{ o.torre.id }}",
+                                medida_manejo: "{{ o.medida_manejo }}",
+                                metros_trinchos: "{{ o.metros_trinchos|default_if_none:"" }}",
+                                metros_cunetas: "{{ o.metros_cunetas|default_if_none:"" }}",
+                                notas: "{{ o.notas|escapejs }}",
+                                tubo_metalico: "{{ o.tubo_metalico }}",
+                                malla_eslabonada: "{{ o.malla_eslabonada }}",
+                                alambre_galvanizado: "{{ o.alambre_galvanizado }}",
+                                geotextil: "{{ o.geotextil }}",
+                                cemento: "{{ o.cemento }}",
+                                arena: "{{ o.arena }}",
+                                grava: "{{ o.grava }}",
+                                cuadrilla: "{{ o.cuadrilla|escapejs }}",
+                                completado: {% if o.completado %}true{% else %}false{% endif %}
+                            })' class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Editar</button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="px-3 py-8 text-center text-gray-500">No hay obras de protección registradas todavía.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Resumen por cuadrilla -->
+    {% if por_cuadrilla %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h3 class="font-semibold mb-2">Resumen por cuadrilla</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            {% for cuad, items in por_cuadrilla.items %}
+            <div class="border border-gray-200 dark:border-gray-700 rounded p-2">
+                <p class="font-semibold">{{ cuad }}</p>
+                <p class="text-xs text-gray-500">{{ items|length }} obras</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function trinchosCunetas(cfg) {
+    return {
+        urlUpsert: cfg.urlUpsert,
+        csrfToken: cfg.csrfToken,
+        formAbierto: false,
+        editando: false,
+        form: {},
+        error: '', okMsg: '',
+        formVacio() {
+            return {
+                torre_id: '', medida_manejo: 'CUNETA',
+                metros_trinchos: '', metros_cunetas: '', notas: '',
+                tubo_metalico: 0, malla_eslabonada: 0, alambre_galvanizado: 0,
+                geotextil: 0, cemento: 0, arena: 0, grava: 0,
+                cuadrilla: '', completado: false,
+            };
+        },
+        abrirForm() {
+            this.form = this.formVacio();
+            this.editando = false;
+            this.formAbierto = true;
+            this.error = ''; this.okMsg = '';
+        },
+        editar(data) {
+            this.form = { ...this.formVacio(), ...data };
+            this.editando = true;
+            this.formAbierto = true;
+            this.error = ''; this.okMsg = '';
+        },
+        async guardar(formEl) {
+            this.error = ''; this.okMsg = '';
+            const fd = new FormData();
+            Object.entries(this.form).forEach(([k, v]) => {
+                if (k === 'completado') fd.append(k, v ? '1' : '0');
+                else fd.append(k, v ?? '');
+            });
+            try {
+                const r = await fetch(this.urlUpsert, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                const data = await r.json();
+                if (r.ok) {
+                    this.okMsg = data.created ? '✓ Obra creada.' : '✓ Obra actualizada.';
+                    setTimeout(() => window.location.reload(), 700);
+                } else {
+                    this.error = data.error || 'Error guardando.';
+                }
+            } catch (e) {
+                this.error = 'Error de red.';
+            }
+        },
+    };
+}
+</script>
+{% endblock %}
