@@ -617,6 +617,129 @@ class PataObra(BaseModel):
         return proximos
 
 
+class ObraCivilTorre(BaseModel):
+    """Matriz Obra Civil torre×columna (#74).
+
+    Cada fila representa una torre del proyecto, con 6 avances editables
+    entre 0 y 1 (0 = no iniciado, 1 = completo), uno por columna de la hoja
+    'CANT OOCC' del Excel del cliente: Cerramiento, Excavación, Solado,
+    Acero, Vaciado, Compactación.
+
+    El avance ponderado de cada torre se calcula como SUMPRODUCT entre estos
+    valores y los pesos editables del proyecto (peso_*_pct de
+    ProyectoConstruccion), que ya existen desde #61.
+
+    PataObra sigue siendo la fuente granular pata×actividad para alarmas de
+    cilindros y materiales; ObraCivilTorre es la capa agregada que el cliente
+    edita en la matriz.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion,
+        on_delete=models.CASCADE,
+        related_name='obra_civil_torres',
+    )
+    torre = models.OneToOneField(
+        'TorreConstruccion',
+        on_delete=models.CASCADE,
+        related_name='obra_civil',
+    )
+
+    # 6 avances 0-1 — una columna del Excel del cliente
+    avance_cerramiento = models.DecimalField(
+        'Avance Cerramiento', max_digits=5, decimal_places=4, default=0,
+        help_text='0 a 1 (1 = 100% completado)',
+    )
+    avance_excavacion = models.DecimalField(
+        'Avance Excavación', max_digits=5, decimal_places=4, default=0,
+    )
+    avance_solado = models.DecimalField(
+        'Avance Solado', max_digits=5, decimal_places=4, default=0,
+    )
+    avance_acero = models.DecimalField(
+        'Avance Acero', max_digits=5, decimal_places=4, default=0,
+    )
+    avance_vaciado = models.DecimalField(
+        'Avance Vaciado', max_digits=5, decimal_places=4, default=0,
+    )
+    avance_compactacion = models.DecimalField(
+        'Avance Compactación', max_digits=5, decimal_places=4, default=0,
+    )
+
+    # Metadatos
+    cuadrilla = models.CharField('Cuadrilla / Encargado', max_length=100, blank=True)
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'construccion_obra_civil_torre'
+        verbose_name = 'Obra Civil — Torre'
+        verbose_name_plural = 'Obra Civil — Torres'
+        ordering = ['torre__numero']
+
+    def __str__(self):
+        return f"OC {self.torre.numero}"
+
+    COLUMNAS = [
+        ('cerramiento', 'Cerramiento'),
+        ('excavacion', 'Excavación'),
+        ('solado', 'Solado'),
+        ('acero', 'Acero'),
+        ('vaciado', 'Vaciado'),
+        ('compactacion', 'Compactación'),
+    ]
+
+    @property
+    def avances_dict(self):
+        """Dict columna → Decimal de avance, conveniente para templates."""
+        return {
+            'cerramiento': self.avance_cerramiento,
+            'excavacion': self.avance_excavacion,
+            'solado': self.avance_solado,
+            'acero': self.avance_acero,
+            'vaciado': self.avance_vaciado,
+            'compactacion': self.avance_compactacion,
+        }
+
+    @property
+    def avance_ponderado(self):
+        """SUMPRODUCT(pesos del proyecto, avances de la torre).
+
+        Devuelve un valor 0–1. El cliente ve el % multiplicando por 100.
+        """
+        from decimal import Decimal
+        pesos = {
+            'cerramiento': self.proyecto.peso_cerramiento_pct,
+            'excavacion': self.proyecto.peso_excavacion_pct,
+            'solado': self.proyecto.peso_solado_pct,
+            'acero': self.proyecto.peso_acero_pct,
+            'vaciado': self.proyecto.peso_vaciado_pct,
+            'compactacion': self.proyecto.peso_compactacion_pct,
+        }
+        total_peso = sum(pesos.values()) or 1
+        avances = self.avances_dict
+        suma = Decimal('0')
+        for columna, peso in pesos.items():
+            suma += avances[columna] * Decimal(peso)
+        return suma / Decimal(total_peso)
+
+    @property
+    def avance_ponderado_pct(self):
+        """avance_ponderado expresado como float 0–100 con 1 decimal."""
+        return round(float(self.avance_ponderado) * 100, 1)
+
+
+def _pesos_obra_civil_validos(proyecto):
+    """¿Los 6 pesos del proyecto suman exactamente 100?"""
+    return (
+        proyecto.peso_cerramiento_pct
+        + proyecto.peso_excavacion_pct
+        + proyecto.peso_solado_pct
+        + proyecto.peso_acero_pct
+        + proyecto.peso_vaciado_pct
+        + proyecto.peso_compactacion_pct
+    ) == 100
+
+
 class FaseTorre(BaseModel):
     """
     Assembly (montaje) and stringing (tendido) phases per tower.
