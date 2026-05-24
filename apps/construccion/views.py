@@ -20,6 +20,7 @@ from .models import (
     TorreConstruccion,
     PataObra,
     ObraCivilTorre,
+    MontajeEstructuraTorre,
     FaseTorre,
     SocialPredial,
     AmbientalTorre,
@@ -1473,6 +1474,151 @@ class ObraCivilAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
             'ok': True,
             'avance_ponderado': float(oc.avance_ponderado),
             'avance_ponderado_pct': oc.avance_ponderado_pct,
+        })
+
+
+# ==========================================================================
+# Montaje — matriz torre × etapa CANT MONTAJE (#76)
+# ==========================================================================
+
+class MontajeMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Matriz CANT MONTAJE: torres × 4 etapas (Estructura en sitio, Prearmada,
+    Torre montada, Revisada) con SUMPRODUCT por torre.
+    """
+    template_name = 'construccion/montaje_matriz.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion,
+                                     id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        torres_qs = torres_qs.select_related().order_by('numero')
+
+        existentes = {m.torre_id: m for m in
+                      MontajeEstructuraTorre.objects.filter(proyecto=proyecto)}
+        filas = []
+        for torre in torres_qs:
+            m = existentes.get(torre.id)
+            if m is None:
+                m = MontajeEstructuraTorre.objects.create(proyecto=proyecto, torre=torre)
+            filas.append(m)
+
+        pesos = {
+            'estructura_sitio': proyecto.peso_mont_estructura_sitio_pct,
+            'prearamada': proyecto.peso_mont_prearamada_pct,
+            'torre_montada': proyecto.peso_mont_torre_montada_pct,
+            'revisada': proyecto.peso_mont_revisada_pct,
+        }
+        suma_pesos = sum(pesos.values())
+
+        if filas:
+            totales = {
+                k: round(
+                    sum(float(getattr(m, f'avance_{k}')) for m in filas)
+                    / len(filas) * 100, 1)
+                for k in pesos
+            }
+            avance_general = round(
+                sum(float(m.avance_ponderado) for m in filas) / len(filas) * 100, 1
+            )
+        else:
+            totales = {k: 0 for k in pesos}
+            avance_general = 0
+
+        ctx['proyecto'] = proyecto
+        ctx['filas'] = filas
+        ctx['pesos'] = pesos
+        ctx['suma_pesos'] = suma_pesos
+        ctx['suma_pesos_ok'] = suma_pesos == 100
+        ctx['totales'] = totales
+        ctx['avance_general'] = avance_general
+        ctx['columnas'] = MontajeEstructuraTorre.COLUMNAS
+        ctx['active_tab'] = 'montaje'
+        return ctx
+
+
+class MontajePesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — actualiza los 4 pesos de Montaje del proyecto."""
+    allowed_roles = ALL_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        try:
+            valores = {
+                'peso_mont_estructura_sitio_pct': int(request.POST.get('estructura_sitio', 0)),
+                'peso_mont_prearamada_pct': int(request.POST.get('prearamada', 0)),
+                'peso_mont_torre_montada_pct': int(request.POST.get('torre_montada', 0)),
+                'peso_mont_revisada_pct': int(request.POST.get('revisada', 0)),
+            }
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Los pesos deben ser enteros 0-100.'}, status=400)
+        for k, v in valores.items():
+            if v < 0 or v > 100:
+                return JsonResponse({'error': f'Peso fuera de rango: {k}={v}'}, status=400)
+        if sum(valores.values()) != 100:
+            return JsonResponse(
+                {'error': f'La suma de pesos debe ser 100 (actual: {sum(valores.values())}).'},
+                status=400)
+        for campo, valor in valores.items():
+            setattr(proyecto, campo, valor)
+        proyecto.save(update_fields=list(valores.keys()))
+        return JsonResponse({'ok': True})
+
+
+class MontajeAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — actualiza una celda (torre × columna).
+
+    Implementa validación de cascada lógica del issue #76:
+    - prearamada ≤ estructura_sitio
+    - torre_montada ≤ prearamada
+    - revisada solo permitido si torre_montada == 1
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    COLUMNAS_VALIDAS = {c[0] for c in MontajeEstructuraTorre.COLUMNAS}
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from decimal import Decimal, InvalidOperation
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+        columna = request.POST.get('columna', '').strip()
+        if columna not in self.COLUMNAS_VALIDAS:
+            return JsonResponse({'error': f'Columna inválida: {columna!r}'}, status=400)
+        try:
+            valor = Decimal(request.POST.get('valor', '0'))
+        except (TypeError, InvalidOperation):
+            return JsonResponse({'error': 'Valor inválido.'}, status=400)
+        if valor < Decimal('0') or valor > Decimal('1'):
+            return JsonResponse(
+                {'error': f'El avance debe estar entre 0 y 1 (recibido {valor}).'},
+                status=400)
+
+        m, _ = MontajeEstructuraTorre.objects.get_or_create(
+            proyecto=proyecto, torre=torre)
+        # Cascada lógica.
+        if columna == 'prearamada' and valor > m.avance_estructura_sitio:
+            return JsonResponse(
+                {'error': 'Prearmada no puede exceder Estructura en sitio.'},
+                status=400)
+        if columna == 'torre_montada' and valor > m.avance_prearamada:
+            return JsonResponse(
+                {'error': 'Torre Montada no puede exceder Prearmada.'},
+                status=400)
+        if columna == 'revisada' and valor > 0 and m.avance_torre_montada < 1:
+            return JsonResponse(
+                {'error': 'Revisada solo se habilita cuando Torre Montada = 100%.'},
+                status=400)
+
+        setattr(m, f'avance_{columna}', valor)
+        m.save(update_fields=[f'avance_{columna}', 'updated_at'])
+        return JsonResponse({
+            'ok': True,
+            'avance_ponderado': float(m.avance_ponderado),
+            'avance_ponderado_pct': m.avance_ponderado_pct,
         })
 
 
