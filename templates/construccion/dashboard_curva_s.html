@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}Dashboard {{ fase_activa }} — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
+{% localize off %}
 <div class="space-y-6"
      x-data='dashboardCurvaS({
         urlUpsert: "{% url "construccion:dashboard_semana_upsert" proyecto_id=proyecto.id %}",
@@ -227,4 +229,5 @@ function dashboardCurvaS(cfg) {
     };
 }
 </script>
+{% endlocalize %}
 {% endblock %}

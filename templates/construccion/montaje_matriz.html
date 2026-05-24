@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}Montaje — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
+{% localize off %}
 <div class="space-y-6"
      x-data='montajeMatriz({
          proyectoId: "{{ proyecto.id }}",
@@ -306,4 +308,5 @@ function filaMontaje(torreId, avancesIniciales) {
     };
 }
 </script>
+{% endlocalize %}
 {% endblock %}

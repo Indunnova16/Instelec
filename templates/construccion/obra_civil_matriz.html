@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}Obra Civil — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
+{% localize off %}
 <div class="space-y-6"
      x-data='obraCivilMatriz({
          proyectoId: "{{ proyecto.id }}",
@@ -320,4 +322,5 @@ window.addEventListener('DOMContentLoaded', () => {
     }, 50);
 });
 </script>
+{% endlocalize %}
 {% endblock %}
