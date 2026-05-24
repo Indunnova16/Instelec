@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}CANT TENDIDO — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
+{% localize off %}
 <div class="space-y-6"
      x-data='tendidoMatriz({
         proyectoId: "{{ proyecto.id }}",
@@ -299,4 +301,5 @@ function filaTendido(torreId, campos) {
     };
 }
 </script>
+{% endlocalize %}
 {% endblock %}

@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}Trinchos y Cunetas — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
+{% localize off %}
 <div class="space-y-6"
      x-data='trinchosCunetas({
         urlUpsert: "{% url "construccion:trinchos_cunetas_upsert" proyecto_id=proyecto.id %}",
@@ -230,4 +232,5 @@ function trinchosCunetas(cfg) {
     };
 }
 </script>
+{% endlocalize %}
 {% endblock %}

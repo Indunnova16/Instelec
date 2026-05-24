@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static l10n %}
 
 {% block title %}SPT y Pintura — Torre {{ torre.numero }}{% endblock %}
 
 {% block content %}
+{% localize off %}
 <div class="space-y-6"
      x-data='sptPinturaTorre({
         urlUpdate: "{% url "construccion:spt_pintura_update" proyecto_id=proyecto.id torre_id=torre.id %}",
@@ -294,4 +295,5 @@ function sptPinturaTorre(cfg) {
     };
 }
 </script>
+{% endlocalize %}
 {% endblock %}
