@@ -66,8 +66,88 @@
                     </p>
                 </iframe>
             </div>
+        {% elif es_excel and url_archivo %}
+            <!-- Excel Viewer via SheetJS -->
+            <div id="excel-viewer"
+                 x-data="excelViewer('{{ url_archivo }}')"
+                 x-init="cargar()"
+                 class="relative">
+                <div x-show="estado === 'cargando'" class="p-12 text-center text-gray-600 dark:text-gray-400">
+                    <svg class="animate-spin mx-auto h-10 w-10 text-blue-600 mb-3" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                    </svg>
+                    Cargando vista previa del Excel...
+                </div>
+
+                <div x-show="estado === 'error'" class="p-12 text-center">
+                    <svg class="mx-auto h-16 w-16 text-amber-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                        No se pudo previsualizar el Excel
+                    </h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-4" x-text="errorMsg"></p>
+                    <a :href="url" download
+                       class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition gap-2">
+                        Descargar archivo
+                    </a>
+                </div>
+
+                <div x-show="estado === 'listo'" class="p-2">
+                    <div x-show="hojas.length > 1" class="flex flex-wrap gap-2 mb-3 px-2">
+                        <template x-for="(nombre, idx) in hojas" :key="idx">
+                            <button type="button"
+                                    @click="cambiarHoja(idx)"
+                                    :class="idx === hojaActiva ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'"
+                                    class="px-3 py-1 text-sm rounded-lg transition"
+                                    x-text="nombre"></button>
+                        </template>
+                    </div>
+                    <div class="overflow-auto max-h-[70vh] border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div id="excel-html-container"
+                             class="excel-preview text-sm [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-gray-200 [&_td]:dark:border-gray-700 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-200 [&_th]:dark:border-gray-700 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_th]:dark:bg-gray-900"></div>
+                    </div>
+                </div>
+            </div>
+
+            <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+            <script>
+                function excelViewer(url) {
+                    return {
+                        url: url,
+                        estado: 'cargando',
+                        errorMsg: '',
+                        hojas: [],
+                        hojaActiva: 0,
+                        libro: null,
+                        async cargar() {
+                            try {
+                                const resp = await fetch(this.url);
+                                if (!resp.ok) {
+                                    throw new Error('No se pudo descargar el archivo (HTTP ' + resp.status + ').');
+                                }
+                                const blob = await resp.arrayBuffer();
+                                this.libro = XLSX.read(blob, { type: 'array' });
+                                this.hojas = this.libro.SheetNames;
+                                this.cambiarHoja(0);
+                                this.estado = 'listo';
+                            } catch (err) {
+                                this.errorMsg = err.message || 'Error inesperado.';
+                                this.estado = 'error';
+                            }
+                        },
+                        cambiarHoja(idx) {
+                            this.hojaActiva = idx;
+                            const hoja = this.libro.Sheets[this.hojas[idx]];
+                            const html = XLSX.utils.sheet_to_html(hoja, { id: 'excel-tabla-' + idx });
+                            document.getElementById('excel-html-container').innerHTML = html;
+                        },
+                    };
+                }
+            </script>
         {% else %}
-            <!-- No es PDF - mostrar información y botón de descarga -->
+            <!-- Fallback: tipo no soportado -->
             <div class="p-12 text-center">
                 <svg class="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -102,6 +182,19 @@
             <div class="text-sm text-blue-700 dark:text-blue-300">
                 <strong>Tip:</strong> Use los controles del visualizador de PDF para navegar, hacer zoom o buscar dentro del documento.
                 Si tiene problemas para ver el PDF, descárguelo usando el botón verde de arriba.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if es_excel %}
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div class="flex">
+            <svg class="h-5 w-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="text-sm text-blue-700 dark:text-blue-300">
+                <strong>Tip:</strong> Use los botones de las hojas para navegar entre pestañas del libro Excel. La vista previa se renderiza en su navegador; para conservar formato avanzado descargue el archivo original.
             </div>
         </div>
     </div>
