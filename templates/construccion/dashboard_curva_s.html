@@ -149,28 +149,38 @@ function dashboardCurvaS(cfg) {
         form: { semana: '', prog: 0, cons: 0, torres_prog: '' },
         mensaje: '', mensajeTipo: '',
         init() {
-            // Diferir render: Alpine init() corre antes del paint del canvas.
-            // requestAnimationFrame asegura que el navegador ya pintó el DOM.
-            window.requestAnimationFrame(() => {
-                window.requestAnimationFrame(() => {
-                    this.renderChart(this.chartInicial);
-                });
-            });
+            // Esperar a window.load (todos los recursos cargados, incluido Chart.js script)
+            // + un rAF para garantizar paint del canvas.
+            if (document.readyState === 'complete') {
+                requestAnimationFrame(() => this.renderChart(this.chartInicial));
+            } else {
+                window.addEventListener('load', () => {
+                    requestAnimationFrame(() => this.renderChart(this.chartInicial));
+                }, { once: true });
+            }
         },
         renderChart(datos) {
             try {
+                if (typeof Chart === 'undefined') {
+                    console.warn('Chart.js todavía no cargado');
+                    return;
+                }
                 const canvas = document.getElementById('curva-s-chart');
                 if (!canvas || canvas.tagName !== 'CANVAS' || !canvas.getContext) {
                     console.warn('curva-s-chart canvas no disponible');
                     return;
                 }
-                // Si el canvas todavía no tiene dimensiones (offsetParent null en display:none), aplazar.
-                if (!canvas.offsetParent && canvas.offsetWidth === 0) {
-                    console.warn('curva-s-chart sin dimensiones todavía, omitiendo');
+                // Obtener context explícitamente; si falla, abortar limpio.
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    console.warn('canvas.getContext("2d") retornó null');
                     return;
                 }
-                if (this.chart) this.chart.destroy();
-                this.chart = new Chart(canvas, {
+                if (this.chart) {
+                    try { this.chart.destroy(); } catch (e) { /* ignore */ }
+                    this.chart = null;
+                }
+                this.chart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: datos.labels,
