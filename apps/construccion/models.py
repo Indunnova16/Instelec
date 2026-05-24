@@ -49,6 +49,16 @@ class ProyectoConstruccion(BaseModel):
     peso_vaciado_pct = models.PositiveSmallIntegerField('Peso Vaciado %', default=30)
     peso_compactacion_pct = models.PositiveSmallIntegerField('Peso Compactación %', default=15)
 
+    # Pesos editables CANT MONTAJE (#76) — defaults del Excel del cliente (suma=100)
+    peso_mont_estructura_sitio_pct = models.PositiveSmallIntegerField(
+        'Peso Estructura en sitio %', default=10)
+    peso_mont_prearamada_pct = models.PositiveSmallIntegerField(
+        'Peso Prearmada %', default=20)
+    peso_mont_torre_montada_pct = models.PositiveSmallIntegerField(
+        'Peso Torre montada %', default=45)
+    peso_mont_revisada_pct = models.PositiveSmallIntegerField(
+        'Peso Revisada %', default=25)
+
     class Meta:
         db_table = 'construccion_proyectos'
         verbose_name = 'Proyecto de Construcción'
@@ -737,6 +747,113 @@ def _pesos_obra_civil_validos(proyecto):
         + proyecto.peso_acero_pct
         + proyecto.peso_vaciado_pct
         + proyecto.peso_compactacion_pct
+    ) == 100
+
+
+class MontajeEstructuraTorre(BaseModel):
+    """Matriz CANT MONTAJE torre×etapa (#76).
+
+    4 etapas secuenciales del Excel del cliente con pesos editables:
+    Estructura en sitio (10%) → Prearmada (20%) → Torre Montada (45%) →
+    Revisada (25%). Cada avance es 0–1; el avance ponderado de la torre es
+    SUMPRODUCT(pesos del proyecto, avances) / 100.
+
+    Validación cascada lógica (issue requirement): prearamada ≤
+    estructura_en_sitio; torre_montada ≤ prearamada; revisada solo si
+    torre_montada == 1.
+
+    FaseTorre se conserva como capa granular (8 fases secuenciales con
+    fechas y cuadrillas específicas). MontajeEstructuraTorre es la matriz
+    agregada que el cliente edita.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion,
+        on_delete=models.CASCADE,
+        related_name='montaje_torres',
+    )
+    torre = models.OneToOneField(
+        'TorreConstruccion',
+        on_delete=models.CASCADE,
+        related_name='montaje_estructura',
+    )
+
+    # 4 avances 0-1 — una columna del Excel CANT MONTAJE
+    avance_estructura_sitio = models.DecimalField(
+        'Estructura en sitio', max_digits=5, decimal_places=4, default=0,
+        help_text='0 a 1 (1 = recibida en sitio)',
+    )
+    avance_prearamada = models.DecimalField(
+        'Prearmada', max_digits=5, decimal_places=4, default=0,
+    )
+    avance_torre_montada = models.DecimalField(
+        'Torre Montada', max_digits=5, decimal_places=4, default=0,
+    )
+    avance_revisada = models.DecimalField(
+        'Revisada (post-inspección)', max_digits=5, decimal_places=4, default=0,
+    )
+
+    # Metadatos
+    encargado_prearmado = models.CharField('Cuadrilla prearmado', max_length=100, blank=True)
+    encargado_montaje = models.CharField('Cuadrilla montaje', max_length=100, blank=True)
+    entregada_para_carga = models.BooleanField(
+        'Entregada para carga (habilita Tendido)', default=False,
+    )
+    observaciones = models.TextField('Observaciones', blank=True)
+
+    class Meta:
+        db_table = 'construccion_montaje_estructura_torre'
+        verbose_name = 'Montaje — Estructura Torre'
+        verbose_name_plural = 'Montaje — Estructuras Torre'
+        ordering = ['torre__numero']
+
+    def __str__(self):
+        return f"Montaje {self.torre.numero}"
+
+    COLUMNAS = [
+        ('estructura_sitio', 'Estructura en sitio'),
+        ('prearamada', 'Prearmada'),
+        ('torre_montada', 'Torre Montada'),
+        ('revisada', 'Revisada'),
+    ]
+
+    @property
+    def avances_dict(self):
+        return {
+            'estructura_sitio': self.avance_estructura_sitio,
+            'prearamada': self.avance_prearamada,
+            'torre_montada': self.avance_torre_montada,
+            'revisada': self.avance_revisada,
+        }
+
+    @property
+    def avance_ponderado(self):
+        """SUMPRODUCT(pesos del proyecto, avances de la torre). Valor 0-1."""
+        from decimal import Decimal
+        pesos = {
+            'estructura_sitio': self.proyecto.peso_mont_estructura_sitio_pct,
+            'prearamada': self.proyecto.peso_mont_prearamada_pct,
+            'torre_montada': self.proyecto.peso_mont_torre_montada_pct,
+            'revisada': self.proyecto.peso_mont_revisada_pct,
+        }
+        total = sum(pesos.values()) or 1
+        avances = self.avances_dict
+        suma = Decimal('0')
+        for col, peso in pesos.items():
+            suma += avances[col] * Decimal(peso)
+        return suma / Decimal(total)
+
+    @property
+    def avance_ponderado_pct(self):
+        return round(float(self.avance_ponderado) * 100, 1)
+
+
+def _pesos_montaje_validos(proyecto):
+    return (
+        proyecto.peso_mont_estructura_sitio_pct
+        + proyecto.peso_mont_prearamada_pct
+        + proyecto.peso_mont_torre_montada_pct
+        + proyecto.peso_mont_revisada_pct
     ) == 100
 
 

@@ -140,7 +140,17 @@ urlpatterns = [
 
     # Montaje + SPT + Pintura (#56 #57) — UI por torre
     path('<uuid:proyecto_id>/montaje/',
-         views.MontajeListView.as_view(), name='montaje_lista'),
+         views.MontajeMatrizView.as_view(), name='montaje_lista'),
+    # AJAX endpoints CANT MONTAJE #76
+    path('<uuid:proyecto_id>/montaje/pesos/',
+         views.MontajePesosUpdateView.as_view(), name='montaje_pesos_update'),
+    path('<uuid:proyecto_id>/montaje/torres/<uuid:torre_id>/avance/',
+         views.MontajeAvanceUpdateView.as_view(), name='montaje_avance_update'),
+    # Drill-down fase-level (vista legacy)
+    path('<uuid:proyecto_id>/montaje/<uuid:torre_id>/fase/',
+         views.MontajeTorreView.as_view(), name='montaje_torre_fase'),
+    path('<uuid:proyecto_id>/montaje-legacy/',
+         views.MontajeListView.as_view(), name='montaje_lista_legacy'),
     path('<uuid:proyecto_id>/montaje/<uuid:torre_id>/',
          views.MontajeTorreView.as_view(), name='montaje_torre'),
 

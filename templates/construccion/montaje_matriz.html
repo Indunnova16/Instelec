@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}Montaje — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6"
+     x-data='montajeMatriz({
+         proyectoId: "{{ proyecto.id }}",
+         urlPesos: "{% url "construccion:montaje_pesos_update" proyecto_id=proyecto.id %}",
+         urlBase: "{% url "construccion:montaje_lista" proyecto_id=proyecto.id %}",
+         csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+         pesosIniciales: {
+             estructura_sitio: {{ pesos.estructura_sitio }},
+             prearamada: {{ pesos.prearamada }},
+             torre_montada: {{ pesos.torre_montada }},
+             revisada: {{ pesos.revisada }}
+         },
+         totalesIniciales: {
+             estructura_sitio: {{ totales.estructura_sitio }},
+             prearamada: {{ totales.prearamada }},
+             torre_montada: {{ totales.torre_montada }},
+             revisada: {{ totales.revisada }}
+         },
+         avanceGeneralIni: {{ avance_general }}
+     })'>
+
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🔩 Montaje — CANT MONTAJE</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Torres: <span class="font-medium">{{ filas|length }}</span>
+            </p>
+        </div>
+        <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg px-4 py-2 text-center">
+            <p class="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">Avance General</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300"
+               x-text="avanceGeneral.toFixed(1) + '%'">{{ avance_general }}%</p>
+        </div>
+    </div>
+
+    <!-- Panel Pesos (sticky) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4 sticky top-0 z-20">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Pesos de etapas (suma = 100%)</h2>
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-medium"
+                      :class="sumaPesos === 100 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+                    <template x-if="sumaPesos === 100">
+                        <span>✓ Suma = 100%</span>
+                    </template>
+                    <template x-if="sumaPesos !== 100">
+                        <span x-text="'✗ Suma = ' + sumaPesos + '%'"></span>
+                    </template>
+                </span>
+                <button type="button" @click="guardarPesos()"
+                        :disabled="sumaPesos !== 100 || guardandoPesos"
+                        :class="sumaPesos === 100 && !guardandoPesos ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'"
+                        class="px-4 py-1.5 rounded-lg text-sm font-medium transition">
+                    <span x-text="guardandoPesos ? 'Guardando…' : 'Guardar pesos'"></span>
+                </button>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {% for slug, label in columnas %}
+            <label class="flex flex-col">
+                <span class="text-xs text-gray-500 dark:text-gray-400 mb-1">{{ label }}</span>
+                <div class="relative">
+                    <input type="number" min="0" max="100" step="1"
+                           x-model.number="pesos.{{ slug }}"
+                           class="w-full pr-7 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <span class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+        <p x-show="mensajePesos" x-text="mensajePesos"
+           :class="mensajePesosTipo === 'error' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'"
+           class="mt-2 text-sm" style="display:none"></p>
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Cascada lógica: Prearmada ≤ Estructura en sitio · Torre Montada ≤ Prearmada · Revisada solo si Torre Montada = 100%.
+        </p>
+    </div>
+
+    <!-- Tabla matriz -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-200 sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">Torre</th>
+                        {% for slug, label in columnas %}
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">
+                            {{ label }}
+                            <div class="text-xs font-normal text-gray-500 dark:text-gray-400"
+                                 x-text="pesos.{{ slug }} + '%'"></div>
+                        </th>
+                        {% endfor %}
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Avance</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in filas %}
+                    <tr x-data="filaMontaje('{{ fila.torre.id }}', {
+                            estructura_sitio: {{ fila.avance_estructura_sitio|floatformat:4|default:"0" }},
+                            prearamada: {{ fila.avance_prearamada|floatformat:4|default:"0" }},
+                            torre_montada: {{ fila.avance_torre_montada|floatformat:4|default:"0" }},
+                            revisada: {{ fila.avance_revisada|floatformat:4|default:"0" }}
+                        })"
+                        class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td class="px-3 py-2 font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10">
+                            <a href="{% url 'construccion:montaje_torre_fase' proyecto_id=proyecto.id torre_id=fila.torre.id %}"
+                               class="hover:text-blue-600 dark:hover:text-blue-400"
+                               title="Drill-down a las 8 fases de FaseTorre (vista legacy)">
+                                {{ fila.torre.numero }}
+                            </a>
+                        </td>
+                        {% for slug, _label in columnas %}
+                        <td class="px-3 py-1 text-center">
+                            <input type="number" min="0" max="100" step="1"
+                                   :value="(avances.{{ slug }} * 100).toFixed(0)"
+                                   @change="actualizarAvance('{{ slug }}', $event.target.value, $event.target)"
+                                   :disabled="guardando.{{ slug }}"
+                                   class="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   :class="guardando.{{ slug }} ? 'opacity-50' : ''">
+                        </td>
+                        {% endfor %}
+                        <td class="px-3 py-1 text-center font-semibold"
+                            :class="avancePonderado() >= 0.75 ? 'text-green-600 dark:text-green-400' : (avancePonderado() >= 0.5 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')"
+                            x-text="(avancePonderado() * 100).toFixed(1) + '%'"></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                            No hay torres en este proyecto.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if filas %}
+                <tfoot class="bg-gray-50 dark:bg-gray-900 font-semibold">
+                    <tr>
+                        <td class="px-3 py-2 sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">Promedio</td>
+                        <td class="px-3 py-2 text-center" x-text="totales.estructura_sitio.toFixed(1) + '%'">{{ totales.estructura_sitio }}%</td>
+                        <td class="px-3 py-2 text-center" x-text="totales.prearamada.toFixed(1) + '%'">{{ totales.prearamada }}%</td>
+                        <td class="px-3 py-2 text-center" x-text="totales.torre_montada.toFixed(1) + '%'">{{ totales.torre_montada }}%</td>
+                        <td class="px-3 py-2 text-center" x-text="totales.revisada.toFixed(1) + '%'">{{ totales.revisada }}%</td>
+                        <td class="px-3 py-2 text-center text-blue-700 dark:text-blue-300"
+                            x-text="avanceGeneral.toFixed(1) + '%'">{{ avance_general }}%</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+        <p x-show="mensajeAvance" x-text="mensajeAvance"
+           class="px-4 py-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20" style="display:none"></p>
+    </div>
+
+    <!-- Panel barras -->
+    {% if filas %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Avance por etapa</h2>
+        <div class="space-y-2">
+            {% for slug, label in columnas %}
+            <div class="flex items-center gap-3 text-sm">
+                <span class="w-44 text-gray-700 dark:text-gray-200">{{ label }}</span>
+                <div class="flex-1 bg-gray-100 dark:bg-gray-900 rounded-full h-3 overflow-hidden">
+                    <div class="h-full transition-all"
+                         :class="totales.{{ slug }} >= 75 ? 'bg-green-500' : (totales.{{ slug }} >= 50 ? 'bg-amber-500' : 'bg-red-500')"
+                         :style="'width: ' + Math.min(100, totales.{{ slug }}) + '%'"></div>
+                </div>
+                <span class="w-16 text-right font-medium text-gray-900 dark:text-white"
+                      x-text="totales.{{ slug }}.toFixed(1) + '%'"></span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+window.__montaje_matriz__ = null;
+window.__montaje_filas__ = [];
+
+function montajeMatriz(cfg) {
+    return {
+        proyectoId: cfg.proyectoId,
+        urlPesos: cfg.urlPesos,
+        urlBase: cfg.urlBase,
+        csrfToken: cfg.csrfToken,
+        pesos: { ...cfg.pesosIniciales },
+        totales: { ...cfg.totalesIniciales },
+        avanceGeneral: cfg.avanceGeneralIni,
+        guardandoPesos: false,
+        mensajePesos: '',
+        mensajePesosTipo: '',
+        mensajeAvance: '',
+        init() {
+            window.__montaje_matriz__ = this;
+        },
+        get sumaPesos() {
+            return (this.pesos.estructura_sitio || 0) + (this.pesos.prearamada || 0)
+                 + (this.pesos.torre_montada || 0) + (this.pesos.revisada || 0);
+        },
+        async guardarPesos() {
+            if (this.sumaPesos !== 100) return;
+            this.guardandoPesos = true;
+            this.mensajePesos = '';
+            try {
+                const fd = new FormData();
+                Object.entries(this.pesos).forEach(([k, v]) => fd.append(k, v));
+                const r = await fetch(this.urlPesos, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                const data = await r.json();
+                if (r.ok) {
+                    this.mensajePesos = '✓ Pesos guardados.';
+                    this.mensajePesosTipo = 'ok';
+                    this.recalcular();
+                } else {
+                    this.mensajePesos = data.error || 'Error guardando pesos.';
+                    this.mensajePesosTipo = 'error';
+                }
+            } catch (e) {
+                this.mensajePesos = 'Error de red.';
+                this.mensajePesosTipo = 'error';
+            }
+            this.guardandoPesos = false;
+            setTimeout(() => { this.mensajePesos = ''; }, 4000);
+        },
+        recalcular() {
+            const filas = window.__montaje_filas__;
+            if (filas.length) {
+                this.avanceGeneral = filas.reduce((acc, f) => acc + f.avancePonderado() * 100, 0) / filas.length;
+                ['estructura_sitio','prearamada','torre_montada','revisada'].forEach(col => {
+                    this.totales[col] = filas.reduce((acc, f) => acc + f.avances[col] * 100, 0) / filas.length;
+                });
+            }
+        },
+        mostrarError(msg) {
+            this.mensajeAvance = msg;
+            setTimeout(() => { this.mensajeAvance = ''; }, 4000);
+        },
+    };
+}
+
+function filaMontaje(torreId, avancesIniciales) {
+    return {
+        torreId: torreId,
+        avances: { ...avancesIniciales },
+        guardando: { estructura_sitio: false, prearamada: false, torre_montada: false, revisada: false },
+        init() {
+            window.__montaje_filas__.push(this);
+        },
+        avancePonderado() {
+            const m = window.__montaje_matriz__;
+            if (!m) return 0;
+            const total = (m.pesos.estructura_sitio || 0) + (m.pesos.prearamada || 0)
+                       + (m.pesos.torre_montada || 0) + (m.pesos.revisada || 0) || 1;
+            return (
+                (this.avances.estructura_sitio || 0) * (m.pesos.estructura_sitio || 0)
+              + (this.avances.prearamada || 0) * (m.pesos.prearamada || 0)
+              + (this.avances.torre_montada || 0) * (m.pesos.torre_montada || 0)
+              + (this.avances.revisada || 0) * (m.pesos.revisada || 0)
+            ) / total;
+        },
+        async actualizarAvance(columna, valorPct, inputEl) {
+            let pct = parseFloat(valorPct);
+            if (isNaN(pct)) pct = 0;
+            pct = Math.max(0, Math.min(100, pct));
+            const valor = pct / 100;
+            const valorPrevio = this.avances[columna];
+            this.avances[columna] = valor;
+            this.guardando[columna] = true;
+            const matriz = window.__montaje_matriz__;
+            try {
+                const fd = new FormData();
+                fd.append('columna', columna);
+                fd.append('valor', valor.toFixed(4));
+                const csrf = (document.cookie.split('csrftoken=')[1] || '').split(';')[0]
+                          || (matriz ? matriz.csrfToken : '');
+                const url = matriz.urlBase + 'torres/' + this.torreId + '/avance/';
+                const r = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf },
+                    body: fd,
+                });
+                const data = await r.json();
+                if (!r.ok) {
+                    this.avances[columna] = valorPrevio;
+                    if (inputEl) inputEl.value = (valorPrevio * 100).toFixed(0);
+                    matriz.mostrarError(data.error || 'Error guardando.');
+                } else {
+                    matriz.recalcular();
+                }
+            } catch (e) {
+                this.avances[columna] = valorPrevio;
+                matriz.mostrarError('Error de red.');
+            } finally {
+                this.guardando[columna] = false;
+            }
+        },
+    };
+}
+</script>
+{% endblock %}
