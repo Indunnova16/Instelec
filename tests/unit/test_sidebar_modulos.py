@@ -59,8 +59,7 @@ class TestPlaceholdersResponden200:
     """Issue #73: los 6 placeholders (módulos sin issue) deben renderizar 200."""
 
     PLACEHOLDERS = [
-        "construccion:dashboard_obra_civil",
-        "construccion:dashboard_montaje",
+        # dashboard_obra_civil (#75) y dashboard_montaje (#77) ahora son vistas reales (Fase 3).
         # spt_pintura (#78 Fase 2C) y trinchos_cunetas (#80 Fase 2E) ahora son vistas reales.
         "construccion:actividades_finales",
         "construccion:indicadores_financieros",
