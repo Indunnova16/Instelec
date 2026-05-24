@@ -337,95 +337,92 @@
                         </a>
                     </li>
 
-                    {# === Categorías del proyecto activo === #}
-                    <li class="px-4 pt-3 pb-1">
-                        <p class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold"
-                           x-text="proyectoId ? 'Proyecto activo' : 'Selecciona proyecto ↑'"></p>
+                    {# === Módulos del proyecto activo (issue #73) === #}
+                    {# Aviso de selección de proyecto (visible solo si no hay proyecto activo) #}
+                    <li class="px-4 pt-3 pb-1" x-show="!proyectoId">
+                        <p class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
+                            Selecciona proyecto ↑
+                        </p>
                     </li>
 
-                    {# Helper macro: cada item usa :href / @click dinámicos #}
-                    <li role="none">
-                        <a :href="catUrl('social')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🏘️</span> Sociopredial
-                        </a>
-                    </li>
-                    <li role="none">
-                        <a :href="catUrl('ambiental')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🌳</span> Ambiental
-                        </a>
-                    </li>
-                    <li role="none">
-                        <a :href="catUrl('torres')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🗼</span> Torres
-                        </a>
-                    </li>
+                    {# 1. Obra Civil #}
                     <li role="none">
                         <a :href="catUrl('obra-civil')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🏗️</span> Obra civil
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg>
+                            Obra Civil
                         </a>
                     </li>
+
+                    {# 2. Dashboard Obra Civil #}
+                    <li role="none">
+                        <a :href="catUrl('dashboard-obra-civil')" @click="catClick($event)" role="menuitem"
+                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+                            Dashboard Obra Civil
+                        </a>
+                    </li>
+
+                    {# 3. Montaje #}
                     <li role="none">
                         <a :href="catUrl('montaje')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🔩</span> Montaje
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            Montaje
                         </a>
                     </li>
+
+                    {# 4. Dashboard Montaje #}
+                    <li role="none">
+                        <a :href="catUrl('dashboard-montaje')" @click="catClick($event)" role="menuitem"
+                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                            Dashboard Montaje
+                        </a>
+                    </li>
+
+                    {# 5. SPT y Pintura #}
+                    <li role="none">
+                        <a :href="catUrl('spt-pintura')" @click="catClick($event)" role="menuitem"
+                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+                            SPT y Pintura
+                        </a>
+                    </li>
+
+                    {# 6. CANT Tendido #}
                     <li role="none">
                         <a :href="catUrl('tendido')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">⚡</span> Tendido
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            CANT Tendido
                         </a>
                     </li>
+
+                    {# 7. Trinchos y Cunetas #}
                     <li role="none">
-                        <a :href="catUrl('protecciones')" @click="catClick($event)" role="menuitem"
+                        <a :href="catUrl('trinchos-cunetas')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🛡️</span> Protecciones
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 3v12m0 0l-3-3m3 3l3-3m6-6v12m0-12l-3 3m3-3l3 3"/></svg>
+                            Trinchos y Cunetas
                         </a>
                     </li>
+
+                    {# 8. Actividades Finales (placeholder) #}
                     <li role="none">
-                        <a :href="catUrl('kits')" @click="catClick($event)" role="menuitem"
+                        <a :href="catUrl('actividades-finales')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">📦</span> Kits
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Actividades Finales
                         </a>
                     </li>
+
+                    {# 9. Indicadores Financieros (placeholder) #}
                     <li role="none">
-                        <a :href="catUrl('pruebas')" @click="catClick($event)" role="menuitem"
+                        <a :href="catUrl('indicadores-financieros')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🧪</span> Pruebas
-                        </a>
-                    </li>
-                    <li role="none">
-                        <a :href="catUrl('cronograma')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">📅</span> Cronograma
-                        </a>
-                    </li>
-                    <li role="none">
-                        <a :href="catUrl('dashboard-avance')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">📊</span> Avance
-                        </a>
-                    </li>
-                    <li role="none">
-                        <a :href="catUrl('financiero')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">💵</span> P&amp;G
-                        </a>
-                    </li>
-                    <li role="none">
-                        <a :href="catUrl('dashboard-financiero')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">💰</span> Dashboard fin
-                        </a>
-                    </li>
-                    <li role="none">
-                        <a :href="catUrl('cilindros')" @click="catClick($event)" role="menuitem"
-                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
-                            <span class="w-5 mr-3 text-center">🧪</span> Cilindros
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Indicadores Financieros
                         </a>
                     </li>
                 </div>
