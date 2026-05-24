@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}SPT y Pintura — Torre {{ torre.numero }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6"
+     x-data='sptPinturaTorre({
+        urlUpdate: "{% url "construccion:spt_pintura_update" proyecto_id=proyecto.id torre_id=torre.id %}",
+        csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}"
+     })'>
+
+    <!-- Header con navegación -->
+    <div class="flex items-center justify-between gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🔌⚡ SPT y Pintura — Torre {{ torre.numero }}</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Posición: <span class="font-medium">{{ posicion }} / {{ total_torres }}</span>
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if prev_torre %}
+            <a href="{% url 'construccion:spt_pintura_torre' proyecto_id=proyecto.id torre_id=prev_torre.id %}"
+               class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">← {{ prev_torre.numero }}</a>
+            {% endif %}
+            <a href="{% url 'construccion:spt_pintura' proyecto_id=proyecto.id %}"
+               class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">Lista</a>
+            {% if next_torre %}
+            <a href="{% url 'construccion:spt_pintura_torre' proyecto_id=proyecto.id torre_id=next_torre.id %}"
+               class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">{{ next_torre.numero }} →</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============== SECCIÓN 1: SPT ============== -->
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700" open>
+        <summary class="px-4 py-3 cursor-pointer font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700">
+            🟢 Sistema de Puesta a Tierra (SPT)
+        </summary>
+        <form @submit.prevent="guardar('spt', $event.target)" class="p-4 space-y-4">
+            <!-- Cable -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Excavación (m)</span>
+                    <input type="number" step="0.01" name="excavacion_m" value="{{ spt.excavacion_m|default_if_none:'' }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Cable según planos (m)</span>
+                    <input type="number" step="0.01" name="cable_planos_m"
+                           x-model="spt.cable_planos_m"
+                           value="{{ spt.cable_planos_m|default_if_none:'' }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Cable instalado (m)</span>
+                    <input type="number" step="0.01" name="cable_instalado_m"
+                           x-model="spt.cable_instalado_m"
+                           value="{{ spt.cable_instalado_m|default_if_none:'' }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Diferencia cable (auto)</span>
+                    <div class="px-3 py-1.5 bg-gray-50 dark:bg-gray-900 rounded text-gray-700 dark:text-gray-300"
+                         x-text="diffCable()">—</div>
+                </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Cuadrilla SPT</span>
+                    <input type="text" name="cuadrilla_spt" value="{{ spt.cuadrilla_spt }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Observaciones cable</span>
+                    <input type="text" name="observaciones_cable" value="{{ spt.observaciones_cable }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+            </div>
+            <!-- Pólvora -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Tiros</span>
+                    <input type="number" name="cantidad_tiros" value="{{ spt.cantidad_tiros|default_if_none:'' }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Pólvora teórica (cajas)</span>
+                    <input type="number" step="0.01" name="polvora_teorica_cajas"
+                           x-model="spt.polvora_teorica_cajas"
+                           value="{{ spt.polvora_teorica_cajas|default_if_none:'' }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Pólvora real (kg)</span>
+                    <input type="number" step="0.01" name="polvora_real_kg"
+                           x-model="spt.polvora_real_kg"
+                           value="{{ spt.polvora_real_kg|default_if_none:'' }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Diferencia pólvora (auto)</span>
+                    <div class="px-3 py-1.5 bg-gray-50 dark:bg-gray-900 rounded text-gray-700 dark:text-gray-300"
+                         x-text="diffPolvora()">—</div>
+                </label>
+            </div>
+            <label class="flex flex-col text-sm">
+                <span class="text-gray-500 dark:text-gray-400 mb-1">Observaciones pólvora</span>
+                <input type="text" name="observaciones_polvora" value="{{ spt.observaciones_polvora }}"
+                       class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+            </label>
+            <!-- Control y avance -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Avance SPT (%)</span>
+                    <input type="number" min="0" max="100" name="porcentaje_avance"
+                           value="{{ spt.porcentaje_avance }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="control_compensacion" value="1" {% if spt.control_compensacion %}checked{% endif %}> <span>FT-068 Control compensación</span></label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="control_medicion" value="1" {% if spt.control_medicion %}checked{% endif %}> <span>FT-029 Lectura medición</span></label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="informe_mediciones" value="1" {% if spt.informe_mediciones %}checked{% endif %}> <span>Informe mediciones</span></label>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">Guardar SPT</button>
+                <span x-text="msg.spt" :class="msg.spt_tipo === 'error' ? 'text-red-600' : 'text-green-600'" class="text-sm"></span>
+            </div>
+        </form>
+    </details>
+
+    <!-- ============== SECCIÓN 2: PINTURA PATAS ============== -->
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+        <summary class="px-4 py-3 cursor-pointer font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700">
+            🎨 Pintura de Patas
+        </summary>
+        <form @submit.prevent="guardar('patas', $event.target)" class="p-4 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <label class="flex items-center gap-2"><input type="checkbox" name="control_espesor" value="1" {% if patas.control_espesor %}checked{% endif %}> <span>FT-912 Control espesor</span></label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="torres_pintadas" value="1" {% if patas.torres_pintadas %}checked{% endif %}> <span>Torres pintadas</span></label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="medicion_espesor" value="1" {% if patas.medicion_espesor %}checked{% endif %}> <span>Medición de espesor</span></label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="entrega_pintura" value="1" {% if patas.entrega_pintura %}checked{% endif %}> <span>Entrega de pintura</span></label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Cuadrilla</span>
+                    <input type="text" name="cuadrilla" value="{{ patas.cuadrilla }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+                <label class="flex flex-col">
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Observaciones</span>
+                    <input type="text" name="observaciones" value="{{ patas.observaciones }}"
+                           class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </label>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">Guardar Pintura Patas</button>
+                <span x-text="msg.patas" :class="msg.patas_tipo === 'error' ? 'text-red-600' : 'text-green-600'" class="text-sm"></span>
+            </div>
+        </form>
+    </details>
+
+    <!-- ============== SECCIÓN 3: PINTURA AERONÁUTICA (7 FRANJAS) ============== -->
+    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+        <summary class="px-4 py-3 cursor-pointer font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700">
+            ✈️ Pintura Aeronáutica (7 franjas)
+        </summary>
+
+        <!-- Controles finales -->
+        <form @submit.prevent="guardar('aero', $event.target)" class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm items-center">
+                <label class="flex items-center gap-2"><input type="checkbox" name="revision_espesor_micras" value="1" {% if aero.revision_espesor_micras %}checked{% endif %}> <span>Revisión espesor en micras</span></label>
+                <label class="flex items-center gap-2"><input type="checkbox" name="entrega_pintura" value="1" {% if aero.entrega_pintura %}checked{% endif %}> <span>Entrega de pintura</span></label>
+                <div class="flex items-center gap-2">
+                    <button type="submit" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">Guardar controles</button>
+                    <span x-text="msg.aero" :class="msg.aero_tipo === 'error' ? 'text-red-600' : 'text-green-600'" class="text-sm"></span>
+                </div>
+            </div>
+        </form>
+
+        <!-- 7 franjas -->
+        <div class="p-4 space-y-4">
+            {% for franja in franjas %}
+            <form @submit.prevent="guardar('franja_{{ franja.numero_franja }}', $event.target)"
+                  class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-sm mb-2">Franja {{ franja.numero_franja }} — Base Gris + Color {{ franja.get_color_display }}</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">Base % avance</span>
+                        <input type="number" min="0" max="100" name="porcentaje_base" value="{{ franja.porcentaje_base }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">Base proyectado (L)</span>
+                        <input type="number" step="0.01" name="cantidad_base_proyectada" value="{{ franja.cantidad_base_proyectada|default_if_none:'' }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">Base consumido (L)</span>
+                        <input type="number" step="0.01" name="cantidad_base_consumida" value="{{ franja.cantidad_base_consumida|default_if_none:'' }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">Notas base</span>
+                        <input type="text" name="observaciones_base" value="{{ franja.observaciones_base }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">{{ franja.get_color_display }} % avance</span>
+                        <input type="number" min="0" max="100" name="porcentaje_color" value="{{ franja.porcentaje_color }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">Color proyectado (L)</span>
+                        <input type="number" step="0.01" name="cantidad_color_proyectada" value="{{ franja.cantidad_color_proyectada|default_if_none:'' }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">Color consumido (L)</span>
+                        <input type="number" step="0.01" name="cantidad_color_consumida" value="{{ franja.cantidad_color_consumida|default_if_none:'' }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                    <label class="flex flex-col">
+                        <span class="text-xs text-gray-500">Notas color</span>
+                        <input type="text" name="observaciones_color" value="{{ franja.observaciones_color }}"
+                               class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                </div>
+                <div class="mt-2 flex items-center gap-3">
+                    <button type="submit" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">Guardar Franja {{ franja.numero_franja }}</button>
+                    <span x-text="msg['franja_{{ franja.numero_franja }}'] || ''"
+                          :class="msg['franja_{{ franja.numero_franja }}_tipo'] === 'error' ? 'text-red-600' : 'text-green-600'"
+                          class="text-sm"></span>
+                </div>
+            </form>
+            {% endfor %}
+        </div>
+    </details>
+</div>
+
+<script>
+function sptPinturaTorre(cfg) {
+    return {
+        urlUpdate: cfg.urlUpdate,
+        csrfToken: cfg.csrfToken,
+        spt: {
+            cable_planos_m: '{{ spt.cable_planos_m|default_if_none:"" }}',
+            cable_instalado_m: '{{ spt.cable_instalado_m|default_if_none:"" }}',
+            polvora_teorica_cajas: '{{ spt.polvora_teorica_cajas|default_if_none:"" }}',
+            polvora_real_kg: '{{ spt.polvora_real_kg|default_if_none:"" }}',
+        },
+        msg: {},
+        diffCable() {
+            const p = parseFloat(this.spt.cable_planos_m);
+            const i = parseFloat(this.spt.cable_instalado_m);
+            if (isNaN(p) || isNaN(i)) return '—';
+            return (p - i).toFixed(2) + ' m';
+        },
+        diffPolvora() {
+            const t = parseFloat(this.spt.polvora_teorica_cajas);
+            const r = parseFloat(this.spt.polvora_real_kg);
+            if (isNaN(t) || isNaN(r)) return '—';
+            return (t - r).toFixed(2);
+        },
+        async guardar(seccion, form) {
+            const fd = new FormData(form);
+            fd.append('seccion', seccion);
+            // Asegurar que checkboxes desmarcados se envíen como '0' explícito para preservar estado
+            form.querySelectorAll('input[type=checkbox]').forEach(cb => {
+                if (!cb.checked) fd.append(cb.name, '0');
+            });
+            try {
+                const r = await fetch(this.urlUpdate, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                const data = await r.json();
+                if (r.ok) {
+                    this.msg[seccion] = '✓ Guardado';
+                    this.msg[seccion + '_tipo'] = 'ok';
+                } else {
+                    this.msg[seccion] = data.error || 'Error guardando';
+                    this.msg[seccion + '_tipo'] = 'error';
+                }
+            } catch (e) {
+                this.msg[seccion] = 'Error de red';
+                this.msg[seccion + '_tipo'] = 'error';
+            }
+            setTimeout(() => { this.msg[seccion] = ''; }, 4000);
+        },
+    };
+}
+</script>
+{% endblock %}

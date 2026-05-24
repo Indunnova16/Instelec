@@ -175,10 +175,13 @@ urlpatterns = [
          views.ModuloPlaceholderView.as_view(
              extra_context={'modulo_titulo': 'Dashboard Montaje', 'modulo_slug': 'dashboard-montaje'}),
          name='dashboard_montaje'),
+    # SPT y Pintura — captura por torre #78
     path('<uuid:proyecto_id>/spt-pintura/',
-         views.ModuloPlaceholderView.as_view(
-             extra_context={'modulo_titulo': 'SPT y Pintura', 'modulo_slug': 'spt-pintura'}),
-         name='spt_pintura'),
+         views.SPTPinturaIndexView.as_view(), name='spt_pintura'),
+    path('<uuid:proyecto_id>/spt-pintura/<uuid:torre_id>/',
+         views.SPTPinturaTorreView.as_view(), name='spt_pintura_torre'),
+    path('<uuid:proyecto_id>/spt-pintura/<uuid:torre_id>/update/',
+         views.SPTPinturaTorreUpdateView.as_view(), name='spt_pintura_update'),
     path('<uuid:proyecto_id>/trinchos-cunetas/',
          views.ModuloPlaceholderView.as_view(
              extra_context={'modulo_titulo': 'Trinchos y Cunetas', 'modulo_slug': 'trinchos-cunetas'}),

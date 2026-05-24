@@ -1,8 +1,26 @@
-"""Signals para el módulo construccion (#69, #65)."""
+"""Signals para el módulo construccion (#69, #65, #78)."""
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 
-from .models import MovimientoFinanciero, PeriodoFinanciero, KitCerramiento, MovimientoKit
+from .models import (
+    MovimientoFinanciero, PeriodoFinanciero, KitCerramiento, MovimientoKit,
+    PinturaAeronauticaTorre, PinturaFranja,
+)
+
+
+@receiver(post_save, sender=PinturaAeronauticaTorre)
+def crear_franjas_pintura_aeronautica(sender, instance, created, **kwargs):
+    """#78: al crear PinturaAeronauticaTorre genera las 7 franjas con colores
+    alternando (1,3,5,7 NARANJA · 2,4,6 BLANCO). Idempotente."""
+    if not created:
+        return
+    for n in range(1, 8):
+        color = PinturaFranja.Color.NARANJA if n % 2 == 1 else PinturaFranja.Color.BLANCO
+        PinturaFranja.objects.get_or_create(
+            pintura_aeronautica=instance,
+            numero_franja=n,
+            defaults={'color': color},
+        )
 
 
 class PresupuestoBloqueadoError(Exception):
