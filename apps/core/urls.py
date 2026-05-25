@@ -12,4 +12,5 @@ urlpatterns = [
     path('api/health/', views.health_check, name='api_health'),
     path('api/health/simple/', views.health_check_simple, name='api_health_simple'),
     path('set-unidad-negocio/', views.set_unidad_negocio_view, name='set_unidad_negocio'),
+    path('presentacion/', views.PresentacionView.as_view(), name='presentacion'),
 ]

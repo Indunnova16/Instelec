@@ -184,3 +184,8 @@ def health_check(request: HttpRequest) -> JsonResponse:
 def health_check_simple(request: HttpRequest) -> JsonResponse:
     """Simple health check for load balancer (fast)."""
     return JsonResponse({'status': 'ok'})
+
+
+class PresentacionView(TemplateView):
+    """Presentación oficial de Instelec - 26 mayo 2026."""
+    template_name = 'presentacion_entrega.html'
