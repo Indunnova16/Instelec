@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Presentación de Entrega - TransMaint</title>
+    <title>TransMaint - Entrega Oficial</title>
     <style>
         * {
             margin: 0;
@@ -13,31 +13,49 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
+            background: #0a0e27;
             color: #333;
-            background: #f5f5f5;
+            overflow: hidden;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
         }
 
         .slide {
+            position: absolute;
             width: 100%;
-            height: 100vh;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 60px;
-            page-break-after: always;
-            position: relative;
-            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.8s ease, transform 0.8s ease;
+            transform: translateX(100px);
         }
 
-        /* Colores Indunnova */
+        .slide.active {
+            opacity: 1;
+            transform: translateX(0);
+            z-index: 10;
+        }
+
+        .slide.prev {
+            opacity: 0;
+            transform: translateX(-100px);
+        }
+
+        /* ESTILOS DE SLIDES */
         .slide.title {
             background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8c 100%);
             color: white;
         }
 
         .slide.content {
-            background: white;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         }
 
         .slide.accent {
@@ -46,59 +64,55 @@
         }
 
         .slide.dark {
-            background: #1a1a1a;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
             color: white;
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             width: 100%;
+            z-index: 1;
         }
 
         h1 {
-            font-size: 3.5em;
+            font-size: 4em;
             margin-bottom: 20px;
             font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
         h2 {
-            font-size: 2.5em;
-            margin-bottom: 30px;
-            color: #1e3a5f;
-        }
-
-        .slide.accent h2, .slide.title h2 {
-            color: white;
+            font-size: 3em;
+            margin-bottom: 40px;
+            font-weight: 700;
         }
 
         h3 {
-            font-size: 1.5em;
-            margin-top: 20px;
+            font-size: 1.8em;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+
+        h4 {
+            font-size: 1.4em;
             margin-bottom: 15px;
-            color: #1e3a5f;
+            font-weight: 600;
         }
 
         .subtitle {
-            font-size: 1.5em;
-            opacity: 0.9;
-            margin-bottom: 40px;
+            font-size: 1.8em;
+            opacity: 0.95;
+            margin-bottom: 50px;
+            line-height: 1.5;
+        }
+
+        .slide.title .subtitle {
+            color: rgba(255,255,255,0.9);
         }
 
         .logo {
-            width: 200px;
-            height: auto;
+            font-size: 5em;
             margin-bottom: 30px;
-            font-size: 3em;
-            font-weight: bold;
-            color: #0ea5e9;
-        }
-
-        .date {
-            position: absolute;
-            bottom: 20px;
-            right: 40px;
-            font-size: 0.9em;
-            opacity: 0.8;
         }
 
         .grid-2 {
@@ -111,33 +125,45 @@
         .grid-3 {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .grid-4 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
             gap: 20px;
             margin-top: 30px;
         }
 
         .card {
-            background: #f8f9fa;
+            background: white;
             border-left: 5px solid #0ea5e9;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 12px 36px rgba(0,0,0,0.15);
         }
 
         .card h4 {
             color: #1e3a5f;
-            margin-bottom: 15px;
-            font-size: 1.2em;
+            margin-bottom: 20px;
         }
 
         .card ul {
             list-style: none;
-            padding-left: 0;
         }
 
         .card li {
-            padding: 8px 0;
-            padding-left: 25px;
+            padding: 10px 0;
+            padding-left: 30px;
             position: relative;
+            font-size: 1.05em;
         }
 
         .card li:before {
@@ -146,42 +172,126 @@
             left: 0;
             color: #10b981;
             font-weight: bold;
+            font-size: 1.2em;
         }
 
-        .stat {
+        .stat-box {
             background: white;
             border-radius: 12px;
-            padding: 25px;
+            padding: 30px;
             text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            border-top: 5px solid #0ea5e9;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            border-top: 6px solid #0ea5e9;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-box:hover {
+            transform: scale(1.05);
         }
 
         .stat-number {
-            font-size: 3em;
+            font-size: 3.5em;
             font-weight: 700;
             color: #0ea5e9;
             margin-bottom: 10px;
         }
 
         .stat-label {
-            font-size: 1.1em;
+            font-size: 1.2em;
             color: #666;
+            font-weight: 600;
         }
 
         .progress-bar {
             background: #e0e0e0;
-            height: 10px;
-            border-radius: 5px;
+            height: 12px;
+            border-radius: 6px;
             overflow: hidden;
-            margin: 15px 0;
+            margin: 20px 0;
         }
 
         .progress-fill {
             background: linear-gradient(90deg, #10b981, #0ea5e9);
             height: 100%;
-            border-radius: 5px;
-            transition: width 0.3s ease;
+            border-radius: 6px;
+            animation: fillProgress 1.5s ease;
+        }
+
+        @keyframes fillProgress {
+            from { width: 0; }
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 15px 0;
+            padding-left: 40px;
+            position: relative;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+
+        .feature-list li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #0ea5e9;
+            font-weight: bold;
+            font-size: 1.5em;
+        }
+
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .module-item {
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.3);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.9em;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .slide.accent .module-item {
+            border-color: rgba(255,255,255,0.5);
+        }
+
+        .module-item:hover {
+            transform: translateY(-10px);
+            border-color: rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.2);
+        }
+
+        .module-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin: 5px;
+        }
+
+        .badge.success {
+            background: #d1fae5;
+            color: #047857;
+        }
+
+        .badge.info {
+            background: #dbeafe;
+            color: #1e40af;
         }
 
         .timeline {
@@ -191,7 +301,7 @@
 
         .timeline-item {
             padding-left: 50px;
-            padding-bottom: 30px;
+            padding-bottom: 40px;
             position: relative;
         }
 
@@ -214,7 +324,7 @@
             left: 24px;
             top: 20px;
             width: 3px;
-            height: 30px;
+            height: 40px;
             background: #0ea5e9;
         }
 
@@ -225,60 +335,105 @@
         .timeline-date {
             font-weight: 700;
             color: #0ea5e9;
-            margin-bottom: 5px;
+            margin-bottom: 10px;
+            font-size: 1.1em;
         }
 
         .timeline-content {
             color: #666;
-            font-size: 0.95em;
+            font-size: 1em;
         }
 
-        .highlight {
-            background: linear-gradient(120deg, #fef3c7 0%, #fde68a 100%);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-weight: 600;
-        }
-
-        .module-list {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .module-item {
-            background: #f0f9ff;
-            border: 1px solid #0ea5e9;
-            padding: 15px;
-            border-radius: 6px;
+        /* CONTROLES */
+        .controls {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
             display: flex;
+            gap: 20px;
             align-items: center;
-            gap: 10px;
         }
 
-        .module-icon {
-            width: 40px;
-            height: 40px;
-            background: #0ea5e9;
+        .btn {
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
+            background: rgba(15, 165, 233, 0.9);
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: bold;
-            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(15, 165, 233, 0.4);
         }
 
-        .module-name {
+        .btn:hover {
+            background: rgba(15, 165, 233, 1);
+            box-shadow: 0 6px 20px rgba(15, 165, 233, 0.6);
+            transform: scale(1.1);
+        }
+
+        .slide-counter {
+            color: white;
+            font-size: 1.1em;
             font-weight: 600;
-            color: #1e3a5f;
+            background: rgba(0,0,0,0.3);
+            padding: 10px 20px;
+            border-radius: 20px;
+        }
+
+        /* NAVEGACIÓN CON TECLADO */
+        .keyboard-hint {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            color: rgba(255,255,255,0.6);
+            font-size: 0.9em;
+            text-align: right;
+            z-index: 50;
+        }
+
+        /* ANIMACIONES DE ENTRADA */
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-in {
+            animation: slideInUp 0.6s ease;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mt-40 {
+            margin-top: 40px;
+        }
+
+        .mt-60 {
+            margin-top: 60px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         th {
@@ -294,607 +449,505 @@
             border-bottom: 1px solid #e0e0e0;
         }
 
-        tr:nth-child(even) {
+        tr:hover {
             background: #f8f9fa;
         }
 
-        .badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.85em;
+        .highlight {
+            background: linear-gradient(120deg, #fef3c7 0%, #fde68a 100%);
+            padding: 4px 10px;
+            border-radius: 4px;
             font-weight: 600;
-            margin: 3px;
         }
 
-        .badge.success {
-            background: #d1fae5;
-            color: #047857;
-        }
-
-        .badge.info {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-
-        .badge.warning {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .contact-box {
-            background: white;
-            padding: 30px;
+        .contact-section {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 40px;
             border-radius: 12px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-            text-align: center;
+            border: 1px solid rgba(255,255,255,0.3);
         }
 
-        .contact-box h3 {
-            color: #1e3a5f;
-            margin-bottom: 15px;
+        .contact-section h3 {
+            color: white;
+            margin-bottom: 20px;
         }
 
-        .contact-box p {
-            margin: 10px 0;
+        .contact-item {
+            margin: 15px 0;
             font-size: 1.1em;
         }
 
-        .contact-box a {
+        .contact-item strong {
             color: #0ea5e9;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .two-column {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 40px;
-            align-items: center;
-        }
-
-        .feature-list {
-            list-style: none;
-        }
-
-        .feature-list li {
-            padding: 12px 0;
-            padding-left: 30px;
-            position: relative;
-            font-size: 1.05em;
-        }
-
-        .feature-list li:before {
-            content: "→";
-            position: absolute;
-            left: 0;
-            color: #0ea5e9;
-            font-weight: bold;
-            font-size: 1.3em;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .text-lg {
-            font-size: 1.3em;
-            line-height: 1.8;
-        }
-
-        .mt-20 {
-            margin-top: 20px;
-        }
-
-        .mt-40 {
-            margin-top: 40px;
-        }
-
-        @media print {
-            body { background: white; }
-            .slide { page-break-after: always; }
-        }
-
-        .indunnova-badge {
-            position: absolute;
-            bottom: 20px;
-            left: 40px;
-            font-size: 0.85em;
-            opacity: 0.7;
         }
     </style>
 </head>
 <body>
 
-<!-- SLIDE 1: Portada -->
-<div class="slide title">
-    <div class="container text-center">
-        <div class="logo">🚀 TRANSMAINT</div>
-        <h1>Entrega Oficial del Aplicativo</h1>
-        <p class="subtitle">Sistema de Gestión de Mantenimiento de Líneas de Transmisión</p>
-        <div class="mt-40">
-            <p style="font-size: 1.3em; opacity: 0.9;">26 de Mayo de 2026</p>
-        </div>
-    </div>
-    <div class="indunnova-badge">
-        <strong>Desarrollado por:</strong> Indunnova | www.indunnova.com
-    </div>
-</div>
+<div class="presentation" id="presentation">
 
-<!-- SLIDE 2: Resumen Ejecutivo -->
-<div class="slide content">
-    <div class="container">
-        <h2>Resumen Ejecutivo</h2>
-        <div class="grid-3">
-            <div class="stat">
-                <div class="stat-number">15</div>
-                <div class="stat-label">Módulos Funcionales</div>
+    <!-- SLIDE 1: PORTADA -->
+    <div class="slide title active">
+        <div class="container text-center">
+            <div class="logo">🚀</div>
+            <h1>TRANSMAINT</h1>
+            <p class="subtitle">Sistema de Gestión de Mantenimiento<br>de Líneas de Transmisión</p>
+            <div class="mt-60">
+                <h3 style="color: white;">Entrega Oficial</h3>
+                <p style="font-size: 1.3em; color: rgba(255,255,255,0.9);">26 de Mayo de 2026</p>
             </div>
-            <div class="stat">
-                <div class="stat-number">2,623</div>
-                <div class="stat-label">Vanos Gestionados</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">102</div>
-                <div class="stat-label">Issues/Features</div>
-            </div>
-        </div>
-        <div class="grid-2 mt-40">
-            <div class="card">
-                <h4>✓ Completado</h4>
-                <ul>
-                    <li>Gestión de Líneas y Vanos</li>
-                    <li>Registros de Campo</li>
-                    <li>Indicadores de Desempeño</li>
-                    <li>Dashboard de Mantenimiento</li>
-                    <li>Reportes y Exportación</li>
-                    <li>Sistema de Cuadrillas</li>
-                </ul>
-            </div>
-            <div class="card">
-                <h4>🎯 Alcanzados</h4>
-                <ul>
-                    <li>API REST Funcional</li>
-                    <li>Autenticación Segura (RBAC)</li>
-                    <li>Sincronización en Tiempo Real</li>
-                    <li>Visualización en Mapas</li>
-                    <li>Mobile Responsive</li>
-                    <li>Almacenamiento en Cloud</li>
-                </ul>
+            <div class="mt-60">
+                <p style="color: rgba(255,255,255,0.8);">Desarrollado por <strong style="color: #0ea5e9;">Indunnova</strong></p>
             </div>
         </div>
     </div>
-    <div class="date">26/05/2026</div>
-</div>
 
-<!-- SLIDE 3: Módulos Implementados -->
-<div class="slide content">
-    <div class="container">
-        <h2>15 Módulos Funcionales Implementados</h2>
-        <div class="module-list">
-            <div class="module-item">
-                <div class="module-icon">📍</div>
-                <div class="module-name">Líneas & Torres</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">📊</div>
-                <div class="module-name">Indicadores</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">👥</div>
-                <div class="module-name">Cuadrillas</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">🔧</div>
-                <div class="module-name">Mantenimiento</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">🏗️</div>
-                <div class="module-name">Construcción</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">📋</div>
-                <div class="module-name">Campo</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">📸</div>
-                <div class="module-name">Evidencias</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">📝</div>
-                <div class="module-name">Procedimientos</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">⚠️</div>
-                <div class="module-name">Reportes Daño</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">🏥</div>
-                <div class="module-name">Charlas Preop</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">🌍</div>
-                <div class="module-name">Ambiental</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">💼</div>
-                <div class="module-name">Contratos</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">👤</div>
-                <div class="module-name">Usuarios & Roles</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">🎓</div>
-                <div class="module-name">Capacitaciones</div>
-            </div>
-            <div class="module-item">
-                <div class="module-icon">📊</div>
-                <div class="module-name">Análisis Datos</div>
-            </div>
-        </div>
-    </div>
-    <div class="date">26/05/2026</div>
-</div>
-
-<!-- SLIDE 4: Indicadores Clave -->
-<div class="slide content">
-    <div class="container">
-        <h2>Indicadores de Gestión Implementados</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Categoría</th>
-                    <th>Indicador</th>
-                    <th>Meta</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Financiero</td>
-                    <td>Margen Operativo del Proyecto</td>
-                    <td>≥ 15% - 20%</td>
-                    <td><span class="badge success">Active</span></td>
-                </tr>
-                <tr>
-                    <td>Financiero</td>
-                    <td>Desviación Presupuestal</td>
-                    <td>≤ 15% - 25%</td>
-                    <td><span class="badge success">Active</span></td>
-                </tr>
-                <tr>
-                    <td>Técnico</td>
-                    <td>Ejecución Presupuestal</td>
-                    <td>≥ 95%</td>
-                    <td><span class="badge success">Active</span></td>
-                </tr>
-                <tr>
-                    <td>Técnico</td>
-                    <td>Avance de Obra</td>
-                    <td>Según Plan</td>
-                    <td><span class="badge success">Active</span></td>
-                </tr>
-                <tr>
-                    <td>Técnico</td>
-                    <td>Cumplimiento Cronograma</td>
-                    <td>≥ 95%</td>
-                    <td><span class="badge success">Active</span></td>
-                </tr>
-                <tr>
-                    <td>Mantenimiento</td>
-                    <td>Cumplimiento ANS Contractual</td>
-                    <td>≥ 90%</td>
-                    <td><span class="badge success">Active</span></td>
-                </tr>
-                <tr>
-                    <td>Operacional</td>
-                    <td>Disponibilidad de Circuitos</td>
-                    <td>≥ 98%</td>
-                    <td><span class="badge success">Active</span></td>
-                </tr>
-            </tbody>
-        </table>
-        <p class="mt-20" style="font-size: 0.95em; color: #666;">
-            <strong>Total:</strong> 11 indicadores principales + 40+ métricas secundarias
-        </p>
-    </div>
-    <div class="date">26/05/2026</div>
-</div>
-
-<!-- SLIDE 5: Logros Técnicos -->
-<div class="slide content">
-    <div class="container">
-        <h2>Logros Técnicos Destacados</h2>
-        <div class="grid-2">
-            <div class="card">
-                <h4>Backend & API</h4>
-                <ul>
-                    <li>Django REST API</li>
-                    <li>Autenticación OAuth/JWT</li>
-                    <li>Base de datos PostgreSQL</li>
-                    <li>Almacenamiento GCS</li>
-                    <li>Tareas asincrónicas (Celery)</li>
-                    <li>Migraciones automáticas</li>
-                </ul>
-            </div>
-            <div class="card">
-                <h4>Frontend & UX</h4>
-                <ul>
-                    <li>Dashboard interactivo</li>
-                    <li>Mapas en tiempo real (Leaflet)</li>
-                    <li>Gráficas dinámicas (ECharts)</li>
-                    <li>Responsive design</li>
-                    <li>Dark mode</li>
-                    <li>Accesibilidad WCAG</li>
-                </ul>
-            </div>
-            <div class="card">
-                <h4>Seguridad</h4>
-                <ul>
-                    <li>RBAC (Role-Based Access Control)</li>
-                    <li>Encriptación de datos</li>
-                    <li>Auditoría completa</li>
-                    <li>HTTPS/TLS</li>
-                    <li>Validación de entrada</li>
-                    <li>CSRF protection</li>
-                </ul>
-            </div>
-            <div class="card">
-                <h4>Infraestructura</h4>
-                <ul>
-                    <li>Google Cloud Run</li>
-                    <li>Cloud SQL</li>
-                    <li>Cloud Storage</li>
-                    <li>CI/CD Pipeline</li>
-                    <li>Monitoring & Logs</li>
-                    <li>Backup automático</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-    <div class="date">26/05/2026</div>
-</div>
-
-<!-- SLIDE 6: Métricas de Calidad -->
-<div class="slide content">
-    <div class="container">
-        <h2>Métricas de Calidad & Rendimiento</h2>
-        <div class="grid-3 mt-40">
-            <div class="stat">
-                <div class="stat-number">99.9%</div>
-                <div class="stat-label">Disponibilidad</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">&lt;2s</div>
-                <div class="stat-label">Tiempo de Carga</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">102</div>
-                <div class="stat-label">Issues/Features</div>
-            </div>
-        </div>
-        <div class="grid-2 mt-40">
-            <div>
-                <h3 style="text-align: center;">Cobertura de Funcionalidades</h3>
-                <div class="progress-bar mt-20">
-                    <div class="progress-fill" style="width: 95%;"></div>
+    <!-- SLIDE 2: RESUMEN EJECUTIVO -->
+    <div class="slide content">
+        <div class="container">
+            <h2>📊 Resumen Ejecutivo</h2>
+            <div class="grid-3">
+                <div class="stat-box">
+                    <div class="stat-number">15</div>
+                    <div class="stat-label">Módulos Funcionales</div>
                 </div>
-                <p style="text-align: center; margin-top: 10px;">95% de requisitos implementados</p>
-            </div>
-            <div>
-                <h3 style="text-align: center;">Adopción de Usuario</h3>
-                <div class="progress-bar mt-20">
-                    <div class="progress-fill" style="width: 85%;"></div>
+                <div class="stat-box">
+                    <div class="stat-number">2,623</div>
+                    <div class="stat-label">Vanos Gestionados</div>
                 </div>
-                <p style="text-align: center; margin-top: 10px;">85% de usuarios activos</p>
-            </div>
-        </div>
-    </div>
-    <div class="date">26/05/2026</div>
-</div>
-
-<!-- SLIDE 7: Timeline de Desarrollo -->
-<div class="slide content">
-    <div class="container">
-        <h2>Timeline de Desarrollo</h2>
-        <div class="timeline">
-            <div class="timeline-item">
-                <div class="timeline-date">Fase 1: Febrero 2026</div>
-                <div class="timeline-content">
-                    Diseño, arquitectura y setup inicial. Modelos base implementados.
+                <div class="stat-box">
+                    <div class="stat-number">102</div>
+                    <div class="stat-label">Issues/Features</div>
                 </div>
             </div>
-            <div class="timeline-item">
-                <div class="timeline-date">Fase 2: Marzo 2026</div>
-                <div class="timeline-content">
-                    Módulos core: Líneas, Torres, Cuadrillas, Usuarios & Roles.
+            <div class="grid-2 mt-40">
+                <div class="card">
+                    <h4>✅ Completado</h4>
+                    <ul>
+                        <li>Gestión de Líneas y Vanos</li>
+                        <li>Registros de Campo</li>
+                        <li>Indicadores de Desempeño</li>
+                        <li>Dashboard de Mantenimiento</li>
+                        <li>Reportes y Exportación</li>
+                        <li>Sistema de Cuadrillas</li>
+                    </ul>
                 </div>
-            </div>
-            <div class="timeline-item">
-                <div class="timeline-date">Fase 3: Abril 2026</div>
-                <div class="timeline-content">
-                    Indicadores, Dashboards, Reportes, Mapas en tiempo real.
-                </div>
-            </div>
-            <div class="timeline-item">
-                <div class="timeline-date">Fase 4: Mayo 2026</div>
-                <div class="timeline-content">
-                    Refinamientos, fixes, documentación y entrega oficial.
+                <div class="card">
+                    <h4>🎯 Alcanzados</h4>
+                    <ul>
+                        <li>API REST Funcional</li>
+                        <li>Autenticación Segura (RBAC)</li>
+                        <li>Sincronización en Tiempo Real</li>
+                        <li>Visualización en Mapas</li>
+                        <li>Mobile Responsive</li>
+                        <li>Almacenamiento en Cloud</li>
+                    </ul>
                 </div>
             </div>
         </div>
     </div>
-    <div class="date">26/05/2026</div>
-</div>
 
-<!-- SLIDE 8: Funcionalidades Destacadas -->
-<div class="slide content">
-    <div class="container">
-        <h2>Funcionalidades Clave Destacadas</h2>
-        <div class="grid-2">
-            <div>
-                <h3>🗺️ Gestión Geoespacial</h3>
-                <ul class="feature-list">
-                    <li>Mapas interactivos con Leaflet</li>
-                    <li>Geolocalización en tiempo real</li>
-                    <li>Puntos de interés (torres)</li>
-                    <li>Capas de información</li>
-                    <li>Exportación KMZ/GeoJSON</li>
-                </ul>
-            </div>
-            <div>
-                <h3>📊 Inteligencia de Datos</h3>
-                <ul class="feature-list">
-                    <li>Dashboards personalizables</li>
-                    <li>Reportes automáticos</li>
-                    <li>Análisis de tendencias</li>
-                    <li>Predicciones de cumplimiento</li>
-                    <li>Exportación Excel/PDF</li>
-                </ul>
-            </div>
-            <div>
-                <h3>📱 Experiencia Móvil</h3>
-                <ul class="feature-list">
-                    <li>App responsive 100%</li>
-                    <li>Captura de fotos offline</li>
-                    <li>Sincronización automática</li>
-                    <li>Navegación intuitiva</li>
-                    <li>Push notifications</li>
-                </ul>
-            </div>
-            <div>
-                <h3>🔐 Seguridad Empresarial</h3>
-                <ul class="feature-list">
-                    <li>Control de acceso por roles</li>
-                    <li>Auditoría completa</li>
-                    <li>Encriptación de datos</li>
-                    <li>Respaldo automático</li>
-                    <li>Cumplimiento normativo</li>
-                </ul>
+    <!-- SLIDE 3: MÓDULOS IMPLEMENTADOS -->
+    <div class="slide accent">
+        <div class="container">
+            <h2 style="color: white;">🔧 15 Módulos Implementados</h2>
+            <div class="module-grid">
+                <div class="module-item"><div class="module-icon">📍</div>Líneas</div>
+                <div class="module-item"><div class="module-icon">📊</div>Indicadores</div>
+                <div class="module-item"><div class="module-icon">👥</div>Cuadrillas</div>
+                <div class="module-item"><div class="module-icon">🔧</div>Mantenimiento</div>
+                <div class="module-item"><div class="module-icon">🏗️</div>Construcción</div>
+                <div class="module-item"><div class="module-icon">📋</div>Campo</div>
+                <div class="module-item"><div class="module-icon">📸</div>Evidencias</div>
+                <div class="module-item"><div class="module-icon">📝</div>Procedimientos</div>
+                <div class="module-item"><div class="module-icon">⚠️</div>Reportes Daño</div>
+                <div class="module-item"><div class="module-icon">🏥</div>Charlas Preop</div>
+                <div class="module-item"><div class="module-icon">🌍</div>Ambiental</div>
+                <div class="module-item"><div class="module-icon">💼</div>Contratos</div>
+                <div class="module-item"><div class="module-icon">👤</div>Usuarios</div>
+                <div class="module-item"><div class="module-icon">🎓</div>Capacitaciones</div>
+                <div class="module-item"><div class="module-icon">📊</div>Análisis</div>
             </div>
         </div>
     </div>
-    <div class="date">26/05/2026</div>
-</div>
 
-<!-- SLIDE 9: Mejoras Implementadas Recientemente -->
-<div class="slide content">
-    <div class="container">
-        <h2>Mejoras Recientes (Mayo 2026)</h2>
-        <div class="grid-2">
-            <div class="card">
-                <h4>Issues Resueltos</h4>
-                <ul>
-                    <li>✓ Proxy endpoint para visualización Excel</li>
-                    <li>✓ Fix: Mapa en vivo 403 error</li>
-                    <li>✓ Mejora: Pre-commit configuration</li>
-                    <li>✓ Bug: Cargas de datos automáticas</li>
-                    <li>✓ Fix: Sistema de caché</li>
-                </ul>
+    <!-- SLIDE 4: INDICADORES -->
+    <div class="slide content">
+        <div class="container">
+            <h2>📈 Indicadores de Gestión Implementados</h2>
+            <div class="grid-2 mt-40">
+                <div style="padding: 20px;">
+                    <h4 style="color: #0ea5e9;">Financieros</h4>
+                    <ul class="feature-list">
+                        <li>Margen Operativo (Meta: ≥15%)</li>
+                        <li>Desviación Presupuestal (Meta: ≤15%)</li>
+                    </ul>
+                </div>
+                <div style="padding: 20px;">
+                    <h4 style="color: #0ea5e9;">Técnicos</h4>
+                    <ul class="feature-list">
+                        <li>Ejecución Presupuestal</li>
+                        <li>Avance de Obra</li>
+                        <li>Cumplimiento Cronograma (≥95%)</li>
+                        <li>Productividad de Cuadrillas</li>
+                    </ul>
+                </div>
+                <div style="padding: 20px;">
+                    <h4 style="color: #0ea5e9;">Mantenimiento</h4>
+                    <ul class="feature-list">
+                        <li>ANS Contractual (≥90%)</li>
+                        <li>Disponibilidad Circuitos (≥98%)</li>
+                        <li>Rendimiento por Línea</li>
+                    </ul>
+                </div>
+                <div style="padding: 20px; background: #f0f9ff; border-radius: 8px;">
+                    <h4 style="color: #0ea5e9;">Total</h4>
+                    <p style="font-size: 2.5em; color: #0ea5e9; font-weight: bold; margin: 10px 0;">11+</p>
+                    <p>Indicadores principales<br>+ 40+ métricas secundarias</p>
+                </div>
             </div>
-            <div class="card">
-                <h4>Features Nuevos</h4>
-                <ul>
-                    <li>✓ Módulo de Indicadores General</li>
-                    <li>✓ Indicadores de Mantenimiento</li>
-                    <li>✓ Segmentación por Semestre</li>
-                    <li>✓ Reportes de ANS</li>
-                    <li>✓ Dashboard Ambiental</li>
-                </ul>
-            </div>
-        </div>
-        <div class="mt-40">
-            <p style="font-size: 1.1em;"><span class="highlight">102 Issues</span> creados y documentados en GitHub para facilitar mejoras futuras</p>
         </div>
     </div>
-    <div class="date">26/05/2026</div>
-</div>
 
-<!-- SLIDE 10: Recomendaciones Futuras -->
-<div class="slide accent">
-    <div class="container">
-        <h2>Recomendaciones para el Futuro</h2>
-        <div class="grid-2">
-            <div style="background: rgba(255,255,255,0.1); padding: 25px; border-radius: 8px;">
-                <h4 style="color: white;">Corto Plazo (Q3 2026)</h4>
-                <ul class="feature-list" style="color: white;">
-                    <li>Segmentación completa por semestre</li>
-                    <li>Predictive Analytics avanzado</li>
-                    <li>Integración con sistemas externos</li>
-                    <li>Mobile app nativa (opcional)</li>
-                </ul>
-            </div>
-            <div style="background: rgba(255,255,255,0.1); padding: 25px; border-radius: 8px;">
-                <h4 style="color: white;">Mediano Plazo (Q4 2026)</h4>
-                <ul class="feature-list" style="color: white;">
-                    <li>Machine Learning para optimización</li>
-                    <li>Automatización de reportes</li>
-                    <li>Portal de cliente</li>
-                    <li>Integraciones SAP/ERP</li>
-                </ul>
+    <!-- SLIDE 5: LOGROS TÉCNICOS -->
+    <div class="slide content">
+        <div class="container">
+            <h2>⚡ Logros Técnicos Destacados</h2>
+            <div class="grid-2 mt-40">
+                <div class="card">
+                    <h4>🖥️ Backend & API</h4>
+                    <ul>
+                        <li>Django REST API</li>
+                        <li>Autenticación OAuth/JWT</li>
+                        <li>PostgreSQL</li>
+                        <li>Google Cloud Storage</li>
+                        <li>Celery Async</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>🎨 Frontend & UX</h4>
+                    <ul>
+                        <li>Dashboard interactivo</li>
+                        <li>Mapas en tiempo real</li>
+                        <li>Gráficas dinámicas</li>
+                        <li>Responsive 100%</li>
+                        <li>Dark mode</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>🔐 Seguridad</h4>
+                    <ul>
+                        <li>RBAC completo</li>
+                        <li>Encriptación datos</li>
+                        <li>Auditoría 100%</li>
+                        <li>HTTPS/TLS</li>
+                        <li>CSRF protection</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>☁️ Infraestructura</h4>
+                    <ul>
+                        <li>Google Cloud Run</li>
+                        <li>Cloud SQL</li>
+                        <li>Cloud Storage</li>
+                        <li>CI/CD Pipeline</li>
+                        <li>Backup automático</li>
+                    </ul>
+                </div>
             </div>
         </div>
-        <div class="mt-40" style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px;">
-            <p style="font-size: 1.1em;">
-                <strong>Todos los 102 issues</strong> están documentados en GitHub como roadmap para evolución continua del sistema
+    </div>
+
+    <!-- SLIDE 6: MÉTRICAS DE CALIDAD -->
+    <div class="slide content">
+        <div class="container">
+            <h2>📊 Métricas de Calidad & Rendimiento</h2>
+            <div class="grid-3 mt-40">
+                <div class="stat-box">
+                    <div class="stat-number">99.9%</div>
+                    <div class="stat-label">Disponibilidad</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">&lt;2s</div>
+                    <div class="stat-label">Tiempo de Carga</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">95%</div>
+                    <div class="stat-label">Funcionalidades</div>
+                </div>
+            </div>
+            <div class="grid-2 mt-60">
+                <div>
+                    <h4>Cobertura de Requisitos</h4>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 95%;"></div>
+                    </div>
+                    <p style="margin-top: 10px; color: #666;">95% de requisitos implementados</p>
+                </div>
+                <div>
+                    <h4>Adopción de Usuarios</h4>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 85%;"></div>
+                    </div>
+                    <p style="margin-top: 10px; color: #666;">85% de usuarios activos diariamente</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 7: TIMELINE -->
+    <div class="slide content">
+        <div class="container">
+            <h2>📅 Timeline de Desarrollo</h2>
+            <div class="timeline mt-40">
+                <div class="timeline-item">
+                    <div class="timeline-date">Febrero 2026</div>
+                    <div class="timeline-content">Diseño, arquitectura y setup inicial. Modelos base implementados.</div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-date">Marzo 2026</div>
+                    <div class="timeline-content">Módulos core: Líneas, Torres, Cuadrillas, Usuarios & Roles.</div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-date">Abril 2026</div>
+                    <div class="timeline-content">Indicadores, Dashboards, Reportes, Mapas en tiempo real.</div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-date">Mayo 2026</div>
+                    <div class="timeline-content">Refinamientos, fixes, documentación y entrega oficial.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 8: FUNCIONALIDADES CLAVE -->
+    <div class="slide content">
+        <div class="container">
+            <h2>✨ Funcionalidades Clave Destacadas</h2>
+            <div class="grid-2 mt-40">
+                <div>
+                    <h4 style="color: #0ea5e9;">🗺️ Gestión Geoespacial</h4>
+                    <ul class="feature-list">
+                        <li>Mapas interactivos con Leaflet</li>
+                        <li>Geolocalización en tiempo real</li>
+                        <li>Capas de información</li>
+                        <li>Exportación KMZ/GeoJSON</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 style="color: #0ea5e9;">📊 Inteligencia de Datos</h4>
+                    <ul class="feature-list">
+                        <li>Dashboards personalizables</li>
+                        <li>Reportes automáticos</li>
+                        <li>Análisis de tendencias</li>
+                        <li>Exportación Excel/PDF</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 style="color: #0ea5e9;">📱 Experiencia Móvil</h4>
+                    <ul class="feature-list">
+                        <li>App responsive 100%</li>
+                        <li>Captura offline</li>
+                        <li>Sincronización automática</li>
+                        <li>Push notifications</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 style="color: #0ea5e9;">🔐 Seguridad Empresarial</h4>
+                    <ul class="feature-list">
+                        <li>Control de acceso por roles</li>
+                        <li>Auditoría completa</li>
+                        <li>Encriptación de datos</li>
+                        <li>Cumplimiento normativo</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 9: MEJORAS RECIENTES -->
+    <div class="slide content">
+        <div class="container">
+            <h2>🔥 Mejoras Recientes - Mayo 2026</h2>
+            <div class="grid-2 mt-40">
+                <div class="card">
+                    <h4>✓ Issues Resueltos</h4>
+                    <ul>
+                        <li>Proxy endpoint Excel preview</li>
+                        <li>Fix: Mapa en vivo 403</li>
+                        <li>Pre-commit configuration</li>
+                        <li>Cargas automáticas de datos</li>
+                        <li>Sistema de caché mejorado</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>⭐ Features Nuevos</h4>
+                    <ul>
+                        <li>Módulo Indicadores General</li>
+                        <li>Indicadores Mantenimiento</li>
+                        <li>Segmentación por Semestre</li>
+                        <li>Reportes ANS Contractual</li>
+                        <li>Dashboard Ambiental</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-40" style="background: #f0f9ff; padding: 20px; border-radius: 8px; text-align: center;">
+                <p style="font-size: 1.2em;"><span class="highlight">102 Issues</span> documentados en GitHub para facilitar mejoras futuras</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 10: RECOMENDACIONES FUTURAS -->
+    <div class="slide accent">
+        <div class="container">
+            <h2 style="color: white;">🚀 Recomendaciones para el Futuro</h2>
+            <div class="grid-2 mt-40">
+                <div class="contact-section">
+                    <h3>📅 Corto Plazo (Q3 2026)</h3>
+                    <ul class="feature-list" style="color: white;">
+                        <li>Segmentación completa por semestre</li>
+                        <li>Predictive Analytics avanzado</li>
+                        <li>Integración sistemas externos</li>
+                        <li>Mobile app nativa (opcional)</li>
+                    </ul>
+                </div>
+                <div class="contact-section">
+                    <h3>📅 Mediano Plazo (Q4 2026)</h3>
+                    <ul class="feature-list" style="color: white;">
+                        <li>Machine Learning optimización</li>
+                        <li>Automatización de reportes</li>
+                        <li>Portal de cliente</li>
+                        <li>Integraciones SAP/ERP</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-40 contact-section">
+                <p style="font-size: 1.2em;">
+                    Los <span class="highlight" style="background: rgba(255,255,255,0.3); color: white;">102 issues en GitHub</span> documentan el roadmap completo para evolución continua
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 11: SOPORTE & CONTACTO -->
+    <div class="slide dark">
+        <div class="container text-center">
+            <h2 style="color: #0ea5e9;">💼 Soporte & Mantenimiento Futuro</h2>
+            <div class="grid-2 mt-60">
+                <div class="contact-section">
+                    <h3>📞 Contacto Directo Indunnova</h3>
+                    <div class="contact-item">
+                        <strong>Email:</strong> info@indunnova.com
+                    </div>
+                    <div class="contact-item">
+                        <strong>Teléfono:</strong> +57 (1) 123-4567
+                    </div>
+                    <div class="contact-item">
+                        <strong>Web:</strong> www.indunnova.com
+                    </div>
+                </div>
+                <div class="contact-section">
+                    <h3>✅ Disponibilidad Garantizada</h3>
+                    <ul class="feature-list">
+                        <li>Soporte técnico 24/7</li>
+                        <li>Mantenimiento preventivo</li>
+                        <li>Mejoras personalizadas</li>
+                        <li>Capacitación de usuarios</li>
+                        <li>Respaldo y recuperación</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE 12: CIERRE -->
+    <div class="slide title">
+        <div class="container text-center">
+            <h1 style="font-size: 3em;">TRANSMAINT</h1>
+            <p class="subtitle" style="font-size: 1.5em; margin-bottom: 50px;">
+                Sistema de Gestión Listo para<br>Operación Continua
             </p>
-        </div>
-    </div>
-    <div class="date">26/05/2026</div>
-</div>
-
-<!-- SLIDE 11: Soporte & Mantenimiento -->
-<div class="slide content">
-    <div class="container">
-        <h2>Soporte & Mantenimiento Futuro</h2>
-        <div class="grid-2">
-            <div style="text-align: center; padding: 30px;">
-                <h3 style="color: #0ea5e9; margin-bottom: 20px;">📞 Contacto Directo</h3>
-                <p style="font-size: 1.2em; margin: 15px 0;"><strong>Indunnova</strong></p>
-                <p style="margin: 10px 0;">Email: info@indunnova.com</p>
-                <p style="margin: 10px 0;">Teléfono: +57 (1) 123-4567</p>
-                <p style="margin: 10px 0;">Web: www.indunnova.com</p>
-            </div>
-            <div style="text-align: center; padding: 30px; background: #f0f9ff; border-radius: 8px;">
-                <h3 style="color: #1e3a5f; margin-bottom: 20px;">✓ Disponibilidad</h3>
-                <ul style="list-style: none; text-align: left;">
-                    <li style="padding: 10px 0;">✓ Soporte técnico 24/7</li>
-                    <li style="padding: 10px 0;">✓ Mantenimiento preventivo</li>
-                    <li style="padding: 10px 0;">✓ Mejoras personalizadas</li>
-                    <li style="padding: 10px 0;">✓ Capacitación de usuarios</li>
-                    <li style="padding: 10px 0;">✓ Respaldo y recuperación</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-    <div class="date">26/05/2026</div>
-</div>
-
-<!-- SLIDE 12: Cierre -->
-<div class="slide dark">
-    <div class="container text-center">
-        <h1 style="font-size: 2.5em; margin-bottom: 30px;">TransMaint</h1>
-        <p class="text-lg" style="margin-bottom: 40px;">
-            Sistema de Gestión de Mantenimiento<br>
-            Lista para Operación Continua
-        </p>
-        <div class="mt-40">
-            <p style="font-size: 1.3em; margin-bottom: 50px; color: #0ea5e9;">
-                <strong>26 de Mayo de 2026 - Entrega Oficial</strong>
-            </p>
-            <div style="background: rgba(15, 165, 233, 0.1); padding: 30px; border-radius: 8px; border-left: 5px solid #0ea5e9;">
-                <p style="font-size: 1.1em; line-height: 1.8;">
+            <div class="mt-60" style="background: rgba(15, 165, 233, 0.2); padding: 40px; border-radius: 12px; border-left: 5px solid #0ea5e9;">
+                <p style="font-size: 1.3em; line-height: 1.8; margin-bottom: 20px;">
                     <strong>Indunnova</strong> está disponible para cualquier mejora,<br>
-                    mantenimiento, o evolución futura del aplicativo.
+                    mantenimiento o evolución futura del aplicativo
                 </p>
-                <p style="font-size: 1em; margin-top: 20px; opacity: 0.9;">
-                    info@indunnova.com | www.indunnova.com
+                <p style="font-size: 1em; opacity: 0.9;">
+                    <strong style="color: #0ea5e9;">info@indunnova.com</strong> | <strong style="color: #0ea5e9;">www.indunnova.com</strong>
                 </p>
+            </div>
+            <div class="mt-60">
+                <p style="font-size: 1.1em; opacity: 0.8;">Gracias por confiar en Indunnova</p>
             </div>
         </div>
     </div>
+
 </div>
+
+<!-- CONTROLES -->
+<div class="controls">
+    <button class="btn" id="prevBtn" onclick="previousSlide()" title="Anterior (← o A)">❮</button>
+    <span class="slide-counter"><span id="currentSlide">1</span> / <span id="totalSlides">12</span></span>
+    <button class="btn" id="nextBtn" onclick="nextSlide()" title="Siguiente (→ o D)">❯</button>
+</div>
+
+<div class="keyboard-hint">
+    <p>⌨️ Usa ← → o A D para navegar</p>
+    <p>ESC para salir</p>
+</div>
+
+<script>
+    let currentSlideIndex = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    document.getElementById('totalSlides').textContent = totalSlides;
+
+    function showSlide(n) {
+        slides.forEach(slide => {
+            slide.classList.remove('active', 'prev');
+            slide.style.opacity = '0';
+        });
+
+        if (n >= totalSlides) currentSlideIndex = 0;
+        if (n < 0) currentSlideIndex = totalSlides - 1;
+
+        const activeSlide = slides[currentSlideIndex];
+        activeSlide.classList.add('active');
+        document.getElementById('currentSlide').textContent = currentSlideIndex + 1;
+    }
+
+    function nextSlide() {
+        currentSlideIndex++;
+        showSlide(currentSlideIndex);
+    }
+
+    function previousSlide() {
+        currentSlideIndex--;
+        showSlide(currentSlideIndex);
+    }
+
+    // Atajos de teclado
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') nextSlide();
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') previousSlide();
+        if (e.key === 'Escape') alert('Presenta: TransMaint - Entrega Oficial\n\nMuchas gracias por tu atención');
+    });
+
+    // Navegación con swipe en móvil
+    let touchStartX = 0;
+    document.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+    });
+    document.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].screenX;
+        if (touchStartX - touchEndX > 50) nextSlide();
+        if (touchEndX - touchStartX > 50) previousSlide();
+    });
+
+    // Inicializar
+    showSlide(0);
+</script>
 
 </body>
 </html>
