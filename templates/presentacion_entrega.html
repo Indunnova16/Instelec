@@ -33,19 +33,24 @@
             justify-content: center;
             padding: 60px;
             opacity: 0;
-            transition: opacity 0.8s ease, transform 0.8s ease;
+            visibility: hidden;
+            transition: opacity 0.8s ease, transform 0.8s ease, visibility 0.8s ease;
             transform: translateX(100px);
+            z-index: 0;
         }
 
         .slide.active {
             opacity: 1;
+            visibility: visible;
             transform: translateX(0);
             z-index: 10;
         }
 
         .slide.prev {
             opacity: 0;
+            visibility: hidden;
             transform: translateX(-100px);
+            z-index: 0;
         }
 
         /* ESTILOS DE SLIDES */
@@ -904,15 +909,18 @@
     document.getElementById('totalSlides').textContent = totalSlides;
 
     function showSlide(n) {
-        slides.forEach(slide => {
-            slide.classList.remove('active', 'prev');
-            slide.style.opacity = '0';
-        });
-
         if (n >= totalSlides) currentSlideIndex = 0;
         if (n < 0) currentSlideIndex = totalSlides - 1;
 
+        slides.forEach((slide, index) => {
+            slide.classList.remove('active', 'prev');
+            if (index !== currentSlideIndex) {
+                slide.classList.add('prev');
+            }
+        });
+
         const activeSlide = slides[currentSlideIndex];
+        activeSlide.classList.remove('prev');
         activeSlide.classList.add('active');
         document.getElementById('currentSlide').textContent = currentSlideIndex + 1;
     }
