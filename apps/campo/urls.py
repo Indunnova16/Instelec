@@ -18,6 +18,7 @@ urlpatterns = [
     path('procedimientos/', views.ProcedimientoListView.as_view(), name='procedimientos'),
     path('procedimientos/crear/', views.ProcedimientoCreateView.as_view(), name='procedimiento_crear'),
     path('procedimientos/<uuid:pk>/', views.ProcedimientoViewerView.as_view(), name='procedimiento_viewer'),
+    path('procedimientos/<uuid:pk>/proxy/', views.ProcedimientoProxyView.as_view(), name='procedimiento_proxy'),
     # Avances de vanos - Agregado 1 abril 2026
     path('avances/', views.AvancesCuadrillaView.as_view(), name='avances_cuadrilla'),
     path('vanos/<uuid:vano_id>/marcar/', views.MarcarVanoView.as_view(), name='marcar_vano'),

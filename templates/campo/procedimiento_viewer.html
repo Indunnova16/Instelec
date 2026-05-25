@@ -66,10 +66,10 @@
                     </p>
                 </iframe>
             </div>
-        {% elif es_excel and url_archivo %}
+        {% elif es_excel and url_proxy %}
             <!-- Excel Viewer via SheetJS -->
             <div id="excel-viewer"
-                 x-data="excelViewer('{{ url_archivo }}')"
+                 x-data="excelViewer('{{ url_proxy }}')"
                  x-init="cargar()"
                  class="relative">
                 <div x-show="estado === 'cargando'" class="p-12 text-center text-gray-600 dark:text-gray-400">

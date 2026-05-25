@@ -9,6 +9,7 @@ from django.views.generic import ListView, DetailView, CreateView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.http import HttpResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from apps.core.cache import get_lineas_activas, get_cuadrillas_activas
 from .models import RegistroCampo, Evidencia, ReporteDano, FotoDano, Procedimiento, RegistroAvance
@@ -494,8 +495,35 @@ class ProcedimientoViewerView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
         context['es_pdf'] = procedimiento.es_pdf
         context['es_excel'] = procedimiento.es_excel
         context['url_archivo'] = procedimiento.archivo.url if procedimiento.archivo else None
+        context['url_proxy'] = reverse_lazy('campo:procedimiento_proxy', kwargs={'pk': procedimiento.pk})
 
         return context
+
+
+class ProcedimientoProxyView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """
+    Proxy endpoint to serve procedure files, bypassing CORS restrictions.
+    Used by frontend to fetch Excel files for preview.
+    """
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+
+    def get(self, request, pk):
+        from django.http import FileResponse, HttpResponse
+        try:
+            procedimiento = Procedimiento.objects.get(pk=pk)
+        except Procedimiento.DoesNotExist:
+            return HttpResponse('Procedimiento no encontrado', status=404)
+
+        if not procedimiento.archivo:
+            return HttpResponse('Archivo no encontrado', status=404)
+
+        try:
+            file_content = procedimiento.archivo.read()
+            response = HttpResponse(file_content, content_type=procedimiento.tipo_archivo or 'application/octet-stream')
+            response['Content-Disposition'] = f'inline; filename="{procedimiento.nombre_original}"'
+            return response
+        except Exception as e:
+            return HttpResponse(f'Error al leer el archivo: {str(e)}', status=500)
 
 
 class AvancesCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
