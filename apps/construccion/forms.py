@@ -337,3 +337,9 @@ class AmbientalTorreForm(forms.ModelForm):
                 field.widget.attrs.setdefault('class', INPUT_CLS)
                 field.widget.attrs.setdefault('step', 'any')
             field.required = False
+
+
+# === /modulo excel_paridad_oc_montaje — split de archivo magnet ===
+# F2 scaffolding: B2b (OC detalle forms) y B3b (Montaje detalle forms) en F3.
+from .forms_b3_oc_detalle import *  # noqa: E402,F401,F403
+from .forms_b3_mont_detalle import *  # noqa: E402,F401,F403

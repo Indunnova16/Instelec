@@ -2371,3 +2371,8 @@ class ModuloPlaceholderView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
 from .views_b1_actividades_finales import *  # noqa: F401, F403
 from .views_b2_indicadores import *  # noqa: F401, F403
 from .views_b3_dashboard_indicadores import *  # noqa: F401, F403
+
+# === /modulo excel_paridad_oc_montaje — split de archivo magnet ===
+# F2 scaffolding: B2b (OC detalle views) y B3b (Montaje detalle views) en F3.
+from .views_b3_oc_detalle import *  # noqa: E402,F401,F403
+from .views_b3_mont_detalle import *  # noqa: E402,F401,F403

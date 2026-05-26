@@ -220,3 +220,10 @@ from . import (
 urlpatterns += urls_b1_actividades_finales.urlpatterns
 urlpatterns += urls_b2_indicadores.urlpatterns
 urlpatterns += urls_b3_dashboard_indicadores.urlpatterns
+
+# === /modulo excel_paridad_oc_montaje — split de archivo magnet ===
+# F2 scaffolding: B2b (OC detalle URLs) y B3b (Montaje detalle URLs) en F3.
+from . import urls_b3_oc_detalle, urls_b3_mont_detalle  # noqa: E402
+
+urlpatterns += urls_b3_oc_detalle.urlpatterns
+urlpatterns += urls_b3_mont_detalle.urlpatterns

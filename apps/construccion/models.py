@@ -2645,3 +2645,8 @@ class SnapshotAvance(BaseModel):
 # corrió F3 — eso está OK durante el desarrollo paralelo.
 from .models_b1_actividades_finales import *  # noqa: F401, F403
 from .models_b2_indicadores import *  # noqa: F401, F403
+
+# === /modulo excel_paridad_oc_montaje — split de archivo magnet ===
+# F2 scaffolding: B2a (OC detalle) y B3a (Montaje detalle) en F3.
+from .models_b3_oc_detalle import *  # noqa: E402,F401,F403
+from .models_b3_mont_detalle import *  # noqa: E402,F401,F403

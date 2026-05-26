@@ -1,0 +1,38 @@
+{% comment %}
+Tabs reusables para navegación entre secciones.
+
+Contexto esperado:
+  - pestanas: list of dicts con keys:
+      - slug (str): identificador
+      - label (str): texto visible
+      - url (str): href destino
+      - active (bool): si es la pestaña actual
+  - orientacion: "horizontal" (default) | "vertical"
+
+Uso:
+  {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas orientacion="horizontal" %}
+
+Plantado por F2 (scaffolding /modulo excel_paridad_oc_montaje). Reusado por B2b y B3b.
+{% endcomment %}
+{% if orientacion == "vertical" %}
+<nav class="flex flex-col gap-1 border-r border-gray-200 pr-2" aria-label="Tabs">
+  {% for p in pestanas %}
+    <a href="{{ p.url }}"
+       class="px-3 py-2 text-sm rounded-md transition-colors {% if p.active %}bg-blue-50 text-blue-700 font-semibold border-l-2 border-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}"
+       {% if p.active %}aria-current="page"{% endif %}>
+      {{ p.label }}
+    </a>
+  {% endfor %}
+</nav>
+{% else %}
+<nav class="flex flex-wrap gap-1 border-b border-gray-200" aria-label="Tabs"
+     x-data="{ activeTab: '{% for p in pestanas %}{% if p.active %}{{ p.slug }}{% endif %}{% endfor %}' }">
+  {% for p in pestanas %}
+    <a href="{{ p.url }}"
+       class="px-4 py-2 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px {% if p.active %}border-blue-600 text-blue-700 font-semibold{% else %}border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300{% endif %}"
+       {% if p.active %}aria-current="page"{% endif %}>
+      {{ p.label }}
+    </a>
+  {% endfor %}
+</nav>
+{% endif %}
