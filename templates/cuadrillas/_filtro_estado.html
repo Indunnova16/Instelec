@@ -1,0 +1,71 @@
+{# B3 — Filtro estado cuadrillas (activas/inactivas/todas) + contadores. Issue #104 #}
+{# Variables esperadas en context: b3_filtro_actual, b3_total_activas, b3_total_inactivas, b3_total_todas #}
+{% load i18n %}
+<section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+         aria-labelledby="b3-filtro-estado-title"
+         data-b3-component="filtro-estado">
+    <h2 id="b3-filtro-estado-title" class="sr-only">Filtrar cuadrillas por estado</h2>
+    <form method="get" class="flex flex-col sm:flex-row items-start sm:items-center gap-4"
+          role="tablist" aria-label="Filtro de estado">
+        {# Preservar otros filtros (semana, codigo) al cambiar de tab. #}
+        {% if request.GET.semana %}<input type="hidden" name="semana" value="{{ request.GET.semana }}">{% endif %}
+        {% if request.GET.codigo %}<input type="hidden" name="codigo" value="{{ request.GET.codigo }}">{% endif %}
+
+        <fieldset class="flex flex-wrap gap-2 items-center">
+            <legend class="sr-only">Estado</legend>
+
+            <label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition
+                          {% if b3_filtro_actual == 'activas' %}bg-green-50 dark:bg-green-900 border-green-500 text-green-800 dark:text-green-100{% else %}border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %}"
+                   role="tab" aria-selected="{% if b3_filtro_actual == 'activas' %}true{% else %}false{% endif %}"
+                   data-b3-filtro="activas">
+                <input type="radio" name="filtro" value="activas"
+                       {% if b3_filtro_actual == 'activas' %}checked{% endif %}
+                       onchange="this.form.submit()"
+                       class="text-green-600 focus:ring-green-500">
+                <span class="text-sm font-medium">Activas</span>
+                <span class="px-2 py-0.5 text-xs font-semibold rounded-full
+                             {% if b3_filtro_actual == 'activas' %}bg-green-200 dark:bg-green-700{% else %}bg-gray-100 dark:bg-gray-700{% endif %}"
+                      data-b3-count="activas">{{ b3_total_activas|default:0 }}</span>
+            </label>
+
+            <label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition
+                          {% if b3_filtro_actual == 'inactivas' %}bg-red-50 dark:bg-red-900 border-red-500 text-red-800 dark:text-red-100{% else %}border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %}"
+                   role="tab" aria-selected="{% if b3_filtro_actual == 'inactivas' %}true{% else %}false{% endif %}"
+                   data-b3-filtro="inactivas">
+                <input type="radio" name="filtro" value="inactivas"
+                       {% if b3_filtro_actual == 'inactivas' %}checked{% endif %}
+                       onchange="this.form.submit()"
+                       class="text-red-600 focus:ring-red-500">
+                <span class="text-sm font-medium">Inactivas</span>
+                <span class="px-2 py-0.5 text-xs font-semibold rounded-full
+                             {% if b3_filtro_actual == 'inactivas' %}bg-red-200 dark:bg-red-700{% else %}bg-gray-100 dark:bg-gray-700{% endif %}"
+                      data-b3-count="inactivas">{{ b3_total_inactivas|default:0 }}</span>
+            </label>
+
+            <label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition
+                          {% if b3_filtro_actual == 'todas' %}bg-blue-50 dark:bg-blue-900 border-blue-500 text-blue-800 dark:text-blue-100{% else %}border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %}"
+                   role="tab" aria-selected="{% if b3_filtro_actual == 'todas' %}true{% else %}false{% endif %}"
+                   data-b3-filtro="todas">
+                <input type="radio" name="filtro" value="todas"
+                       {% if b3_filtro_actual == 'todas' %}checked{% endif %}
+                       onchange="this.form.submit()"
+                       class="text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium">Todas</span>
+                <span class="px-2 py-0.5 text-xs font-semibold rounded-full
+                             {% if b3_filtro_actual == 'todas' %}bg-blue-200 dark:bg-blue-700{% else %}bg-gray-100 dark:bg-gray-700{% endif %}"
+                      data-b3-count="todas">{{ b3_total_todas|default:0 }}</span>
+            </label>
+        </fieldset>
+
+        {# Botón reactivar contextual cuando filtro=inactivas (UI hint, accionable por fila) #}
+        {% if b3_filtro_actual == 'inactivas' and b3_total_inactivas > 0 %}
+        <div class="ml-auto text-xs text-gray-500 dark:text-gray-400">
+            <svg class="inline w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Usa el botón Reactivar en cada fila para devolver una cuadrilla a operación.
+        </div>
+        {% endif %}
+    </form>
+</section>
