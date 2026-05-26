@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% comment %}
+  B2b (#74) — Detalle Obra Civil por torre.
+
+  Layout:
+    - Header con torre + proyecto + volver al resumen.
+    - Tabs verticales sticky-left: 4 patas A/B/C/D.
+    - Tabs horizontales sticky-top: 6 secciones (Cerramiento, Excavación,
+      Solado, Acero, Vaciado, Compactación).
+    - Área principal: partial `oc_seccion_<slug>.html` con el ModelForm
+      de la sección activa.
+
+  Pata + sección activos vienen por query params `?pata=A&seccion=excavacion`.
+{% endcomment %}
+
+{% block title %}Obra Civil — T{{ torre.numero }} — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+<div class="space-y-4"
+     x-data='ocDetalle({
+         urlPost: "{{ url_post_seccion|escapejs }}",
+         pata: "{{ pata_activa }}",
+         seccion: "{{ seccion_activa }}",
+         avancePonderadoPct: {{ avance_ponderado_pct|default:0 }},
+         csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}"
+     })'>
+
+  {% include "construccion/_proyecto_tabs.html" %}
+
+  {% comment %}Header{% endcomment %}
+  <div class="flex items-center gap-4 flex-wrap">
+    <a href="{{ url_resumen }}"
+       class="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+      &larr; Volver al resumen
+    </a>
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+        Obra Civil — Torre Nº {{ torre.numero }}
+      </h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+        · Pata: <span class="font-medium" data-pata-activa>{{ pata_activa }}</span>
+        · Sección: <span class="font-medium" data-seccion-activa>{{ seccion_label }}</span>
+      </p>
+    </div>
+    <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg px-4 py-2 text-center">
+      <p class="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">
+        Avance ponderado pata {{ pata_activa }}
+      </p>
+      <p class="text-2xl font-bold text-blue-700 dark:text-blue-300"
+         data-avance-ponderado-pct
+         x-text="avancePonderadoPct.toFixed(1) + '%'">{{ avance_ponderado_pct }}%</p>
+    </div>
+  </div>
+
+  {% comment %}Toast{% endcomment %}
+  <div x-show="toast.visible"
+       x-transition.opacity
+       :class="toast.tipo === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300'"
+       class="rounded border px-4 py-2 text-sm"
+       style="display:none"
+       x-text="toast.mensaje"></div>
+
+  {% comment %}Layout 2-col: tabs verticales patas + contenido (tabs secciones + partial){% endcomment %}
+  <div class="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4">
+
+    {% comment %}Tabs verticales: patas A/B/C/D — sticky-left{% endcomment %}
+    <div class="md:sticky md:top-4 md:self-start">
+      <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Patas</p>
+      {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas_patas orientacion="vertical" %}
+    </div>
+
+    {% comment %}Contenido: tabs secciones (horizontal sticky-top) + partial activo{% endcomment %}
+    <div class="space-y-3">
+      <div class="sticky top-0 z-10 bg-white dark:bg-gray-800 -mx-2 px-2 pt-1 pb-1">
+        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Secciones</p>
+        {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas_secciones orientacion="horizontal" %}
+      </div>
+
+      {% comment %}Partial de la sección activa.{% endcomment %}
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4"
+           data-section-container="{{ seccion_activa }}">
+        {% if seccion_activa == "cerramiento" %}
+          {% include "construccion/partials/oc_seccion_cerramiento.html" %}
+        {% elif seccion_activa == "excavacion" %}
+          {% include "construccion/partials/oc_seccion_excavacion.html" %}
+        {% elif seccion_activa == "solado" %}
+          {% include "construccion/partials/oc_seccion_solado.html" %}
+        {% elif seccion_activa == "acero" %}
+          {% include "construccion/partials/oc_seccion_acero.html" %}
+        {% elif seccion_activa == "vaciado" %}
+          {% include "construccion/partials/oc_seccion_vaciado.html" %}
+        {% elif seccion_activa == "compactacion" %}
+          {% include "construccion/partials/oc_seccion_compactacion.html" %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function ocDetalle(cfg) {
+  return {
+    urlPost: cfg.urlPost,
+    pata: cfg.pata,
+    seccion: cfg.seccion,
+    avancePonderadoPct: cfg.avancePonderadoPct,
+    csrfToken: cfg.csrfToken,
+    enviando: false,
+    toast: { visible: false, mensaje: '', tipo: 'ok' },
+    showToast(mensaje, tipo) {
+      this.toast = { visible: true, mensaje: mensaje, tipo: tipo };
+      setTimeout(() => { this.toast.visible = false; }, 3500);
+    },
+    async submitForm(formEl) {
+      if (this.enviando) return;
+      this.enviando = true;
+      try {
+        const fd = new FormData(formEl);
+        const r = await fetch(this.urlPost, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          this.avancePonderadoPct = data.avance_ponderado_pct;
+          this.showToast('Cambios guardados.', 'ok');
+        } else {
+          const errs = data.errors || {};
+          const msg = data.error || ('Validación: ' + Object.keys(errs).join(', '));
+          this.showToast(msg, 'error');
+        }
+      } catch (e) {
+        this.showToast('Error de red.', 'error');
+      } finally {
+        this.enviando = false;
+      }
+    },
+  };
+}
+</script>
+{% endlocalize %}
+{% endblock %}

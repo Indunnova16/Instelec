@@ -1,1 +1,89 @@
-{% comment %}stub plantado por F2 — sobrescrito por B2b en F3{% endcomment %}
+{% comment %}
+  B2b (#74) — Partial Sección Excavación (16 campos).
+{% endcomment %}
+{% load l10n %}
+<form @submit.prevent="submitForm($event.target)" class="space-y-4"
+      data-section-form="excavacion">
+  {% csrf_token %}
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Excavación</h2>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_cuadrilla.label }}</span>
+      {{ form.exc_cuadrilla }}
+      {% if form.exc_cuadrilla.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_cuadrilla.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_tipo.label }}</span>
+      {{ form.exc_tipo }}
+      {% if form.exc_tipo.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_tipo.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Formatos técnicos (FT)</legend>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft022_ok }}<span>{{ form.exc_ft022_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft929_ok }}<span>{{ form.exc_ft929_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft923_ok }}<span>{{ form.exc_ft923_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft924_ok }}<span>{{ form.exc_ft924_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft925_ok }}<span>{{ form.exc_ft925_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft926_ok }}<span>{{ form.exc_ft926_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft927_ok }}<span>{{ form.exc_ft927_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft928_ok }}<span>{{ form.exc_ft928_ok.label }}</span></label>
+    </div>
+  </fieldset>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_metros_m3.label }}</span>
+      {{ form.exc_metros_m3 }}
+      {% if form.exc_metros_m3.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_metros_m3.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_monitoreo_arq.label }}</span>
+      {{ form.exc_monitoreo_arq }}
+      {% if form.exc_monitoreo_arq.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_monitoreo_arq.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_ejecutada_pct.label }}</span>
+      {{ form.exc_ejecutada_pct }}
+      <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">0–1 (ej. 0.30 = 30%)</span>
+      {% if form.exc_ejecutada_pct.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_ejecutada_pct.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+    {{ form.exc_penetrometro_ok }}
+    <span>{{ form.exc_penetrometro_ok.label }}</span>
+  </label>
+
+  <label class="flex flex-col">
+    <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_observaciones.label }}</span>
+    {{ form.exc_observaciones }}
+    {% if form.exc_observaciones.errors %}
+      <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_observaciones.errors|join:", " }}</span>
+    {% endif %}
+  </label>
+
+  <div class="flex justify-end">
+    <button type="submit"
+            :disabled="enviando"
+            :class="enviando ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition"
+            data-action="guardar-seccion">
+      <span x-text="enviando ? 'Guardando…' : 'Guardar sección'"></span>
+    </button>
+  </div>
+</form>
