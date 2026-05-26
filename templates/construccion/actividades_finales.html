@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% block title %}Actividades Finales y Pruebas — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+<div class="space-y-6">
+
+    {# ==================== Header ==================== #}
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                🏁 Actividades Finales y Pruebas — LT 230kV
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Estructuras: <span class="font-medium">{{ resumen.total_torres }}</span>
+            </p>
+        </div>
+        <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg px-4 py-2 text-center">
+            <p class="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">Avance Global</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                {{ resumen.pct_global|floatformat:1 }}%
+            </p>
+        </div>
+    </div>
+
+    {# ==================== Resumen ==================== #}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 border border-gray-200 dark:border-gray-700">
+            <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Completadas</p>
+            <p class="text-xl font-bold text-green-600 dark:text-green-400">{{ resumen.completadas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 border border-gray-200 dark:border-gray-700">
+            <p class="text-xs uppercase text-gray-500 dark:text-gray-400">En proceso</p>
+            <p class="text-xl font-bold text-yellow-600 dark:text-yellow-400">{{ resumen.en_proceso }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 border border-gray-200 dark:border-gray-700">
+            <p class="text-xs uppercase text-gray-500 dark:text-gray-400">Bloqueadas</p>
+            <p class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ resumen.bloqueadas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 border border-gray-200 dark:border-gray-700">
+            <p class="text-xs uppercase text-gray-500 dark:text-gray-400">No iniciadas</p>
+            <p class="text-xl font-bold text-red-600 dark:text-red-400">{{ resumen.no_iniciadas }}</p>
+        </div>
+    </div>
+
+    {# ==================== Filtros ==================== #}
+    <form method="get" class="flex flex-wrap items-end gap-3 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex flex-col">
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">Estructura</label>
+            <input type="text" name="estructura" value="{{ filtros.estructura }}"
+                   placeholder="E1, T-001, …"
+                   class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div class="flex flex-col">
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">Estado</label>
+            <select name="estado"
+                    class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                {% for val, label in estados_choices %}
+                <option value="{{ val }}" {% if filtros.estado == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit"
+                class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">
+            Filtrar
+        </button>
+        <a href="{% url 'construccion:actividades_finales' proyecto_id=proyecto.id %}"
+           class="px-4 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm">
+            Limpiar
+        </a>
+    </form>
+
+    {# ==================== Toast errores ==================== #}
+    <div id="actividades-finales-toast"
+         class="hidden p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300"></div>
+
+    {# ==================== Tabla matriz 14×N ==================== #}
+    {% if filas %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    {# Fila 1: secciones con colspan #}
+                    <tr>
+                        <th rowspan="2"
+                            class="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-200 sticky left-0 bg-gray-50 dark:bg-gray-900 z-10 border-b border-gray-200 dark:border-gray-700">
+                            Estructura
+                        </th>
+                        {% for sec_slug, sec_label, columnas in secciones %}
+                        <th colspan="{{ columnas|length }}"
+                            class="px-2 py-1 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 border-b border-l border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
+                            {{ sec_label }}
+                        </th>
+                        {% endfor %}
+                        <th rowspan="2"
+                            class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200 border-b border-l border-gray-200 dark:border-gray-700">
+                            Estado
+                        </th>
+                    </tr>
+                    {# Fila 2: columnas individuales (letra + label) #}
+                    <tr>
+                        {% for sec_slug, sec_label, columnas in secciones %}
+                            {% for campo, label, letra in columnas %}
+                            <th class="px-2 py-1 text-center font-medium text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
+                                title="{{ label }}">
+                                <div class="text-xs font-bold">{{ letra }}</div>
+                                <div class="text-[10px] font-normal text-gray-500 dark:text-gray-500 leading-tight">
+                                    {{ label }}
+                                </div>
+                            </th>
+                            {% endfor %}
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-800">
+                    {% for fila in filas %}
+                        {% include "construccion/_actividades_finales_row.html" with fila=fila proyecto=proyecto %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-8 text-center">
+        <p class="text-gray-500 dark:text-gray-400">
+            No hay estructuras que coincidan con los filtros.
+        </p>
+    </div>
+    {% endif %}
+
+    {# ==================== Leyenda ==================== #}
+    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+        <p class="font-medium mb-1">Validaciones de progresión lógica:</p>
+        <ul class="list-disc list-inside space-y-0.5">
+            <li>G (Certificado RETIE) requiere F (Visita RETIE).</li>
+            <li>K (Paz y salvo propietarios) requiere J (Cierre actas).</li>
+            <li>N (Dossier final) requiere TODAS las anteriores.</li>
+        </ul>
+    </div>
+</div>
+{% endlocalize %}
+{% endblock %}
