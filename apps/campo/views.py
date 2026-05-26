@@ -668,14 +668,37 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
     allowed_roles = ['liniero', 'auxiliar', 'supervisor', 'admin', 'director', 'coordinador', 'ing_residente']
 
     def get_context_data(self, **kwargs):
-        from apps.lineas.models import Linea, Vano
+        """
+        Construye el contexto de la vista de registro de avances.
+
+        Maneja explícitamente tres rutas para que la UI muestre el mensaje
+        correcto en cada caso (no confundir "sin permiso" con "sin vanos"):
+
+        - ``context['error']``: mensaje técnico/funcional bloqueante
+          (UUID inválido, línea no encontrada, sin cuadrilla asignada).
+        - ``context['permission_denied']`` + ``context['error']``: el usuario
+          existe y no es admin, pero no es miembro activo de una cuadrilla
+          asignada a la línea solicitada — mensaje claro al usuario, no
+          ambiguo "no hay vanos".
+        - ``context['vanos']`` vacío + ``context['linea']`` presente: la línea
+          existe pero no tiene vanos registrados (empty state real).
+
+        Refs: #101 (B1.2)
+        """
+        from uuid import UUID
+
+        from django.db.models import Count
+
         from apps.cuadrillas.models import CuadrillaMiembro
-        from django.db.models import Q, Count
+        from apps.lineas.models import Linea, Vano
 
         context = super().get_context_data(**kwargs)
         usuario = self.request.user
         es_admin = usuario.rol in ['admin', 'director', 'coordinador', 'ing_residente']
-        linea_id = self.request.GET.get('linea_id', '')
+        linea_id = self.request.GET.get('linea_id', '').strip()
+
+        context['es_admin'] = es_admin
+        context['permission_denied'] = False
 
         # Get available lines for the user
         if es_admin:
@@ -685,10 +708,11 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
             miembro = CuadrillaMiembro.objects.filter(
                 usuario=usuario,
                 activo=True
-            ).select_related('cuadrilla').first()
+            ).select_related('cuadrilla', 'cuadrilla__linea_asignada').first()
 
             if not miembro or not miembro.cuadrilla.linea_asignada:
                 context['error'] = 'No estás asignado a una cuadrilla con línea.'
+                context['lineas'] = Linea.objects.none()
                 return context
 
             lineas = Linea.objects.filter(id=miembro.cuadrilla.linea_asignada.id)
@@ -699,42 +723,80 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         context['lineas'] = lineas
 
         # If a line is selected, show vanos for that line
-        if linea_id:
-            try:
-                linea = Linea.objects.get(id=linea_id)
-            except Linea.DoesNotExist:
-                context['error'] = 'Línea no encontrada.'
+        if not linea_id:
+            return context
+
+        # Validar UUID antes de tocar el ORM. Sin esto,
+        # ``Linea.objects.get(id='no-soy-uuid')`` revienta con ``ValueError``
+        # no atrapado, queryset silenciado y la vista cae en "no hay vanos".
+        try:
+            linea_uuid = UUID(linea_id)
+        except (ValueError, TypeError, AttributeError):
+            context['error'] = 'El identificador de línea no es válido.'
+            return context
+
+        try:
+            linea = Linea.objects.select_related().get(id=linea_uuid)
+        except Linea.DoesNotExist:
+            context['error'] = 'Línea no encontrada.'
+            return context
+
+        # Verify permission — admins pasan directo, no consultar membresía.
+        if not es_admin:
+            es_miembro = CuadrillaMiembro.objects.filter(
+                usuario=usuario,
+                activo=True,
+                cuadrilla__linea_asignada=linea,
+                cuadrilla__activa=True
+            ).exists()
+            if not es_miembro:
+                context['permission_denied'] = True
+                context['error'] = (
+                    'No tienes permiso para ver esta línea. '
+                    'Solicita a tu supervisor asignarte a la cuadrilla correspondiente.'
+                )
                 return context
 
-            # Verify permission
-            if not es_admin:
-                miembro = CuadrillaMiembro.objects.filter(
-                    usuario=usuario,
-                    activo=True,
-                    cuadrilla__linea_asignada=linea,
-                    cuadrilla__activa=True
-                ).exists()
-                if not miembro:
-                    context['error'] = 'No tienes permiso para ver esta línea.'
-                    return context
+        # Vanos con prefetch optimizado. ``select_related('linea')`` es
+        # redundante con el filtro pero hace explícita la relación 1-1 y
+        # evita un round-trip al renderizar. ``pendientes__responsable`` es
+        # válido — PendienteVano sí tiene FK ``responsable`` a Usuario.
+        vanos = (
+            Vano.objects
+            .filter(linea=linea)
+            .select_related('linea', 'torre_inicio', 'torre_fin')
+            .prefetch_related('pendientes', 'pendientes__responsable')
+            .order_by('numero')
+        )
 
-            vanos = Vano.objects.filter(linea=linea).prefetch_related('pendientes', 'pendientes__responsable').order_by('numero')
-            context['linea'] = linea
-            context['vanos'] = vanos
+        # Materializar para reusar y para que ``{% if vanos %}`` del template
+        # no dispare un COUNT(*) adicional.
+        vanos_list = list(vanos)
 
-            # Calculate stats
-            estados = vanos.values('estado').annotate(count=Count('estado'))
-            stats = {e['estado']: e['count'] for e in estados}
+        context['linea'] = linea
+        context['vanos'] = vanos_list
 
-            context['total_vanos'] = vanos.count()
-            context['vanos_ejecutados'] = stats.get(Vano.Estado.EJECUTADO, 0)
-            context['vanos_pendientes'] = stats.get(Vano.Estado.PENDIENTE, 0)
-            context['vanos_sin_permiso'] = stats.get(Vano.Estado.SIN_PERMISO, 0)
-            context['vanos_no_ejecutado'] = stats.get(Vano.Estado.NO_EJECUTADO, 0)
-            context['vanos_en_espera'] = stats.get(Vano.Estado.EN_ESPERA, 0)
+        # Calculate stats — usar el QuerySet base (no la lista) para que el
+        # GROUP BY corra en la BD.
+        estados = (
+            Vano.objects
+            .filter(linea=linea)
+            .values('estado')
+            .annotate(count=Count('estado'))
+        )
+        stats = {e['estado']: e['count'] for e in estados}
 
-            total = context['total_vanos']
-            context['porcentaje'] = round(context['vanos_ejecutados'] / total * 100) if total > 0 else 0
+        total = len(vanos_list)
+        context['total_vanos'] = total
+        context['vanos_ejecutados'] = stats.get(Vano.Estado.EJECUTADO, 0)
+        context['vanos_pendientes'] = stats.get(Vano.Estado.PENDIENTE, 0)
+        context['vanos_sin_permiso'] = stats.get(Vano.Estado.SIN_PERMISO, 0)
+        context['vanos_no_ejecutado'] = stats.get(Vano.Estado.NO_EJECUTADO, 0)
+        context['vanos_en_espera'] = stats.get(Vano.Estado.EN_ESPERA, 0)
+
+        context['porcentaje'] = (
+            round(context['vanos_ejecutados'] / total * 100) if total > 0 else 0
+        )
 
         return context
 
