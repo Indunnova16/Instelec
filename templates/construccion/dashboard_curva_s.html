@@ -20,7 +20,7 @@
     <!-- Header con tabs de fase -->
     <div class="flex items-center gap-4">
         <div class="flex-1">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">📊 Dashboard Curva S</h1>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{% if fase_activa == 'OOCC' %}🏗️ Dashboard Obra Civil{% elif fase_activa == 'MONTAJE' %}🔧 Dashboard Montaje{% elif fase_activa == 'TENDIDO' %}🔌 Dashboard Tendido{% else %}📊 Dashboard Curva S{% endif %}</h1>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
                 · Total torres: <span class="font-medium">{{ total_torres }}</span>
@@ -66,7 +66,7 @@
     <!-- Form agregar/editar semana -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
         <h2 class="font-semibold mb-3">Agregar / editar semana</h2>
-        <form @submit.prevent="guardar()" class="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm items-end">
+        <form @submit.prevent="guardar()" class="grid grid-cols-1 md:grid-cols-6 gap-3 text-sm items-end">
             <label class="flex flex-col">
                 <span class="text-gray-500 mb-1">Semana (lunes)</span>
                 <input type="date" x-model="form.semana" required
@@ -85,6 +85,11 @@
             <label class="flex flex-col">
                 <span class="text-gray-500 mb-1">Torres prog (opt.)</span>
                 <input type="text" x-model="form.torres_prog" placeholder="1, 38, 39"
+                       class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+            </label>
+            <label class="flex flex-col">
+                <span class="text-gray-500 mb-1">Pendientes (opt.)</span>
+                <input type="text" x-model="form.pendientes" placeholder="Clima, falta materiales, ..."
                        class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
             </label>
             <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">Guardar</button>
@@ -106,6 +111,7 @@
                         <th class="px-3 py-2 text-right font-semibold">Ejec. acum.</th>
                         <th class="px-3 py-2 text-right font-semibold">% Ejec.</th>
                         <th class="px-3 py-2 text-right font-semibold">Varianza</th>
+                        <th class="px-3 py-2 text-left font-semibold">Pendientes</th>
                         <th class="px-3 py-2 text-center font-semibold">Acciones</th>
                     </tr>
                 </thead>
@@ -120,13 +126,14 @@
                         <td class="px-3 py-2 text-right">{{ s.torres_construidas_acum }}</td>
                         <td class="px-3 py-2 text-right">{{ s.pct_construido }}%</td>
                         <td class="px-3 py-2 text-right {% if s.varianza_acum < 0 %}text-red-600{% elif s.varianza_acum > 0 %}text-green-600{% endif %}">{{ s.varianza_acum }}</td>
+                        <td class="px-3 py-2 text-left text-xs text-gray-700 dark:text-gray-300 max-w-xs truncate" title="{{ s.pendientes }}">{{ s.pendientes|default:"—" }}</td>
                         <td class="px-3 py-2 text-center">
-                            <button @click="cargarFila('{{ s.semana|date:'Y-m-d' }}', {{ s.torres_programadas_semana }}, {{ s.torres_construidas_semana }}, '{{ s.torres_incluidas_prog|escapejs }}')" class="text-blue-600 hover:underline text-xs">Editar</button>
+                            <button @click="cargarFila('{{ s.semana|date:'Y-m-d' }}', {{ s.torres_programadas_semana }}, {{ s.torres_construidas_semana }}, '{{ s.torres_incluidas_prog|escapejs }}', '{{ s.pendientes|escapejs }}')" class="text-blue-600 hover:underline text-xs">Editar</button>
                             <button @click="borrar('{{ s.id }}')" class="text-red-600 hover:underline text-xs ml-2">Borrar</button>
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="9" class="px-3 py-8 text-center text-gray-500">No hay semanas capturadas todavía.</td></tr>
+                    <tr><td colspan="10" class="px-3 py-8 text-center text-gray-500">No hay semanas capturadas todavía.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -146,7 +153,7 @@ function dashboardCurvaS(cfg) {
         totalTorres: cfg.totalTorres,
         chartInicial: cfg.chartInicial,
         chart: null,
-        form: { semana: '', prog: 0, cons: 0, torres_prog: '' },
+        form: { semana: '', prog: 0, cons: 0, torres_prog: '', pendientes: '' },
         mensaje: '', mensajeTipo: '',
         init() {
             // Esperar a window.load (todos los recursos cargados, incluido Chart.js script)
@@ -214,8 +221,8 @@ function dashboardCurvaS(cfg) {
                 this.renderChart(d);
             }
         },
-        cargarFila(semana, prog, cons, torres_prog) {
-            this.form = { semana, prog, cons, torres_prog };
+        cargarFila(semana, prog, cons, torres_prog, pendientes) {
+            this.form = { semana, prog, cons, torres_prog, pendientes: pendientes || '' };
             this.mensaje = '';
         },
         async guardar() {
@@ -226,6 +233,7 @@ function dashboardCurvaS(cfg) {
             fd.append('torres_programadas_semana', this.form.prog);
             fd.append('torres_construidas_semana', this.form.cons);
             fd.append('torres_incluidas_prog', this.form.torres_prog);
+            fd.append('pendientes', this.form.pendientes || '');
             try {
                 const r = await fetch(this.urlUpsert, {
                     method: 'POST',

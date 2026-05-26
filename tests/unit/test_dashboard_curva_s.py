@@ -166,6 +166,27 @@ class TestDashboardSemanaUpsert:
         })
         assert resp.status_code == 400
 
+    def test_pendientes_se_persiste_y_se_muestra(self, admin_client, proyecto):
+        """Refs #75 #77 — campo pendientes texto libre por semana."""
+        resp = admin_client.post(self._url(proyecto), {
+            "fase": "OOCC", "semana": "2026-01-05",
+            "torres_programadas_semana": "2", "torres_construidas_semana": "1",
+            "pendientes": "Clima desfavorable, falta permisos",
+        })
+        assert resp.status_code == 200
+        obj = DashboardAvanceSemanal.objects.get(
+            proyecto=proyecto, fase='OOCC', semana=date(2026, 1, 5),
+        )
+        assert obj.pendientes == "Clima desfavorable, falta permisos"
+        # La vista del dashboard debe renderizar el texto
+        url_dashboard = reverse("construccion:dashboard_obra_civil",
+                                kwargs={"proyecto_id": proyecto.id})
+        page = admin_client.get(url_dashboard)
+        assert page.status_code == 200
+        assert b"Clima desfavorable" in page.content
+        # Símbolo Obra Civil debe aparecer en el header (no el genérico 📊)
+        assert "🏗️ Dashboard Obra Civil".encode() in page.content
+
 
 @pytest.mark.django_db
 class TestDashboardSemanaDelete:

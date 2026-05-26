@@ -1326,6 +1326,11 @@ class DashboardAvanceSemanal(BaseModel):
         'Torres incluidas (cons)', max_length=300, blank=True,
     )
 
+    pendientes = models.TextField(
+        'Pendientes', blank=True,
+        help_text='Texto libre — clima, falta materiales, espera permisos, etc.',
+    )
+
     class Meta:
         db_table = 'construccion_dashboard_semanal'
         verbose_name = 'Dashboard — Avance semanal'
