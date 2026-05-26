@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo }} — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto p-6 space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ titulo }}</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="{{ crear_url }}"
+         class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+        + Nuevo
+      </a>
+      <form method="post"
+            action="{% url 'construccion:b2_indicadores_recalcular' proyecto_id=proyecto.id %}"
+            class="inline">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+                title="Re-corre los cálculos sobre todos los indicadores del proyecto">
+          Recalcular
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="bg-{{ message.tags|default:'blue' }}-50 border border-{{ message.tags|default:'blue' }}-200 text-{{ message.tags|default:'blue' }}-700 px-4 py-2 rounded">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    {% if indicadores %}
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+          <tr>
+            <th class="px-4 py-2 text-left">Fecha</th>
+            {% if tipo == 'financiero' %}
+              <th class="px-4 py-2 text-right">Margen Operativo</th>
+              <th class="px-4 py-2 text-right">Desviación Pres.</th>
+              <th class="px-4 py-2 text-right">Ingresos Ejec.</th>
+              <th class="px-4 py-2 text-right">Costo Real</th>
+            {% elif tipo == 'tecnico' %}
+              <th class="px-4 py-2 text-right">Avance Obra</th>
+              <th class="px-4 py-2 text-right">Cumplim. Cronog.</th>
+              <th class="px-4 py-2 text-right">Productividad</th>
+              <th class="px-4 py-2 text-right">Rend. Cuadrillas</th>
+            {% elif tipo == 'desempeno' %}
+              <th class="px-4 py-2 text-left">Línea</th>
+              <th class="px-4 py-2 text-left">Cuadrilla</th>
+              <th class="px-4 py-2 text-left">Tipo trabajo</th>
+              <th class="px-4 py-2 text-right">Meta</th>
+              <th class="px-4 py-2 text-right">Actual</th>
+              <th class="px-4 py-2 text-left">Estado</th>
+            {% endif %}
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ind in indicadores %}
+            <tr class="border-t border-gray-100 dark:border-gray-700">
+              <td class="px-4 py-2">{{ ind.fecha|date:"Y-m-d" }}</td>
+              {% if tipo == 'financiero' %}
+                <td class="px-4 py-2 text-right font-mono">
+                  {% if ind.margen_operativo is not None %}{{ ind.margen_operativo|floatformat:2 }}%{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-2 text-right font-mono">
+                  {% if ind.desviacion_presupuestal is not None %}{{ ind.desviacion_presupuestal|floatformat:2 }}%{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-2 text-right font-mono">${{ ind.ingresos_ejecutados|floatformat:0 }}</td>
+                <td class="px-4 py-2 text-right font-mono">${{ ind.costo_real|floatformat:0 }}</td>
+              {% elif tipo == 'tecnico' %}
+                <td class="px-4 py-2 text-right font-mono">
+                  {% if ind.avance_obra is not None %}{{ ind.avance_obra|floatformat:2 }}%{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-2 text-right font-mono">
+                  {% if ind.cumplimiento_cronograma is not None %}{{ ind.cumplimiento_cronograma|floatformat:2 }}%{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-2 text-right font-mono">
+                  {% if ind.productividad is not None %}{{ ind.productividad|floatformat:2 }}%{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-2 text-right font-mono">
+                  {% if ind.rendimiento_cuadrillas is not None %}{{ ind.rendimiento_cuadrillas|floatformat:2 }}%{% else %}—{% endif %}
+                </td>
+              {% elif tipo == 'desempeno' %}
+                <td class="px-4 py-2">{{ ind.linea }}</td>
+                <td class="px-4 py-2">{{ ind.cuadrilla|default:"—" }}</td>
+                <td class="px-4 py-2">{{ ind.get_tipo_trabajo_display }}</td>
+                <td class="px-4 py-2 text-right font-mono">{{ ind.meta|floatformat:2 }} {{ ind.unidad }}</td>
+                <td class="px-4 py-2 text-right font-mono">{{ ind.actual|floatformat:2 }}</td>
+                <td class="px-4 py-2">
+                  {% if ind.estado == 'EN_META' %}
+                    <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">✓ {{ ind.get_estado_display }}</span>
+                  {% elif ind.estado == 'BAJO_META' %}
+                    <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs">⚠ {{ ind.get_estado_display }}</span>
+                  {% elif ind.estado == 'SOBRE_META' %}
+                    <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">↑ {{ ind.get_estado_display }}</span>
+                  {% else %}
+                    <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{{ ind.get_estado_display }}</span>
+                  {% endif %}
+                </td>
+              {% endif %}
+              <td class="px-4 py-2 text-right space-x-2 whitespace-nowrap">
+                {% if tipo == 'financiero' %}
+                  <a class="text-blue-600 hover:underline" href="{% url 'construccion:b2_indicador_financiero_editar' proyecto_id=proyecto.id pk=ind.id %}">Editar</a>
+                  <form method="post" action="{% url 'construccion:b2_indicador_financiero_eliminar' proyecto_id=proyecto.id pk=ind.id %}" class="inline" onsubmit="return confirm('¿Eliminar este indicador?');">
+                    {% csrf_token %}
+                    <button type="submit" class="text-red-600 hover:underline">Eliminar</button>
+                  </form>
+                {% elif tipo == 'tecnico' %}
+                  <a class="text-blue-600 hover:underline" href="{% url 'construccion:b2_indicador_tecnico_editar' proyecto_id=proyecto.id pk=ind.id %}">Editar</a>
+                  <form method="post" action="{% url 'construccion:b2_indicador_tecnico_eliminar' proyecto_id=proyecto.id pk=ind.id %}" class="inline" onsubmit="return confirm('¿Eliminar este indicador?');">
+                    {% csrf_token %}
+                    <button type="submit" class="text-red-600 hover:underline">Eliminar</button>
+                  </form>
+                {% elif tipo == 'desempeno' %}
+                  <a class="text-blue-600 hover:underline" href="{% url 'construccion:b2_indicador_desempeno_editar' proyecto_id=proyecto.id pk=ind.id %}">Editar</a>
+                  <form method="post" action="{% url 'construccion:b2_indicador_desempeno_eliminar' proyecto_id=proyecto.id pk=ind.id %}" class="inline" onsubmit="return confirm('¿Eliminar este indicador?');">
+                    {% csrf_token %}
+                    <button type="submit" class="text-red-600 hover:underline">Eliminar</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="p-12 text-center text-gray-500">
+        <p class="text-lg">Aún no hay indicadores registrados.</p>
+        <p class="text-sm mt-2">Crea el primero con el botón superior, o espera al sync semanal (lunes 6am).</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

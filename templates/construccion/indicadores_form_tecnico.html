@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}{% if object %}Editar{% else %}Nuevo{% endif %} Indicador Técnico{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto p-6 space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+      {% if object %}Editar{% else %}Nuevo{% endif %} Indicador Técnico
+    </h1>
+    <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+  </div>
+
+  <form method="post"
+        class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <legend class="text-sm font-semibold px-2">Fecha y Presupuesto</legend>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.fecha.label }}</label>
+          {{ form.fecha }}
+          {% if form.fecha.errors %}<p class="text-xs text-red-600">{{ form.fecha.errors.0 }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.presupuesto_ejecutado_pct.label }}</label>
+          {{ form.presupuesto_ejecutado_pct }}
+          {% if form.presupuesto_ejecutado_pct.errors %}<p class="text-xs text-red-600">{{ form.presupuesto_ejecutado_pct.errors.0 }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.presupuesto_planeado_pct.label }}</label>
+          {{ form.presupuesto_planeado_pct }}
+          {% if form.presupuesto_planeado_pct.errors %}<p class="text-xs text-red-600">{{ form.presupuesto_planeado_pct.errors.0 }}</p>{% endif %}
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <legend class="text-sm font-semibold px-2">Obra</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.obra_ejecutada.label }}</label>
+          {{ form.obra_ejecutada }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.obra_programada.label }}</label>
+          {{ form.obra_programada }}
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <legend class="text-sm font-semibold px-2">Cronograma</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.actividades_completadas.label }}</label>
+          {{ form.actividades_completadas }}
+          {% if form.actividades_completadas.errors %}<p class="text-xs text-red-600">{{ form.actividades_completadas.errors.0 }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.actividades_planificadas.label }}</label>
+          {{ form.actividades_planificadas }}
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <legend class="text-sm font-semibold px-2">Productividad</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.cantidad_ejecutada.label }}</label>
+          {{ form.cantidad_ejecutada }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ form.horas_hombre.label }}</label>
+          {{ form.horas_hombre }}
+        </div>
+      </div>
+    </fieldset>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">{{ form.observaciones.label }}</label>
+      {{ form.observaciones }}
+    </div>
+
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 p-4 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+      <strong>ℹ Cálculo automático:</strong>
+      Al guardar, se calculan 5 indicadores derivados: Ejecución Presupuestal,
+      Avance de Obra, Cumplimiento Cronograma, Productividad y Rendimiento Cuadrillas.
+    </div>
+
+    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+      <a href="{% url 'construccion:b2_indicador_tecnico_lista' proyecto_id=proyecto.id %}"
+         class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">
+        Cancelar
+      </a>
+      <button type="submit"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        {% if object %}Guardar cambios{% else %}Crear{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
