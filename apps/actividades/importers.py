@@ -992,8 +992,11 @@ class ProgramacionSemanalImporter:
         nombre = sheet_name.strip().lower()
         if nombre in ProgramacionSemanalImporter.SHEETS_EXCLUIR:
             return False
-        # Aceptar '02', '18', 'S18', 'Semana 18', 'semana_05'
-        return bool(re.fullmatch(r's?(emana)?[\s_]*\d+', nombre))
+        # Aceptar '02', '18', 'S18', 'Semana 18', 'semana_05', '12 (2)', '18 (1)'
+        # B5 fix: las copias de hojas que Excel nombra '12 (2)' SON
+        # válidas (mismo formato de programación). Antes el regex las
+        # excluía silenciosamente y se perdían filas de avisos.
+        return bool(re.fullmatch(r's?(emana)?[\s_]*\d+(\s*\(\d+\))?', nombre))
 
     def _resultado_error(self, mensaje):
         return {
@@ -1015,6 +1018,53 @@ class ProgramacionSemanalImporter:
                 if cell_lower in posibles and field_name not in self.column_indices:
                     self.column_indices[field_name] = col_idx
                     break
+
+    @staticmethod
+    def _localizar_header(rows):
+        """B5 fix: encuentra la fila índice cuyas celdas contienen el header
+        ('#' + 'AVISOS' + 'ACTIVIDAD'). Busca en las primeras 6 filas.
+
+        Devuelve el índice (0-based) o None si no encuentra.
+        Antes el código asumía rows[1] siempre; falla cuando el archivo trae
+        2 filas de banner o si las plantillas evolucionan.
+        """
+        for idx in range(min(6, len(rows))):
+            row = rows[idx]
+            celdas = {str(c).lower().strip() for c in row if c is not None}
+            if '#' in celdas and 'avisos' in celdas and 'actividad' in celdas:
+                return idx
+        return None
+
+    @staticmethod
+    def _es_numero_actividad(numero_str):
+        """B5 fix: una fila es actividad real si '#' es un entero positivo.
+        Filtra ruido como '-' (separador), 'NOVEDADES' (sección final),
+        notas libres, etc. — los archivos reales de planta tienen estas
+        filas mezcladas con las actividades.
+        """
+        s = str(numero_str).strip()
+        if not s:
+            return False
+        return s.isdigit() and int(s) > 0
+
+    def _crear_torre_placeholder(self, linea):
+        """B5 fix: cuando una línea no tiene torres registradas todavía,
+        crear una torre placeholder 'T-AUTO' para no perder la actividad.
+        Coordenadas (0,0) marcadas para que mantenimiento las corrija.
+        """
+        from apps.lineas.models import Torre
+        torre, _ = Torre.objects.get_or_create(
+            linea=linea,
+            numero='T-AUTO',
+            defaults={
+                'tipo': Torre.TipoTorre.SUSPENSION,
+                'estado': Torre.EstadoTorre.BUENO,
+                'latitud': 0,
+                'longitud': 0,
+                'observaciones': 'Torre placeholder creada por importer de programación semanal — corregir coordenadas',
+            },
+        )
+        return torre
 
     def _get_cell(self, row, field_name):
         idx = self.column_indices.get(field_name)
@@ -1043,7 +1093,18 @@ class ProgramacionSemanalImporter:
         if len(rows) < 3:
             return {'creadas': 0, 'actualizadas': 0, 'omitidas': 0, 'nota': 'hoja vacía'}
 
-        self._detectar_columnas(rows[1])
+        # B5 fix: detectar la fila del header dinámicamente (puede no ser
+        # row index 1). Algunos archivos tienen el banner extendido a 2-3
+        # filas y el header termina en row index 2 o 3.
+        header_row_idx = self._localizar_header(rows)
+        if header_row_idx is None:
+            self.advertencias.append({
+                'hoja': sheet.title,
+                'mensaje': 'no se pudo localizar fila de encabezados; hoja omitida',
+            })
+            return {'creadas': 0, 'actualizadas': 0, 'omitidas': 0, 'nota': 'sin header'}
+
+        self._detectar_columnas(rows[header_row_idx])
         requeridos = {'numero', 'tipo_actividad', 'linea', 'avisos'}
         faltantes = requeridos - set(self.column_indices)
         if faltantes:
@@ -1059,11 +1120,19 @@ class ProgramacionSemanalImporter:
         actividades_cuadrilla_pendiente = []  # [(actividad_obj, [cedulas])]
         current_actividad_idx = None  # idx en actividades_cuadrilla_pendiente
 
-        for row_idx, row in enumerate(rows[2:], start=3):
+        for row_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
             numero = self._get_cell(row, 'numero')
             cedula = self._get_cell(row, 'cedula')
 
-            if numero is None or str(numero).strip() == '':
+            numero_str = '' if numero is None else str(numero).strip()
+
+            # B5 fix: filas con '#' no-numérico ('-', 'NOVEDADES', notas)
+            # NO son actividades ni miembros; ignorarlas silenciosamente
+            # sin avanzar current_actividad_idx ni contarlas como omitidas.
+            if numero_str and not self._es_numero_actividad(numero_str):
+                continue
+
+            if numero_str == '':
                 # Fila de personal — agregar cédula a actividad anterior
                 if current_actividad_idx is not None and cedula:
                     actividades_cuadrilla_pendiente[current_actividad_idx][1].append(cedula)
@@ -1105,15 +1174,17 @@ class ProgramacionSemanalImporter:
                 omitidas += 1
                 continue
 
-            # Resolver torre — primera disponible de la línea
+            # Resolver torre — primera disponible de la línea.
+            # B5 fix: si la línea no tiene torres, NO descartar la actividad
+            # (estaba perdiéndolas en silencio). Crear placeholder T-AUTO.
             torre = linea_obj.torres.order_by('numero').first()
             if torre is None:
+                torre = self._crear_torre_placeholder(linea_obj)
                 self.advertencias.append({
                     'hoja': sheet.title, 'fila': row_idx,
-                    'mensaje': f'línea {linea_obj.codigo} sin torres — omitida',
+                    'mensaje': f'línea {linea_obj.codigo} sin torres — '
+                               f'creada torre placeholder {torre.numero!r}',
                 })
-                omitidas += 1
-                continue
 
             # Resolver tipo_actividad
             tipo_obj = self._resolver_tipo_actividad(tipo_actividad_raw)

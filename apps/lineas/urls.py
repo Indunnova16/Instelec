@@ -1,5 +1,10 @@
 """
-Lineas URL patterns.
+Lineas URL patterns — aggregator.
+
+Pre-block: a single list. After block `portafolio_sofi_may2026` (F2 scaffolding
+S1) sub-features may declare their own urlpatterns in `urls_<sub_id>.py` (B2.1
+uses `views_b21.urlpatterns` exposed through that module). They get appended
+here so include('apps.lineas.urls') keeps resolving every route.
 """
 from django.urls import path
 from . import views
@@ -31,3 +36,11 @@ urlpatterns = [
     path('mi-avance/<uuid:pk>/marcar/', views.MarcarActividadCompletadaView.as_view(), name='marcar_actividad_completada'),
     path('api/torres/<uuid:pk>/observaciones/', views.TorreUpdateObservacionesView.as_view(), name='torre_update_observaciones'),
 ]
+
+# B2.1 — Sub-feature urls. Optional import so the repo stays importable before F3
+# writes views_b21.py / urls_b21.py.
+try:
+    from . import views_b21  # noqa: F401
+    urlpatterns += views_b21.urlpatterns
+except ImportError:
+    pass

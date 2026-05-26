@@ -1,5 +1,11 @@
 """
-Cuadrillas URL patterns.
+Cuadrillas URL patterns — aggregator.
+
+Pre-block: a single list. After block `portafolio_sofi_may2026` (F2 scaffolding
+S1) sub-features may declare their own urlpatterns in `urls_<sub_id>.py`. B3
+adds Reactivate/filter routes; B4 adds CuadrillaUpload/DescargarPlantilla
+routes. They get appended here so include('apps.cuadrillas.urls') keeps
+resolving every route.
 """
 from django.urls import path
 from . import views
@@ -26,3 +32,17 @@ urlpatterns = [
     path('mapa/partial/', views.MapaCuadrillasPartialView.as_view(), name='mapa_partial'),
     path('ubicaciones/json/', views.MapaCuadrillasPartialView.as_view(), name='ubicaciones_json'),
 ]
+
+# B3 — Cuadrilla auditoria/reactivar routes. Optional import.
+try:
+    from . import views_b3  # noqa: F401
+    urlpatterns += views_b3.urlpatterns
+except ImportError:
+    pass
+
+# B4 — Carga masiva via Excel. Optional import.
+try:
+    from . import views_b4  # noqa: F401
+    urlpatterns += views_b4.urlpatterns
+except ImportError:
+    pass

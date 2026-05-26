@@ -1,0 +1,41 @@
+{# B2.1 — Filtro por Semestre (S1/S2/TA). Plantado por F2 con `ignore missing`. #}
+{# Compatible con vistas que renderean `linea` (detalle) o `lineas` (avance_registrar). #}
+{% with current=request.GET.semestre %}
+<div
+    x-data="{
+        sem: '{{ current|default:'' }}',
+        irA(value) {
+            const url = new URL(window.location.href);
+            if (value) {
+                url.searchParams.set('semestre', value);
+            } else {
+                url.searchParams.delete('semestre');
+            }
+            window.location.href = url.toString();
+        }
+    }"
+    class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between border border-gray-200 dark:border-gray-700"
+    data-testid="b21-filtro-semestre"
+>
+    <div class="flex items-center gap-3">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Período:</span>
+        <select
+            x-model="sem"
+            @change="irA(sem)"
+            class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white text-sm"
+            data-testid="b21-filtro-semestre-select"
+        >
+            <option value="">Todos los semestres</option>
+            <option value="S1">Semestre 1 (Ene–Jun)</option>
+            <option value="S2">Semestre 2 (Jul–Dic)</option>
+            <option value="TA">Todo el año</option>
+        </select>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span x-show="sem === 'S1'">Mostrando solo vanos S1.</span>
+        <span x-show="sem === 'S2'">Mostrando solo vanos S2.</span>
+        <span x-show="sem === 'TA'">Mostrando solo vanos Todo el Año.</span>
+        <span x-show="!sem">Mostrando todos los vanos.</span>
+    </div>
+</div>
+{% endwith %}
