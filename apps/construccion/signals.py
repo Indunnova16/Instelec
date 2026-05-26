@@ -126,3 +126,7 @@ def capturar_estado_previo_kit(sender, instance, **kwargs):
         instance._previo_estado = previo.estado
     except KitCerramiento.DoesNotExist:
         pass
+
+
+# B3a (#76) — signal post_save MontajeEstructuraTorreDetalle → cache legacy
+from . import signals_b3_mont_detalle  # noqa: F401,E402
