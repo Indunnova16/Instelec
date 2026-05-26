@@ -671,19 +671,43 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         """
         Construye el contexto de la vista de registro de avances.
 
-        Maneja explícitamente tres rutas para que la UI muestre el mensaje
-        correcto en cada caso (no confundir "sin permiso" con "sin vanos"):
+        Envuelto en try/except con logger.exception para capturar tracebacks
+        en Cloud Run (Django con DEBUG=False y sin LOGGING handler explícito
+        suprime el stderr de excepciones de vista). Refs: #101 (B1.2 hotfix).
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            return self._build_context(**kwargs)
+        except Exception as exc:
+            logger.exception(
+                "RegistroAvanceCreateView 500: linea_id=%r usuario=%r rol=%r — %s",
+                self.request.GET.get('linea_id', ''),
+                getattr(self.request.user, 'email', '?'),
+                getattr(self.request.user, 'rol', '?'),
+                exc,
+            )
+            ctx = super().get_context_data(**kwargs)
+            ctx['error'] = (
+                'Ocurrió un error al cargar la vista. El equipo técnico ya fue '
+                'notificado vía logs. Intentá refrescar o consultá soporte.'
+            )
+            ctx['lineas'] = []
+            ctx['permission_denied'] = False
+            ctx['es_admin'] = False
+            return ctx
+
+    def _build_context(self, **kwargs):
+        """
+        Construye el contexto real. Tres rutas:
 
         - ``context['error']``: mensaje técnico/funcional bloqueante
           (UUID inválido, línea no encontrada, sin cuadrilla asignada).
-        - ``context['permission_denied']`` + ``context['error']``: el usuario
-          existe y no es admin, pero no es miembro activo de una cuadrilla
-          asignada a la línea solicitada — mensaje claro al usuario, no
-          ambiguo "no hay vanos".
-        - ``context['vanos']`` vacío + ``context['linea']`` presente: la línea
-          existe pero no tiene vanos registrados (empty state real).
-
-        Refs: #101 (B1.2)
+        - ``context['permission_denied']`` + ``context['error']``: usuario
+          no admin sin membresía activa a cuadrilla de esa línea — mensaje
+          claro, no ambiguo "no hay vanos".
+        - ``context['vanos']`` vacío + ``context['linea']`` presente: la
+          línea existe pero no tiene vanos registrados (empty state real).
         """
         from uuid import UUID
 
@@ -694,7 +718,12 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
         context = super().get_context_data(**kwargs)
         usuario = self.request.user
-        es_admin = usuario.rol in ['admin', 'director', 'coordinador', 'ing_residente']
+        # admin_general (RBAC v2 desde #44) es el rol admin canónico de
+        # Instelec. Sin esto, qa_claude y otros admins RBAC v2 caen al
+        # branch trabajador y fallan al renderizar.
+        es_admin = usuario.rol in [
+            'admin', 'admin_general', 'director', 'coordinador', 'ing_residente'
+        ]
         linea_id = self.request.GET.get('linea_id', '').strip()
 
         context['es_admin'] = es_admin
