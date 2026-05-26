@@ -209,61 +209,18 @@ class TestPesosUpdate:
 
 
 @pytest.mark.django_db
-class TestAvanceUpdate:
-    """POST /obra-civil/torres/<id>/avance/ actualiza una celda."""
+class TestAvanceUpdateGone:
+    """Endpoint legacy /obra-civil/torres/<id>/avance/ deprecado a 410 Gone (PR #113).
 
-    def test_post_avance_valido_persiste(self, admin_client, proyecto, torres):
+    La edición directa de la matriz quedó reemplazada por ObraCivilDetalleSeccionView
+    (paridad campo-a-campo Excel, granularidad torre × pata). Los tests legacy de
+    validación de cascada/rango/columna se reubicaron en tests_b3_oc_detalle_views.
+    """
+
+    def test_post_endpoint_legacy_devuelve_410(self, admin_client, proyecto, torres):
         url = reverse("construccion:obra_civil_avance_update",
                       kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
         resp = admin_client.post(url, {"columna": "cerramiento", "valor": "0.8"})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert data["avance_ponderado_pct"] == pytest.approx(4.0, abs=0.05)  # 0.8 × 5% = 4%
-        oc = ObraCivilTorre.objects.get(proyecto=proyecto, torre=torres[0])
-        assert oc.avance_cerramiento == Decimal("0.8")
-
-    def test_post_columna_invalida_rechaza(self, admin_client, proyecto, torres):
-        url = reverse("construccion:obra_civil_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        resp = admin_client.post(url, {"columna": "fantasma", "valor": "0.5"})
-        assert resp.status_code == 400
-
-    def test_post_valor_fuera_de_rango_rechaza(self, admin_client, proyecto, torres):
-        url = reverse("construccion:obra_civil_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        resp = admin_client.post(url, {"columna": "cerramiento", "valor": "1.5"})
-        assert resp.status_code == 400
-
-    def test_post_valor_negativo_rechaza(self, admin_client, proyecto, torres):
-        url = reverse("construccion:obra_civil_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        resp = admin_client.post(url, {"columna": "cerramiento", "valor": "-0.1"})
-        assert resp.status_code == 400
-
-    def test_post_torre_de_otro_proyecto_404(self, admin_client, proyecto, torres):
-        # Crear otro proyecto y torre.
-        contrato2 = Contrato.objects.create(
-            unidad_negocio=Contrato.UnidadNegocio.CONSTRUCCION,
-            codigo="CT-OTRO", nombre="Otro", cliente="X",
-            estado=Contrato.Estado.ACTIVO,
-        )
-        proyecto2 = ProyectoConstruccion.objects.create(
-            contrato=contrato2, nombre="Otro", estado="EJECUCION",
-        )
-        torre_otro = TorreConstruccion.objects.create(
-            proyecto=proyecto2, numero="X-001", tipo="A",
-        )
-        url = reverse("construccion:obra_civil_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torre_otro.id})
-        resp = admin_client.post(url, {"columna": "cerramiento", "valor": "0.5"})
-        assert resp.status_code == 404
-
-    def test_post_get_or_create_torre_sin_oc(self, admin_client, proyecto, torres):
-        """Si la torre no tiene ObraCivilTorre todavía, el POST debe crearla."""
-        assert not ObraCivilTorre.objects.filter(torre=torres[0]).exists()
-        url = reverse("construccion:obra_civil_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        resp = admin_client.post(url, {"columna": "excavacion", "valor": "0.5"})
-        assert resp.status_code == 200
-        assert ObraCivilTorre.objects.filter(torre=torres[0]).exists()
+        assert resp.status_code == 410
+        assert resp.json()["error"] == "gone"
+        assert "/detalle/" in resp.json()["detail"]
