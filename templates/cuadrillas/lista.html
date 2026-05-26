@@ -4,6 +4,8 @@
 
 {% block content %}
 <main class="space-y-6" role="main" aria-label="Gestion de cuadrillas de trabajo">
+    {# B3 hook (Sofi mayo 2026) — filtro activas/inactivas/todas. Sub-feature crea templates/cuadrillas/_filtro_estado.html. #}
+    {% include 'cuadrillas/_filtro_estado.html' ignore missing %}
     <!-- Header -->
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>

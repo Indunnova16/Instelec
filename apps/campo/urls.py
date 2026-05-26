@@ -1,5 +1,10 @@
 """
-Campo URL patterns.
+Campo URL patterns — aggregator.
+
+Pre-block: a single list. After block `portafolio_sofi_may2026` (F2 scaffolding
+S1) sub-features may declare their own urlpatterns in `urls_<sub_id>.py`. B6
+exposes ProcedimientoDownloadView/proxy via views_b6.urlpatterns. They get
+appended here so include('apps.campo.urls') keeps resolving every route.
 """
 from django.urls import path
 from . import views
@@ -29,3 +34,10 @@ urlpatterns = [
     path('avance/registrar/', views.RegistroAvanceCreateView.as_view(), name='avance_registrar'),
     path('mis-avances/', views.MisAvancesListView.as_view(), name='mis_avances'),
 ]
+
+# B6 — ProcedimientoDownloadView proxy GCS (fix CORS preview). Optional import.
+try:
+    from . import views_b6  # noqa: F401
+    urlpatterns += views_b6.urlpatterns
+except ImportError:
+    pass
