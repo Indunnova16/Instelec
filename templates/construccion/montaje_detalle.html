@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% block title %}Montaje · T{{ torre.numero }} — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+<div class="space-y-6">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-3 text-sm text-gray-500">
+        <a href="{% url 'construccion:montaje_lista' proyecto_id=proyecto.id %}"
+           class="hover:text-blue-600">Montaje (resumen)</a>
+        <span aria-hidden="true">/</span>
+        <span class="text-gray-700 font-medium">Torre {{ torre.numero }}</span>
+      </div>
+      <h1 class="mt-1 text-2xl font-bold text-gray-900">
+        Montaje · Torre {{ torre.numero }}
+      </h1>
+      <p class="text-sm text-gray-500 mt-0.5">
+        Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <!-- Funcion badge -->
+      <div class="flex flex-col items-end">
+        <span class="text-xs uppercase tracking-wide text-gray-500">Funcion</span>
+        <span class="mt-0.5 inline-flex items-center px-3 py-1 rounded-md text-sm font-semibold
+                     {% if funcion == 'Suspension' or funcion == 'Suspensión' %}bg-amber-100 text-amber-800
+                     {% elif funcion == 'Retencion' or funcion == 'Retención' %}bg-emerald-100 text-emerald-800
+                     {% else %}bg-gray-100 text-gray-500{% endif %}">
+          {% if funcion %}{{ funcion }}{% else %}—{% endif %}
+        </span>
+      </div>
+
+      <!-- Avance ponderado -->
+      <div class="flex flex-col items-end bg-blue-50 rounded-lg px-4 py-2">
+        <span class="text-xs uppercase tracking-wide text-blue-700">Avance ponderado</span>
+        <span id="mont-avance-ponderado" class="text-2xl font-bold text-blue-700"
+              data-pct="{{ avance_ponderado_pct }}">{{ avance_ponderado_pct }}%</span>
+      </div>
+
+      {% if peso_alerta %}
+      <!-- Warning visual peso -->
+      <div class="flex flex-col items-end bg-amber-100 border border-amber-300 rounded-lg px-3 py-2"
+           id="mont-warning-peso-header" data-peso-alerta="true">
+        <span class="text-xs uppercase tracking-wide text-amber-800">Alerta peso</span>
+        <span class="text-sm font-semibold text-amber-900">Desviacion &gt; 5%</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Tabs horizontales (7 secciones) -->
+  <div class="bg-white border border-gray-200 rounded-lg shadow-sm">
+    <div class="px-4 pt-2">
+      {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas orientacion="horizontal" %}
+    </div>
+
+    <div class="px-4 py-5">
+      {% if seccion_activa == 'general' %}
+        {% include "construccion/partials/mont_seccion_general.html" %}
+      {% elif seccion_activa == 'recepcion' %}
+        {% include "construccion/partials/mont_seccion_recepcion.html" %}
+      {% elif seccion_activa == 'prearmado' %}
+        {% include "construccion/partials/mont_seccion_prearmado.html" %}
+      {% elif seccion_activa == 'montaje' %}
+        {% include "construccion/partials/mont_seccion_montaje.html" %}
+      {% elif seccion_activa == 'controles' %}
+        {% include "construccion/partials/mont_seccion_controles.html" %}
+      {% elif seccion_activa == 'pesos' %}
+        {% include "construccion/partials/mont_seccion_pesos.html" %}
+      {% elif seccion_activa == 'facturacion' %}
+        {% include "construccion/partials/mont_seccion_facturacion.html" %}
+      {% else %}
+        <p class="text-sm text-gray-500">Seccion no encontrada.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="text-xs text-gray-500">
+    Granularidad por torre (OneToOne). El cache legacy se mantiene fresco
+    automaticamente al guardar (signal B3a).
+  </p>
+</div>
+
+<script>
+(function () {
+  // Handler comun para los 7 forms - POST AJAX, actualiza UI sin recargar.
+  function getCookie(name) {
+    const m = document.cookie.match('(?:^|;)\\s*' + name + '=([^;]+)');
+    return m ? m[1] : '';
+  }
+
+  document.querySelectorAll('form[data-seccion]').forEach(function (frm) {
+    frm.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      const seccion = frm.dataset.seccion;
+      const msgEl = document.getElementById('mont-msg-' + seccion);
+      const btn = frm.querySelector('button[type=submit]');
+      if (btn) btn.disabled = true;
+      if (msgEl) {
+        msgEl.classList.remove('hidden', 'text-green-600', 'text-red-600');
+        msgEl.classList.add('text-gray-500');
+        msgEl.textContent = 'Guardando...';
+      }
+      try {
+        const fd = new FormData(frm);
+        const r = await fetch(frm.action, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          if (msgEl) {
+            msgEl.classList.remove('text-gray-500', 'text-red-600');
+            msgEl.classList.add('text-green-600');
+            msgEl.textContent = 'Guardado. Avance ponderado: ' + data.avance_ponderado_pct + '%';
+          }
+          const av = document.getElementById('mont-avance-ponderado');
+          if (av) {
+            av.textContent = data.avance_ponderado_pct + '%';
+            av.dataset.pct = data.avance_ponderado_pct;
+          }
+          // Hooks por seccion
+          if (seccion === 'general' && data.funcion !== undefined) {
+            const badge = document.getElementById('mont-funcion-badge');
+            if (badge) {
+              badge.dataset.funcion = data.funcion;
+              badge.textContent = data.funcion || '—';
+            }
+          }
+          if (seccion === 'pesos') {
+            const w = document.getElementById('mont-warning-peso-header');
+            if (data.peso_alerta && !w) {
+              location.reload();
+            } else if (!data.peso_alerta && w) {
+              w.remove();
+            }
+          }
+          if (seccion === 'montaje' && data.dias_montaje !== undefined) {
+            const d = document.getElementById('mont-dias-montaje');
+            if (d) {
+              d.dataset.dias = data.dias_montaje === null ? '' : data.dias_montaje;
+              d.textContent = data.dias_montaje === null ? '—' : (data.dias_montaje + ' dias');
+            }
+          }
+        } else {
+          if (msgEl) {
+            msgEl.classList.remove('text-gray-500', 'text-green-600');
+            msgEl.classList.add('text-red-600');
+            const errs = data.errors ? Object.keys(data.errors).join(', ') : (data.error || 'Error');
+            msgEl.textContent = 'Error: ' + errs;
+          }
+        }
+      } catch (e) {
+        if (msgEl) {
+          msgEl.classList.remove('text-gray-500', 'text-green-600');
+          msgEl.classList.add('text-red-600');
+          msgEl.textContent = 'Error de red.';
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  });
+})();
+</script>
+{% endlocalize %}
+{% endblock %}

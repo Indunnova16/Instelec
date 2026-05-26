@@ -1,1 +1,93 @@
-{% comment %}stub plantado por F2 — sobrescrito por B3b en F3{% endcomment %}
+{% comment %}
+B3b - Partial seccion Montaje del detalle.
+Campos: montaje_encargado, montaje_fecha_inicio, montaje_fecha_fin,
+        torre_montada_ok, montaje_observaciones
+Muestra read-only `dias_montaje` (@property) cuando ambas fechas estan.
+{% endcomment %}
+
+<form id="mont-form-montaje" method="post" action="{{ save_url }}"
+      class="space-y-4"
+      data-seccion="montaje">
+  {% csrf_token %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label for="{{ seccion_form.montaje_encargado.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Encargado de montaje
+      </label>
+      {{ seccion_form.montaje_encargado }}
+      {% if seccion_form.montaje_encargado.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.montaje_encargado.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <span class="block text-sm font-medium text-gray-700 mb-1">Dias de montaje</span>
+      <span id="mont-dias-montaje" data-dias="{{ dias_montaje|default_if_none:'' }}"
+            class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-semibold
+                   bg-blue-50 text-blue-800">
+        {% if dias_montaje is not None %}{{ dias_montaje }} dias{% else %}—{% endif %}
+      </span>
+      <p class="mt-1 text-xs text-gray-500">Diferencia fecha_fin - fecha_inicio.</p>
+    </div>
+
+    <div>
+      <label for="{{ seccion_form.montaje_fecha_inicio.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Montaje - fecha inicio
+      </label>
+      {{ seccion_form.montaje_fecha_inicio }}
+      {% if seccion_form.montaje_fecha_inicio.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.montaje_fecha_inicio.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <label for="{{ seccion_form.montaje_fecha_fin.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Montaje - fecha fin
+      </label>
+      {{ seccion_form.montaje_fecha_fin }}
+      {% if seccion_form.montaje_fecha_fin.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.montaje_fecha_fin.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="pt-2">
+    <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+      {{ seccion_form.torre_montada_ok }}
+      <span>Torre montada <span class="text-xs text-gray-500">(peso 45%)</span></span>
+    </label>
+  </div>
+
+  <div>
+    <label for="{{ seccion_form.montaje_observaciones.id_for_label }}"
+           class="block text-sm font-medium text-gray-700 mb-1">
+      Observaciones de montaje
+    </label>
+    {{ seccion_form.montaje_observaciones }}
+    {% if seccion_form.montaje_observaciones.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ seccion_form.montaje_observaciones.errors|join:", " }}</p>
+    {% endif %}
+  </div>
+
+  {% if seccion_form.non_field_errors %}
+    <div class="rounded-md bg-red-50 border border-red-200 p-3">
+      <p class="text-sm text-red-800">{{ seccion_form.non_field_errors|join:", " }}</p>
+    </div>
+  {% endif %}
+
+  <div class="flex items-center justify-between pt-3 border-t border-gray-200">
+    <p class="text-xs text-gray-500">El avance ponderado pasa al cache legacy via signal.</p>
+    <button type="submit"
+            class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white
+                   text-sm font-medium rounded-md shadow-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
+      Guardar seccion
+    </button>
+  </div>
+
+  <div id="mont-msg-montaje" class="hidden text-sm" role="status"></div>
+</form>
