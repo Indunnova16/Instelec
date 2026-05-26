@@ -1,6 +1,7 @@
-{# B3 — KPI card individual. Espera 'kpi' en contexto con keys:
-   key, label, value, unit, status, accent ('green'|'amber'|'red'), description.
-#}
+{% comment %}
+B3 — KPI card individual. Espera 'kpi' en contexto con keys:
+key, label, value, unit, status, accent ('green'|'amber'|'red'), description.
+{% endcomment %}
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4
             border-l-4
             {% if kpi.accent == 'green' %}border-green-500

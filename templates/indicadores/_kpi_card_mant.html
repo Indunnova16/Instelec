@@ -1,5 +1,7 @@
-{# KPI card generica de Mantenimiento.
-   Espera contexto: kpi = {label, valor, sufijo, meta_label, ok, color_ok, color_ko} #}
+{% comment %}
+KPI card generica de Mantenimiento.
+Espera contexto: kpi = {label, valor, sufijo, meta_label, ok, color_ok, color_ko}
+{% endcomment %}
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 {% if kpi.ok %}{{ kpi.color_ok|default:'border-green-500' }}{% else %}{{ kpi.color_ko|default:'border-amber-500' }}{% endif %}">
     <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{{ kpi.label }}</p>
     <p class="text-3xl font-bold {% if kpi.ok %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
