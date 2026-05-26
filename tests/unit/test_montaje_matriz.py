@@ -129,57 +129,19 @@ class TestMontajePesosUpdate:
 
 
 @pytest.mark.django_db
-class TestMontajeAvanceUpdate:
-    def test_avance_valido(self, admin_client, proyecto, torres):
+class TestMontajeAvanceUpdateGone:
+    """Endpoint legacy /montaje/torres/<id>/avance/ deprecado a 410 Gone (PR #113).
+
+    La edición directa de la matriz quedó reemplazada por MontajeDetalleSaveView
+    (paridad campo-a-campo Excel, granularidad OneToOne torre). Cascada lógica
+    ahora se valida en MontSeccionMontajeForm. Los tests de cascada se reubican
+    en tests_b3_mont_detalle_views.
+    """
+
+    def test_post_endpoint_legacy_devuelve_410(self, admin_client, proyecto, torres):
         url = reverse("construccion:montaje_avance_update",
                       kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
         resp = admin_client.post(url, {"columna": "estructura_sitio", "valor": "1.0"})
-        assert resp.status_code == 200
-        data = resp.json()
-        # estructura_sitio=1, otros=0 → ponderado = 10%
-        assert data["avance_ponderado_pct"] == pytest.approx(10.0, abs=0.05)
-
-    def test_cascada_prearmada_no_excede_estructura(self, admin_client, proyecto, torres):
-        """Prearmada > estructura_sitio → 400."""
-        url = reverse("construccion:montaje_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        # estructura_sitio queda en 0 por default
-        resp = admin_client.post(url, {"columna": "prearamada", "valor": "0.5"})
-        assert resp.status_code == 400
-        assert "Estructura en sitio" in resp.json()["error"]
-
-    def test_cascada_torre_montada_no_excede_prearmada(self, admin_client, proyecto, torres):
-        url = reverse("construccion:montaje_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        # Subo estructura primero a 1
-        admin_client.post(url, {"columna": "estructura_sitio", "valor": "1"})
-        # Sin prearmada, no puedo poner torre_montada
-        resp = admin_client.post(url, {"columna": "torre_montada", "valor": "0.5"})
-        assert resp.status_code == 400
-        assert "Prearmada" in resp.json()["error"]
-
-    def test_cascada_revisada_requiere_torre_montada_100(self, admin_client, proyecto, torres):
-        url = reverse("construccion:montaje_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        admin_client.post(url, {"columna": "estructura_sitio", "valor": "1"})
-        admin_client.post(url, {"columna": "prearamada", "valor": "1"})
-        admin_client.post(url, {"columna": "torre_montada", "valor": "0.8"})  # < 1
-        resp = admin_client.post(url, {"columna": "revisada", "valor": "0.5"})
-        assert resp.status_code == 400
-        assert "Torre Montada" in resp.json()["error"]
-        # Si subo torre_montada a 1, revisada se habilita:
-        admin_client.post(url, {"columna": "torre_montada", "valor": "1"})
-        resp = admin_client.post(url, {"columna": "revisada", "valor": "0.5"})
-        assert resp.status_code == 200
-
-    def test_columna_invalida(self, admin_client, proyecto, torres):
-        url = reverse("construccion:montaje_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        resp = admin_client.post(url, {"columna": "xxx", "valor": "0.5"})
-        assert resp.status_code == 400
-
-    def test_valor_fuera_de_rango(self, admin_client, proyecto, torres):
-        url = reverse("construccion:montaje_avance_update",
-                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
-        resp = admin_client.post(url, {"columna": "estructura_sitio", "valor": "1.5"})
-        assert resp.status_code == 400
+        assert resp.status_code == 410
+        assert resp.json()["error"] == "gone"
+        assert "/detalle/" in resp.json()["detail"]

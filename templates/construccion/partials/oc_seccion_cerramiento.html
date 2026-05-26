@@ -1,0 +1,59 @@
+{% comment %}
+  B2b (#74) — Partial Sección Cerramiento (5 campos).
+
+  Render: form ligado a OCSeccionCerramientoForm.
+  Submit AJAX via x-data ocDetalle (parent scope).
+{% endcomment %}
+{% load l10n %}
+<form @submit.prevent="submitForm($event.target)" class="space-y-4"
+      data-section-form="cerramiento">
+  {% csrf_token %}
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Cerramiento</h2>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.cerr_madera_un.label }}</span>
+      {{ form.cerr_madera_un }}
+      {% if form.cerr_madera_un.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.cerr_madera_un.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.cerr_lona_m.label }}</span>
+      {{ form.cerr_lona_m }}
+      {% if form.cerr_lona_m.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.cerr_lona_m.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  <div class="flex flex-col gap-2">
+    <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+      {{ form.cerr_senalizacion_ok }}
+      <span>{{ form.cerr_senalizacion_ok.label }}</span>
+    </label>
+    <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+      {{ form.cerr_finalizado_ok }}
+      <span>{{ form.cerr_finalizado_ok.label }}</span>
+    </label>
+  </div>
+
+  <label class="flex flex-col">
+    <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.cerr_notas.label }}</span>
+    {{ form.cerr_notas }}
+    {% if form.cerr_notas.errors %}
+      <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.cerr_notas.errors|join:", " }}</span>
+    {% endif %}
+  </label>
+
+  <div class="flex justify-end">
+    <button type="submit"
+            :disabled="enviando"
+            :class="enviando ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition"
+            data-action="guardar-seccion">
+      <span x-text="enviando ? 'Guardando…' : 'Guardar sección'"></span>
+    </button>
+  </div>
+</form>

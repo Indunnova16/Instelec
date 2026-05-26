@@ -1,0 +1,77 @@
+{% comment %}
+  B2b (#74) — Partial Sección Acero (12 campos).
+{% endcomment %}
+{% load l10n %}
+<form @submit.prevent="submitForm($event.target)" class="space-y-4"
+      data-section-form="acero">
+  {% csrf_token %}
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Acero</h2>
+
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ingreso }}<span>{{ form.ace_ingreso.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ft028_ok }}<span>{{ form.ace_ft028_ok.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ft930_ok }}<span>{{ form.ace_ft930_ok.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_corte_flejado_ok }}<span>{{ form.ace_corte_flejado_ok.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_armado_sitio_ok }}<span>{{ form.ace_armado_sitio_ok.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_spt_herramientas_ok }}<span>{{ form.ace_spt_herramientas_ok.label }}</span></label>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.ace_solicitado_kg.label }}</span>
+      {{ form.ace_solicitado_kg }}
+      {% if form.ace_solicitado_kg.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.ace_solicitado_kg.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.ace_instalado_kg.label }}</span>
+      {{ form.ace_instalado_kg }}
+      {% if form.ace_instalado_kg.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.ace_instalado_kg.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.ace_instalacion_pct.label }}</span>
+      {{ form.ace_instalacion_pct }}
+      <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">0–1</span>
+      {% if form.ace_instalacion_pct.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.ace_instalacion_pct.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  {% if detalle %}
+  <div class="text-xs text-gray-500 dark:text-gray-400">
+    Desviación kg (instalado − solicitado): <span data-desv="acero">{{ detalle.ace_desviacion_kg|default:"—" }}</span>
+  </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.ace_observaciones.label }}</span>
+      {{ form.ace_observaciones }}
+      {% if form.ace_observaciones.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.ace_observaciones.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.ace_instalacion_obs.label }}</span>
+      {{ form.ace_instalacion_obs }}
+      {% if form.ace_instalacion_obs.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.ace_instalacion_obs.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  <div class="flex justify-end">
+    <button type="submit"
+            :disabled="enviando"
+            :class="enviando ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition"
+            data-action="guardar-seccion">
+      <span x-text="enviando ? 'Guardando…' : 'Guardar sección'"></span>
+    </button>
+  </div>
+</form>

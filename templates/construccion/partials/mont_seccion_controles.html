@@ -1,0 +1,61 @@
+{% comment %}
+B3b - Partial seccion Controles de Calidad del detalle Montaje.
+Campos: ft032_control_montaje_ok, ft913_verticalidad_torsion_ok,
+        ft920_recepcion_montaje_ok, revisada_ok, entregada_para_carga_ok
+{% endcomment %}
+
+<form id="mont-form-controles" method="post" action="{{ save_url }}"
+      class="space-y-4"
+      data-seccion="controles">
+  {% csrf_token %}
+
+  <div class="rounded-md border border-gray-200 bg-gray-50 p-4">
+    <h3 class="text-sm font-semibold text-gray-800 mb-3">Formatos tecnicos</h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        {{ seccion_form.ft032_control_montaje_ok }}
+        <span>FT-032 Control montaje</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        {{ seccion_form.ft913_verticalidad_torsion_ok }}
+        <span>FT-913 Verticalidad y torsion</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        {{ seccion_form.ft920_recepcion_montaje_ok }}
+        <span>FT-920 Recepcion de montaje</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="rounded-md border border-gray-200 bg-gray-50 p-4">
+    <h3 class="text-sm font-semibold text-gray-800 mb-3">Cierre de etapa</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        {{ seccion_form.revisada_ok }}
+        <span>Revisada <span class="text-xs text-gray-500">(peso 25%)</span></span>
+      </label>
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        {{ seccion_form.entregada_para_carga_ok }}
+        <span>Entregada para carga <span class="text-xs text-gray-500">(habilita Tendido)</span></span>
+      </label>
+    </div>
+  </div>
+
+  {% if seccion_form.errors %}
+    <div class="rounded-md bg-red-50 border border-red-200 p-3">
+      <p class="text-sm text-red-800">Hay errores en los campos.</p>
+    </div>
+  {% endif %}
+
+  <div class="flex items-center justify-between pt-3 border-t border-gray-200">
+    <p class="text-xs text-gray-500">Marcar cuando los formatos esten firmados por interventoria.</p>
+    <button type="submit"
+            class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white
+                   text-sm font-medium rounded-md shadow-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
+      Guardar seccion
+    </button>
+  </div>
+
+  <div id="mont-msg-controles" class="hidden text-sm" role="status"></div>
+</form>

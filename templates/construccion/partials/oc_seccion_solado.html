@@ -1,0 +1,92 @@
+{% comment %}
+  B2b (#74) — Partial Sección Solado (20 campos: ingreso + 4 sub-bloques × 3 + 4 trailer).
+
+  Sub-bloques agrupados en grid 4×3 (agua/arena/grava/cemento × calc/real/obs).
+  Mostramos `*_desv` calculado por @property en modelo.
+{% endcomment %}
+{% load l10n %}
+<form @submit.prevent="submitForm($event.target)" class="space-y-4"
+      data-section-form="solado">
+  {% csrf_token %}
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Solado</h2>
+
+  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+    {{ form.sol_ingreso_materiales }}
+    <span>{{ form.sol_ingreso_materiales.label }}</span>
+  </label>
+
+  <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">
+      Materiales (calculado vs real)
+    </legend>
+    <div class="grid grid-cols-4 gap-3 mt-2 text-sm">
+      <span class="font-medium text-gray-500"></span>
+      <span class="font-medium text-gray-500">Calculado</span>
+      <span class="font-medium text-gray-500">Real</span>
+      <span class="font-medium text-gray-500">Observaciones</span>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Agua</span>
+      <div>{{ form.sol_agua_calc }}{% if form.sol_agua_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_agua_real }}{% if form.sol_agua_real.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_agua_obs }}{% if form.sol_agua_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_obs.errors|join:", " }}</span>{% endif %}</div>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Arena</span>
+      <div>{{ form.sol_arena_calc }}{% if form.sol_arena_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_arena_real }}{% if form.sol_arena_real.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_arena_obs }}{% if form.sol_arena_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_obs.errors|join:", " }}</span>{% endif %}</div>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Grava</span>
+      <div>{{ form.sol_grava_calc }}{% if form.sol_grava_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_grava_real }}{% if form.sol_grava_real.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_grava_obs }}{% if form.sol_grava_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_obs.errors|join:", " }}</span>{% endif %}</div>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Cemento</span>
+      <div>{{ form.sol_cemento_calc }}{% if form.sol_cemento_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_cemento_real }}{% if form.sol_cemento_real.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.sol_cemento_obs }}{% if form.sol_cemento_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_obs.errors|join:", " }}</span>{% endif %}</div>
+    </div>
+
+    {% if detalle %}
+    <div class="grid grid-cols-4 gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
+      <span>Desviación (real − calc)</span>
+      <span data-desv="agua">Agua: {{ detalle.sol_agua_desv|default:"—" }}</span>
+      <span data-desv="arena">Arena: {{ detalle.sol_arena_desv|default:"—" }}</span>
+      <span data-desv="grava">Grava: {{ detalle.sol_grava_desv|default:"—" }}</span>
+    </div>
+    {% endif %}
+  </fieldset>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+      {{ form.sol_soldadura_prolongas_ok }}
+      <span>{{ form.sol_soldadura_prolongas_ok.label }}</span>
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.sol_ejecutado_pct.label }}</span>
+      {{ form.sol_ejecutado_pct }}
+      <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">0–1</span>
+      {% if form.sol_ejecutado_pct.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.sol_ejecutado_pct.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  <label class="flex flex-col">
+    <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.sol_observaciones.label }}</span>
+    {{ form.sol_observaciones }}
+    {% if form.sol_observaciones.errors %}
+      <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.sol_observaciones.errors|join:", " }}</span>
+    {% endif %}
+  </label>
+
+  <div class="flex justify-end">
+    <button type="submit"
+            :disabled="enviando"
+            :class="enviando ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition"
+            data-action="guardar-seccion">
+      <span x-text="enviando ? 'Guardando…' : 'Guardar sección'"></span>
+    </button>
+  </div>
+</form>

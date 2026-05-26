@@ -126,3 +126,12 @@ def capturar_estado_previo_kit(sender, instance, **kwargs):
         instance._previo_estado = previo.estado
     except KitCerramiento.DoesNotExist:
         pass
+
+
+# B2a (#74) — Detalle OC granularidad torre × pata. Signal post_save refresca
+# el cache agregado ObraCivilTorre. Import diferido al final del archivo para
+# evitar ciclos en import time del módulo.
+from . import signals_b3_oc_detalle  # noqa: F401, E402
+
+# B3a (#76) — signal post_save MontajeEstructuraTorreDetalle → cache legacy
+from . import signals_b3_mont_detalle  # noqa: F401,E402

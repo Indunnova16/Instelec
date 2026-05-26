@@ -1448,40 +1448,20 @@ class ObraCivilPesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 
 class ObraCivilAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """POST AJAX para actualizar un avance individual de una torre (#74).
+    """410 Gone — endpoint reemplazado por edición detallada por sección.
 
-    Body: columna ∈ {cerramiento,excavacion,solado,acero,vaciado,compactacion},
-    valor ∈ [0,1] (decimal). Devuelve el nuevo avance ponderado de la torre.
+    Reemplazado por ObraCivilDetalleSeccionView (B2b, paridad campo-a-campo Excel).
+    Cliente debe editar en /construccion/<p>/obra-civil/<t>/detalle/?pata=X&seccion=Y/.
     """
     allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
 
-    COLUMNAS_VALIDAS = {c[0] for c in ObraCivilTorre.COLUMNAS}
-
     def post(self, request, proyecto_id, torre_id, *args, **kwargs):
-        from decimal import Decimal, InvalidOperation
         from django.http import JsonResponse
-        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
-        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
-        columna = request.POST.get('columna', '').strip()
-        if columna not in self.COLUMNAS_VALIDAS:
-            return JsonResponse({'error': f'Columna inválida: {columna!r}'}, status=400)
-        try:
-            valor = Decimal(request.POST.get('valor', '0'))
-        except (TypeError, InvalidOperation):
-            return JsonResponse({'error': 'Valor inválido.'}, status=400)
-        if valor < Decimal('0') or valor > Decimal('1'):
-            return JsonResponse(
-                {'error': f'El avance debe estar entre 0 y 1 (recibido {valor}).'},
-                status=400)
-
-        oc, _ = ObraCivilTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
-        setattr(oc, f'avance_{columna}', valor)
-        oc.save(update_fields=[f'avance_{columna}', 'updated_at'])
         return JsonResponse({
-            'ok': True,
-            'avance_ponderado': float(oc.avance_ponderado),
-            'avance_ponderado_pct': oc.avance_ponderado_pct,
-        })
+            'error': 'gone',
+            'detail': 'Este endpoint fue reemplazado por el editor detallado por sección. '
+                      'Editá en /construccion/<proyecto>/obra-civil/<torre>/detalle/?pata=A&seccion=cerramiento.',
+        }, status=410)
 
 
 # ==========================================================================
@@ -1576,57 +1556,20 @@ class MontajePesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 
 class MontajeAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """POST AJAX — actualiza una celda (torre × columna).
+    """410 Gone — endpoint reemplazado por edición detallada por sección.
 
-    Implementa validación de cascada lógica del issue #76:
-    - prearamada ≤ estructura_sitio
-    - torre_montada ≤ prearamada
-    - revisada solo permitido si torre_montada == 1
+    Reemplazado por MontajeDetalleSaveView (B3b, paridad campo-a-campo Excel).
+    Cliente debe editar en /construccion/<p>/montaje/<t>/detalle/?seccion=Y/.
     """
     allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
 
-    COLUMNAS_VALIDAS = {c[0] for c in MontajeEstructuraTorre.COLUMNAS}
-
     def post(self, request, proyecto_id, torre_id, *args, **kwargs):
-        from decimal import Decimal, InvalidOperation
         from django.http import JsonResponse
-        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
-        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
-        columna = request.POST.get('columna', '').strip()
-        if columna not in self.COLUMNAS_VALIDAS:
-            return JsonResponse({'error': f'Columna inválida: {columna!r}'}, status=400)
-        try:
-            valor = Decimal(request.POST.get('valor', '0'))
-        except (TypeError, InvalidOperation):
-            return JsonResponse({'error': 'Valor inválido.'}, status=400)
-        if valor < Decimal('0') or valor > Decimal('1'):
-            return JsonResponse(
-                {'error': f'El avance debe estar entre 0 y 1 (recibido {valor}).'},
-                status=400)
-
-        m, _ = MontajeEstructuraTorre.objects.get_or_create(
-            proyecto=proyecto, torre=torre)
-        # Cascada lógica.
-        if columna == 'prearamada' and valor > m.avance_estructura_sitio:
-            return JsonResponse(
-                {'error': 'Prearmada no puede exceder Estructura en sitio.'},
-                status=400)
-        if columna == 'torre_montada' and valor > m.avance_prearamada:
-            return JsonResponse(
-                {'error': 'Torre Montada no puede exceder Prearmada.'},
-                status=400)
-        if columna == 'revisada' and valor > 0 and m.avance_torre_montada < 1:
-            return JsonResponse(
-                {'error': 'Revisada solo se habilita cuando Torre Montada = 100%.'},
-                status=400)
-
-        setattr(m, f'avance_{columna}', valor)
-        m.save(update_fields=[f'avance_{columna}', 'updated_at'])
         return JsonResponse({
-            'ok': True,
-            'avance_ponderado': float(m.avance_ponderado),
-            'avance_ponderado_pct': m.avance_ponderado_pct,
-        })
+            'error': 'gone',
+            'detail': 'Este endpoint fue reemplazado por el editor detallado por sección. '
+                      'Editá en /construccion/<proyecto>/montaje/<torre>/detalle/?seccion=montaje.',
+        }, status=410)
 
 
 # ==========================================================================
@@ -2371,3 +2314,8 @@ class ModuloPlaceholderView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
 from .views_b1_actividades_finales import *  # noqa: F401, F403
 from .views_b2_indicadores import *  # noqa: F401, F403
 from .views_b3_dashboard_indicadores import *  # noqa: F401, F403
+
+# === /modulo excel_paridad_oc_montaje — split de archivo magnet ===
+# F2 scaffolding: B2b (OC detalle views) y B3b (Montaje detalle views) en F3.
+from .views_b3_oc_detalle import *  # noqa: E402,F401,F403
+from .views_b3_mont_detalle import *  # noqa: E402,F401,F403

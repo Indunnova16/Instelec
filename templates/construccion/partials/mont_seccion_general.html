@@ -1,0 +1,74 @@
+{% comment %}
+B3b - Partial seccion General (Info General) del detalle Montaje.
+
+Contexto esperado:
+  - detalle: instancia MontajeEstructuraTorreDetalle
+  - seccion_form: MontSeccionGeneralForm ligada al detalle
+  - save_url: URL endpoint AJAX (montaje_detalle_save con seccion=general)
+  - funcion: str ('Suspension' | 'Retencion' | '') - @property del detalle
+{% endcomment %}
+
+<form id="mont-form-general" method="post" action="{{ save_url }}"
+      class="space-y-4"
+      data-seccion="general">
+  {% csrf_token %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- Tipo de torre -->
+    <div>
+      <label for="{{ seccion_form.tipo_torre.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Tipo de torre
+      </label>
+      {{ seccion_form.tipo_torre }}
+      {% if seccion_form.tipo_torre.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.tipo_torre.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    <!-- Cuerpo / tramo -->
+    <div>
+      <label for="{{ seccion_form.cuerpo.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Cuerpo / tramo
+      </label>
+      {{ seccion_form.cuerpo }}
+      {% if seccion_form.cuerpo.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.cuerpo.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    <!-- Funcion (read-only, derivada) -->
+    <div>
+      <span class="block text-sm font-medium text-gray-700 mb-1">
+        Funcion (derivada del tipo)
+      </span>
+      <span id="mont-funcion-badge"
+            data-funcion="{{ funcion }}"
+            class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-semibold
+                   {% if funcion == 'Suspension' or funcion == 'Suspensión' %}bg-amber-100 text-amber-800
+                   {% elif funcion == 'Retencion' or funcion == 'Retención' %}bg-emerald-100 text-emerald-800
+                   {% else %}bg-gray-100 text-gray-500{% endif %}">
+        {% if funcion %}{{ funcion }}{% else %}—{% endif %}
+      </span>
+      <p class="mt-1 text-xs text-gray-500">
+        Suspension: A, A_esp · Retencion: B, C, D, portico
+      </p>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between pt-3 border-t border-gray-200">
+    <p class="text-xs text-gray-500">
+      Los cambios se guardan via AJAX al pulsar "Guardar seccion".
+    </p>
+    <button type="submit"
+            class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white
+                   text-sm font-medium rounded-md shadow-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
+                   disabled:opacity-50 disabled:cursor-not-allowed">
+      Guardar seccion
+    </button>
+  </div>
+
+  <div id="mont-msg-general" class="hidden text-sm" role="status"></div>
+</form>

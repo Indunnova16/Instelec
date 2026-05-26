@@ -1,0 +1,126 @@
+{% comment %}
+  B2b (#74) — Partial Sección Vaciado (32 campos).
+
+  Estructura: checks pre-vaciado + sub-bloques agua/arena/grava/cemento +
+  controles vaciado (slump/encofrado/fechas/desencofrado) + % ejecutado + obs.
+{% endcomment %}
+{% load l10n %}
+<form @submit.prevent="submitForm($event.target)" class="space-y-4"
+      data-section-form="vaciado">
+  {% csrf_token %}
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Vaciado</h2>
+
+  <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Pre-vaciado</legend>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ft916_ok }}<span>{{ form.vac_ft916_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_nivelacion_stub_ok }}<span>{{ form.vac_nivelacion_stub_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_encofrado_ok }}<span>{{ form.vac_encofrado_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ingreso_materiales }}<span>{{ form.vac_ingreso_materiales.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_it380_ok }}<span>{{ form.vac_it380_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ft056_ok }}<span>{{ form.vac_ft056_ok.label }}</span></label>
+    </div>
+  </fieldset>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.vac_tipo_concreto.label }}</span>
+      {{ form.vac_tipo_concreto }}
+      {% if form.vac_tipo_concreto.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.vac_tipo_concreto.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.vac_mpa_teorica.label }}</span>
+      {{ form.vac_mpa_teorica }}
+      {% if form.vac_mpa_teorica.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.vac_mpa_teorica.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">
+      Materiales (calculado vs real)
+    </legend>
+    <div class="grid grid-cols-4 gap-3 mt-2 text-sm">
+      <span class="font-medium text-gray-500"></span>
+      <span class="font-medium text-gray-500">Calculado</span>
+      <span class="font-medium text-gray-500">Real</span>
+      <span class="font-medium text-gray-500">Observaciones</span>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Agua</span>
+      <div>{{ form.vac_agua_calc }}{% if form.vac_agua_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_agua_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_agua_real }}{% if form.vac_agua_real.errors %}<span class="text-xs text-red-600">{{ form.vac_agua_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_agua_obs }}{% if form.vac_agua_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_agua_obs.errors|join:", " }}</span>{% endif %}</div>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Arena</span>
+      <div>{{ form.vac_arena_calc }}{% if form.vac_arena_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_arena_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_arena_real }}{% if form.vac_arena_real.errors %}<span class="text-xs text-red-600">{{ form.vac_arena_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_arena_obs }}{% if form.vac_arena_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_arena_obs.errors|join:", " }}</span>{% endif %}</div>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Grava</span>
+      <div>{{ form.vac_grava_calc }}{% if form.vac_grava_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_grava_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_grava_real }}{% if form.vac_grava_real.errors %}<span class="text-xs text-red-600">{{ form.vac_grava_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_grava_obs }}{% if form.vac_grava_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_grava_obs.errors|join:", " }}</span>{% endif %}</div>
+
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Cemento</span>
+      <div>{{ form.vac_cemento_calc }}{% if form.vac_cemento_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_cemento_calc.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_cemento_real }}{% if form.vac_cemento_real.errors %}<span class="text-xs text-red-600">{{ form.vac_cemento_real.errors|join:", " }}</span>{% endif %}</div>
+      <div>{{ form.vac_cemento_obs }}{% if form.vac_cemento_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_cemento_obs.errors|join:", " }}</span>{% endif %}</div>
+    </div>
+  </fieldset>
+
+  <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Ejecución</legend>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_slump_ok }}<span>{{ form.vac_slump_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_inspeccion_stub_ok }}<span>{{ form.vac_inspeccion_stub_ok.label }}</span></label>
+      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_desencofrado_ok }}<span>{{ form.vac_desencofrado_ok.label }}</span></label>
+      <label class="flex flex-col">
+        <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.vac_fecha_vaciado.label }}</span>
+        {{ form.vac_fecha_vaciado }}
+        {% if form.vac_fecha_vaciado.errors %}<span class="text-xs text-red-600">{{ form.vac_fecha_vaciado.errors|join:", " }}</span>{% endif %}
+      </label>
+      <label class="flex flex-col">
+        <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.vac_fecha_cilindros.label }}</span>
+        {{ form.vac_fecha_cilindros }}
+        {% if form.vac_fecha_cilindros.errors %}<span class="text-xs text-red-600">{{ form.vac_fecha_cilindros.errors|join:", " }}</span>{% endif %}
+      </label>
+      <label class="flex flex-col">
+        <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.vac_encargado_puntas.label }}</span>
+        {{ form.vac_encargado_puntas }}
+        {% if form.vac_encargado_puntas.errors %}<span class="text-xs text-red-600">{{ form.vac_encargado_puntas.errors|join:", " }}</span>{% endif %}
+      </label>
+    </div>
+  </fieldset>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.vac_ejecutado_pct.label }}</span>
+      {{ form.vac_ejecutado_pct }}
+      <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">0–1</span>
+      {% if form.vac_ejecutado_pct.errors %}<span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.vac_ejecutado_pct.errors|join:", " }}</span>{% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.vac_observaciones.label }}</span>
+      {{ form.vac_observaciones }}
+      {% if form.vac_observaciones.errors %}<span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.vac_observaciones.errors|join:", " }}</span>{% endif %}
+    </label>
+  </div>
+
+  {% if form.non_field_errors %}
+    <div class="text-xs text-red-600 dark:text-red-400">{{ form.non_field_errors|join:", " }}</div>
+  {% endif %}
+
+  <div class="flex justify-end">
+    <button type="submit"
+            :disabled="enviando"
+            :class="enviando ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition"
+            data-action="guardar-seccion">
+      <span x-text="enviando ? 'Guardando…' : 'Guardar sección'"></span>
+    </button>
+  </div>
+</form>
