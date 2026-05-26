@@ -2239,6 +2239,7 @@ class DashboardSemanaUpsertView(LoginRequiredMixin, RoleRequiredMixin, View):
                 'torres_construidas_semana': cons,
                 'torres_incluidas_prog': request.POST.get('torres_incluidas_prog', '').strip()[:300],
                 'torres_incluidas_cons': request.POST.get('torres_incluidas_cons', '').strip()[:300],
+                'pendientes': request.POST.get('pendientes', '').strip(),
             },
         )
         recalcular_dashboard_acumulados(proyecto, fase)
