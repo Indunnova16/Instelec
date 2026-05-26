@@ -1,1 +1,48 @@
-{% comment %}stub plantado por F2 — sobrescrito por B3b en F3{% endcomment %}
+{% comment %}
+B3b - Partial seccion Facturacion del detalle Montaje.
+Campos: facturada_a_dueno_ok, facturada_por_contratista (CharField, NO Boolean).
+{% endcomment %}
+
+<form id="mont-form-facturacion" method="post" action="{{ save_url }}"
+      class="space-y-4"
+      data-seccion="facturacion">
+  {% csrf_token %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="flex items-center pt-6">
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        {{ seccion_form.facturada_a_dueno_ok }}
+        <span>Facturada al dueno</span>
+      </label>
+      {% if seccion_form.facturada_a_dueno_ok.errors %}
+        <p class="ml-3 text-sm text-red-600">{{ seccion_form.facturada_a_dueno_ok.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <label for="{{ seccion_form.facturada_por_contratista.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Facturada por contratista
+      </label>
+      {{ seccion_form.facturada_por_contratista }}
+      {% if seccion_form.facturada_por_contratista.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.facturada_por_contratista.errors|join:", " }}</p>
+      {% endif %}
+      <p class="mt-1 text-xs text-gray-500">
+        Nombre del subcontratista que facturo (ej. Cruz, Higuita, Instelec). Campo de texto libre.
+      </p>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between pt-3 border-t border-gray-200">
+    <p class="text-xs text-gray-500">Registro de facturacion - cierre comercial de la torre.</p>
+    <button type="submit"
+            class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white
+                   text-sm font-medium rounded-md shadow-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
+      Guardar seccion
+    </button>
+  </div>
+
+  <div id="mont-msg-facturacion" class="hidden text-sm" role="status"></div>
+</form>

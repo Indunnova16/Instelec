@@ -1,1 +1,93 @@
-{% comment %}stub plantado por F2 — sobrescrito por B3b en F3{% endcomment %}
+{% comment %}
+B3b - Partial seccion Pesos del detalle Montaje.
+Campos: peso_diseno_kl, peso_instalado_kl
+Muestra warning visual NO bloqueante si desviacion > 5%
+(@peso_alerta del modelo + recalculo client-side).
+{% endcomment %}
+
+<form id="mont-form-pesos" method="post" action="{{ save_url }}"
+      class="space-y-4"
+      data-seccion="pesos"
+      x-data='{
+          pesoDiseno: parseFloat("{{ detalle.peso_diseno_kl|default_if_none:'' }}") || null,
+          pesoInstalado: parseFloat("{{ detalle.peso_instalado_kl|default_if_none:'' }}") || null,
+          umbral: 5,
+          get desviacionPct() {
+              if (this.pesoDiseno === null || this.pesoInstalado === null || this.pesoDiseno === 0) return null;
+              return Math.abs(this.pesoInstalado - this.pesoDiseno) / this.pesoDiseno * 100;
+          },
+          get alerta() {
+              const d = this.desviacionPct;
+              return d !== null && d > this.umbral;
+          },
+      }'>
+  {% csrf_token %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label for="{{ seccion_form.peso_diseno_kl.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Peso diseno (kL)
+      </label>
+      {{ seccion_form.peso_diseno_kl }}
+      {% if seccion_form.peso_diseno_kl.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.peso_diseno_kl.errors|join:", " }}</p>
+      {% endif %}
+      <p class="mt-1 text-xs text-gray-500">Peso teorico segun planos, en kilo-libras (kL).</p>
+    </div>
+
+    <div>
+      <label for="{{ seccion_form.peso_instalado_kl.id_for_label }}"
+             class="block text-sm font-medium text-gray-700 mb-1">
+        Peso instalado (kL)
+      </label>
+      {{ seccion_form.peso_instalado_kl }}
+      {% if seccion_form.peso_instalado_kl.errors %}
+        <p class="mt-1 text-sm text-red-600">{{ seccion_form.peso_instalado_kl.errors|join:", " }}</p>
+      {% endif %}
+      <p class="mt-1 text-xs text-gray-500">Peso real montado, en kilo-libras (kL).</p>
+    </div>
+  </div>
+
+  <!-- Indicador desviacion + warning visual (no bloqueante) -->
+  <div class="rounded-md p-4 border"
+       :class="alerta ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-gray-50 border-gray-200 text-gray-700'">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium">
+          Desviacion de peso:
+          <span x-text="desviacionPct !== null ? desviacionPct.toFixed(2) + '%' : '—'"></span>
+        </p>
+        <p class="text-xs mt-1">Umbral de alerta: <span x-text="umbral + '%'"></span> (no bloqueante).</p>
+      </div>
+      <div x-show="alerta" class="text-2xl" aria-hidden="true">!</div>
+    </div>
+    <p x-show="alerta" class="mt-2 text-sm font-semibold"
+       id="mont-peso-warning"
+       data-peso-alerta="{% if peso_alerta %}true{% else %}false{% endif %}">
+      Desviacion de peso supera 5% (alerta no bloqueante)
+    </p>
+  </div>
+
+  {% if peso_alerta %}
+  <!-- Render server-side fallback para que el test funcione sin JS -->
+  <div class="rounded-md p-3 bg-amber-100 border border-amber-300 text-amber-900 text-sm"
+       id="mont-peso-warning-ssr"
+       data-peso-alerta="true"
+       data-peso-desviacion="{{ peso_desviacion_pct }}">
+    Desviacion de peso supera 5% (alerta no bloqueante) - desviacion actual {{ peso_desviacion_pct }}%.
+  </div>
+  {% endif %}
+
+  <div class="flex items-center justify-between pt-3 border-t border-gray-200">
+    <p class="text-xs text-gray-500">Los pesos se guardan aunque la desviacion supere el umbral.</p>
+    <button type="submit"
+            class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white
+                   text-sm font-medium rounded-md shadow-sm
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
+      Guardar seccion
+    </button>
+  </div>
+
+  <div id="mont-msg-pesos" class="hidden text-sm" role="status"></div>
+</form>
