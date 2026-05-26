@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Mantenimiento V2 - TransMaint{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header + filtros -->
+    <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Indicadores Mantenimiento - Proyecto</h1>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Vista detallada Financiero + Tecnico + ANS Contractual + Produccion Cuadrilla
+            </p>
+        </div>
+        <form method="get" class="flex gap-2 flex-wrap items-end">
+            <div>
+                <label class="text-xs text-gray-500 block">Mes</label>
+                <select name="mes" class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm px-2 py-1">
+                    {% for m, n in meses %}
+                    <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ n }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 block">Anio</label>
+                <select name="anio" class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm px-2 py-1">
+                    {% for a in anios %}
+                    <option value="{{ a }}" {% if a == anio %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 block">Linea</label>
+                <select name="linea" class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm px-2 py-1">
+                    <option value="">Todas (agregado)</option>
+                    {% for l in lineas %}
+                    <option value="{{ l.id }}" {% if linea and l.id == linea.id %}selected{% endif %}>{{ l.codigo }} - {{ l.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700">Filtrar</button>
+        </form>
+    </div>
+
+    <!-- Puntaje ANS prominente -->
+    {% if has_ans %}
+    <div class="rounded-xl shadow-lg p-6
+                {% if ans_actual.estado_ans == 'CUMPLE' %}bg-gradient-to-r from-green-600 to-emerald-700{% elif ans_actual.estado_ans == 'PARCIAL' %}bg-gradient-to-r from-amber-500 to-orange-600{% else %}bg-gradient-to-r from-red-600 to-rose-700{% endif %} text-white">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+                <p class="text-sm uppercase tracking-wider opacity-90">Puntaje ANS Contractual</p>
+                <p class="text-6xl font-bold leading-tight">{{ ans_actual.puntaje_total_ans|floatformat:2 }}%</p>
+                <p class="text-sm opacity-90 mt-1">Meta &ge; 90% &middot; Periodo {{ mes }}/{{ anio }}</p>
+            </div>
+            <div class="text-right">
+                <span class="inline-block px-4 py-2 rounded-lg bg-white/20 backdrop-blur text-lg font-semibold">
+                    {{ ans_actual.get_estado_ans_display|upper }}
+                </span>
+                <p class="text-xs opacity-90 mt-2">Actualizado: {{ ans_actual.updated_at|date:"d/m/Y H:i" }}</p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="rounded-xl shadow p-6 bg-gray-100 dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 text-center">
+        <p class="text-gray-600 dark:text-gray-400">Sin medicion ANS para el periodo {{ mes }}/{{ anio }}.</p>
+        <a href="{% url 'indicadores:ans_create' %}" class="inline-block mt-3 px-4 py-2 bg-primary-600 text-white text-sm rounded hover:bg-primary-700">
+            + Registrar ANS del periodo
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Seccion 1: Financiero -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Financiero</h2>
+            <a href="{% url 'indicadores:mant_fin_list' %}" class="text-sm text-primary-600 hover:underline">Ver historial &raquo;</a>
+        </div>
+        {% if resumen.financiero %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% with kpi_margen='1' %}
+            <div class="bg-gray-50 dark:bg-gray-900 rounded p-4 border-l-4 {% if resumen.financiero.cumple_margen %}border-green-500{% else %}border-amber-500{% endif %}">
+                <p class="text-xs text-gray-500 mb-1">Margen Operativo</p>
+                <p class="text-3xl font-bold {% if resumen.financiero.cumple_margen %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+                    {{ resumen.financiero.margen_operativo|floatformat:2 }}%
+                </p>
+                <p class="text-xs text-gray-500 mt-1">Meta &ge; 20%</p>
+                {% if resumen.financiero.cumple_margen %}<p class="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">EN META</p>{% else %}<p class="text-xs font-semibold text-amber-600 dark:text-amber-400 mt-1">FUERA DE META</p>{% endif %}
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-900 rounded p-4 border-l-4 {% if resumen.financiero.cumple_desviacion %}border-green-500{% else %}border-red-500{% endif %}">
+                <p class="text-xs text-gray-500 mb-1">Desviacion Presupuestal</p>
+                <p class="text-3xl font-bold {% if resumen.financiero.cumple_desviacion %}text-green-700 dark:text-green-300{% else %}text-red-700 dark:text-red-300{% endif %}">
+                    {{ resumen.financiero.desviacion_presupuestal|floatformat:2 }}%
+                </p>
+                <p class="text-xs text-gray-500 mt-1">Meta &le; 25%</p>
+                {% if resumen.financiero.cumple_desviacion %}<p class="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">EN META</p>{% else %}<p class="text-xs font-semibold text-red-600 dark:text-red-400 mt-1">FUERA DE META</p>{% endif %}
+            </div>
+            {% endwith %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500 italic">Sin datos financieros del periodo.
+            <a href="{% url 'indicadores:mant_fin_create' %}" class="text-primary-600 hover:underline">Registrar &raquo;</a>
+        </p>
+        {% endif %}
+    </section>
+
+    <!-- Seccion 2: Tecnico (incluye Produccion Cuadrilla) -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Tecnico</h2>
+            <a href="{% url 'indicadores:mant_tec_list' %}" class="text-sm text-primary-600 hover:underline">Ver historial &raquo;</a>
+        </div>
+        {% if resumen.tecnico %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-gray-50 dark:bg-gray-900 rounded p-4 border-l-4 {% if resumen.tecnico.cumple_ejecucion %}border-green-500{% else %}border-amber-500{% endif %}">
+                <p class="text-xs text-gray-500 mb-1">Ejecucion Presupuestal</p>
+                <p class="text-2xl font-bold {% if resumen.tecnico.cumple_ejecucion %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+                    {{ resumen.tecnico.ejecucion_presupuestal|floatformat:2 }}%
+                </p>
+                <p class="text-xs text-gray-500 mt-1">Meta 2.95% (semanal)</p>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-900 rounded p-4 border-l-4 {% if resumen.tecnico.cumple_rentabilidad %}border-green-500{% else %}border-amber-500{% endif %}">
+                <p class="text-xs text-gray-500 mb-1">Rentabilidad Costo Fijo</p>
+                <p class="text-2xl font-bold {% if resumen.tecnico.cumple_rentabilidad %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+                    {{ resumen.tecnico.rentabilidad_costo_fijo|floatformat:2 }}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">Meta &ge; 12 (ratio)</p>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-900 rounded p-4 border-l-4 {% if resumen.tecnico.cumple_meta_facturacion %}border-green-500{% else %}border-amber-500{% endif %}">
+                <p class="text-xs text-gray-500 mb-1">Meta Facturacion General</p>
+                <p class="text-2xl font-bold {% if resumen.tecnico.cumple_meta_facturacion %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+                    {{ resumen.tecnico.meta_facturacion_general|floatformat:2 }}%
+                </p>
+                <p class="text-xs text-gray-500 mt-1">Meta &ge; 100%</p>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-900 rounded p-4 border-l-4 {% if resumen.tecnico.cumple_produccion %}border-green-500{% else %}border-amber-500{% endif %}">
+                <p class="text-xs text-gray-500 mb-1">Produccion Cuadrillas</p>
+                <p class="text-2xl font-bold {% if resumen.tecnico.cumple_produccion %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+                    {{ resumen.tecnico.produccion_cuadrillas|floatformat:2 }}%
+                </p>
+                <p class="text-xs text-gray-500 mt-1">Meta &ge; 2.95% (diario)</p>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500 italic">Sin datos tecnicos del periodo.
+            <a href="{% url 'indicadores:mant_tec_create' %}" class="text-primary-600 hover:underline">Registrar &raquo;</a>
+        </p>
+        {% endif %}
+    </section>
+
+    <!-- Seccion 3: ANS Contractual - 5 componentes -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">ANS Contractual - Componentes ponderados</h2>
+            <a href="{% url 'indicadores:ans_list' %}" class="text-sm text-primary-600 hover:underline">Ver historial &raquo;</a>
+        </div>
+        {% if has_ans %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for componente in componentes_ans %}
+                {% include "indicadores/_ans_componente.html" %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500 italic">Sin medicion ANS del periodo. Los 5 componentes apareceran aqui al registrar.</p>
+        {% endif %}
+    </section>
+
+    <!-- Seccion 4: Tendencia 6 meses Chart.js -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Tendencia 6 meses - Puntaje ANS</h2>
+            <span class="text-xs text-gray-500">Linea horizontal: meta 90%</span>
+        </div>
+        <div style="height: 320px;">
+            <canvas id="chart-tendencia-ans"></canvas>
+        </div>
+    </section>
+
+</div>
+
+<script>
+(function() {
+    const data = {{ tendencia_json|safe }};
+    const ctx = document.getElementById('chart-tendencia-ans');
+    if (!ctx) return;
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: [
+                {
+                    label: 'Puntaje Total ANS',
+                    data: data.puntaje_total,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.15)',
+                    borderWidth: 3,
+                    tension: 0.3,
+                    fill: true,
+                    spanGaps: false
+                },
+                {
+                    label: 'Meta (90%)',
+                    data: data.labels.map(() => 90),
+                    borderColor: '#16a34a',
+                    borderDash: [6, 4],
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    suggestedMax: 100,
+                    ticks: { callback: v => v + '%' }
+                }
+            },
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(c) {
+                            if (c.raw === null) return c.dataset.label + ': sin dato';
+                            return c.dataset.label + ': ' + Number(c.raw).toFixed(2) + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

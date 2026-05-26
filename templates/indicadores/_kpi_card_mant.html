@@ -1,1 +1,16 @@
-{# Stub plantado por F2 scaffolding del /modulo block indicadores_construccion_sub_run_a. Será sobreescrito por la sub-feature B4 en F3. NO usar `{% include ... ignore missing %}` — falla en esta versión de Django (TemplateSyntaxError). #}
+{# KPI card generica de Mantenimiento.
+   Espera contexto: kpi = {label, valor, sufijo, meta_label, ok, color_ok, color_ko} #}
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 {% if kpi.ok %}{{ kpi.color_ok|default:'border-green-500' }}{% else %}{{ kpi.color_ko|default:'border-amber-500' }}{% endif %}">
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{{ kpi.label }}</p>
+    <p class="text-3xl font-bold {% if kpi.ok %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+        {{ kpi.valor|default_if_none:"--"|floatformat:2 }}{{ kpi.sufijo|default:"%" }}
+    </p>
+    {% if kpi.meta_label %}
+    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ kpi.meta_label }}</p>
+    {% endif %}
+    {% if kpi.ok %}
+    <p class="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">EN META</p>
+    {% else %}
+    <p class="text-xs font-semibold text-amber-600 dark:text-amber-400 mt-1">FUERA DE META</p>
+    {% endif %}
+</div>
