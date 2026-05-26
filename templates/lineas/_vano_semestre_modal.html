@@ -1,0 +1,160 @@
+{# B2.1 — Modal Alpine.js para configurar semestres de un vano. #}
+{# Uso: {% include 'lineas/_vano_semestre_modal.html' %} en cualquier template #}
+{# que tenga acceso a `vano` (objeto Vano). El modal hace fetch a #}
+{# /lineas/vano/<uuid>/semestres/configurar/ con CSRF token. #}
+{% load static %}
+
+<div
+    x-data="vanoSemestreModal({{ vano.id|default_if_none:'null'|stringformat:'s'|escapejs|json_script:'_unused_' }})"
+    x-cloak
+    class="hidden"
+    data-testid="b21-vano-semestre-modal-root"
+>
+    <button
+        type="button"
+        @click="abrir('{{ vano.id }}', '{{ vano.numero|escapejs }}', '{{ vano.linea.codigo|escapejs }}')"
+        class="text-xs text-blue-600 hover:text-blue-800 underline"
+        data-testid="b21-vano-semestre-modal-trigger"
+    >
+        Configurar semestres
+    </button>
+
+    <template x-teleport="body">
+        <div
+            x-show="abierto"
+            x-transition.opacity
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            @keydown.escape.window="cerrar()"
+        >
+            <div
+                class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 space-y-4"
+                @click.outside="cerrar()"
+            >
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                    Configurar Semestres — Vano <span x-text="vanoNumero"></span>
+                </h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                    Línea <span x-text="lineaCodigo"></span>
+                </p>
+
+                <div class="space-y-2">
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" value="S1" x-model="semestres" class="rounded border-gray-300">
+                        <span>Semestre 1 (01 Ene – 30 Jun)</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" value="S2" x-model="semestres" class="rounded border-gray-300">
+                        <span>Semestre 2 (01 Jul – 31 Dic)</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" value="TA" x-model="semestres" class="rounded border-gray-300">
+                        <span>Todo el año</span>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Observaciones
+                    </label>
+                    <textarea
+                        x-model="observaciones"
+                        rows="3"
+                        class="w-full rounded border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white text-sm"
+                    ></textarea>
+                </div>
+
+                <template x-if="error">
+                    <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-2" x-text="error"></div>
+                </template>
+
+                <template x-if="success">
+                    <div class="bg-green-50 border border-green-200 text-green-700 text-sm rounded p-2" x-text="success"></div>
+                </template>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button
+                        type="button"
+                        @click="cerrar()"
+                        :disabled="cargando"
+                        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="button"
+                        @click="guardar()"
+                        :disabled="cargando"
+                        class="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded disabled:opacity-50"
+                        data-testid="b21-vano-semestre-modal-save"
+                    >
+                        <span x-show="!cargando">Guardar</span>
+                        <span x-show="cargando">Guardando...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+
+<script>
+function vanoSemestreModal() {
+    return {
+        abierto: false,
+        vanoId: null,
+        vanoNumero: '',
+        lineaCodigo: '',
+        semestres: [],
+        observaciones: '',
+        cargando: false,
+        error: '',
+        success: '',
+
+        abrir(vanoId, numero, codigo) {
+            this.vanoId = vanoId;
+            this.vanoNumero = numero;
+            this.lineaCodigo = codigo;
+            this.semestres = [];
+            this.observaciones = '';
+            this.error = '';
+            this.success = '';
+            this.abierto = true;
+        },
+
+        cerrar() {
+            this.abierto = false;
+        },
+
+        _csrf() {
+            const m = document.cookie.match(/csrftoken=([^;]+)/);
+            return m ? m[1] : '';
+        },
+
+        async guardar() {
+            this.error = '';
+            this.success = '';
+            this.cargando = true;
+            try {
+                const fd = new FormData();
+                this.semestres.forEach(s => fd.append('semestres', s));
+                fd.append('observaciones', this.observaciones);
+                const resp = await fetch(`/lineas/vano/${this.vanoId}/semestres/configurar/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this._csrf() },
+                    body: fd,
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    this.error = data.error || 'Error desconocido';
+                } else {
+                    this.success = `Creados: ${(data.creados||[]).join(', ') || '—'}. Eliminados: ${(data.eliminados||[]).join(', ') || '—'}.`;
+                    setTimeout(() => this.cerrar(), 1200);
+                }
+            } catch (exc) {
+                this.error = 'Error de red: ' + exc.message;
+            } finally {
+                this.cargando = false;
+            }
+        },
+    };
+}
+</script>

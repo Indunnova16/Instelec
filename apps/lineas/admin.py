@@ -123,3 +123,45 @@ class TramoAdmin(BaseModelAdmin):
     def total_torres_display(self, obj):
         return obj.total_torres
     total_torres_display.short_description = 'Total de torres'
+
+
+# ---------------------------------------------------------------------------
+# B2.1 — VanoSemestre + SeguimientoVanoSemestre (Sofi mayo 2026, issue #102)
+# ---------------------------------------------------------------------------
+try:
+    from .models_b21 import VanoSemestre, SeguimientoVanoSemestre
+
+    class SeguimientoVanoSemestreInline(admin.TabularInline):
+        model = SeguimientoVanoSemestre
+        extra = 0
+        fields = ('fecha', 'porcentaje_avance', 'horas', 'observaciones', 'registrado_por')
+        readonly_fields = ('id',)
+
+    @admin.register(VanoSemestre)
+    class VanoSemestreAdmin(BaseModelAdmin):
+        list_display = ('vano', 'semestre', 'estado', 'fecha_inicio', 'fecha_fin', 'actualizado_por')
+        list_filter = ('semestre', 'estado')
+        search_fields = ('vano__numero', 'vano__linea__codigo')
+        raw_id_fields = ('vano', 'creado_por', 'actualizado_por')
+        inlines = [SeguimientoVanoSemestreInline]
+        fieldsets = (
+            (None, {'fields': ('vano', 'semestre', 'estado')}),
+            ('Período', {'fields': ('fecha_inicio', 'fecha_fin', 'observaciones')}),
+            ('Auditoría', {
+                'fields': ('creado_por', 'actualizado_por', 'id', 'created_at', 'updated_at'),
+                'classes': ('collapse',),
+            }),
+        )
+        readonly_fields = ('id', 'created_at', 'updated_at')
+
+    @admin.register(SeguimientoVanoSemestre)
+    class SeguimientoVanoSemestreAdmin(BaseModelAdmin):
+        list_display = ('vano_semestre', 'fecha', 'porcentaje_avance', 'horas', 'registrado_por')
+        list_filter = ('fecha',)
+        search_fields = ('vano_semestre__vano__numero', 'vano_semestre__vano__linea__codigo')
+        raw_id_fields = ('vano_semestre', 'registrado_por')
+        readonly_fields = ('id', 'created_at', 'updated_at')
+except ImportError:
+    # B2.1 aún no escribió models_b21.py — silenciar para mantener importable
+    # la rama base.
+    pass
