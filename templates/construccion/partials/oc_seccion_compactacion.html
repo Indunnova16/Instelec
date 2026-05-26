@@ -1,1 +1,53 @@
-{% comment %}stub plantado por F2 — sobrescrito por B2b en F3{% endcomment %}
+{% comment %}
+  B2b (#74) — Partial Sección Compactación (7 campos).
+{% endcomment %}
+{% load l10n %}
+<form @submit.prevent="submitForm($event.target)" class="space-y-4"
+      data-section-form="compactacion">
+  {% csrf_token %}
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Compactación</h2>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.com_ft914_ok }}<span>{{ form.com_ft914_ok.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.com_suelo_natural_ok }}<span>{{ form.com_suelo_natural_ok.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.com_suelo_cemento_ok }}<span>{{ form.com_suelo_cemento_ok.label }}</span></label>
+    <label class="inline-flex items-center gap-2 text-sm">{{ form.com_suelo_prestamo_ok }}<span>{{ form.com_suelo_prestamo_ok.label }}</span></label>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.com_volumen_m3.label }}</span>
+      {{ form.com_volumen_m3 }}
+      {% if form.com_volumen_m3.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.com_volumen_m3.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.com_finalizada_pct.label }}</span>
+      {{ form.com_finalizada_pct }}
+      <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">0–1</span>
+      {% if form.com_finalizada_pct.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.com_finalizada_pct.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+  </div>
+
+  <label class="flex flex-col">
+    <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.com_observaciones.label }}</span>
+    {{ form.com_observaciones }}
+    {% if form.com_observaciones.errors %}
+      <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.com_observaciones.errors|join:", " }}</span>
+    {% endif %}
+  </label>
+
+  <div class="flex justify-end">
+    <button type="submit"
+            :disabled="enviando"
+            :class="enviando ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition"
+            data-action="guardar-seccion">
+      <span x-text="enviando ? 'Guardando…' : 'Guardar sección'"></span>
+    </button>
+  </div>
+</form>

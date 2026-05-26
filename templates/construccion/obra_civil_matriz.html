@@ -1,15 +1,31 @@
 {% extends "base.html" %}
 {% load l10n %}
 
+{% comment %}
+  Vista resumen Obra Civil (re-propósito B2b #74).
+
+  Antes: matriz editable inline torre×columna (POST a obra_civil_avance_update).
+  Ahora: matriz READ-ONLY que deriva % del cache ObraCivilTorre.avance_*
+  (recalculado vía signal de B2a a partir del detalle por pata).
+  Cada celda enlaza a la nueva vista de detalle pata-por-pata.
+
+  El panel de pesos sigue editable (POST a obra_civil_pesos_update legacy).
+
+  Las filas pueden venir como:
+    - List[ObraCivilTorre] (legacy view ObraCivilMatrizView), o
+    - List[dict{torre, torre_legacy, avance_ponderado_pct}] (nueva
+      ObraCivilResumenView de B2b).
+  El template detecta y normaliza.
+{% endcomment %}
+
 {% block title %}Obra Civil — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
 {% localize off %}
 <div class="space-y-6"
-     x-data='obraCivilMatriz({
+     x-data='obraCivilResumen({
          proyectoId: "{{ proyecto.id }}",
          urlPesos: "{% url "construccion:obra_civil_pesos_update" proyecto_id=proyecto.id %}",
-         urlAvanceBase: "{% url "construccion:obra_civil_lista" proyecto_id=proyecto.id %}",
          csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
          pesosIniciales: {
              cerramiento: {{ pesos.cerramiento }},
@@ -21,10 +37,10 @@
          }
      })'>
 
-    <!-- Header -->
+    {% comment %}Header{% endcomment %}
     <div class="flex items-center gap-4">
         <div class="flex-1">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🏗️ Obra Civil — CANT OOCC</h1>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Obra Civil — CANT OOCC (Resumen)</h1>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
                 · Torres: <span class="font-medium">{{ filas|length }}</span>
@@ -32,12 +48,17 @@
         </div>
         <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg px-4 py-2 text-center">
             <p class="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">Avance General</p>
-            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300"
-               x-text="avanceGeneral.toFixed(1) + '%'">{{ avance_general }}%</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ avance_general }}%</p>
         </div>
     </div>
 
-    <!-- Panel Pesos (sticky) -->
+    {% comment %}Banner explicativo (re-propósito B2b){% endcomment %}
+    <div class="bg-amber-50 dark:bg-amber-900/30 border-l-4 border-amber-400 dark:border-amber-500 rounded-r p-3 text-sm text-amber-800 dark:text-amber-200">
+        <strong>Vista resumen</strong> — los valores se calculan desde el detalle por pata.
+        Edita en cada celda haciendo clic para abrir el detalle por pata × sección.
+    </div>
+
+    {% comment %}Panel Pesos (sticky) — sigue editable{% endcomment %}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4 sticky top-0 z-20">
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Pesos de columnas</h2>
@@ -45,16 +66,17 @@
                 <span class="text-sm font-medium"
                       :class="sumaPesos === 100 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
                     <template x-if="sumaPesos === 100">
-                        <span>✓ Suma = 100%</span>
+                        <span>Suma = 100%</span>
                     </template>
                     <template x-if="sumaPesos !== 100">
-                        <span x-text="'✗ Suma = ' + sumaPesos + '%'"></span>
+                        <span x-text="'Suma = ' + sumaPesos + '%'"></span>
                     </template>
                 </span>
                 <button type="button" @click="guardarPesos()"
                         :disabled="sumaPesos !== 100 || guardandoPesos"
                         :class="sumaPesos === 100 && !guardandoPesos ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'"
-                        class="px-4 py-1.5 rounded-lg text-sm font-medium transition">
+                        class="px-4 py-1.5 rounded-lg text-sm font-medium transition"
+                        data-action="guardar-pesos">
                     <span x-text="guardandoPesos ? 'Guardando…' : 'Guardar pesos'"></span>
                 </button>
             </div>
@@ -66,8 +88,8 @@
                 <div class="relative">
                     <input type="number" min="0" max="100" step="1"
                            x-model.number="pesos.{{ slug }}"
-                           @input="recalcular()"
-                           class="w-full pr-7 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                           class="w-full pr-7 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           data-peso="{{ slug }}">
                     <span class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
                 </div>
             </label>
@@ -78,7 +100,7 @@
            class="mt-2 text-sm" style="display:none"></p>
     </div>
 
-    <!-- Tabla matriz -->
+    {% comment %}Tabla matriz read-only con links a detalle por pata{% endcomment %}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
@@ -88,8 +110,9 @@
                         {% for slug, label in columnas %}
                         <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">
                             {{ label }}
-                            <div class="text-xs font-normal text-gray-500 dark:text-gray-400"
-                                 x-text="pesos.{{ slug }} + '%'"></div>
+                            <div class="text-xs font-normal text-gray-500 dark:text-gray-400">
+                                <span data-peso-label="{{ slug }}">{% if slug == "cerramiento" %}{{ pesos.cerramiento }}{% elif slug == "excavacion" %}{{ pesos.excavacion }}{% elif slug == "solado" %}{{ pesos.solado }}{% elif slug == "acero" %}{{ pesos.acero }}{% elif slug == "vaciado" %}{{ pesos.vaciado }}{% elif slug == "compactacion" %}{{ pesos.compactacion }}{% endif %}%</span>
+                            </div>
                         </th>
                         {% endfor %}
                         <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Avance</th>
@@ -97,36 +120,49 @@
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     {% for fila in filas %}
-                    <tr x-data="filaTorre('{{ fila.torre.id }}', {
-                            cerramiento: {{ fila.avance_cerramiento|unlocalize }},
-                            excavacion: {{ fila.avance_excavacion|unlocalize }},
-                            solado: {{ fila.avance_solado|unlocalize }},
-                            acero: {{ fila.avance_acero|unlocalize }},
-                            vaciado: {{ fila.avance_vaciado|unlocalize }},
-                            compactacion: {{ fila.avance_compactacion|unlocalize }}
-                        })"
-                        class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td class="px-3 py-2 font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10">
-                            <a href="{% url 'construccion:obra_civil_torre_patas' proyecto_id=proyecto.id torre_id=fila.torre.id %}"
-                               class="hover:text-blue-600 dark:hover:text-blue-400"
-                               title="Drill-down a las 4 patas (vista legacy granular)">
-                                {{ fila.torre.numero }}
-                            </a>
-                        </td>
-                        {% for slug, _label in columnas %}
-                        <td class="px-3 py-1 text-center">
-                            <input type="number" min="0" max="100" step="1"
-                                   :value="(avances.{{ slug }} * 100).toFixed(0)"
-                                   @change="actualizarAvance('{{ slug }}', $event.target.value)"
-                                   :disabled="guardando.{{ slug }}"
-                                   class="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                   :class="guardando.{{ slug }} ? 'opacity-50' : ''">
-                        </td>
-                        {% endfor %}
-                        <td class="px-3 py-1 text-center font-semibold"
-                            :class="avancePonderado() >= 0.75 ? 'text-green-600 dark:text-green-400' : (avancePonderado() >= 0.5 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')"
-                            x-text="(avancePonderado() * 100).toFixed(1) + '%'"></td>
-                    </tr>
+                    {% comment %}
+                      Detección dual: legacy `fila` = ObraCivilTorre con .torre y .avance_*;
+                      nuevo `fila.torre_legacy` con los mismos campos.
+                    {% endcomment %}
+                    {% if fila.torre_legacy %}
+                        {% with torre=fila.torre oc=fila.torre_legacy %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td class="px-3 py-2 font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10">
+                                <a href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento"
+                                   class="hover:text-blue-600 dark:hover:text-blue-400"
+                                   title="Abrir detalle por pata × sección">
+                                    {{ torre.numero }}
+                                </a>
+                            </td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento" data-celda="cerramiento" data-torre="{{ torre.id }}">{{ oc.avance_cerramiento|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=excavacion" data-celda="excavacion" data-torre="{{ torre.id }}">{{ oc.avance_excavacion|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=solado" data-celda="solado" data-torre="{{ torre.id }}">{{ oc.avance_solado|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=acero" data-celda="acero" data-torre="{{ torre.id }}">{{ oc.avance_acero|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=vaciado" data-celda="vaciado" data-torre="{{ torre.id }}">{{ oc.avance_vaciado|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=compactacion" data-celda="compactacion" data-torre="{{ torre.id }}">{{ oc.avance_compactacion|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center font-semibold {% if oc.avance_ponderado >= 0.75 %}text-green-600 dark:text-green-400{% elif oc.avance_ponderado >= 0.5 %}text-amber-600 dark:text-amber-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ fila.avance_ponderado_pct }}%</td>
+                        </tr>
+                        {% endwith %}
+                    {% else %}
+                        {% with torre=fila.torre oc=fila %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td class="px-3 py-2 font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10">
+                                <a href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento"
+                                   class="hover:text-blue-600 dark:hover:text-blue-400"
+                                   title="Abrir detalle por pata × sección">
+                                    {{ torre.numero }}
+                                </a>
+                            </td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento" data-celda="cerramiento" data-torre="{{ torre.id }}">{{ oc.avance_cerramiento|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=excavacion" data-celda="excavacion" data-torre="{{ torre.id }}">{{ oc.avance_excavacion|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=solado" data-celda="solado" data-torre="{{ torre.id }}">{{ oc.avance_solado|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=acero" data-celda="acero" data-torre="{{ torre.id }}">{{ oc.avance_acero|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=vaciado" data-celda="vaciado" data-torre="{{ torre.id }}">{{ oc.avance_vaciado|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=compactacion" data-celda="compactacion" data-torre="{{ torre.id }}">{{ oc.avance_compactacion|unlocalize|floatformat:2 }}</a></td>
+                            <td class="px-3 py-1 text-center font-semibold {% if oc.avance_ponderado >= 0.75 %}text-green-600 dark:text-green-400{% elif oc.avance_ponderado >= 0.5 %}text-amber-600 dark:text-amber-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ oc.avance_ponderado_pct }}%</td>
+                        </tr>
+                        {% endwith %}
+                    {% endif %}
                     {% empty %}
                     <tr>
                         <td colspan="8" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
@@ -141,20 +177,13 @@
                 <tfoot class="bg-gray-50 dark:bg-gray-900 font-semibold">
                     <tr>
                         <td class="px-3 py-2 text-gray-900 dark:text-white sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">Promedio</td>
-                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200"
-                            x-text="totales.cerramiento.toFixed(1) + '%'">{{ totales.cerramiento|default:"0" }}%</td>
-                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200"
-                            x-text="totales.excavacion.toFixed(1) + '%'">{{ totales.excavacion|default:"0" }}%</td>
-                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200"
-                            x-text="totales.solado.toFixed(1) + '%'">{{ totales.solado|default:"0" }}%</td>
-                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200"
-                            x-text="totales.acero.toFixed(1) + '%'">{{ totales.acero|default:"0" }}%</td>
-                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200"
-                            x-text="totales.vaciado.toFixed(1) + '%'">{{ totales.vaciado|default:"0" }}%</td>
-                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200"
-                            x-text="totales.compactacion.toFixed(1) + '%'">{{ totales.compactacion|default:"0" }}%</td>
-                        <td class="px-3 py-2 text-center text-blue-700 dark:text-blue-300"
-                            x-text="avanceGeneral.toFixed(1) + '%'">{{ avance_general }}%</td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.cerramiento|default:"0" }}%</td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.excavacion|default:"0" }}%</td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.solado|default:"0" }}%</td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.acero|default:"0" }}%</td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.vaciado|default:"0" }}%</td>
+                        <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.compactacion|default:"0" }}%</td>
+                        <td class="px-3 py-2 text-center text-blue-700 dark:text-blue-300">{{ avance_general }}%</td>
                     </tr>
                 </tfoot>
                 {% endif %}
@@ -162,7 +191,7 @@
         </div>
     </div>
 
-    <!-- Panel barras -->
+    {% comment %}Panel barras{% endcomment %}
     {% if filas %}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Avance por columna</h2>
@@ -171,12 +200,21 @@
             <div class="flex items-center gap-3 text-sm">
                 <span class="w-32 text-gray-700 dark:text-gray-200">{{ label }}</span>
                 <div class="flex-1 bg-gray-100 dark:bg-gray-900 rounded-full h-3 overflow-hidden">
-                    <div class="h-full transition-all"
-                         :class="totales.{{ slug }} >= 75 ? 'bg-green-500' : (totales.{{ slug }} >= 50 ? 'bg-amber-500' : 'bg-red-500')"
-                         :style="'width: ' + Math.min(100, totales.{{ slug }}) + '%'"></div>
+                    {% if slug == "cerramiento" %}{% with valor=totales.cerramiento %}<div class="h-full transition-all {% if valor >= 75 %}bg-green-500{% elif valor >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %}" style="width: {{ valor }}%"></div>{% endwith %}{% endif %}
+                    {% if slug == "excavacion" %}{% with valor=totales.excavacion %}<div class="h-full transition-all {% if valor >= 75 %}bg-green-500{% elif valor >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %}" style="width: {{ valor }}%"></div>{% endwith %}{% endif %}
+                    {% if slug == "solado" %}{% with valor=totales.solado %}<div class="h-full transition-all {% if valor >= 75 %}bg-green-500{% elif valor >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %}" style="width: {{ valor }}%"></div>{% endwith %}{% endif %}
+                    {% if slug == "acero" %}{% with valor=totales.acero %}<div class="h-full transition-all {% if valor >= 75 %}bg-green-500{% elif valor >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %}" style="width: {{ valor }}%"></div>{% endwith %}{% endif %}
+                    {% if slug == "vaciado" %}{% with valor=totales.vaciado %}<div class="h-full transition-all {% if valor >= 75 %}bg-green-500{% elif valor >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %}" style="width: {{ valor }}%"></div>{% endwith %}{% endif %}
+                    {% if slug == "compactacion" %}{% with valor=totales.compactacion %}<div class="h-full transition-all {% if valor >= 75 %}bg-green-500{% elif valor >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %}" style="width: {{ valor }}%"></div>{% endwith %}{% endif %}
                 </div>
-                <span class="w-16 text-right font-medium text-gray-900 dark:text-white"
-                      x-text="totales.{{ slug }}.toFixed(1) + '%'"></span>
+                <span class="w-16 text-right font-medium text-gray-900 dark:text-white">
+                    {% if slug == "cerramiento" %}{{ totales.cerramiento }}%{% endif %}
+                    {% if slug == "excavacion" %}{{ totales.excavacion }}%{% endif %}
+                    {% if slug == "solado" %}{{ totales.solado }}%{% endif %}
+                    {% if slug == "acero" %}{{ totales.acero }}%{% endif %}
+                    {% if slug == "vaciado" %}{{ totales.vaciado }}%{% endif %}
+                    {% if slug == "compactacion" %}{{ totales.compactacion }}%{% endif %}
+                </span>
             </div>
             {% endfor %}
         </div>
@@ -185,26 +223,15 @@
 </div>
 
 <script>
-function obraCivilMatriz(cfg) {
+function obraCivilResumen(cfg) {
     return {
         proyectoId: cfg.proyectoId,
         urlPesos: cfg.urlPesos,
-        urlAvanceBase: cfg.urlAvanceBase,
         csrfToken: cfg.csrfToken,
         pesos: { ...cfg.pesosIniciales },
         guardandoPesos: false,
         mensajePesos: '',
         mensajePesosTipo: '',
-        totales: {
-            cerramiento: {{ totales.cerramiento }},
-            excavacion: {{ totales.excavacion }},
-            solado: {{ totales.solado }},
-            acero: {{ totales.acero }},
-            vaciado: {{ totales.vaciado }},
-            compactacion: {{ totales.compactacion }}
-        },
-        avanceGeneral: {{ avance_general }},
-        filasData: [],  // poblado en init
         get sumaPesos() {
             return (this.pesos.cerramiento || 0) + (this.pesos.excavacion || 0) + (this.pesos.solado || 0)
                  + (this.pesos.acero || 0) + (this.pesos.vaciado || 0) + (this.pesos.compactacion || 0);
@@ -223,9 +250,8 @@ function obraCivilMatriz(cfg) {
                 });
                 const data = await r.json();
                 if (r.ok) {
-                    this.mensajePesos = '✓ Pesos guardados.';
+                    this.mensajePesos = 'Pesos guardados.';
                     this.mensajePesosTipo = 'ok';
-                    this.recalcular();
                 } else {
                     this.mensajePesos = data.error || 'Error guardando pesos.';
                     this.mensajePesosTipo = 'error';
@@ -237,91 +263,8 @@ function obraCivilMatriz(cfg) {
             this.guardandoPesos = false;
             setTimeout(() => { this.mensajePesos = ''; }, 4000);
         },
-        recalcular() {
-            // Disparamos un evento global para que las filas recalculen su avance ponderado.
-            window.dispatchEvent(new CustomEvent('oc-pesos-changed', { detail: { pesos: { ...this.pesos } } }));
-            // Recalcular el avance general usando las filas registradas.
-            const filas = window.__oc_filas__ || [];
-            if (filas.length) {
-                this.avanceGeneral = filas.reduce((acc, f) => acc + f.avancePonderado() * 100, 0) / filas.length;
-                ['cerramiento','excavacion','solado','acero','vaciado','compactacion'].forEach(col => {
-                    this.totales[col] = filas.reduce((acc, f) => acc + f.avances[col] * 100, 0) / filas.length;
-                });
-            }
-        },
     };
 }
-
-window.__oc_filas__ = [];
-
-function filaTorre(torreId, avancesIniciales) {
-    return {
-        torreId: torreId,
-        avances: { ...avancesIniciales },
-        guardando: { cerramiento: false, excavacion: false, solado: false, acero: false, vaciado: false, compactacion: false },
-        pesos: null,
-        init() {
-            const matriz = this.$root && this.$root.__x ? this.$root.__x.$data : null;
-            this.pesos = matriz ? matriz.pesos : null;
-            window.__oc_filas__.push(this);
-            window.addEventListener('oc-pesos-changed', (ev) => {
-                this.pesos = ev.detail.pesos;
-            });
-        },
-        avancePonderado() {
-            // Fallback: leer pesos del scope de la matriz si init aún no corrió.
-            const matriz = this.$root && this.$root.__x ? this.$root.__x.$data : null;
-            const pesos = this.pesos || (matriz ? matriz.pesos : null) || {};
-            const totalPeso = Object.values(pesos).reduce((a, b) => a + (b || 0), 0) || 1;
-            let suma = 0;
-            for (const [col, peso] of Object.entries(pesos)) {
-                suma += (this.avances[col] || 0) * (peso || 0);
-            }
-            return suma / totalPeso;
-        },
-        async actualizarAvance(columna, valorPct) {
-            let pct = parseFloat(valorPct);
-            if (isNaN(pct)) pct = 0;
-            pct = Math.max(0, Math.min(100, pct));
-            const valor = pct / 100;
-            this.avances[columna] = valor;
-            this.guardando[columna] = true;
-            try {
-                const fd = new FormData();
-                fd.append('columna', columna);
-                fd.append('valor', valor.toFixed(4));
-                const matriz = window.__oc_matriz__;
-                const csrf = (document.cookie.split('csrftoken=')[1] || '').split(';')[0]
-                          || (matriz ? matriz.csrfToken : '');
-                const url = (matriz ? matriz.urlAvanceBase : window.location.pathname.replace(/\/$/, ''))
-                         + 'torres/' + this.torreId + '/avance/';
-                await fetch(url, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrf },
-                    body: fd,
-                });
-                // Disparar recálculo global.
-                window.dispatchEvent(new CustomEvent('oc-avance-changed'));
-                if (matriz) matriz.recalcular();
-            } finally {
-                this.guardando[columna] = false;
-            }
-        },
-    };
-}
-
-// Exponer la instancia de matriz para que las filas la encuentren sin atravesar el DOM.
-document.addEventListener('alpine:init', () => {
-    Alpine.magic('matriz', () => () => window.__oc_matriz__);
-});
-window.addEventListener('DOMContentLoaded', () => {
-    // Capturar la instancia raíz tras el primer render.
-    setTimeout(() => {
-        const root = document.querySelector('[x-data^="obraCivilMatriz"]');
-        if (root && root.__x) window.__oc_matriz__ = root.__x.$data;
-    }, 50);
-});
 </script>
 {% endlocalize %}
 {% endblock %}
-{# fix l10n re-deploy Sun May 24 13:34:56 -05 2026 #}
