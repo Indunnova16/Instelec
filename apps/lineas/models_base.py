@@ -326,7 +326,15 @@ class Torre(BaseModel):
         ordering = ['linea', 'numero']
 
     def __str__(self):
-        return f"Torre {self.numero} - {self.linea.codigo}"
+        # B1.1 — formato uniforme T{numero}. Para variantes con línea usar
+        # `codigo_display` (e.g. en exports o detalle cuando se requiere desambiguar).
+        return f"T{self.numero}"
+
+    @property
+    def codigo_display(self):
+        """Variante con línea para casos donde se necesita desambiguar
+        (e.g. listados cross-línea, exports a Excel, breadcrumbs)."""
+        return f"T{self.numero} ({self.linea.codigo})"
 
     def save(self, *args, **kwargs):
         # Auto-generate geometry from lat/lon
@@ -397,7 +405,8 @@ class PoligonoServidumbre(BaseModel):
 
     def __str__(self):
         if self.torre:
-            return f"Servidumbre - Torre {self.torre.numero}"
+            # B1.1 — usar formato T{numero} en lugar de "Torre N"
+            return f"Servidumbre - T{self.torre.numero}"
         return f"Servidumbre - {self.nombre or self.id}"
 
     def punto_dentro(self, latitud: float, longitud: float) -> bool:

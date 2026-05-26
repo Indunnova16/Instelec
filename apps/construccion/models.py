@@ -368,7 +368,15 @@ class TorreConstruccion(BaseModel):
         ordering = ['numero']
 
     def __str__(self):
-        return f"Torre {self.numero} ({self.proyecto.nombre})"
+        # B1.1 — formato uniforme T{numero}. Para variantes con proyecto usar
+        # `codigo_display` (e.g. en exports, breadcrumbs cross-proyecto).
+        return f"T{self.numero}"
+
+    @property
+    def codigo_display(self):
+        """Variante con proyecto para casos donde se necesita desambiguar
+        (e.g. listados cross-proyecto, exports a Excel)."""
+        return f"T{self.numero} ({self.proyecto.nombre})"
 
     # === Habilitación paralela por torre (#67) ===
     @property
@@ -527,7 +535,8 @@ class PataObra(BaseModel):
         unique_together = [['torre', 'pata']]
 
     def __str__(self):
-        return f"Torre {self.torre.numero} - Pata {self.pata}"
+        # B1.1 — formato T{numero}
+        return f"T{self.torre.numero} - Pata {self.pata}"
 
     @property
     def porcentaje_completado(self):
@@ -1534,7 +1543,8 @@ class FaseTorre(BaseModel):
         verbose_name_plural = 'Fases de Torres'
 
     def __str__(self):
-        return f"Fases - Torre {self.torre.numero}"
+        # B1.1 — formato T{numero}
+        return f"Fases - T{self.torre.numero}"
 
     @property
     def porcentaje_montaje(self):
@@ -1660,7 +1670,8 @@ class SocialPredial(BaseModel):
         verbose_name_plural = 'Social Predial'
 
     def __str__(self):
-        return f"Social - Torre {self.torre.numero}"
+        # B1.1 — formato T{numero}
+        return f"Social - T{self.torre.numero}"
 
     @property
     def semaforo(self):
@@ -1756,7 +1767,8 @@ class AmbientalTorre(BaseModel):
         verbose_name_plural = 'Ambientales Torres'
 
     def __str__(self):
-        return f"Ambiental - Torre {self.torre.numero}"
+        # B1.1 — formato T{numero}
+        return f"Ambiental - T{self.torre.numero}"
 
     @property
     def semaforo(self):
@@ -1810,7 +1822,8 @@ class ControlLluvia(BaseModel):
         unique_together = [['torre', 'fecha']]
 
     def __str__(self):
-        return f"Lluvia - Torre {self.torre.numero} ({self.fecha})"
+        # B1.1 — formato T{numero}
+        return f"Lluvia - T{self.torre.numero} ({self.fecha})"
 
 
 class ReporteReplanteo(BaseModel):
@@ -1937,7 +1950,8 @@ class EntregaElectromecanica(BaseModel):
         verbose_name_plural = 'Entregas Electromecánicas'
 
     def __str__(self):
-        return f"Entrega - Torre {self.torre.numero}"
+        # B1.1 — formato T{numero}
+        return f"Entrega - T{self.torre.numero}"
 
 
 class CorreccionEntrega(BaseModel):
@@ -1970,7 +1984,8 @@ class CorreccionEntrega(BaseModel):
         verbose_name_plural = 'Correcciones de Entrega'
 
     def __str__(self):
-        return f"Corrección - Torre {self.torre.numero}"
+        # B1.1 — formato T{numero}
+        return f"Corrección - T{self.torre.numero}"
 
 
 class ObraProteccion(BaseModel):
@@ -2028,7 +2043,8 @@ class ObraProteccion(BaseModel):
         verbose_name_plural = 'Obras de Protección'
 
     def __str__(self):
-        return f"Protección - Torre {self.torre.numero}"
+        # B1.1 — formato T{numero}
+        return f"Protección - T{self.torre.numero}"
 
 
 class PruebaTecnica(BaseModel):
