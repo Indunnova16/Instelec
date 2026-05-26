@@ -203,12 +203,20 @@ urlpatterns = [
          views.TrinchosCunetasUpsertView.as_view(), name='trinchos_cunetas_upsert'),
     path('<uuid:proyecto_id>/trinchos-cunetas/<uuid:pk>/delete/',
          views.TrinchosCunetasDeleteView.as_view(), name='trinchos_cunetas_delete'),
-    path('<uuid:proyecto_id>/actividades-finales/',
-         views.ModuloPlaceholderView.as_view(
-             extra_context={'modulo_titulo': 'Actividades Finales', 'modulo_slug': 'actividades-finales'}),
-         name='actividades_finales'),
-    path('<uuid:proyecto_id>/indicadores-financieros/',
-         views.ModuloPlaceholderView.as_view(
-             extra_context={'modulo_titulo': 'Indicadores Financieros', 'modulo_slug': 'indicadores-financieros'}),
-         name='indicadores_financieros'),
 ]
+
+# === /modulo indicadores_construccion_sub_run_a — split de archivo magnet ===
+# F2 scaffolding eliminó los placeholders 'actividades-finales' e
+# 'indicadores-financieros' (que apuntaban a ModuloPlaceholderView) y
+# delegó a urls_b1/b2/b3. B1 re-define 'actividades_finales',
+# B3 re-define 'indicadores_financieros' (mismo slug, view nueva),
+# B2 agrega los CRUD bajo /indicadores/.
+from . import (
+    urls_b1_actividades_finales,
+    urls_b2_indicadores,
+    urls_b3_dashboard_indicadores,
+)
+
+urlpatterns += urls_b1_actividades_finales.urlpatterns
+urlpatterns += urls_b2_indicadores.urlpatterns
+urlpatterns += urls_b3_dashboard_indicadores.urlpatterns

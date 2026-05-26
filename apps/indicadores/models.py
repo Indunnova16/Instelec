@@ -193,3 +193,9 @@ class ActaSeguimiento(BaseModel):
 
     def __str__(self):
         return f"Acta {self.linea.codigo} - {self.mes}/{self.anio}"
+
+
+# === /modulo indicadores_construccion_sub_run_a — split de archivo magnet ===
+# F2 scaffolding agregó este import. Los modelos nuevos van en el archivo
+# dedicado de B4, NO en este archivo.
+from .models_b4_mantenimiento_detallado import *  # noqa: F401, F403

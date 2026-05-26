@@ -2637,3 +2637,11 @@ class SnapshotAvance(BaseModel):
             },
         )
         return snap
+
+
+# === /modulo indicadores_construccion_sub_run_a — split de archivo magnet ===
+# F2 scaffolding agregó estos imports. Los modelos nuevos van en los archivos
+# dedicados, NO en este archivo. Si falla el import, la sub-feature aún no
+# corrió F3 — eso está OK durante el desarrollo paralelo.
+from .models_b1_actividades_finales import *  # noqa: F401, F403
+from .models_b2_indicadores import *  # noqa: F401, F403
