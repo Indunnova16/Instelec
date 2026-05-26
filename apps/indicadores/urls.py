@@ -14,3 +14,10 @@ urlpatterns = [
     path('actas/', views.ActaListView.as_view(), name='actas'),
     path('acta/<uuid:pk>/', views.ActaDetailView.as_view(), name='acta_detalle'),
 ]
+
+# === /modulo indicadores_construccion_sub_run_a — split de archivo magnet ===
+# F2 scaffolding agregó este aggregator. B4 plantará urlpatterns de
+# /indicadores/mantenimiento-v2/* en urls_b4.py.
+from . import urls_b4
+
+urlpatterns += urls_b4.urlpatterns

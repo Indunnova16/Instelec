@@ -1,0 +1,12 @@
+{# B3 — Productividad cuadrillas (horizontal bar con meta {{ meta_torres_mes }}). #}
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" data-chart="productividad_cuadrillas">
+  <div class="flex justify-between items-center mb-2">
+    <h3 class="text-sm font-semibold">Productividad por cuadrilla</h3>
+    <span class="text-xs text-gray-400">
+      Meta: {{ meta_torres_mes|default:18 }} torres/mes
+    </span>
+  </div>
+  <div class="relative" style="height: 320px;">
+    <canvas id="chart-productividad-cuadrillas"></canvas>
+  </div>
+</div>

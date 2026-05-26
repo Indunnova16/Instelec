@@ -1,0 +1,46 @@
+{# B1 — Partial: fila de la matriz Actividades Finales.
+   Reemplazado por HTMX tras un toggle. Refresca celdas + % avance + badge. #}
+{% load l10n %}
+{% localize off %}
+<tr id="fila-torre-{{ fila.torre.id }}"
+    class="hover:bg-gray-50 dark:hover:bg-gray-700/40 border-t border-gray-200 dark:border-gray-700">
+    {# Columna A: Estructura #}
+    <th class="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 sticky left-0 bg-white dark:bg-gray-800 z-10 whitespace-nowrap">
+        <span class="font-semibold">T{{ fila.torre.numero }}</span>
+        {% if fila.torre.tipo %}<span class="ml-1 text-xs text-gray-500">{{ fila.torre.tipo }}</span>{% endif %}
+    </th>
+
+    {# 13 celdas booleanas #}
+    {% for celda in fila.celdas %}
+    <td class="px-2 py-1 text-center" title="{{ celda.letra }} — {{ celda.label }}">
+        <button type="button"
+                hx-post="{% url 'construccion:actividades_finales_toggle' proyecto_id=proyecto.id torre_id=fila.torre.id %}"
+                hx-vals='{"campo": "{{ celda.campo }}"}'
+                hx-target="#fila-torre-{{ fila.torre.id }}"
+                hx-swap="outerHTML"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-on::after-request="if(event.detail.failed){ var det=event.detail.xhr.responseText; var t=document.getElementById('actividades-finales-toast'); if(t){t.innerHTML=det; t.classList.remove('hidden');} }"
+                aria-label="Toggle {{ celda.label }} de T{{ fila.torre.numero }}"
+                class="w-9 h-7 rounded text-xs font-bold transition-colors
+                       {% if celda.valor %}
+                         bg-green-500 hover:bg-green-600 text-white
+                       {% else %}
+                         bg-gray-100 hover:bg-gray-200 text-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-500
+                       {% endif %}">
+            {% if celda.valor %}✓{% else %}–{% endif %}
+        </button>
+    </td>
+    {% endfor %}
+
+    {# Columna estado + % #}
+    <td class="px-3 py-2 text-center whitespace-nowrap">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ fila.af.estado_semaforo_color }}">
+            {{ fila.af.estado_semaforo_label }}
+        </span>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {{ fila.af.actividades_completas }}/{{ fila.af.total_actividades }}
+            ({{ fila.af.pct_avance|floatformat:0 }}%)
+        </div>
+    </td>
+</tr>
+{% endlocalize %}

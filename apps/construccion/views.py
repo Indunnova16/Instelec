@@ -2363,3 +2363,11 @@ class ModuloPlaceholderView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
         context['modulo_titulo'] = self.extra_context.get('modulo_titulo') if self.extra_context else 'Módulo'
         context['modulo_slug'] = self.extra_context.get('modulo_slug') if self.extra_context else ''
         return context
+
+
+# === /modulo indicadores_construccion_sub_run_a — split de archivo magnet ===
+# F2 scaffolding agregó estos imports. Las vistas nuevas van en los archivos
+# dedicados, NO en este archivo.
+from .views_b1_actividades_finales import *  # noqa: F401, F403
+from .views_b2_indicadores import *  # noqa: F401, F403
+from .views_b3_dashboard_indicadores import *  # noqa: F401, F403

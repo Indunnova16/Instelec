@@ -1,0 +1,28 @@
+{# Componente ANS individual: barra progress + meta + estado.
+   Espera contexto: componente = {key, nombre, valor, peso, meta, ok} #}
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <div class="flex items-start justify-between mb-2">
+        <div>
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ componente.nombre }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Peso {{ componente.peso|floatformat:0 }}% &middot; Meta {{ componente.meta|floatformat:0 }}%</p>
+        </div>
+        {% if componente.ok %}
+        <span class="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">EN META</span>
+        {% else %}
+        <span class="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">FUERA</span>
+        {% endif %}
+    </div>
+    <div class="flex items-baseline gap-2 mb-2">
+        <span class="text-2xl font-bold {% if componente.ok %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+            {{ componente.valor|floatformat:2 }}%
+        </span>
+    </div>
+    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+        <div class="{% if componente.ok %}bg-green-600{% else %}bg-amber-500{% endif %} h-2 rounded-full transition-all"
+             style="width: {{ componente.valor|floatformat:2 }}%;"
+             role="progressbar"
+             aria-valuenow="{{ componente.valor|floatformat:2 }}"
+             aria-valuemin="0"
+             aria-valuemax="100"></div>
+    </div>
+</div>
