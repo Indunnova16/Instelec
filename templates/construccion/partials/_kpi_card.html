@@ -1,1 +1,23 @@
-{# Stub plantado por F2 scaffolding del /modulo block indicadores_construccion_sub_run_a. Será sobreescrito por la sub-feature B3 en F3. NO usar `{% include ... ignore missing %}` — falla en esta versión de Django (TemplateSyntaxError). #}
+{# B3 — KPI card individual. Espera 'kpi' en contexto con keys:
+   key, label, value, unit, status, accent ('green'|'amber'|'red'), description.
+#}
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4
+            border-l-4
+            {% if kpi.accent == 'green' %}border-green-500
+            {% elif kpi.accent == 'amber' %}border-amber-500
+            {% elif kpi.accent == 'red' %}border-red-500
+            {% else %}border-gray-300{% endif %}"
+     data-kpi-key="{{ kpi.key }}"
+     data-kpi-status="{{ kpi.status }}">
+  <p class="text-xs uppercase tracking-wider text-gray-500">{{ kpi.label }}</p>
+  <p class="text-3xl font-bold mt-1
+            {% if kpi.accent == 'green' %}text-green-600
+            {% elif kpi.accent == 'amber' %}text-amber-600
+            {% elif kpi.accent == 'red' %}text-red-600
+            {% else %}text-gray-800{% endif %}">
+    {{ kpi.value }}{% if kpi.unit %}<span class="text-base font-medium ml-1">{{ kpi.unit }}</span>{% endif %}
+  </p>
+  {% if kpi.description %}
+    <p class="text-xs text-gray-400 mt-1">{{ kpi.description }}</p>
+  {% endif %}
+</div>

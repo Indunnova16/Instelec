@@ -1,1 +1,10 @@
-{# Stub plantado por F2 scaffolding del /modulo block indicadores_construccion_sub_run_a. Será sobreescrito por la sub-feature B3 en F3. NO usar `{% include ... ignore missing %}` — falla en esta versión de Django (TemplateSyntaxError). #}
+{# B3 — Margen + Desviación (bar chart por serie temporal). #}
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" data-chart="margen_kpi">
+  <div class="flex justify-between items-center mb-2">
+    <h3 class="text-sm font-semibold">Margen y Desviación</h3>
+    <span class="text-xs text-gray-400">Por registro financiero</span>
+  </div>
+  <div class="relative" style="height: 280px;">
+    <canvas id="chart-margen-kpi"></canvas>
+  </div>
+</div>

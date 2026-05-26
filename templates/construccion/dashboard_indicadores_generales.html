@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Indicadores en General — {{ proyecto.nombre }}{% endblock %}
+
+{% block extra_head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+{% include 'construccion/_proyecto_tabs.html' %}
+
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex justify-between items-center flex-wrap gap-2">
+    <div>
+      <h1 class="text-2xl font-bold">Indicadores en General</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }}</p>
+    </div>
+    {% if not pdf_mode %}
+    <div class="flex gap-2">
+      <a href="?periodo={{ periodo }}&tipo={{ tipo }}{% if linea_id %}&linea={{ linea_id }}{% endif %}&export=pdf"
+         class="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
+        Exportar PDF
+      </a>
+      <a href="?periodo={{ periodo }}&tipo={{ tipo }}{% if linea_id %}&linea={{ linea_id }}{% endif %}&export=excel"
+         class="px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+        Exportar Excel
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Filtros -->
+  {% if not pdf_mode %}
+  <form method="get" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label class="block text-xs uppercase text-gray-500 mb-1">Período</label>
+      <select name="periodo" class="border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600">
+        {% for value, label in periodo_choices %}
+          <option value="{{ value }}" {% if value == periodo %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs uppercase text-gray-500 mb-1">Tipo</label>
+      <select name="tipo" class="border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600">
+        {% for value, label in tipo_choices %}
+          <option value="{{ value }}" {% if value == tipo %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs uppercase text-gray-500 mb-1">Línea</label>
+      <select name="linea" class="border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600">
+        <option value="">— Todas —</option>
+        {% for ln in lineas %}
+          <option value="{{ ln.id }}" {% if linea_id == ln.id|stringformat:"s" %}selected{% endif %}>{{ ln.codigo|default:ln }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit"
+            class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+      Aplicar
+    </button>
+  </form>
+  {% endif %}
+
+  {% if is_empty %}
+    <!-- Empty state -->
+    <div class="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-6 rounded-lg" data-testid="empty-state">
+      <h2 class="text-lg font-semibold text-yellow-800 dark:text-yellow-200">Aún no hay indicadores registrados</h2>
+      <p class="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+        Cuando se registren indicadores financieros, técnicos o de desempeño, aparecerán aquí los KPIs y las gráficas correspondientes.
+      </p>
+    </div>
+  {% endif %}
+
+  <!-- KPI cards (6) — siempre visibles, valor 0 si vacío -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for kpi in kpis %}
+      {% include 'construccion/partials/_kpi_card.html' %}
+    {% endfor %}
+  </div>
+
+  <!-- Gráficas (6) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {% include 'construccion/partials/_chart_flujo_caja.html' %}
+    {% include 'construccion/partials/_chart_avance_tecnico.html' %}
+    {% include 'construccion/partials/_chart_egresos_pie.html' %}
+    {% include 'construccion/partials/_chart_margen_kpi.html' %}
+    {% include 'construccion/partials/_chart_seguridad.html' %}
+    {% include 'construccion/partials/_chart_productividad_cuadrillas.html' %}
+  </div>
+
+  <!-- Pie con datos JSON embebidos para tests -->
+  {{ charts_json|json_script:"b3-charts-data" }}
+</div>
+
+<script>
+(function() {
+  if (typeof Chart === 'undefined') return;  // CDN bloqueado en PDF / offline
+  const node = document.getElementById('b3-charts-data');
+  if (!node) return;
+  const data = JSON.parse(node.textContent || '{}');
+
+  function ctx(id) {
+    const el = document.getElementById(id);
+    return el ? el.getContext('2d') : null;
+  }
+
+  // 1. Flujo de caja (area)
+  if (ctx('chart-flujo-caja')) new Chart(ctx('chart-flujo-caja'), {
+    type: 'line',
+    data: {
+      labels: data.flujo_caja.labels,
+      datasets: [{
+        label: 'Flujo acumulado',
+        data: data.flujo_caja.values,
+        fill: true,
+        backgroundColor: 'rgba(59,130,246,0.15)',
+        borderColor: '#2563eb',
+        tension: 0.3,
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  // 2. Avance técnico programado vs ejecutado (line dual)
+  if (ctx('chart-avance-tecnico')) new Chart(ctx('chart-avance-tecnico'), {
+    type: 'line',
+    data: {
+      labels: data.avance_tecnico.labels,
+      datasets: [
+        { label: 'Programado', data: data.avance_tecnico.programado, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.2)' },
+        { label: 'Ejecutado',  data: data.avance_tecnico.ejecutado,  borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.2)' },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  // 3. Egresos pie
+  if (ctx('chart-egresos-pie')) new Chart(ctx('chart-egresos-pie'), {
+    type: 'pie',
+    data: {
+      labels: data.egresos_pie.labels,
+      datasets: [{
+        data: data.egresos_pie.values,
+        backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6'],
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  // 4. Margen + Desviación
+  if (ctx('chart-margen-kpi')) new Chart(ctx('chart-margen-kpi'), {
+    type: 'bar',
+    data: {
+      labels: data.margen_kpi.labels,
+      datasets: [
+        { label: 'Margen %', data: data.margen_kpi.margen, backgroundColor: '#10b981' },
+        { label: 'Desviación %', data: data.margen_kpi.desviacion, backgroundColor: '#f97316' },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  // 5. Seguridad incidentes acumulados
+  if (ctx('chart-seguridad')) new Chart(ctx('chart-seguridad'), {
+    type: 'line',
+    data: {
+      labels: data.seguridad.labels,
+      datasets: [{
+        label: 'Incidentes acumulados',
+        data: data.seguridad.values,
+        borderColor: '#dc2626',
+        backgroundColor: 'rgba(220,38,38,0.15)',
+        fill: true,
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  // 6. Productividad cuadrillas (horizontal bar con meta)
+  if (ctx('chart-productividad-cuadrillas')) {
+    const meta = data.productividad_cuadrillas.meta || 18;
+    const labels = data.productividad_cuadrillas.labels;
+    new Chart(ctx('chart-productividad-cuadrillas'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Torres terminadas',
+            data: data.productividad_cuadrillas.values,
+            backgroundColor: '#6366f1',
+          },
+          {
+            label: 'Meta (' + meta + ' torres/mes)',
+            data: labels.map(_ => meta),
+            type: 'line',
+            borderColor: '#dc2626',
+            borderDash: [6,4],
+            pointRadius: 0,
+            fill: false,
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

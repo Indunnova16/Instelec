@@ -1,1 +1,10 @@
-{# Stub plantado por F2 scaffolding del /modulo block indicadores_construccion_sub_run_a. Será sobreescrito por la sub-feature B3 en F3. NO usar `{% include ... ignore missing %}` — falla en esta versión de Django (TemplateSyntaxError). #}
+{# B3 — Flujo de caja acumulado (area chart). #}
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" data-chart="flujo_caja">
+  <div class="flex justify-between items-center mb-2">
+    <h3 class="text-sm font-semibold">Flujo de caja acumulado</h3>
+    <span class="text-xs text-gray-400">Ingresos − costos</span>
+  </div>
+  <div class="relative" style="height: 280px;">
+    <canvas id="chart-flujo-caja"></canvas>
+  </div>
+</div>
