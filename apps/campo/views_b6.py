@@ -25,13 +25,16 @@ import os
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import FileResponse, Http404
 from django.urls import path
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from apps.core.mixins import RoleRequiredMixin
 
 from .models import Procedimiento
 
 
+@method_decorator(xframe_options_sameorigin, name='dispatch')
 class ProcedimientoDownloadView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Proxy view que sirve un Procedimiento via storage backend.
 
