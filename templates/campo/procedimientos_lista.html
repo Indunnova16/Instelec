@@ -92,6 +92,7 @@
                         {{ proc.tamanio_legible }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        {% if proc.blob_disponible %}
                         <div class="flex items-center gap-3">
                             <a href="{% url 'campo:procedimiento_viewer' proc.id %}"
                                class="text-blue-600 hover:text-blue-900 dark:text-blue-400 flex items-center gap-1">
@@ -109,6 +110,15 @@
                                 Descargar
                             </a>
                         </div>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                              title="El archivo no está disponible en almacenamiento; contacta a soporte para recuperarlo o re-subirlo.">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12a2 2 0 00-3.48 0l-7.07 12a2 2 0 001.74 3z"/>
+                            </svg>
+                            Archivo no disponible
+                        </span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}

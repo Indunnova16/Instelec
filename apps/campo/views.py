@@ -462,7 +462,7 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
             context['error'] = 'El archivo excede el tamaño máximo permitido (50 MB).'
             return self.render_to_response(context)
 
-        Procedimiento.objects.create(
+        proc = Procedimiento.objects.create(
             titulo=titulo,
             descripcion=descripcion,
             archivo=archivo,
@@ -471,6 +471,23 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
             tamanio=archivo.size,
             subido_por=request.user,
         )
+
+        # Hardening #118: confirmar que el blob aterrizó en storage antes de
+        # devolver éxito. Si django-storages no propaga la falla del upload
+        # (ej. timeout, permisos GCS), la fila quedaría apuntando a un blob
+        # inexistente y el cliente vería 404 al descargar.
+        try:
+            existe = proc.archivo.storage.exists(proc.archivo.name)
+        except Exception:
+            existe = False
+        if not existe:
+            proc.delete()
+            context = self.get_context_data(**kwargs)
+            context['error'] = (
+                'No se pudo guardar el archivo en almacenamiento. '
+                'Por favor intenta nuevamente.'
+            )
+            return self.render_to_response(context)
 
         return HttpResponseRedirect(reverse_lazy('campo:procedimientos'))
 
