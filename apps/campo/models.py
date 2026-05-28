@@ -479,6 +479,11 @@ class Procedimiento(BaseModel):
         related_name='procedimientos_campo',
         verbose_name='Subido por'
     )
+    blob_disponible = models.BooleanField(
+        'Archivo disponible en storage',
+        default=True,
+        help_text='False si el blob no existe en GCS (huérfano).',
+    )
 
     class Meta:
         db_table = 'procedimientos_campo'
