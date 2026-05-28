@@ -227,3 +227,7 @@ from . import urls_b3_oc_detalle, urls_b3_mont_detalle  # noqa: E402
 
 urlpatterns += urls_b3_oc_detalle.urlpatterns
 urlpatterns += urls_b3_mont_detalle.urlpatterns
+
+# === Complemento financiero #103 — TransaccionesList/Upload/Reportes + PyG drill-down ===
+from . import urls_pdeo_complement  # noqa: E402
+urlpatterns += urls_pdeo_complement.urlpatterns

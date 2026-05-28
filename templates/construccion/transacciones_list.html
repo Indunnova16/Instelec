@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block title %}Transacciones financieras{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold">Transacciones financieras</h1>
+      <p class="text-sm text-gray-500">
+        {{ total_count }} transacciones · Total: ${{ total_valor|floatformat:0 }} COP
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <a href="{% url 'construccion:transacciones_upload' %}"
+         class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+        ⬆️ Cargar PDEO Excel
+      </a>
+      <a href="{% url 'construccion:reportes_financieros' %}"
+         class="px-3 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 text-sm">
+        📊 Reportes
+      </a>
+    </div>
+  </div>
+
+  <form method="get" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+    <div>
+      <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Proyecto</label>
+      <select name="proyecto" class="w-full px-2 py-1 border rounded">
+        <option value="">— Todos —</option>
+        {% for p in proyectos %}
+          <option value="{{ p.id }}" {% if filtros.proyecto == p.id|stringformat:'s' %}selected{% endif %}>{{ p.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Categoría</label>
+      <select name="categoria" class="w-full px-2 py-1 border rounded">
+        <option value="">— Todas —</option>
+        {% for c in categorias %}
+          <option value="{{ c.id }}" {% if filtros.categoria == c.id|stringformat:'s' %}selected{% endif %}>{{ c.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">NIT proveedor</label>
+      <input type="text" name="nit" value="{{ filtros.nit }}"
+             class="w-full px-2 py-1 border rounded" placeholder="NIT contiene…">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Texto libre</label>
+      <input type="text" name="q" value="{{ filtros.q }}"
+             class="w-full px-2 py-1 border rounded" placeholder="descripción, proveedor, factura…">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Desde</label>
+      <input type="date" name="fecha_desde" value="{{ filtros.fecha_desde }}" class="w-full px-2 py-1 border rounded">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Hasta</label>
+      <input type="date" name="fecha_hasta" value="{{ filtros.fecha_hasta }}" class="w-full px-2 py-1 border rounded">
+    </div>
+    <div class="md:col-span-2 flex items-end gap-2">
+      <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white rounded text-sm">Filtrar</button>
+      <a href="{% url 'construccion:transacciones_list' %}" class="px-3 py-1.5 border rounded text-sm">Limpiar</a>
+    </div>
+  </form>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-xs">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left">Fecha</th>
+          <th class="px-3 py-2 text-left">Factura</th>
+          <th class="px-3 py-2 text-left">NIT</th>
+          <th class="px-3 py-2 text-left">Proveedor</th>
+          <th class="px-3 py-2 text-left">Descripción</th>
+          <th class="px-3 py-2 text-left">Categoría</th>
+          <th class="px-3 py-2 text-left">Proyecto</th>
+          <th class="px-3 py-2 text-right">Valor (COP)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transacciones %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-3 py-1.5 whitespace-nowrap">{{ t.fecha|date:'Y-m-d' }}</td>
+          <td class="px-3 py-1.5">{{ t.numero_factura|default:'—' }}</td>
+          <td class="px-3 py-1.5">{{ t.nit_proveedor|default:'—' }}</td>
+          <td class="px-3 py-1.5">{{ t.nombre_proveedor|default:'—'|truncatechars:40 }}</td>
+          <td class="px-3 py-1.5">{{ t.descripcion|truncatechars:60 }}</td>
+          <td class="px-3 py-1.5">{{ t.movimiento.categoria.nombre }}</td>
+          <td class="px-3 py-1.5">{{ t.movimiento.periodo.proyecto.nombre|truncatechars:25 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ t.valor|floatformat:0 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="px-3 py-6 text-center text-gray-500">Sin transacciones con esos filtros.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+  <div class="flex justify-center gap-1 text-sm">
+    {% if page_obj.has_previous %}
+      <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}"
+         class="px-2 py-1 border rounded">←</a>
+    {% endif %}
+    <span class="px-2 py-1">Página {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}"
+         class="px-2 py-1 border rounded">→</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+{% block title %}Reportes financieros{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold">Reportes financieros</h1>
+      <p class="text-sm text-gray-500">PyG trimestral, top proveedores, alertas de variación.</p>
+    </div>
+    <form method="get" class="flex gap-2 items-center">
+      <label class="text-sm">Año:</label>
+      <select name="anio" class="px-2 py-1 border rounded text-sm">
+        <option value="">— Todos —</option>
+        {% for a in anios_disponibles %}
+          <option value="{{ a }}" {% if anio_filtro == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded text-sm">Filtrar</button>
+    </form>
+  </div>
+
+  <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-lg font-semibold">PyG por trimestre</h2>
+      <a href="?reporte=pyg_trimestre&export=csv{% if anio_filtro %}&anio={{ anio_filtro }}{% endif %}"
+         class="text-sm text-blue-600 hover:underline">⬇️ CSV</a>
+    </div>
+    <table class="w-full text-xs">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left">Trimestre</th>
+          <th class="px-3 py-2 text-left">Tipo</th>
+          <th class="px-3 py-2 text-right">Presupuesto</th>
+          <th class="px-3 py-2 text-right">Real</th>
+          <th class="px-3 py-2 text-right">Variación</th>
+          <th class="px-3 py-2 text-right">%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in pyg_trimestre %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-3 py-1.5">{{ r.trimestre }}</td>
+          <td class="px-3 py-1.5">{{ r.tipo }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.presupuesto|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.real|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.variacion|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right">{{ r.pct|default:'—' }}%</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="px-3 py-4 text-center text-gray-500">Sin datos.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-lg font-semibold">Top 10 proveedores</h2>
+      <a href="?reporte=top_proveedores&export=csv{% if anio_filtro %}&anio={{ anio_filtro }}{% endif %}"
+         class="text-sm text-blue-600 hover:underline">⬇️ CSV</a>
+    </div>
+    <table class="w-full text-xs">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left">NIT</th>
+          <th class="px-3 py-2 text-left">Razón social</th>
+          <th class="px-3 py-2 text-right">Total (COP)</th>
+          <th class="px-3 py-2 text-right">Transacciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in top_proveedores %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+          <td class="px-3 py-1.5">{{ r.nit_proveedor|default:'—' }}</td>
+          <td class="px-3 py-1.5">{{ r.nombre_proveedor|default:'—'|truncatechars:50 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.total|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right">{{ r.cnt }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="px-3 py-4 text-center text-gray-500">Sin datos.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-lg font-semibold">⚠️ Alertas de variación &gt;50%</h2>
+      <a href="?reporte=alertas&export=csv{% if anio_filtro %}&anio={{ anio_filtro }}{% endif %}"
+         class="text-sm text-blue-600 hover:underline">⬇️ CSV</a>
+    </div>
+    <table class="w-full text-xs">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left">Categoría</th>
+          <th class="px-3 py-2 text-right">Presupuesto</th>
+          <th class="px-3 py-2 text-right">Real</th>
+          <th class="px-3 py-2 text-right">Variación</th>
+          <th class="px-3 py-2 text-right">%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in alertas %}
+        <tr class="border-t border-gray-100 dark:border-gray-700 {% if r.pct > 0 %}bg-red-50{% else %}bg-amber-50{% endif %}">
+          <td class="px-3 py-1.5">{{ r.categoria.nombre }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.presupuesto|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.real|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.variacion|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right font-semibold">{{ r.pct }}%</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="px-3 py-4 text-center text-gray-500">Ninguna categoría con variación &gt;50%. 🎉</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
