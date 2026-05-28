@@ -57,13 +57,20 @@ DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 # =============================================================================
 # Google Cloud Storage
 # =============================================================================
-DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
+# Django 5.x: STORAGES dict reemplaza DEFAULT_FILE_STORAGE / STATICFILES_STORAGE.
+# Mantener los legacy en paralelo no funciona — Django ignora silenciosamente
+# y cae a FileSystemStorage (efímero en Cloud Run). Issue #95.
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 GS_DEFAULT_ACL = 'publicRead'
 GS_QUERYSTRING_AUTH = False
 GS_FILE_OVERWRITE = False
-
-# Static files served by WhiteNoise
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # =============================================================================
 # Cache Configuration
