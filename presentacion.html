@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instelec - Presentación Ejecutiva</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #0a1e3f;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            display: none;
+            opacity: 0;
+            animation: slideIn 0.6s ease-out forwards;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding: 50px 60px;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .slide.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(60px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* ===== SCROLLBAR ===== */
+        .slide::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .slide::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .slide::-webkit-scrollbar-thumb {
+            background: rgba(0, 102, 204, 0.5);
+            border-radius: 4px;
+        }
+
+        /* ===== PORTADA ===== */
+        .slide-portada {
+            background: linear-gradient(135deg, #001f4d 0%, #0033a0 50%, #0066cc 100%);
+            color: white;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .portada-content {
+            text-align: center;
+        }
+
+        .logo-big {
+            font-size: 100px;
+            margin-bottom: 20px;
+            animation: float 3s ease-in-out infinite;
+            filter: drop-shadow(0 0 20px rgba(0,102,204,0.5));
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .portada-title {
+            font-size: 72px;
+            font-weight: 800;
+            margin-bottom: 15px;
+            letter-spacing: -2px;
+            background: linear-gradient(to right, #ffffff, #e0e7ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .portada-tagline {
+            font-size: 28px;
+            font-weight: 300;
+            opacity: 0.95;
+            margin-bottom: 15px;
+            color: #e0e7ff;
+        }
+
+        .portada-subtitle {
+            font-size: 18px;
+            opacity: 0.8;
+            font-weight: 400;
+        }
+
+        /* ===== SLIDE CONTENT ===== */
+        .slide-white {
+            background: #f8fafc;
+            color: #0a1e3f;
+        }
+
+        .slide-light {
+            background: linear-gradient(135deg, #f0f6ff 0%, #e8eef7 100%);
+            color: #0a1e3f;
+        }
+
+        h1 {
+            font-size: 48px;
+            color: #001f4d;
+            margin-bottom: 35px;
+            font-weight: 800;
+            position: relative;
+            padding-bottom: 20px;
+        }
+
+        h1::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 80px;
+            height: 5px;
+            background: linear-gradient(to right, #0066cc, #0099ff);
+            border-radius: 3px;
+        }
+
+        h2 {
+            font-size: 32px;
+            color: #001f4d;
+            margin-bottom: 25px;
+            font-weight: 700;
+        }
+
+        /* ===== PROBLEMA ===== */
+        .problema-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .problema-item {
+            background: white;
+            padding: 35px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border-left: 6px solid #ff4757;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .problema-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: -50px;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(255, 71, 87, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .problema-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        .problema-number {
+            font-size: 48px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ff4757, #ff6b7a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .problema-label {
+            font-size: 16px;
+            color: #001f4d;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .problema-desc {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        /* ===== SOLUCIÓN ===== */
+        .solucion-container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        .solucion-desc {
+            font-size: 16px;
+            line-height: 1.8;
+            color: #333;
+            margin-bottom: 35px;
+        }
+
+        .solucion-features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .feature {
+            background: linear-gradient(135deg, #001f4d 0%, #0066cc 100%);
+            color: white;
+            padding: 30px 25px;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(0, 102, 204, 0.5);
+        }
+
+        .feature::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .feature:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 40px rgba(0, 102, 204, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 44px;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-text {
+            font-size: 13px;
+            opacity: 0.9;
+            line-height: 1.5;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ===== KPIs ===== */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .kpi-box {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            border-top: 5px solid #0066cc;
+        }
+
+        .kpi-box::before {
+            content: '';
+            position: absolute;
+            bottom: -50px;
+            right: -50px;
+            width: 150px;
+            height: 150px;
+            background: radial-gradient(circle, rgba(0, 102, 204, 0.05) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .kpi-number {
+            font-size: 56px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #0066cc, #0099ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .kpi-label {
+            font-size: 15px;
+            color: #333;
+            line-height: 1.6;
+            font-weight: 500;
+        }
+
+        /* ===== CAPACIDADES ===== */
+        .capacidades-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+            margin-top: 20px;
+            margin-bottom: 40px;
+        }
+
+        .capacidad-card {
+            background: white;
+            padding: 35px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .capacidad-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(to right, #0066cc, #0099ff);
+        }
+
+        .capacidad-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 35px rgba(0, 102, 204, 0.2);
+            border-color: #0066cc;
+        }
+
+        .capacidad-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .capacidad-icon {
+            font-size: 40px;
+            background: linear-gradient(135deg, #0066cc, #0099ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .capacidad-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: #001f4d;
+        }
+
+        .capacidad-desc {
+            font-size: 14px;
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .capacidad-list {
+            list-style: none;
+            margin-top: 12px;
+        }
+
+        .capacidad-list li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .capacidad-list li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: #0066cc;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        /* ===== IMPLEMENTACIÓN ===== */
+        .fases-container {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+
+        .fase {
+            background: white;
+            padding: 25px 15px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .fase::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(to right, #0066cc, #0099ff);
+        }
+
+        .fase:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 102, 204, 0.2);
+        }
+
+        .fase-numero {
+            display: inline-block;
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #0066cc, #0099ff);
+            color: white;
+            border-radius: 50%;
+            line-height: 48px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            font-size: 18px;
+            box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+        }
+
+        .fase-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .roi-section {
+            background: white;
+            padding: 35px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            margin-top: 20px;
+            margin-bottom: 40px;
+            border-top: 5px solid #0066cc;
+        }
+
+        .roi-col h3 {
+            color: #001f4d;
+            font-size: 18px;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .roi-item {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 18px;
+        }
+
+        .roi-check {
+            font-size: 24px;
+            color: #0066cc;
+            flex-shrink: 0;
+            font-weight: bold;
+        }
+
+        .roi-text {
+            font-size: 14px;
+            color: #555;
+            line-height: 1.5;
+        }
+
+        /* ===== CIERRE ===== */
+        .slide-cierre {
+            background: linear-gradient(135deg, #001f4d 0%, #0033a0 50%, #0066cc 100%);
+            color: white;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding-top: 50px;
+        }
+
+        .cierre-content h2 {
+            color: white;
+            font-size: 52px;
+            margin-bottom: 25px;
+            font-weight: 800;
+        }
+
+        .cierre-content p {
+            font-size: 18px;
+            opacity: 0.95;
+            margin-bottom: 40px;
+            line-height: 1.7;
+            max-width: 700px;
+        }
+
+        .cta-group {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 15px 36px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: white;
+            color: #001f4d;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-secondary:hover {
+            background: white;
+            color: #001f4d;
+        }
+
+        /* ===== CONTROLES ===== */
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 100;
+        }
+
+        button.nav-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            background: white;
+            color: #0066cc;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        button.nav-btn:hover {
+            transform: scale(1.12);
+            box-shadow: 0 8px 30px rgba(0, 102, 204, 0.4);
+            background: #0066cc;
+            color: white;
+        }
+
+        button.nav-btn:active {
+            transform: scale(0.98);
+        }
+
+        .counter {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            color: white;
+            font-size: 15px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 10px 18px;
+            border-radius: 25px;
+            font-weight: 700;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .progress {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(to right, #0066cc, #0099ff);
+            transition: width 0.3s ease;
+            z-index: 99;
+        }
+
+        @media (max-width: 1200px) {
+            .slide {
+                padding: 40px;
+            }
+
+            .solucion-features {
+                grid-template-columns: 1fr;
+            }
+
+            .fases-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .roi-section {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .problema-grid, .kpi-grid, .capacidades-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 36px;
+            }
+
+            .portada-title {
+                font-size: 48px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <!-- SLIDE 1: PORTADA -->
+        <div class="slide slide-portada active">
+            <div class="portada-content">
+                <div class="logo-big">⚡</div>
+                <div class="portada-title">INSTELEC</div>
+                <div class="portada-tagline">Transformación Digital de Operaciones</div>
+                <div class="portada-subtitle">Gestión Integral de Mantenimiento en Líneas de Transmisión</div>
+            </div>
+        </div>
+
+        <!-- SLIDE 2: EL PROBLEMA -->
+        <div class="slide slide-light">
+            <h1>El Desafío Actual</h1>
+            <div class="problema-grid">
+                <div class="problema-item">
+                    <div class="problema-number">40%</div>
+                    <div class="problema-label">Tiempo perdido</div>
+                    <div class="problema-desc">En coordinación manual de cuadrillas y actividades</div>
+                </div>
+                <div class="problema-item">
+                    <div class="problema-number">35%</div>
+                    <div class="problema-label">Falta de trazabilidad</div>
+                    <div class="problema-desc">Registros incompletos y sin respaldo documental</div>
+                </div>
+                <div class="problema-item">
+                    <div class="problema-number">28%</div>
+                    <div class="problema-label">Desviaciones presupuestarias</div>
+                    <div class="problema-desc">Sin visibilidad en costos operativos reales</div>
+                </div>
+                <div class="problema-item">
+                    <div class="problema-number">45%</div>
+                    <div class="problema-label">Riesgo regulatorio</div>
+                    <div class="problema-desc">Dificultad para cumplir normativas RETIE y CREG</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 3: LA SOLUCIÓN -->
+        <div class="slide slide-light">
+            <h1>La Solución: Instelec</h1>
+            <div class="solucion-container">
+                <div class="solucion-desc">
+                    Plataforma web empresarial que centraliza la gestión integral de mantenimiento en líneas de transmisión. Automatiza procesos, proporciona visibilidad en tiempo real y genera trazabilidad completa para cumplimiento regulatorio.
+                </div>
+                <div class="solucion-features">
+                    <div class="feature">
+                        <div class="feature-icon">📊</div>
+                        <div class="feature-title">Control Total</div>
+                        <div class="feature-text">Visibilidad completa de actividades, costos y personal en tiempo real</div>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🗺️</div>
+                        <div class="feature-title">Geolocalización</div>
+                        <div class="feature-text">Tracking de cuadrillas y validación de ubicación en campo</div>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">✅</div>
+                        <div class="feature-title">Cumplimiento</div>
+                        <div class="feature-text">Trazabilidad completa para auditorías y regulaciones</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 4: IMPACTO DE NEGOCIO -->
+        <div class="slide slide-light">
+            <h1>Impacto de Negocio</h1>
+            <div class="kpi-grid">
+                <div class="kpi-box">
+                    <div class="kpi-number">-40%</div>
+                    <div class="kpi-label">Reducción de tiempo de planificación y coordinación</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-number">+35%</div>
+                    <div class="kpi-label">Mejora en eficiencia operativa</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-number">-25%</div>
+                    <div class="kpi-label">Reducción de costos operativos</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-number">100%</div>
+                    <div class="kpi-label">Cumplimiento regulatorio garantizado</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 5: CAPACIDADES CLAVE -->
+        <div class="slide slide-light">
+            <h1>Capacidades Principales</h1>
+            <div class="capacidades-grid">
+                <div class="capacidad-card">
+                    <div class="capacidad-header">
+                        <div class="capacidad-icon">📅</div>
+                        <div class="capacidad-title">Gestión de Actividades</div>
+                    </div>
+                    <div class="capacidad-desc">Planificación, programación y seguimiento de mantenimiento preventivo y correctivo</div>
+                    <ul class="capacidad-list">
+                        <li>Calendarios por línea</li>
+                        <li>Asignación automática</li>
+                        <li>Estados en tiempo real</li>
+                    </ul>
+                </div>
+
+                <div class="capacidad-card">
+                    <div class="capacidad-header">
+                        <div class="capacidad-icon">👥</div>
+                        <div class="capacidad-title">Gestión de Cuadrillas</div>
+                    </div>
+                    <div class="capacidad-desc">Control de equipos, supervisores y tracking en vivo de ubicaciones</div>
+                    <ul class="capacidad-list">
+                        <li>Asignación de recursos</li>
+                        <li>GPS en tiempo real</li>
+                        <li>Historial de actividades</li>
+                    </ul>
+                </div>
+
+                <div class="capacidad-card">
+                    <div class="capacidad-header">
+                        <div class="capacidad-icon">💰</div>
+                        <div class="capacidad-title">Control Financiero</div>
+                    </div>
+                    <div class="capacidad-desc">Presupuestos, costos reales y análisis de gastos por actividad</div>
+                    <ul class="capacidad-list">
+                        <li>Presupuestos vs real</li>
+                        <li>Análisis de gastos</li>
+                        <li>Reportes financieros</li>
+                    </ul>
+                </div>
+
+                <div class="capacidad-card">
+                    <div class="capacidad-header">
+                        <div class="capacidad-icon">📊</div>
+                        <div class="capacidad-title">Indicadores & Reportes</div>
+                    </div>
+                    <div class="capacidad-desc">Dashboards ejecutivos y KPIs para toma de decisiones</div>
+                    <ul class="capacidad-list">
+                        <li>Dashboards en vivo</li>
+                        <li>KPI personalizados</li>
+                        <li>Reportes automatizados</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 6: IMPLEMENTACIÓN -->
+        <div class="slide slide-light">
+            <h1>Plan de Implementación</h1>
+            <div class="fases-container">
+                <div class="fase">
+                    <div class="fase-numero">1</div>
+                    <div class="fase-label">Diagnóstico</div>
+                </div>
+                <div class="fase">
+                    <div class="fase-numero">2</div>
+                    <div class="fase-label">Configuración</div>
+                </div>
+                <div class="fase">
+                    <div class="fase-numero">3</div>
+                    <div class="fase-label">Capacitación</div>
+                </div>
+                <div class="fase">
+                    <div class="fase-numero">4</div>
+                    <div class="fase-label">Piloto</div>
+                </div>
+                <div class="fase">
+                    <div class="fase-numero">5</div>
+                    <div class="fase-label">Producción</div>
+                </div>
+            </div>
+
+            <div class="roi-section">
+                <div class="roi-col">
+                    <h3>⏱ Timeline</h3>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text"><strong>Mes 1:</strong> Diagnóstico y configuración</div>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text"><strong>Mes 2:</strong> Capacitación intensiva</div>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text"><strong>Mes 3:</strong> Piloto con cuadrilla</div>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text"><strong>Mes 4+:</strong> Expansión total</div>
+                    </div>
+                </div>
+                <div class="roi-col">
+                    <h3>💡 Beneficios Esperados</h3>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text">Retorno de inversión en 6-8 meses</div>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text">Adopción del 100% del equipo operativo</div>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text">Ahorros anuales superiores a $500M</div>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-check">✓</div>
+                        <div class="roi-text">Cumplimiento total con regulaciones</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 7: CIERRE -->
+        <div class="slide slide-cierre">
+            <div class="cierre-content">
+                <h2>Comencemos la Transformación</h2>
+                <p>
+                    Con Instelec, reduciremos costos operativos en 25%, mejoraremos eficiencia en 35% y garantizaremos cumplimiento regulatorio total en los próximos 4 meses.
+                </p>
+                <div class="cta-group">
+                    <button class="btn btn-primary" onclick="alert('Próximo paso: Junta de arranque con equipo operativo')">Siguiente Paso</button>
+                    <button class="btn btn-secondary" onclick="alert('¡Adelante con la transformación!')">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTROLES -->
+    <div class="counter">
+        <span id="current">1</span> / <span id="total">7</span>
+    </div>
+    <div class="progress" id="progress"></div>
+
+    <div class="controls">
+        <button class="nav-btn" onclick="prev()" title="Anterior">←</button>
+        <button class="nav-btn" onclick="next()" title="Siguiente">→</button>
+    </div>
+
+    <script>
+        let current = 0;
+        const slides = document.querySelectorAll('.slide');
+        const total = slides.length;
+
+        function show(n) {
+            slides[current].classList.remove('active');
+            current = (n + total) % total;
+            slides[current].classList.add('active');
+            document.getElementById('current').textContent = current + 1;
+            document.getElementById('progress').style.width = ((current + 1) / total * 100) + '%';
+        }
+
+        function next() { show(current + 1); }
+        function prev() { show(current - 1); }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') next();
+            if (e.key === 'ArrowLeft') prev();
+            if (e.key === ' ') { e.preventDefault(); next(); }
+        });
+
+        document.getElementById('total').textContent = total;
+        show(0);
+    </script>
+</body>
+</html>
