@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}PyG drill-down — {{ proyecto.nombre }}{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-2xl font-bold">Estado de Resultados (PyG)</h1>
+      <p class="text-sm text-gray-500">{{ proyecto.nombre }} · drill-down por categoría</p>
+    </div>
+    <a href="{% url 'construccion:dashboard_financiero' proyecto.id %}"
+       class="px-3 py-2 border border-blue-600 text-blue-600 rounded-lg text-sm">← Dashboard</a>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <p class="text-xs text-gray-500">Ingresos</p>
+      <p class="text-lg font-bold">${{ totales.ingresos_real|floatformat:0 }}</p>
+      <p class="text-xs text-gray-400">Presup: ${{ totales.ingresos_presupuesto|floatformat:0 }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <p class="text-xs text-gray-500">Gastos</p>
+      <p class="text-lg font-bold">${{ totales.gastos_real|floatformat:0 }}</p>
+      <p class="text-xs text-gray-400">Presup: ${{ totales.gastos_presupuesto|floatformat:0 }}</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 {% if totales.utilidad_real >= 0 %}border-l-4 border-green-500{% else %}border-l-4 border-red-500{% endif %}">
+      <p class="text-xs text-gray-500">Utilidad</p>
+      <p class="text-lg font-bold">${{ totales.utilidad_real|floatformat:0 }}</p>
+      <p class="text-xs text-gray-400">Presup: ${{ totales.utilidad_presupuesto|floatformat:0 }}</p>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left w-8"></th>
+          <th class="px-3 py-2 text-left">Categoría</th>
+          <th class="px-3 py-2 text-right">Presupuesto</th>
+          <th class="px-3 py-2 text-right">Real</th>
+          <th class="px-3 py-2 text-right">Variación</th>
+          <th class="px-3 py-2 text-right">%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resumen %}
+        <tr class="border-t border-gray-100 dark:border-gray-700 {% if r.alerta %}bg-red-50/40{% endif %}">
+          <td class="px-3 py-1.5">
+            {% if r.categoria.id|stringformat:'s' == categoria_expandida_id %}
+              <a href="{% url 'construccion:pyg_drilldown' proyecto.id %}" class="text-blue-600">▼</a>
+            {% else %}
+              <a href="?expandir={{ r.categoria.id }}" class="text-gray-500 hover:text-blue-600">▶</a>
+            {% endif %}
+          </td>
+          <td class="px-3 py-1.5 font-medium">{{ r.categoria.nombre }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.presupuesto|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.real|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right font-mono">{{ r.variacion|floatformat:0 }}</td>
+          <td class="px-3 py-1.5 text-right">{{ r.pct_variacion|default:'—' }}%</td>
+        </tr>
+        {% if r.categoria.id|stringformat:'s' == categoria_expandida_id %}
+        <tr>
+          <td></td>
+          <td colspan="5" class="px-3 py-2">
+            <div class="bg-gray-50 dark:bg-gray-700 rounded p-2 max-h-80 overflow-y-auto">
+              <p class="text-xs font-medium mb-1">Transacciones (top 200):</p>
+              <table class="w-full text-xs">
+                <thead>
+                  <tr class="text-gray-500">
+                    <th class="text-left px-2">Fecha</th>
+                    <th class="text-left px-2">Factura</th>
+                    <th class="text-left px-2">Proveedor</th>
+                    <th class="text-right px-2">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for t in transacciones_expandidas %}
+                  <tr>
+                    <td class="px-2 py-0.5">{{ t.fecha|date:'Y-m-d' }}</td>
+                    <td class="px-2 py-0.5">{{ t.numero_factura|default:'—' }}</td>
+                    <td class="px-2 py-0.5">{{ t.nombre_proveedor|default:'—'|truncatechars:30 }}</td>
+                    <td class="px-2 py-0.5 text-right font-mono">{{ t.valor|floatformat:0 }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="4" class="text-center py-2 text-gray-400">Sin transacciones cargadas.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

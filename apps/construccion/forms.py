@@ -343,3 +343,4 @@ class AmbientalTorreForm(forms.ModelForm):
 # F2 scaffolding: B2b (OC detalle forms) y B3b (Montaje detalle forms) en F3.
 from .forms_b3_oc_detalle import *  # noqa: E402,F401,F403
 from .forms_b3_mont_detalle import *  # noqa: E402,F401,F403
+from .forms_pdeo_complement import *  # noqa: E402,F401,F403

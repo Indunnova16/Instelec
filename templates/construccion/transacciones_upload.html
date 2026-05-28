@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Cargar Excel PDEO{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4">
+  <div>
+    <h1 class="text-2xl font-bold">Cargar Excel PDEO</h1>
+    <p class="text-sm text-gray-500">El parser leerá la hoja BD y poblará las transacciones del proyecto seleccionado. Idempotente: re-cargar el mismo Excel no duplica datos.</p>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+    <div class="rounded-lg p-3 {% if message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% else %}bg-green-50 border border-green-200 text-green-800{% endif %} text-sm">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+    {% csrf_token %}
+    <div>
+      <label class="block text-sm font-medium mb-1">{{ form.proyecto.label }}</label>
+      {{ form.proyecto }}
+      {% if form.proyecto.errors %}<p class="text-red-600 text-xs mt-1">{{ form.proyecto.errors|join:" " }}</p>{% endif %}
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">{{ form.archivo.label }}</label>
+      {{ form.archivo }}
+      <p class="text-xs text-gray-500 mt-1">{{ form.archivo.help_text }}</p>
+      {% if form.archivo.errors %}<p class="text-red-600 text-xs mt-1">{{ form.archivo.errors|join:" " }}</p>{% endif %}
+    </div>
+    <div class="flex gap-2 pt-2">
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Procesar</button>
+      <a href="{% url 'construccion:transacciones_list' %}" class="px-4 py-2 border rounded-lg">Cancelar</a>
+    </div>
+  </form>
+
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
+    <p class="font-medium mb-1">Estructura esperada del Excel PDEO</p>
+    <ul class="list-disc pl-5 space-y-1">
+      <li><strong>Hoja BD</strong>: transacciones (Auxiliar, Neto, Fecha, Docto., Periodo, Tercero, Razón social, …).</li>
+      <li>Hojas <em>Presupuesto</em>, <em>Res EP</em>, <em>pyg</em>: opcionales — son derivadas y se calculan en runtime, no se cargan.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
