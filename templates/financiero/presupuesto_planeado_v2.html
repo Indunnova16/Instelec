@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% comment %}
+B1 (#120) — Presupuesto Planeado v2 con 2 pestañas:
+  1. Cargar Base de Datos Contable  (_cargar_bd_contable.html)
+  2. Presupuesto Planeado (rubros)   (tabla jerárquica + _mapeo_cta_rubro.html)
+Servida por PresupuestoPlaneadoViewV2 (financiero:cargar_bd_contable).
+{% endcomment %}
+
+{% block title %}Presupuesto Planeado {{ anio }} - TransMaint{% endblock %}
+
+{% block content %}
+<main class="space-y-4"
+      x-data="{ tab: '{{ active_tab|default:"cargar" }}' }">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                Presupuesto Planeado
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400">
+                Carga y estructura de la base de datos contable — Año {{ anio }}
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center">
+            <select class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                    @change="window.location.href='?anio=' + $event.target.value + '&tab=' + tab{% if contrato_seleccionado %} + '&contrato={{ contrato_seleccionado.pk }}'{% endif %}">
+                {% for a in anios_disponibles %}
+                <option value="{{ a }}" {% if a == anio %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <div class="border-b border-gray-200 dark:border-gray-700">
+        <nav class="-mb-px flex gap-6" aria-label="Pestañas">
+            <button @click="tab = 'cargar'"
+                    :class="tab === 'cargar' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">
+                Cargar Base de Datos Contable
+            </button>
+            <button @click="tab = 'planeado'"
+                    :class="tab === 'planeado' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">
+                Presupuesto Planeado
+            </button>
+        </nav>
+    </div>
+
+    <!-- Pestaña 1 -->
+    <div x-show="tab === 'cargar'" x-cloak>
+        {% include "financiero/_cargar_bd_contable.html" %}
+    </div>
+
+    <!-- Pestaña 2 -->
+    <div x-show="tab === 'planeado'" x-cloak class="space-y-6">
+        {% if not tiene_datos_bd %}
+        <!-- empty state -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center border border-gray-200 dark:border-gray-700">
+            <p class="text-gray-500 dark:text-gray-400">
+                Aún no hay datos contables cargados para {{ anio }}.
+            </p>
+            <button @click="tab = 'cargar'"
+                    class="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                Cargar Base de Datos Contable
+            </button>
+        </div>
+        {% else %}
+        <!-- Tabla de rubros -->
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+            <div class="px-4 py-3 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                    Estructura por rubros
+                </h2>
+                <span class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ cuentas_count }} cuentas · Total ${{ rubro_total|floatformat:0|intcomma }}
+                </span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                            <th class="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-300">Rubro / Cuenta</th>
+                            <th class="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-300">Total</th>
+                            <th class="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-300">% del Presupuesto</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for row in rubro_rows %}
+                        <tr x-data="{ open: false }" class="bg-gray-50/50 dark:bg-gray-800/50 font-medium cursor-pointer"
+                            @click="open = !open">
+                            <td class="px-4 py-2 text-gray-900 dark:text-white">
+                                <span x-text="open ? '▼' : '▶'" class="text-xs mr-1 text-gray-400"></span>
+                                {{ row.rubro }}
+                            </td>
+                            <td class="px-4 py-2 text-right text-gray-900 dark:text-white">${{ row.total|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{{ row.pct }}%</td>
+                        </tr>
+                        {% for cta in row.cuentas %}
+                        <tr x-show="open" x-cloak class="bg-white dark:bg-gray-900">
+                            <td class="px-4 py-2 pl-10 text-gray-600 dark:text-gray-400">
+                                {{ cta.cta_equivalente }}
+                                {% if cta.descripcion %}<span class="text-xs text-gray-400"> — {{ cta.descripcion }}</span>{% endif %}
+                            </td>
+                            <td class="px-4 py-2 text-right text-gray-600 dark:text-gray-400">${{ cta.total|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-2"></td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="bg-gray-100 dark:bg-gray-800 font-semibold">
+                        <tr>
+                            <td class="px-4 py-2 text-gray-900 dark:text-white">TOTAL</td>
+                            <td class="px-4 py-2 text-right text-gray-900 dark:text-white">${{ rubro_total|floatformat:0|intcomma }}</td>
+                            <td class="px-4 py-2 text-right text-gray-600 dark:text-gray-300">100%</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        {% if cuentas_no_mapeadas %}
+        <div class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-300">
+            <strong>{{ cuentas_no_mapeadas|length }}</strong> cuentas sin mapeo se agruparon en
+            "Otros / No Clasificado". Edite el mapeo abajo para reclasificarlas.
+        </div>
+        {% endif %}
+
+        <!-- Editar Mapeo -->
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700"
+                 x-data="{ showMapeo: false }">
+            <button @click="showMapeo = !showMapeo"
+                    class="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline mb-2">
+                <span x-text="showMapeo ? 'Ocultar' : 'Editar'"></span> Mapeo cuenta → rubro
+            </button>
+            <div x-show="showMapeo" x-cloak class="mt-2">
+                {% include "financiero/_mapeo_cta_rubro.html" %}
+            </div>
+        </section>
+        {% endif %}
+    </div>
+</main>
+{% endblock %}
