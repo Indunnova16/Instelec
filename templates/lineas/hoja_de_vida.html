@@ -107,9 +107,9 @@
                     {% if e.usuario %}<span>👤 {{ e.usuario.get_full_name|default:e.usuario }}</span>{% endif %}
                     {% if e.cuadrilla %}<span>🛠 {{ e.cuadrilla }}</span>{% endif %}
                     {% if e.torre_inicio and e.torre_fin %}
-                        <span>📍 {{ e.torre_inicio.numero }} → {{ e.torre_fin.numero }}</span>
+                        <span>📍 {{ e.torre_inicio.numero_display }} → {{ e.torre_fin.numero_display }}</span>
                     {% elif e.torre_inicio %}
-                        <span>📍 Torre {{ e.torre_inicio.numero }}</span>
+                        <span>📍 {{ e.torre_inicio.numero_display }}</span>
                     {% endif %}
                 </div>
             </li>

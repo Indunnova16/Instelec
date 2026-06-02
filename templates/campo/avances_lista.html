@@ -99,7 +99,7 @@
                         {{ avance.fecha_avance|date:"d/m/Y H:i" }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {{ avance.linea.codigo }} / Torre {{ avance.torre.numero }}
+                        {{ avance.linea.codigo }} / {{ avance.torre.numero_display }}
                     </td>
                     {% if not request.user.is_campo %}
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">

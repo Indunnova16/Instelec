@@ -6,10 +6,24 @@ from django.views.generic import ListView, DetailView, CreateView, UpdateView, D
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404, redirect
-from django.db.models import Q
+from django.db.models import Q, IntegerField, Value, F, Func
+from django.db.models.functions import Cast, NullIf
 
 from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
 from apps.contratos.models import Contrato
+
+
+def ordenar_torres_construccion(qs):
+    """Orden numérico ascendente por la parte numérica de ``numero`` (#100:
+    evita T-1, T-10, T-2). Formatos sin número quedan al final."""
+    return qs.annotate(
+        _solo_digitos=Func(
+            F('numero'), Value(r'[^0-9]'), Value(''), Value('g'),
+            function='regexp_replace',
+        ),
+    ).annotate(
+        _num_ord=Cast(NullIf(F('_solo_digitos'), Value('')), IntegerField()),
+    ).order_by(F('_num_ord').asc(nulls_last=True), 'numero')
 from .forms import (
     ContratoForm, PataObraForm, FaseTorreMontajeForm, FaseTorreTendidoForm,
     SocialPredialForm, AmbientalTorreForm,
@@ -89,7 +103,7 @@ class TorresListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         proyecto_id = self.kwargs.get('proyecto_id')
         qs = TorreConstruccion.objects.filter(proyecto_id=proyecto_id)
         qs = filtrar_torres_por_cuadrilla(qs, self.request.user)
-        return qs.order_by('numero')
+        return ordenar_torres_construccion(qs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -173,7 +187,7 @@ class SeguimientoDiarioView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
         context = super().get_context_data(**kwargs)
         proyecto_id = self.kwargs.get('proyecto_id')
         proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
-        torres = TorreConstruccion.objects.filter(proyecto=proyecto).order_by('numero')
+        torres = ordenar_torres_construccion(TorreConstruccion.objects.filter(proyecto=proyecto))
 
         context['proyecto'] = proyecto
         context['torres'] = torres
@@ -195,7 +209,7 @@ class SocialPredialView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         proyecto = get_object_or_404(ProyectoConstruccion,
                                      id=self.kwargs['proyecto_id'])
-        torres = TorreConstruccion.objects.filter(proyecto=proyecto).order_by('numero')
+        torres = ordenar_torres_construccion(TorreConstruccion.objects.filter(proyecto=proyecto))
 
         filas = []
         verdes = 0
@@ -260,7 +274,7 @@ class AmbientalView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         proyecto = get_object_or_404(ProyectoConstruccion,
                                      id=self.kwargs['proyecto_id'])
-        torres = TorreConstruccion.objects.filter(proyecto=proyecto).order_by('numero')
+        torres = ordenar_torres_construccion(TorreConstruccion.objects.filter(proyecto=proyecto))
 
         filas = []
         verdes = 0
@@ -1088,7 +1102,7 @@ class ObraCivilListView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                                      id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = torres_qs.prefetch_related('pata_obra').order_by('numero')
+        torres_qs = ordenar_torres_construccion(torres_qs.prefetch_related('pata_obra'))
 
         filas = []
         total_alarma = 0
@@ -1201,7 +1215,7 @@ class MontajeListView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                                      id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = torres_qs.select_related('fase').order_by('numero')
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related('fase'))
 
         filas = []
         listas_para_tendido = 0
@@ -1278,7 +1292,7 @@ class TendidoListView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                                      id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = torres_qs.select_related('fase').order_by('numero')
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related('fase'))
 
         filas = []
         habilitadas = 0
@@ -1363,7 +1377,7 @@ class ObraCivilMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                                      id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = torres_qs.select_related().order_by('numero')
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related())
 
         # Asegurar OC para cada torre (crear si no existe — idempotente).
         existentes = {oc.torre_id: oc for oc in ObraCivilTorre.objects.filter(proyecto=proyecto)}
@@ -1481,7 +1495,7 @@ class MontajeMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                                      id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = torres_qs.select_related().order_by('numero')
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related())
 
         existentes = {m.torre_id: m for m in
                       MontajeEstructuraTorre.objects.filter(proyecto=proyecto)}
@@ -1606,9 +1620,9 @@ class SPTPinturaIndexView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = torres_qs.select_related().prefetch_related(
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related().prefetch_related(
             'spt', 'pintura_patas', 'pintura_aeronautica__franjas',
-        ).order_by('numero')
+        ))
 
         filas = []
         for torre in torres_qs:
@@ -1668,7 +1682,7 @@ class SPTPinturaTorreView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         franjas = list(aero.franjas.order_by('numero_franja'))
 
         # Navegación prev/next (por orden alfabético de numero)
-        torres = list(TorreConstruccion.objects.filter(proyecto=proyecto).order_by('numero'))
+        torres = list(ordenar_torres_construccion(TorreConstruccion.objects.filter(proyecto=proyecto)))
         idx = next((i for i, t in enumerate(torres) if t.id == torre.id), None)
         prev_t = torres[idx - 1] if idx is not None and idx > 0 else None
         next_t = torres[idx + 1] if idx is not None and idx < len(torres) - 1 else None
@@ -1846,7 +1860,7 @@ class TendidoMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = torres_qs.select_related().order_by('numero')
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related())
 
         existentes = {t.torre_id: t for t in TendidoTorre.objects.filter(proyecto=proyecto)}
         filas = []
@@ -2024,7 +2038,7 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         ctx.update({
             'proyecto': proyecto,
             'obras': obras,
-            'torres_disponibles': torres_qs.order_by('numero'),
+            'torres_disponibles': ordenar_torres_construccion(torres_qs),
             'total_metros': total_metros,
             'completadas': completadas,
             'por_cuadrilla': por_cuadrilla,

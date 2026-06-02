@@ -29,7 +29,7 @@
                             {{ registro.actividad.tipo_actividad.nombre|truncatechars:30 }}
                         </div>
                         <div class="text-xs text-gray-500">
-                            {{ registro.actividad.linea.codigo }} - Torre {{ registro.actividad.torre.numero }}
+                            {{ registro.actividad.linea.codigo }} - {{ registro.actividad.torre.numero_display }}
                         </div>
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap">

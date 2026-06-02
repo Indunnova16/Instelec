@@ -1,6 +1,8 @@
 """
 Models for transmission lines, towers, and easements.
 """
+import re
+
 from django.contrib.gis.db import models as gis_models
 from django.db import models
 
@@ -325,16 +327,61 @@ class Torre(BaseModel):
         unique_together = ['linea', 'numero']
         ordering = ['linea', 'numero']
 
+    # Prefijos del campo `numero` que corresponden a TORRES (se renombran a T-{n}).
+    # 'P*' son postes (se preservan como P-{n}); el resto (pórticos, códigos
+    # especiales tipo PSAC / T-AUTO / texto libre) se dejan intactos.
+    _PREFIJOS_TORRE = ('', 'T', 'E')
+
+    @staticmethod
+    def normalizar_numero(numero):
+        """Normaliza el `numero` crudo a una etiqueta de display consistente.
+
+        Reglas (issue #100, feedback Sofi):
+        - Torres ('1', 'E-1', 'T-1', 'T15') → 'T-{n}' en formato uniforme.
+        - Postes ('P001', 'P-3') → 'P-{n}' (se preserva la semántica de poste).
+        - Otros prefijos de una letra con número ('F3') → '{LETRA}-{n}'.
+        - Formatos no estándar ('Pórtico Santamarta', 'T-AUTO', 'TN Planta…',
+          textos sin número limpio) → se devuelven tal cual.
+        """
+        raw = (numero or '').strip()
+        if not raw:
+            return raw
+        # prefijo de letras opcional + separador opcional + número, fin de cadena.
+        m = re.match(r'^([A-Za-z]+)?\s*-?\s*(\d+)$', raw)
+        if not m:
+            return raw  # no estándar → no tocar
+        prefijo = (m.group(1) or '').upper()
+        num = int(m.group(2))
+        if prefijo in Torre._PREFIJOS_TORRE:
+            return f'T-{num}'
+        if prefijo == 'P':
+            return f'P-{num}'
+        return f'{prefijo}-{num}'
+
+    @property
+    def numero_display(self):
+        """Etiqueta de la estructura para mostrar al usuario (#100)."""
+        return self.normalizar_numero(self.numero)
+
+    @property
+    def orden_numerico(self):
+        """Parte numérica de `numero` para ordenamiento ascendente (#100).
+
+        Devuelve un entero grande si no hay número, para que los formatos
+        no estándar queden al final sin romper el sort.
+        """
+        m = re.search(r'\d+', self.numero or '')
+        return int(m.group()) if m else 10 ** 9
+
     def __str__(self):
-        # B1.1 — formato uniforme T{numero}. Para variantes con línea usar
-        # `codigo_display` (e.g. en exports o detalle cuando se requiere desambiguar).
-        return f"T{self.numero}"
+        # #100 — etiqueta normalizada uniforme (T-{n} para torres).
+        return self.numero_display
 
     @property
     def codigo_display(self):
         """Variante con línea para casos donde se necesita desambiguar
         (e.g. listados cross-línea, exports a Excel, breadcrumbs)."""
-        return f"T{self.numero} ({self.linea.codigo})"
+        return f"{self.numero_display} ({self.linea.codigo})"
 
     def save(self, *args, **kwargs):
         # Auto-generate geometry from lat/lon

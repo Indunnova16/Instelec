@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load l10n %}
 
-{% block title %}Montaje · T{{ torre.numero }} — {{ proyecto.nombre }}{% endblock %}
+{% block title %}Montaje · T{{ torre.numero_display }} — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
 {% localize off %}
@@ -14,10 +14,10 @@
         <a href="{% url 'construccion:montaje_lista' proyecto_id=proyecto.id %}"
            class="hover:text-blue-600">Montaje (resumen)</a>
         <span aria-hidden="true">/</span>
-        <span class="text-gray-700 font-medium">Torre {{ torre.numero }}</span>
+        <span class="text-gray-700 font-medium">{{ torre.numero_display }}</span>
       </div>
       <h1 class="mt-1 text-2xl font-bold text-gray-900">
-        Montaje · Torre {{ torre.numero }}
+        Montaje · {{ torre.numero_display }}
       </h1>
       <p class="text-sm text-gray-500 mt-0.5">
         Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>

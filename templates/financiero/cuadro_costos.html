@@ -96,7 +96,7 @@
                             {{ ejecucion.fecha|date:"d/m/Y" }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
-                            {% if ejecucion.actividad %}{{ ejecucion.actividad.torre.numero }}{% else %}-{% endif %}
+                            {% if ejecucion.actividad %}{{ ejecucion.actividad.torre.numero_display }}{% else %}-{% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                             {% if ejecucion.actividad %}{{ ejecucion.actividad.tipo_actividad.nombre }}{% else %}-{% endif %}

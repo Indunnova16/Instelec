@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
-{% block title %}Sociopredial — Torre {{ torre.numero }}{% endblock %}
+{% block title %}Sociopredial — {{ torre.numero_display }}{% endblock %}
 {% block content %}
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold">🏘️ Sociopredial — Torre {{ torre.numero }}</h1>
+      <h1 class="text-2xl font-bold">🏘️ Sociopredial — {{ torre.numero_display }}</h1>
       <p class="text-sm text-gray-500">
         {{ proyecto.nombre }} ·
         {% if social.semaforo == 'VERDE' %}

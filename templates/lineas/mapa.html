@@ -119,8 +119,8 @@
                             role="button"
                             tabindex="0"
                             onkeypress="if(event.key==='Enter') focusTower({{ torre.latitud }}, {{ torre.longitud }})"
-                            aria-label="Enfocar torre {{ torre.numero }} en el mapa">
-                            <td class="px-4 py-2 font-medium">{{ torre.numero }}</td>
+                            aria-label="Enfocar torre {{ torre.numero_display }} en el mapa">
+                            <td class="px-4 py-2 font-medium">{{ torre.numero_display }}</td>
                             <td class="px-4 py-2 text-sm text-gray-600">{{ torre.get_tipo_display }}</td>
                             <td class="px-4 py-2 text-sm text-gray-600">{{ torre.latitud }}, {{ torre.longitud }}</td>
                             <td class="px-4 py-2 text-sm text-gray-600">{{ torre.altitud|default:"-" }} m</td>

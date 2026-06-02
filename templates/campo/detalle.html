@@ -14,7 +14,7 @@
         <div class="flex-1">
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Registro de Campo</h1>
             <p class="text-gray-600 dark:text-gray-400">
-                {{ registro.actividad.tipo_actividad.nombre }} - Torre {{ registro.actividad.torre.numero }}
+                {{ registro.actividad.tipo_actividad.nombre }} - {{ registro.actividad.torre.numero_display }}
             </p>
         </div>
         <div>
@@ -43,7 +43,7 @@
                     </div>
                     <div>
                         <p class="text-gray-500 dark:text-gray-400">Torre</p>
-                        <p class="font-medium text-gray-900 dark:text-white">{{ registro.actividad.torre.numero }} ({{ registro.actividad.torre.get_tipo_display }})</p>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ registro.actividad.torre.numero_display }} ({{ registro.actividad.torre.get_tipo_display }})</p>
                     </div>
                     <div>
                         <p class="text-gray-500 dark:text-gray-400">Tipo de Actividad</p>

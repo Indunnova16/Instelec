@@ -39,7 +39,7 @@
             <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
                 {% for torre in torres %}
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td class="px-6 py-4 text-sm text-gray-900 dark:text-white font-medium">{{ torre.numero }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900 dark:text-white font-medium">{{ torre.numero_display }}</td>
                     <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ torre.tipo|default:"-" }}</td>
                     <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ torre.get_tipo_cimentacion_display|default:"-" }}</td>
                     <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ torre.peso_kg|floatformat:0|default:"-" }}</td>

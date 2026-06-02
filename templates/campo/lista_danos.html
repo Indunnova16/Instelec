@@ -154,7 +154,7 @@
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {% if reporte.linea %}{{ reporte.linea.codigo }}{% endif %}
-                        {% if reporte.torre %} / T{{ reporte.torre.numero }}{% endif %}
+                        {% if reporte.torre %} / {{ reporte.torre.numero_display }}{% endif %}
                         {% if not reporte.linea and not reporte.torre %}-{% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">

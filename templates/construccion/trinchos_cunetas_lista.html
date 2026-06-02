@@ -122,7 +122,7 @@
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     {% for o in obras %}
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td class="px-3 py-2 font-medium">{{ o.torre.numero }}</td>
+                        <td class="px-3 py-2 font-medium">{{ o.torre.numero_display }}</td>
                         <td class="px-3 py-2 text-center">{{ o.get_medida_manejo_display }}</td>
                         <td class="px-3 py-2 text-right">{{ o.metros_trinchos|default:"—" }}</td>
                         <td class="px-3 py-2 text-right">{{ o.metros_cunetas|default:"—" }}</td>

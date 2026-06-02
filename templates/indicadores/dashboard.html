@@ -182,7 +182,7 @@
                                 {% elif act.estado == 'EN_CURSO' %}bg-yellow-500
                                 {% else %}bg-gray-400{% endif %}"
                                 aria-hidden="true"></span>
-                            <span class="text-gray-600 dark:text-gray-400">{{ act.torre.numero }}</span>
+                            <span class="text-gray-600 dark:text-gray-400">{{ act.torre.numero_display }}</span>
                             <span class="sr-only">
                                 {% if act.estado == 'COMPLETADA' %}completada
                                 {% elif act.estado == 'EN_CURSO' %}en curso

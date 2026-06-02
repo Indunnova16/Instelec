@@ -45,7 +45,7 @@
         {% for f in filas %}
         <tr class="border-t border-gray-100 dark:border-gray-700
                    {% if f.alarma_materiales %}bg-red-50 dark:bg-red-900/20{% endif %}">
-          <td class="px-4 py-2 font-medium">{{ f.torre.numero }}</td>
+          <td class="px-4 py-2 font-medium">{{ f.torre.numero_display }}</td>
           <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{{ f.torre.cuadrilla_civil|default:"—" }}</td>
           <td class="px-4 py-2 text-right">
             <span class="font-semibold">{{ f.avance }}%</span>

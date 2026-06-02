@@ -51,7 +51,7 @@
       <tbody>
         {% for f in filas %}
         <tr class="border-t border-gray-100 dark:border-gray-700 {% if not f.puede_iniciar %}opacity-50{% endif %}">
-          <td class="px-2 py-2 font-medium">{{ f.torre.numero }}</td>
+          <td class="px-2 py-2 font-medium">{{ f.torre.numero_display }}</td>
           <td class="px-2 py-2">{{ f.torre.tramo_tendido|default:"—" }}</td>
           <td class="px-2 py-2">{{ f.fase.cuadrilla_tendido|default:"—" }}</td>
           <td class="px-2 py-2 text-center">{% if f.fase.vestida_torres_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>

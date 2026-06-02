@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
-{% block title %}Tendido — Torre {{ torre.numero }}{% endblock %}
+{% block title %}Tendido — {{ torre.numero_display }}{% endblock %}
 {% block content %}
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold">⚡ Tendido — Torre {{ torre.numero }}</h1>
+      <h1 class="text-2xl font-bold">⚡ Tendido — {{ torre.numero_display }}</h1>
       <p class="text-sm text-gray-500">{{ proyecto.nombre }} · % Tendido: <span class="font-semibold">{{ fase.porcentaje_tendido }}%</span></p>
     </div>
     <a href="{% url 'construccion:tendido_lista' proyecto.id %}" class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
