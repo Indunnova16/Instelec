@@ -125,14 +125,23 @@ def test_b2_desviacion_presupuestal_banda():
     assert desv_ok["valor_num"] == Decimal("0.00")
     assert desv_ok["estado"] == "verde"
 
-    # Gasto real 12% por encima -> fuera de banda 5% pero <=10% -> amarillo.
+    # Gasto real +8% -> fuera de banda 5% pero <=10% (2x tolerancia) -> amarillo.
     inds_amarillo = calcular_indicadores_tecnico_financieros(
+        _resumen(2000, 600, 200),                 # plan gastos 800
+        _resumen(2000, 700, 164),                 # real gastos 864 -> +8%
+    )
+    desv_a = _por_nombre(inds_amarillo, "Desviación Presupuestal")
+    assert desv_a["valor_num"] == Decimal("8.00")
+    assert desv_a["estado"] == "amarillo"
+
+    # Gasto real +12% -> fuera de 2x tolerancia (>10%) -> rojo.
+    inds_rojo = calcular_indicadores_tecnico_financieros(
         _resumen(2000, 600, 200),                 # plan gastos 800
         _resumen(2000, 700, 196),                 # real gastos 896 -> +12%
     )
-    desv_a = _por_nombre(inds_amarillo, "Desviación Presupuestal")
-    assert desv_a["valor_num"] == Decimal("12.00")
-    assert desv_a["estado"] == "amarillo"
+    desv_r = _por_nombre(inds_rojo, "Desviación Presupuestal")
+    assert desv_r["valor_num"] == Decimal("12.00")
+    assert desv_r["estado"] == "rojo"
 
 
 def test_b2_helpers_formulas():
