@@ -26,3 +26,7 @@ path('checklist-facturacion/', views.ChecklistFacturacionView.as_view(), name='c
     path('cargar-costos-cuadrilla/', views.CargarCostosCuadrillaView.as_view(), name='cargar_costos_cuadrilla'),
     path('nomina/', views.NominaView.as_view(), name='nomina'),
 ]
+
+# Financiero v2 (mapeo contable) — B1 (#120) llena urls_finv2.urlpatterns
+from . import urls_finv2  # noqa
+urlpatterns += urls_finv2.urlpatterns

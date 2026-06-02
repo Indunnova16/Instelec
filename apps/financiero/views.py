@@ -13,6 +13,8 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from apps.core.cache import get_lineas_activas, get_cuadrillas_activas
 
+from .views_finv2_dashboard import DashboardFinancieroMixinV2
+
 from .models import (
     ArchivoChecklist,
     ArchivoPeriodoFacturacion,
@@ -87,7 +89,7 @@ def _extract_presupuesto_summary(datos, mes_indices):
     }
 
 
-class DashboardFinancieroView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+class DashboardFinancieroView(DashboardFinancieroMixinV2, LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Financial dashboard with year/month filters and Planeado vs Real comparison."""
     template_name = 'financiero/dashboard.html'
     allowed_roles = ['admin', 'director', 'coordinador']
