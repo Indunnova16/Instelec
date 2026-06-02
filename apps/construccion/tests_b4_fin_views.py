@@ -293,6 +293,10 @@ class PresupuestoUploadPostTests(_BaseFinViewTest):
         ).first()
         self.assertIsNotNone(obj, 'debe crear el PresupuestoDetalladoConstruccion')
         self.assertTrue(obj.datos, 'datos no debe quedar vacío tras importar')
+        # #123 fix: la pestaña Presupuesto Planeado debe mostrar los rubros del contable.
+        page = self.client.get(url + '?anio=2026&tab=tabla')
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'Base de Datos contable')  # header tabla rubros (#123 fix)
 
     def test_post_sin_archivo_no_rompe(self):
         url = reverse('construccion:fin_presupuesto_planeado',

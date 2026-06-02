@@ -25,6 +25,36 @@ Cada sección es colapsable (Alpine). Empty state cuando sin_datos.
 </div>
 {% else %}
 <div class="space-y-4">
+    <!-- Rubros del contable (#123 fix: espejo #120 — datos['finv2_bd']) -->
+    {% if tiene_datos_bd %}
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h3 class="text-base font-semibold text-gray-900 dark:text-white">Rubros (Base de Datos contable)</h3>
+            <span class="text-sm font-bold text-gray-700 dark:text-gray-200">${{ rubro_total|floatformat:0|intcomma }}</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-300">Rubro</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-300">Total</th>
+                        <th class="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-300">% del total</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in rubro_rows %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                        <td class="px-4 py-2 text-gray-900 dark:text-white">{{ fila.rubro }}</td>
+                        <td class="px-4 py-2 text-right text-gray-700 dark:text-gray-300">${{ fila.total|floatformat:0|intcomma }}</td>
+                        <td class="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{{ fila.pct }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
     <!-- Resumen superior -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">

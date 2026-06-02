@@ -53,6 +53,7 @@ from .importers import (
     PresupuestoConstruccionExcelImporter,
     detect_excel_format_construccion,
 )
+from apps.financiero.importers_finv2 import build_rubro_display_rows
 
 
 # Roles administrativos con acceso al financiero (espejo de views.py::ALL_ADMIN_ROLES).
@@ -284,6 +285,12 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
         ctx['sin_datos'] = presupuesto is None
         ctx['resumen'] = self._resumen_presupuesto(
             proyecto, anio, PresupuestoDetalladoConstruccion.Tipo.PLANEADO)
+        # Rubros del contable (espejo #120): cuando la carga fue una BD contable,
+        # los datos viven en datos['finv2_bd'] y se muestran agrupados por rubro.
+        rubro_rows, rubro_total = build_rubro_display_rows(ctx['datos'])
+        ctx['rubro_rows'] = rubro_rows
+        ctx['rubro_total'] = rubro_total
+        ctx['tiene_datos_bd'] = bool(rubro_rows)
         return ctx
 
     def post(self, request, *args, **kwargs):
