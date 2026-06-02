@@ -231,3 +231,8 @@ urlpatterns += urls_b3_mont_detalle.urlpatterns
 # === Complemento financiero #103 — TransaccionesList/Upload/Reportes + PyG drill-down ===
 from . import urls_pdeo_complement  # noqa: E402
 urlpatterns += urls_pdeo_complement.urlpatterns
+
+# === /modulo financiero_construccion_runB — rutas financieras ===
+# F2 scaffolding: B4 (#123) llena urls_fin con las 6 rutas /financiero/<subruta>/.
+from . import urls_fin  # noqa: E402
+urlpatterns += urls_fin.urlpatterns
