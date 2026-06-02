@@ -48,6 +48,11 @@ from .models_fin import (
     FacturacionConstruccion,
     IndicadorANSConstruccion,
 )
+from .importers import (
+    ContableConstruccionExcelImporter,
+    PresupuestoConstruccionExcelImporter,
+    detect_excel_format_construccion,
+)
 
 
 # Roles administrativos con acceso al financiero (espejo de views.py::ALL_ADMIN_ROLES).
@@ -280,6 +285,63 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
         ctx['resumen'] = self._resumen_presupuesto(
             proyecto, anio, PresupuestoDetalladoConstruccion.Tipo.PLANEADO)
         return ctx
+
+    def post(self, request, *args, **kwargs):
+        """Carga BD contable / presupuesto desde Excel (#123 Fase 4, espejo #120).
+
+        El form (``_financiero_cargar_bd.html``) postea ``action=cargar_bd`` +
+        ``archivo`` + ``anio``. Detecta el formato, corre el importer adecuado
+        y persiste el resultado en ``PresupuestoDetalladoConstruccion.datos``.
+        """
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        proyecto = get_object_or_404(ProyectoConstruccion, pk=kwargs['proyecto_id'])
+        try:
+            anio = int(request.POST.get('anio') or date.today().year)
+        except (ValueError, TypeError):
+            anio = date.today().year
+        destino = f'{request.path}?anio={anio}&tab=cargar'
+
+        archivo = request.FILES.get('archivo')
+        if not archivo:
+            messages.error(request, 'Seleccione un archivo .xlsx.')
+            return redirect(destino)
+
+        formato = detect_excel_format_construccion(archivo)
+        try:
+            archivo.seek(0)
+        except Exception:
+            pass
+
+        if formato == 'contable':
+            res = ContableConstruccionExcelImporter().procesar(archivo)
+        elif formato == 'presupuesto':
+            res = PresupuestoConstruccionExcelImporter().procesar(archivo)
+        else:
+            messages.error(
+                request,
+                'Formato no reconocido. Suba la Base de Datos contable (hoja BD) '
+                'o el Presupuesto (columnas de mes).',
+            )
+            return redirect(destino)
+
+        if res.get('exito'):
+            obj, _creado = PresupuestoDetalladoConstruccion.objects.get_or_create(
+                proyecto=proyecto, anio=anio,
+                tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO,
+                defaults={'datos': {}},
+            )
+            merged = dict(obj.datos or {})
+            merged.update(res.get('datos') or {})
+            obj.datos = merged
+            obj.save(update_fields=['datos', 'updated_at'])
+            messages.success(request, res.get('mensaje') or 'Importación completada.')
+            if res.get('advertencia'):
+                messages.warning(request, res['advertencia'])
+        else:
+            messages.error(request, res.get('error') or 'No se pudo procesar el archivo.')
+        return redirect(destino)
 
 
 # ===========================================================================

@@ -254,3 +254,48 @@ class TestB4DatoLegacy(_BaseFinViewTest):
                      'fin_facturacion'):
             resp = self.client.get(self._url(name))
             self.assertEqual(resp.status_code, 200, f'{name} debió dar 200')
+
+
+# ===========================================================================
+# F4 — Carga de Excel (POST) en Presupuesto Planeado (#123 Fase 4 wiring)
+# ===========================================================================
+class PresupuestoUploadPostTests(_BaseFinViewTest):
+    """El handler POST cablea form -> importer -> PresupuestoDetalladoConstruccion."""
+
+    def _xlsx_contable(self):
+        import io
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'BD'
+        ws.append(['Desc auxiliar', 'Neto', 'Cta equivalente'])
+        ws.append(['mov 1', 100, 'Ingresos Operacionales'])
+        ws.append(['mov 2', 200, 'Ingresos Operacionales'])
+        ws.append(['mov 3', 50, 'Salarios'])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.getvalue()
+
+    def test_post_cargar_bd_contable_crea_presupuesto(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        url = reverse('construccion:fin_presupuesto_planeado',
+                      kwargs={'proyecto_id': self.proyecto.pk})
+        archivo = SimpleUploadedFile(
+            'BASE DE DATOS.xlsx', self._xlsx_contable(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        resp = self.client.post(url, {'action': 'cargar_bd', 'anio': 2026, 'archivo': archivo})
+        self.assertEqual(resp.status_code, 302)  # redirect tras carga
+        obj = PresupuestoDetalladoConstruccion.objects.filter(
+            proyecto=self.proyecto, anio=2026,
+            tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO,
+        ).first()
+        self.assertIsNotNone(obj, 'debe crear el PresupuestoDetalladoConstruccion')
+        self.assertTrue(obj.datos, 'datos no debe quedar vacío tras importar')
+
+    def test_post_sin_archivo_no_rompe(self):
+        url = reverse('construccion:fin_presupuesto_planeado',
+                      kwargs={'proyecto_id': self.proyecto.pk})
+        resp = self.client.post(url, {'action': 'cargar_bd', 'anio': 2026})
+        self.assertEqual(resp.status_code, 302)  # redirect con mensaje de error, sin 500
