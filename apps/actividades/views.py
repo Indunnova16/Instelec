@@ -1104,7 +1104,7 @@ class BuscarAvisoSAPView(LoginRequiredMixin, View):
             'linea_id': str(actividad.linea_id),
             'linea_nombre': f"{actividad.linea.codigo} - {actividad.linea.nombre}",
             'torre_id': str(actividad.torre_id) if actividad.torre_id else '',
-            'torre_numero': actividad.torre.numero if actividad.torre else '',
+            'torre_numero': actividad.torre.numero_display if actividad.torre else '',
             'cuadrilla_id': str(actividad.cuadrilla_id) if actividad.cuadrilla_id else '',
             'orden_sap': actividad.orden_sap or '',
             'pt_sap': actividad.pt_sap or '',

@@ -100,7 +100,7 @@
                     {% for torre in torres %}
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 edit-row" data-torre-id="{{ torre.id }}">
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="font-medium text-gray-900 dark:text-white">{{ torre.numero }}</span>
+                            <span class="font-medium text-gray-900 dark:text-white">{{ torre.numero_display }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                             {{ torre.get_tipo_display }}

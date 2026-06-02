@@ -11,6 +11,8 @@ from django.views import View
 from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
+from django.db.models import IntegerField, Value, F, Func
+from django.db.models.functions import Cast, NullIf
 from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 import json
@@ -18,6 +20,20 @@ from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Linea, Torre, Vano
 
 logger = logging.getLogger(__name__)
+
+
+def ordenar_torres_num(qs):
+    """Ordena torres por la parte numérica de ``numero`` (ascendente), no
+    alfabéticamente (#100: evita E-1, E-10, E-2). Los formatos sin número
+    quedan al final. Postgres-only (usa ``regexp_replace``)."""
+    return qs.annotate(
+        _solo_digitos=Func(
+            F('numero'), Value(r'[^0-9]'), Value(''), Value('g'),
+            function='regexp_replace',
+        ),
+    ).annotate(
+        _num_ord=Cast(NullIf(F('_solo_digitos'), Value('')), IntegerField()),
+    ).order_by(F('_num_ord').asc(nulls_last=True), 'numero')
 
 
 class LineaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -59,7 +75,7 @@ class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailVi
     def get_context_data(self, **kwargs):
         import json
         context = super().get_context_data(**kwargs)
-        context['torres'] = self.object.torres.all()
+        context['torres'] = ordenar_torres_num(self.object.torres.all())
         context['total_torres'] = self.object.torres.count()
         if self.object.kmz_geojson:
             context['kmz_geojson_json'] = json.dumps(self.object.kmz_geojson)
@@ -178,7 +194,7 @@ class TorresLineaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'ing_ambiental', 'supervisor', 'liniero']
 
     def get_queryset(self):
-        return Torre.objects.filter(linea_id=self.kwargs['pk']).order_by('numero')
+        return ordenar_torres_num(Torre.objects.filter(linea_id=self.kwargs['pk']))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

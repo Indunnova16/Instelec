@@ -148,7 +148,7 @@
                             empalmes_opgw: {% if fila.empalmes_opgw %}true{% else %}false{% endif %}
                         })'
                         class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10">{{ fila.torre.numero }}</td>
+                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10">{{ fila.torre.numero_display }}</td>
                         <td class="px-2 py-1 text-center text-gray-600 dark:text-gray-400">{{ fila.funcion|slice:":3" }}</td>
                         <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.vestida_conductor" @change="toggle('vestida_conductor', $event.target.checked)"></td>
                         {% for slug, _ in columnas_conductor %}

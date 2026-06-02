@@ -69,7 +69,7 @@
                         <td class="px-6 py-3 whitespace-nowrap">
                             <a href="{% url 'lineas:torre_detalle' fila.torre.pk %}"
                                class="font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400">
-                                T{{ fila.torre.numero }}
+                                {{ fila.torre.numero_display }}
                             </a>
                         </td>
                         <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">

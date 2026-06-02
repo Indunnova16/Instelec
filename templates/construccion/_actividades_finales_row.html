@@ -8,7 +8,7 @@ Reemplazado por HTMX tras un toggle. Refresca celdas + % avance + badge.
     class="hover:bg-gray-50 dark:hover:bg-gray-700/40 border-t border-gray-200 dark:border-gray-700">
     {# Columna A: Estructura #}
     <th class="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 sticky left-0 bg-white dark:bg-gray-800 z-10 whitespace-nowrap">
-        <span class="font-semibold">T{{ fila.torre.numero }}</span>
+        <span class="font-semibold">T{{ fila.torre.numero_display }}</span>
         {% if fila.torre.tipo %}<span class="ml-1 text-xs text-gray-500">{{ fila.torre.tipo }}</span>{% endif %}
     </th>
 
@@ -22,7 +22,7 @@ Reemplazado por HTMX tras un toggle. Refresca celdas + % avance + badge.
                 hx-swap="outerHTML"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                 hx-on::after-request="if(event.detail.failed){ var det=event.detail.xhr.responseText; var t=document.getElementById('actividades-finales-toast'); if(t){t.innerHTML=det; t.classList.remove('hidden');} }"
-                aria-label="Toggle {{ celda.label }} de T{{ fila.torre.numero }}"
+                aria-label="Toggle {{ celda.label }} de T{{ fila.torre.numero_display }}"
                 class="w-9 h-7 rounded text-xs font-bold transition-colors
                        {% if celda.valor %}
                          bg-green-500 hover:bg-green-600 text-white

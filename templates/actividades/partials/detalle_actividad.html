@@ -5,7 +5,7 @@
         <h4 id="ubicacion-heading" class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Ubicacion</h4>
         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
             <p class="text-sm"><strong>Linea:</strong> {{ actividad.linea.nombre }}</p>
-            <p class="text-sm"><strong>Torre:</strong> {{ actividad.torre.numero }} ({{ actividad.torre.get_tipo_display }})</p>
+            <p class="text-sm"><strong>Torre:</strong> {{ actividad.torre.numero_display }} ({{ actividad.torre.get_tipo_display }})</p>
             <p class="text-sm"><strong>Coordenadas:</strong> {{ actividad.torre.latitud }}, {{ actividad.torre.longitud }}</p>
             {% if actividad.torre.altitud %}
             <p class="text-sm"><strong>Altitud:</strong> {{ actividad.torre.altitud }} m</p>

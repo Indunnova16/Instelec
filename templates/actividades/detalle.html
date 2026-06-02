@@ -14,7 +14,7 @@
             </a>
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ actividad.tipo_actividad.nombre }}</h1>
-                <p class="text-gray-600 dark:text-gray-400">Torre {{ actividad.torre.numero }} - {{ actividad.linea.codigo }}</p>
+                <p class="text-gray-600 dark:text-gray-400">{{ actividad.torre.numero_display }} - {{ actividad.linea.codigo }}</p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -134,7 +134,7 @@
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Torre</dt>
                     <dd>
                         <a href="{% url 'lineas:torre_detalle' actividad.torre.id %}" class="text-blue-600 hover:text-blue-800">
-                            {{ actividad.torre.numero }}
+                            {{ actividad.torre.numero_display }}
                         </a>
                     </dd>
                 </div>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static l10n %}
 
-{% block title %}SPT y Pintura — Torre {{ torre.numero }}{% endblock %}
+{% block title %}SPT y Pintura — {{ torre.numero_display }}{% endblock %}
 
 {% block content %}
 {% localize off %}
@@ -14,7 +14,7 @@
     <!-- Header con navegación -->
     <div class="flex items-center justify-between gap-4">
         <div class="flex-1">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🔌⚡ SPT y Pintura — Torre {{ torre.numero }}</h1>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🔌⚡ SPT y Pintura — {{ torre.numero_display }}</h1>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
                 · Posición: <span class="font-medium">{{ posicion }} / {{ total_torres }}</span>
@@ -23,13 +23,13 @@
         <div class="flex items-center gap-2">
             {% if prev_torre %}
             <a href="{% url 'construccion:spt_pintura_torre' proyecto_id=proyecto.id torre_id=prev_torre.id %}"
-               class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">← {{ prev_torre.numero }}</a>
+               class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">← {{ prev_torre.numero_display }}</a>
             {% endif %}
             <a href="{% url 'construccion:spt_pintura' proyecto_id=proyecto.id %}"
                class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">Lista</a>
             {% if next_torre %}
             <a href="{% url 'construccion:spt_pintura_torre' proyecto_id=proyecto.id torre_id=next_torre.id %}"
-               class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">{{ next_torre.numero }} →</a>
+               class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm">{{ next_torre.numero_display }} →</a>
             {% endif %}
         </div>
     </div>

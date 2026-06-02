@@ -131,7 +131,7 @@
                                 <a href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento"
                                    class="hover:text-blue-600 dark:hover:text-blue-400"
                                    title="Abrir detalle por pata × sección">
-                                    {{ torre.numero }}
+                                    {{ torre.numero_display }}
                                 </a>
                             </td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento" data-celda="cerramiento" data-torre="{{ torre.id }}">{{ oc.avance_cerramiento|unlocalize|floatformat:2 }}</a></td>
@@ -150,7 +150,7 @@
                                 <a href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento"
                                    class="hover:text-blue-600 dark:hover:text-blue-400"
                                    title="Abrir detalle por pata × sección">
-                                    {{ torre.numero }}
+                                    {{ torre.numero_display }}
                                 </a>
                             </td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento" data-celda="cerramiento" data-torre="{{ torre.id }}">{{ oc.avance_cerramiento|unlocalize|floatformat:2 }}</a></td>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {# B1.1 — formato uniforme T{numero} #}
-{% block title %}T{{ torre.numero }} - TransMaint{% endblock %}
+{% block title %}{{ torre.numero_display }} - TransMaint{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -14,7 +14,7 @@
                 </svg>
             </a>
             <div>
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">T{{ torre.numero }}</h1>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ torre.numero_display }}</h1>
                 <p class="text-gray-600 dark:text-gray-400">{{ torre.linea.codigo }} - {{ torre.linea.nombre }}</p>
             </div>
         </div>
@@ -35,7 +35,7 @@
             <dl class="space-y-3">
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Numero</dt>
-                    <dd class="font-medium text-gray-900 dark:text-white">{{ torre.numero }}</dd>
+                    <dd class="font-medium text-gray-900 dark:text-white">{{ torre.numero_display }}</dd>
                 </div>
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Linea</dt>

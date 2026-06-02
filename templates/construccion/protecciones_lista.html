@@ -27,7 +27,7 @@
       <tbody>
         {% for p in protecciones %}
         <tr class="border-t border-gray-100 dark:border-gray-700">
-          <td class="px-4 py-2 font-medium">{{ p.torre.numero }}</td>
+          <td class="px-4 py-2 font-medium">{{ p.torre.numero_display }}</td>
           <td class="px-4 py-2 text-xs">{{ p.tipos_medida }}</td>
           <td class="px-4 py-2 text-right">{{ p.metros_trinchos|default:"—" }}</td>
           <td class="px-4 py-2 text-right">{{ p.metros_cunetas|default:"—" }}</td>

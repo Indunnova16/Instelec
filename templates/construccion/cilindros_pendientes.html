@@ -24,7 +24,7 @@
       <tbody>
         {% for p in pendientes %}
         <tr class="border-t border-gray-100 dark:border-gray-700">
-          <td class="px-4 py-2 font-medium">{{ p.pata.torre.numero }}</td>
+          <td class="px-4 py-2 font-medium">{{ p.pata.torre.numero_display }}</td>
           <td class="px-4 py-2">Pata {{ p.pata.pata }}</td>
           <td class="px-4 py-2">{{ p.pata.vaciado_fecha|date:"d/m/Y" }}</td>
           <td class="px-4 py-2">
@@ -56,7 +56,7 @@
       <tbody>
         {% for p in proximos %}
         <tr class="border-t border-gray-100 dark:border-gray-700">
-          <td class="px-4 py-2 font-medium">{{ p.pata.torre.numero }}</td>
+          <td class="px-4 py-2 font-medium">{{ p.pata.torre.numero_display }}</td>
           <td class="px-4 py-2">Pata {{ p.pata.pata }}</td>
           <td class="px-4 py-2">
             {% for n, faltan in p.proximos %}

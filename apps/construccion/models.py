@@ -367,16 +367,30 @@ class TorreConstruccion(BaseModel):
         unique_together = [['proyecto', 'numero']]
         ordering = ['numero']
 
+    @property
+    def numero_display(self):
+        """Etiqueta normalizada de la estructura (#100): torres → T-{n},
+        postes → P-{n}, formatos no estándar intactos. Reusa la lógica de
+        ``apps.lineas.models.Torre.normalizar_numero``."""
+        from apps.lineas.models import Torre
+        return Torre.normalizar_numero(self.numero)
+
+    @property
+    def orden_numerico(self):
+        """Parte numérica de ``numero`` para orden ascendente (#100)."""
+        import re
+        m = re.search(r'\d+', self.numero or '')
+        return int(m.group()) if m else 10 ** 9
+
     def __str__(self):
-        # B1.1 — formato uniforme T{numero}. Para variantes con proyecto usar
-        # `codigo_display` (e.g. en exports, breadcrumbs cross-proyecto).
-        return f"T{self.numero}"
+        # #100 — etiqueta normalizada uniforme (T-{n} para torres).
+        return self.numero_display
 
     @property
     def codigo_display(self):
         """Variante con proyecto para casos donde se necesita desambiguar
         (e.g. listados cross-proyecto, exports a Excel)."""
-        return f"T{self.numero} ({self.proyecto.nombre})"
+        return f"{self.numero_display} ({self.proyecto.nombre})"
 
     # === Habilitación paralela por torre (#67) ===
     @property

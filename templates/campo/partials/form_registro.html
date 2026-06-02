@@ -32,7 +32,7 @@
             <option value="{{ actividad.id }}"
                     data-linea="{{ actividad.linea.id }}"
                     {% if actividad_seleccionada == actividad.id|stringformat:"s" %}selected{% endif %}>
-                {{ actividad.tipo_actividad.nombre }} - Torre {{ actividad.torre.numero }} ({{ actividad.linea.codigo }})
+                {{ actividad.tipo_actividad.nombre }} - {{ actividad.torre.numero_display }} ({{ actividad.linea.codigo }})
             </option>
             {% endfor %}
         </select>
