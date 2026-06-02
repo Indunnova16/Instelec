@@ -7,14 +7,21 @@
     <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">📥 Cargar Cuadrillas Masivamente</h1>
         <p class="text-gray-600 dark:text-gray-400 mt-1">
-            Sube un archivo Excel con formato Aviso SAP (encabezado de cuadrilla + filas de miembros)
-            para crear cuadrillas con sus miembros automáticamente.
+            Sube un archivo Excel y el sistema <strong>detecta automáticamente el formato</strong>:
+            <em>Programación S18</em> (filas agrupadas por actividad, con encargado JT/CTA) o
+            <em>Aviso SAP</em> (una fila por cuadrilla con su código).
         </p>
     </div>
 
     {% if error %}
     <div class="px-4 py-3 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">
         <strong>❌ Error:</strong> {{ error }}
+    </div>
+    {% endif %}
+
+    {% if formato_detectado %}
+    <div class="px-4 py-3 rounded-lg text-sm bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200">
+        <strong>🔍 Formato detectado:</strong> {{ formato_detectado }}
     </div>
     {% endif %}
 
@@ -26,6 +33,15 @@
                 <li>✓ Cuadrillas creadas: <strong>{{ resultado.cuadrillas_creadas }}</strong></li>
                 <li>📝 Cuadrillas actualizadas: <strong>{{ resultado.cuadrillas_actualizadas }}</strong></li>
                 <li>👥 Miembros agregados: <strong>{{ resultado.miembros_agregados }}</strong></li>
+                {% if resultado.formato == 'S18' %}
+                <li>⭐ Encargados (JT/CTA) asignados: <strong>{{ resultado.encargados_asignados }}</strong></li>
+                {% if resultado.usuarios_creados %}
+                <li>🆕 Usuarios creados automáticamente: <strong>{{ resultado.usuarios_creados }}</strong></li>
+                {% endif %}
+                {% if resultado.sheets_procesadas %}
+                <li class="text-xs mt-2">Hojas procesadas: {{ resultado.sheets_procesadas|join:", " }}</li>
+                {% endif %}
+                {% endif %}
                 {% if resultado.columnas_detectadas %}
                 <li class="text-xs mt-2">
                     Columnas detectadas: {{ resultado.columnas_detectadas|join:", " }}
@@ -91,11 +107,15 @@
         </div>
     </div>
 
-    <!-- Descarga de plantilla -->
-    <div class="flex gap-3">
-        <a href="{% url 'cuadrillas:b4_descargar_plantilla' %}"
+    <!-- Descarga de plantillas -->
+    <div class="flex flex-wrap gap-3">
+        <a href="{% url 'cuadrillas:b4_descargar_plantilla_s18' %}"
            class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">
-            📥 Descargar Plantilla Excel
+            📥 Plantilla Programación S18
+        </a>
+        <a href="{% url 'cuadrillas:b4_descargar_plantilla' %}"
+           class="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg text-sm font-medium">
+            📥 Plantilla Aviso SAP
         </a>
     </div>
 
@@ -120,6 +140,16 @@
             </label>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
                 Si está desmarcado y el código ya existe, la cuadrilla se conserva sin cambios y solo se agregan miembros nuevos.
+            </p>
+        </div>
+
+        <div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input type="checkbox" name="crear_usuarios_faltantes" class="rounded border-gray-300">
+                <span>Crear usuarios faltantes automáticamente (solo formato S18)</span>
+            </label>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+                Si está desmarcado, las cédulas que no existan en el sistema se reportan como advertencia y el miembro se omite.
             </p>
         </div>
 
