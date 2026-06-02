@@ -91,3 +91,5 @@ class CorreccionEntregaAdmin(admin.ModelAdmin):
     list_display = ['torre', 'avance_correccion', 'firma_hmv']
     list_filter = ['firma_hmv']
     search_fields = ['torre__numero']
+
+from .admin_fin import *  # noqa: E402,F401,F403  # B3 (#123) financiero construccion

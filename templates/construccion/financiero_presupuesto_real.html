@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% comment %}
+B5 (#123 Fase 3.3) — Presupuesto Real de Construcción.
+Servido por PresupuestoRealConstruccionView (construccion:fin_presupuesto_real).
+
+Contexto (B4): proyecto, anio, mes, active_subtab, tipo='REAL',
+  presupuesto, datos (dict), sin_datos, resumen, total_costos_registrados.
+Reusa _financiero_cargar_bd.html + _financiero_presupuesto_tabla.html.
+{% endcomment %}
+
+{% block title %}Financiero — Presupuesto Real · {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+<nav class="border-b border-gray-200 dark:border-gray-700 mb-6 overflow-x-auto">
+    <div class="-mb-px flex gap-4 text-sm whitespace-nowrap">
+        {% with st=active_subtab %}
+        <a href="{% url 'construccion:fin_dashboard' proyecto.id %}?anio={{ anio }}&mes={{ mes }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'dashboard' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Dashboard</a>
+        <a href="{% url 'construccion:fin_presupuesto_planeado' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'presupuesto_planeado' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Presupuesto Planeado</a>
+        <a href="{% url 'construccion:fin_presupuesto_real' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'presupuesto_real' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Presupuesto Real</a>
+        <a href="{% url 'construccion:fin_nomina' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'nomina' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Nómina</a>
+        <a href="{% url 'construccion:fin_costos' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'costos' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Costos</a>
+        <a href="{% url 'construccion:fin_facturacion' proyecto.id %}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'facturacion' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Facturación</a>
+        {% endwith %}
+    </div>
+</nav>
+
+<main class="space-y-4" x-data="{ tab: '{% if sin_datos %}cargar{% else %}tabla{% endif %}' }">
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Presupuesto Real (Ejecutado)</h1>
+            <p class="text-gray-500 dark:text-gray-400">{{ proyecto.nombre }} · Año {{ anio }}</p>
+        </div>
+        <form method="get" class="flex items-end gap-2 text-sm">
+            <label class="flex flex-col">
+                <span class="text-xs text-gray-500">Año</span>
+                <input type="number" name="anio" value="{{ anio }}"
+                       class="w-24 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+            </label>
+            <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Ver</button>
+        </form>
+    </header>
+
+    <!-- Cruce con costos registrados -->
+    <div class="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 flex items-center justify-between">
+        <div>
+            <p class="text-sm font-medium text-blue-800 dark:text-blue-300">Costos ejecutados registrados ({{ anio }})</p>
+            <p class="text-xs text-blue-700 dark:text-blue-400">Suma de los registros de costos del año (módulo Costos).</p>
+        </div>
+        <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">${{ total_costos_registrados|default:0|floatformat:0|intcomma }}</p>
+    </div>
+
+    <div class="border-b border-gray-200 dark:border-gray-700">
+        <nav class="-mb-px flex gap-6" aria-label="Pestañas">
+            <button @click="tab = 'cargar'"
+                    :class="tab === 'cargar' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">Cargar Ejecución</button>
+            <button @click="tab = 'tabla'"
+                    :class="tab === 'tabla' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">Ejecución por Rubros</button>
+        </nav>
+    </div>
+
+    <div x-show="tab === 'cargar'" x-cloak>
+        {% include "construccion/_financiero_cargar_bd.html" %}
+    </div>
+    <div x-show="tab === 'tabla'" x-cloak class="space-y-6">
+        {% include "construccion/_financiero_presupuesto_tabla.html" %}
+    </div>
+</main>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% comment %}
+B5 (#123 Fase 3) — Tabla de los 6 indicadores Técnico-Financieros.
+Espejo de templates/financiero/_indicadores_tecnico_financieros.html (#122).
+
+Contexto que provee DashboardFinancieroConstruccionView.get_context_data:
+  indicadores_tecnico_financieros: list[dict] con keys
+    tipo, nombre, formula, meta, valor, estado (verde|amarillo|rojo), progreso (0..100).
+
+Coloreo: verde = cumple/supera, amarillo = 80-99%, rojo = <80%.
+{% endcomment %}
+<section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6"
+         aria-label="Indicadores técnico-financieros">
+    <div class="p-4 border-b dark:border-gray-700 flex items-center justify-between">
+        <div>
+            <h3 class="font-medium text-gray-900 dark:text-white">Indicadores Técnico-Financieros</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Año {{ anio }} · Mes {{ mes }}</p>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-500"></span>Cumple</span>
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-yellow-400"></span>Parcial</span>
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span>No cumple</span>
+        </div>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre Indicador</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fórmula / Cálculo</th>
+                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Meta</th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for ind in indicadores_tecnico_financieros %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700
+                    {% if ind.estado == 'verde' %}bg-green-50/40 dark:bg-green-900/10
+                    {% elif ind.estado == 'amarillo' %}bg-yellow-50/40 dark:bg-yellow-900/10
+                    {% else %}bg-red-50/40 dark:bg-red-900/10{% endif %}">
+                    <td class="px-4 py-3 text-sm">
+                        <span class="px-2 py-0.5 rounded text-xs font-semibold
+                            {% if ind.tipo == 'FINANCIERO' %}bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300
+                            {% else %}bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300{% endif %}">
+                            {{ ind.tipo }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                        <span class="cursor-help border-b border-dotted border-gray-400" title="{{ ind.formula }}">{{ ind.nombre }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
+                        <code class="font-mono">{{ ind.formula }}</code>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-center font-medium text-gray-700 dark:text-gray-200">{{ ind.meta }}</td>
+                    <td class="px-4 py-3 text-sm text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            <div class="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden" aria-hidden="true">
+                                <div class="h-2 rounded-full transition-all duration-700
+                                    {% if ind.estado == 'verde' %}bg-green-500
+                                    {% elif ind.estado == 'amarillo' %}bg-yellow-400
+                                    {% else %}bg-red-500{% endif %}"
+                                    style="width: {{ ind.progreso }}%"></div>
+                            </div>
+                            <span class="font-bold w-16 text-right
+                                {% if ind.estado == 'verde' %}text-green-600
+                                {% elif ind.estado == 'amarillo' %}text-yellow-600
+                                {% else %}text-red-600{% endif %}">{{ ind.valor }}</span>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-400">
+                        No hay datos suficientes para calcular los indicadores en este período.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>

@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% comment %}
+B5 (#123 Fase 3.1) — Dashboard Financiero de Construcción.
+Servido por DashboardFinancieroConstruccionView (construccion:fin_dashboard).
+
+Contexto consumido (todo provisto por la vista B4):
+  proyecto, anio, mes, active_subtab,
+  resumen_planeado / resumen_real {ingreso,total_variables,total_fijos,total_gastos,resultado,utilidad_pct},
+  indicadores_tecnico_financieros (list[dict] estado verde/amarillo/rojo) → _financiero_indicadores_tabla.html,
+  resumen_ans {filas, total_ponderado, estado_general, estado_color, sin_datos},
+  indicadores_ans (list[IndicadorANSConstruccion] — model instances, estado cumplido/parcial/incumplido),
+  alertas (list[str|dict]).
+{% endcomment %}
+
+{% block title %}Financiero — Dashboard · {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% comment %} Subnav financiero (inline — no es un partial propio de B5) {% endcomment %}
+<nav class="border-b border-gray-200 dark:border-gray-700 mb-6 overflow-x-auto">
+    <div class="-mb-px flex gap-4 text-sm whitespace-nowrap">
+        {% with st=active_subtab %}
+        <a href="{% url 'construccion:fin_dashboard' proyecto.id %}?anio={{ anio }}&mes={{ mes }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'dashboard' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Dashboard</a>
+        <a href="{% url 'construccion:fin_presupuesto_planeado' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'presupuesto_planeado' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Presupuesto Planeado</a>
+        <a href="{% url 'construccion:fin_presupuesto_real' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'presupuesto_real' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Presupuesto Real</a>
+        <a href="{% url 'construccion:fin_nomina' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'nomina' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Nómina</a>
+        <a href="{% url 'construccion:fin_costos' proyecto.id %}?anio={{ anio }}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'costos' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Costos</a>
+        <a href="{% url 'construccion:fin_facturacion' proyecto.id %}"
+           class="py-3 px-1 border-b-2 font-medium {% if st == 'facturacion' %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">Facturación</a>
+        {% endwith %}
+    </div>
+</nav>
+
+<div class="space-y-6">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Financiero</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ proyecto.nombre }} · Año {{ anio }} · Mes {{ mes }}</p>
+        </div>
+        <form method="get" class="flex flex-wrap gap-2 items-end text-sm">
+            <label class="flex flex-col">
+                <span class="text-xs text-gray-500">Año</span>
+                <input type="number" name="anio" value="{{ anio }}"
+                       class="w-24 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+            </label>
+            <label class="flex flex-col">
+                <span class="text-xs text-gray-500">Mes</span>
+                <input type="number" name="mes" value="{{ mes }}" min="1" max="12"
+                       class="w-20 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+            </label>
+            <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Ver</button>
+        </form>
+    </header>
+
+    <!-- Alertas -->
+    {% if alertas %}
+    <div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4">
+        <p class="text-sm font-semibold text-red-800 dark:text-red-300">{{ alertas|length }} alerta{{ alertas|length|pluralize }} del período</p>
+        <ul class="mt-2 space-y-1 text-sm text-red-700 dark:text-red-300 list-disc list-inside">
+            {% for a in alertas %}
+            <li>{% if a.nombre %}{{ a.nombre }}{% else %}{{ a }}{% endif %}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- KPI cards: planeado vs real -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
+            <p class="text-xs uppercase text-gray-500">Ingreso</p>
+            <p class="text-2xl font-bold text-green-600">${{ resumen_real.ingreso|default:0|floatformat:0|intcomma }}</p>
+            <p class="text-xs text-gray-400">Plan: ${{ resumen_planeado.ingreso|default:0|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-red-500">
+            <p class="text-xs uppercase text-gray-500">Gastos</p>
+            <p class="text-2xl font-bold text-red-600">${{ resumen_real.total_gastos|default:0|floatformat:0|intcomma }}</p>
+            <p class="text-xs text-gray-400">Plan: ${{ resumen_planeado.total_gastos|default:0|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-blue-500">
+            <p class="text-xs uppercase text-gray-500">Resultado</p>
+            <p class="text-2xl font-bold {% if resumen_real.resultado >= 0 %}text-blue-600{% else %}text-red-600{% endif %}">
+                ${{ resumen_real.resultado|default:0|floatformat:0|intcomma }}
+            </p>
+            <p class="text-xs text-gray-400">Plan: ${{ resumen_planeado.resultado|default:0|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-purple-500">
+            <p class="text-xs uppercase text-gray-500">% Utilidad</p>
+            <p class="text-2xl font-bold text-purple-600">{{ resumen_real.utilidad_pct|default:0 }}%</p>
+            <p class="text-xs text-gray-400">Plan: {{ resumen_planeado.utilidad_pct|default:0 }}%</p>
+        </div>
+    </div>
+
+    <!-- 6 indicadores técnico-financieros -->
+    {% include "construccion/_financiero_indicadores_tabla.html" %}
+
+    <!-- ANS de construcción (modelo B3: IndicadorANSConstruccion) -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6" aria-label="Indicadores ANS de construcción">
+        <div class="p-4 border-b dark:border-gray-700 flex items-center justify-between">
+            <div>
+                <h3 class="font-medium text-gray-900 dark:text-white">Indicadores ANS del Proyecto</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Acuerdos de nivel de servicio · {{ mes }}/{{ anio }}</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Indicador</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Meta</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for ind in indicadores_ans %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700
+                        {% if ind.estado == 'cumplido' %}bg-green-50/40 dark:bg-green-900/10
+                        {% elif ind.estado == 'parcial' %}bg-yellow-50/40 dark:bg-yellow-900/10
+                        {% else %}bg-red-50/40 dark:bg-red-900/10{% endif %}">
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                            {{ ind.nombre }}
+                            {% if ind.descripcion %}<span class="block text-xs text-gray-400">{{ ind.descripcion|truncatechars:80 }}</span>{% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-center text-gray-700 dark:text-gray-200">{{ ind.meta_porcentaje }}%</td>
+                        <td class="px-4 py-3 text-sm text-right font-bold
+                            {% if ind.estado == 'cumplido' %}text-green-600
+                            {% elif ind.estado == 'parcial' %}text-yellow-600
+                            {% else %}text-red-600{% endif %}">{{ ind.valor_actual }}%</td>
+                        <td class="px-4 py-3 text-sm text-center">
+                            <span class="px-2 py-0.5 rounded text-xs font-semibold
+                                {% if ind.estado == 'cumplido' %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                {% elif ind.estado == 'parcial' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
+                                {% else %}bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300{% endif %}">
+                                {{ ind.get_estado_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-400">
+                            No hay indicadores ANS registrados para {{ mes }}/{{ anio }}.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

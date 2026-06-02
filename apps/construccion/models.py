@@ -2655,3 +2655,7 @@ from .models_b2_indicadores import *  # noqa: F401, F403
 # F2 scaffolding: B2a (OC detalle) y B3a (Montaje detalle) en F3.
 from .models_b3_oc_detalle import *  # noqa: E402,F401,F403
 from .models_b3_mont_detalle import *  # noqa: E402,F401,F403
+
+# === /modulo financiero_construccion_runB — modelos financieros ===
+# F2 scaffolding: B3 (#123) llena los 5 modelos financieros en models_fin.
+from .models_fin import *  # noqa: E402,F401,F403

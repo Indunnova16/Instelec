@@ -1,0 +1,99 @@
+{% comment %}
+B5 (#123 Fase 3) — Partial Pestaña 1: Cargar archivo (presupuesto / BD contable / costos).
+Espejo de templates/financiero/_cargar_bd_contable.html (#120).
+
+Contexto consumido (todo opcional → render-safe sin él):
+  cargar_bd_form (opcional)  — CargarBDContableConstruccionForm; si no está, se
+                               renderiza un <input type=file> plano equivalente.
+  proyecto, anio             — provistos por ProyectoFinMixin (siempre presentes).
+  tipo                       — 'PLANEADO' | 'REAL' (provisto por la vista).
+
+Nota de scope (B5): la vista PresupuestoPlaneadoConstruccionView (B4) es un
+TemplateView GET; el manejo POST del upload (detect_excel_format_construccion +
+importer + save) vive fuera de los archivos de B5 (requeriría editar views_fin.py,
+que no es de B5). El form se postea a la misma URL; cuando el endpoint de carga
+esté cableado procesará el archivo. La UI queda completa y funcional como subida.
+{% endcomment %}
+{% load humanize %}
+
+<section x-data="{ uploading: false }"
+         class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
+    <div class="flex items-start gap-3 mb-4">
+        <div class="rounded-lg bg-blue-50 dark:bg-blue-900/30 p-3 text-blue-600 dark:text-blue-300">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 16a4 4 0 01-.88-7.9A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+            </svg>
+        </div>
+        <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                Cargar presupuesto {{ tipo|default:"" }} desde Excel
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Suba el archivo de presupuesto o base de datos contable (.xlsx).
+                El formato se detecta automáticamente. Máximo 20 MB.
+            </p>
+        </div>
+    </div>
+
+    <form method="post"
+          action="?anio={{ anio }}&tab=cargar"
+          enctype="multipart/form-data"
+          @submit="uploading = true"
+          class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="cargar_bd">
+        <input type="hidden" name="anio" value="{{ anio }}">
+        {% if tipo %}<input type="hidden" name="tipo" value="{{ tipo }}">{% endif %}
+
+        <div>
+            {% if cargar_bd_form %}
+                {{ cargar_bd_form.archivo }}
+                {% if cargar_bd_form.archivo.errors %}
+                <p class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {{ cargar_bd_form.archivo.errors.0 }}
+                </p>
+                {% endif %}
+            {% else %}
+                <input type="file" name="archivo" accept=".xlsx" required
+                       class="block w-full text-sm text-gray-500 dark:text-gray-400
+                              file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
+                              file:text-sm file:font-semibold file:bg-blue-50
+                              file:text-blue-700 hover:file:bg-blue-100
+                              dark:file:bg-gray-700 dark:file:text-gray-300">
+            {% endif %}
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Formatos aceptados: presupuesto (columnas por mes), base de datos
+                contable (hoja "BD", columna O), o costos (concepto + total).
+            </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit"
+                    :disabled="uploading"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                <svg x-show="uploading" x-cloak class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"></path>
+                </svg>
+                <span x-text="uploading ? 'Procesando archivo…' : 'Importar'"></span>
+            </button>
+            <span x-show="uploading" x-cloak class="text-xs text-gray-500 dark:text-gray-400">
+                Esto puede tardar unos segundos con archivos grandes.
+            </span>
+        </div>
+    </form>
+
+    {% if not sin_datos %}
+    <div class="mt-6 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-4">
+        <p class="text-sm font-medium text-green-800 dark:text-green-300">
+            Ya hay datos cargados para {{ anio }}
+        </p>
+        <p class="mt-1 text-xs text-green-700 dark:text-green-400">
+            Total ingreso ${{ resumen.ingreso|default:0|floatformat:0|intcomma }} ·
+            Total gastos ${{ resumen.total_gastos|default:0|floatformat:0|intcomma }}.
+            Volver a importar reemplazará la estructura actual.
+        </p>
+    </div>
+    {% endif %}
+</section>
