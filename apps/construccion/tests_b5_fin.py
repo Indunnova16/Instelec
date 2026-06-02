@@ -65,6 +65,9 @@ class _FakeUpload:
     def seek(self, *a, **k):
         return self._buf.seek(*a, **k)
 
+    def tell(self, *a, **k):
+        return self._buf.tell(*a, **k)
+
 
 # ===========================================================================
 # Importador de presupuesto
