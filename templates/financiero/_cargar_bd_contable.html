@@ -1,0 +1,93 @@
+{% comment %}
+B1 (#120) — Partial Pestaña 1: Cargar Base de Datos Contable.
+Contexto esperado (lo provee PresupuestoPlaneadoViewV2.get_context_data):
+  cargar_bd_form, anio, contrato_seleccionado,
+  tiene_datos_bd, cuentas_count, rubro_total, cuentas_no_mapeadas
+{% endcomment %}
+{% load humanize %}
+
+<section x-data="{ uploading: false }"
+         class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
+    <div class="flex items-start gap-3 mb-4">
+        <div class="rounded-lg bg-blue-50 dark:bg-blue-900/30 p-3 text-blue-600 dark:text-blue-300">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 16a4 4 0 01-.88-7.9A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+            </svg>
+        </div>
+        <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                Cargar Base de Datos Contable
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Suba archivo con transacciones contables. Los datos se agruparán
+                por cuenta (columna O). Máximo 20 MB.
+            </p>
+        </div>
+    </div>
+
+    <form method="post"
+          action="{% url 'financiero:cargar_bd_contable' %}?anio={{ anio }}{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
+          enctype="multipart/form-data"
+          @submit="uploading = true"
+          class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="cargar_bd">
+        <input type="hidden" name="anio" value="{{ anio }}">
+        {% if contrato_seleccionado %}
+        <input type="hidden" name="contrato" value="{{ contrato_seleccionado.pk }}">
+        {% endif %}
+
+        <div>
+            {{ cargar_bd_form.archivo }}
+            {% if cargar_bd_form.archivo.errors %}
+            <p class="mt-1 text-xs text-red-600 dark:text-red-400">
+                {{ cargar_bd_form.archivo.errors.0 }}
+            </p>
+            {% endif %}
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit"
+                    :disabled="uploading"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                <!-- loading state -->
+                <svg x-show="uploading" x-cloak class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"></path>
+                </svg>
+                <span x-text="uploading ? 'Procesando archivo…' : 'Importar'"></span>
+            </button>
+            <span x-show="uploading" x-cloak class="text-xs text-gray-500 dark:text-gray-400">
+                Esto puede tardar unos segundos con archivos grandes (~23k filas).
+            </span>
+        </div>
+    </form>
+
+    {% if tiene_datos_bd %}
+    <!-- success summary state -->
+    <div class="mt-6 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-4">
+        <p class="text-sm font-medium text-green-800 dark:text-green-300">
+            Datos contables cargados
+        </p>
+        <dl class="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+                <dt class="text-gray-500 dark:text-gray-400">Cuentas procesadas</dt>
+                <dd class="font-semibold text-gray-900 dark:text-white">{{ cuentas_count }}</dd>
+            </div>
+            <div>
+                <dt class="text-gray-500 dark:text-gray-400">Total importado</dt>
+                <dd class="font-semibold text-gray-900 dark:text-white">${{ rubro_total|floatformat:0|intcomma }}</dd>
+            </div>
+            <div>
+                <dt class="text-gray-500 dark:text-gray-400">Sin clasificar</dt>
+                <dd class="font-semibold text-gray-900 dark:text-white">{{ cuentas_no_mapeadas|length }}</dd>
+            </div>
+        </dl>
+        <a href="?anio={{ anio }}&tab=planeado{% if contrato_seleccionado %}&contrato={{ contrato_seleccionado.pk }}{% endif %}"
+           class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+            Ver Presupuesto Planeado →
+        </a>
+    </div>
+    {% endif %}
+</section>

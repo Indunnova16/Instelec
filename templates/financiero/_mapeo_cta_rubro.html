@@ -1,0 +1,113 @@
+{% comment %}
+B1 (#120) — Partial: CRUD inline de Mapeo cuenta→rubro.
+Renderizado tanto dentro de presupuesto_planeado_v2.html (carga inicial) como
+devuelto por MapeoCtaRubroCrudView para los swaps HTMX (target #mapeo-panel).
+Contexto: mapeos (queryset), mapeo_form.
+{% endcomment %}
+<div id="mapeo-panel" class="space-y-4">
+    <!-- Form de alta -->
+    <form hx-post="{% url 'financiero:editar_mapeo' %}"
+          hx-target="#mapeo-panel"
+          hx-swap="outerHTML"
+          class="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="crear">
+        <div class="flex-1 w-full">
+            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Cuenta equivalente</label>
+            {{ mapeo_form.cta_equivalente }}
+            {% if mapeo_form.cta_equivalente.errors %}
+            <p class="text-xs text-red-600 mt-1">{{ mapeo_form.cta_equivalente.errors.0 }}</p>
+            {% endif %}
+        </div>
+        <div class="flex-1 w-full">
+            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Rubro presupuestal</label>
+            {{ mapeo_form.rubro_presupuestal }}
+            {% if mapeo_form.rubro_presupuestal.errors %}
+            <p class="text-xs text-red-600 mt-1">{{ mapeo_form.rubro_presupuestal.errors.0 }}</p>
+            {% endif %}
+        </div>
+        <button type="submit"
+                class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition">
+            Agregar
+        </button>
+    </form>
+
+    <!-- Lista editable -->
+    <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                    <th class="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">Cuenta equivalente</th>
+                    <th class="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">Rubro presupuestal</th>
+                    <th class="px-3 py-2 text-center font-medium text-gray-600 dark:text-gray-300">Activo</th>
+                    <th class="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300">Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for m in mapeos %}
+                <tr x-data="{ editando: false }" class="bg-white dark:bg-gray-900">
+                    <!-- vista normal -->
+                    <template x-if="!editando">
+                        <td class="px-3 py-2 text-gray-900 dark:text-white">{{ m.cta_equivalente }}</td>
+                    </template>
+                    <template x-if="!editando">
+                        <td class="px-3 py-2 text-gray-900 dark:text-white">{{ m.rubro_presupuestal }}</td>
+                    </template>
+                    <template x-if="!editando">
+                        <td class="px-3 py-2 text-center">
+                            {% if m.activo %}
+                            <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">Sí</span>
+                            {% else %}
+                            <span class="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">No</span>
+                            {% endif %}
+                        </td>
+                    </template>
+                    <template x-if="!editando">
+                        <td class="px-3 py-2 text-right whitespace-nowrap">
+                            <button type="button" @click="editando = true"
+                                    class="text-blue-600 dark:text-blue-400 hover:underline text-xs mr-3">Editar</button>
+                            <button type="button"
+                                    hx-post="{% url 'financiero:editar_mapeo' %}"
+                                    hx-vals='{"accion": "eliminar", "pk": "{{ m.pk }}"}'
+                                    hx-target="#mapeo-panel" hx-swap="outerHTML"
+                                    hx-confirm="¿Eliminar este mapeo?"
+                                    class="text-red-600 dark:text-red-400 hover:underline text-xs">Eliminar</button>
+                        </td>
+                    </template>
+
+                    <!-- vista edición (HTMX inline) -->
+                    <template x-if="editando">
+                        <td colspan="4" class="px-3 py-2">
+                            <form hx-post="{% url 'financiero:editar_mapeo' %}"
+                                  hx-target="#mapeo-panel" hx-swap="outerHTML"
+                                  class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                                {% csrf_token %}
+                                <input type="hidden" name="accion" value="editar">
+                                <input type="hidden" name="pk" value="{{ m.pk }}">
+                                <input type="text" name="cta_equivalente" value="{{ m.cta_equivalente }}"
+                                       class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+                                <input type="text" name="rubro_presupuestal" value="{{ m.rubro_presupuestal }}"
+                                       class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+                                <label class="inline-flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                                    <input type="checkbox" name="activo" {% if m.activo %}checked{% endif %}
+                                           class="rounded border-gray-300 text-blue-600"> Activo
+                                </label>
+                                <button type="submit"
+                                        class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs">Guardar</button>
+                                <button type="button" @click="editando = false"
+                                        class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs">Cancelar</button>
+                            </form>
+                        </td>
+                    </template>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">
+                        No hay mapeos configurados. Se usa el mapeo por defecto.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
