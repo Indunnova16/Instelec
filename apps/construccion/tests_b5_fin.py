@@ -59,14 +59,12 @@ class _FakeUpload:
         self.size = buf.tell()
         buf.seek(0)
 
-    def read(self, *a, **k):
-        return self._buf.read(*a, **k)
-
-    def seek(self, *a, **k):
-        return self._buf.seek(*a, **k)
-
-    def tell(self, *a, **k):
-        return self._buf.tell(*a, **k)
+    def __getattr__(self, attr):
+        # Delegar cualquier método file-like no definido (read/seek/tell/
+        # seekable/readable/close/...) al buffer subyacente, para que openpyxl
+        # en modo read_only (que abre el xlsx como zip) funcione igual que con
+        # un UploadedFile real de Django.
+        return getattr(self.__dict__['_buf'], attr)
 
 
 # ===========================================================================
