@@ -1,0 +1,85 @@
+{% comment %}
+B2 (#122) — Tabla de Indicadores ANS (9 filas) + Total ANS Ponderado.
+
+Espera del contexto:
+  indicadores_ans: list[dict] (9) con keys ans (#), descripcion, peso, meta,
+                   valor, estado (verde|amarillo|rojo).
+  resumen_ans: dict con total_ponderado, estado_general, estado_color, sin_datos.
+
+Reusa IndicadorANSContractual (B4): el total proviene de puntaje_total_ans.
+{% endcomment %}
+<section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6"
+         aria-label="Indicadores ANS (Acuerdos de Nivel de Servicio)">
+    <div class="p-4 border-b dark:border-gray-700 flex items-center justify-between">
+        <div>
+            <h3 class="font-medium text-gray-900 dark:text-white">Indicadores ANS — Acuerdos de Nivel de Servicio</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ periodo_label }}</p>
+        </div>
+        {% if resumen_ans %}
+        <span class="px-3 py-1 rounded-full text-sm font-semibold
+            {% if resumen_ans.estado_color == 'verde' %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+            {% elif resumen_ans.estado_color == 'amarillo' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
+            {% else %}bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300{% endif %}">
+            {{ resumen_ans.estado_general }}
+        </span>
+        {% endif %}
+    </div>
+
+    {% if resumen_ans.sin_datos %}
+    <div class="px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 text-sm text-yellow-700 dark:text-yellow-300">
+        No hay registros ANS para este período. Se muestran las filas con sus metas de referencia.
+    </div>
+    {% endif %}
+
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">ANS</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
+                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Peso</th>
+                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Meta</th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for fila in indicadores_ans %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700
+                    {% if fila.estado == 'verde' %}bg-green-50/40 dark:bg-green-900/10
+                    {% elif fila.estado == 'amarillo' %}bg-yellow-50/40 dark:bg-yellow-900/10
+                    {% else %}bg-red-50/40 dark:bg-red-900/10{% endif %}">
+                    <td class="px-4 py-3 text-sm text-center font-semibold text-gray-700 dark:text-gray-200">{{ fila.ans }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ fila.descripcion }}</td>
+                    <td class="px-4 py-3 text-sm text-center">
+                        {% if fila.peso and fila.peso != '—' %}
+                        <span class="px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">{{ fila.peso }}</span>
+                        {% else %}
+                        <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-center text-gray-700 dark:text-gray-200">{{ fila.meta }}</td>
+                    <td class="px-4 py-3 text-sm text-right font-bold
+                        {% if fila.estado == 'verde' %}text-green-600
+                        {% elif fila.estado == 'amarillo' %}text-yellow-600
+                        {% else %}text-red-600{% endif %}">{{ fila.valor }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-400">No hay indicadores ANS definidos.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% if resumen_ans %}
+            <tfoot class="bg-gray-100 dark:bg-gray-900 font-bold">
+                <tr>
+                    <td colspan="4" class="px-4 py-3 text-sm text-right">Total ANS Ponderado</td>
+                    <td class="px-4 py-3 text-sm text-right
+                        {% if resumen_ans.estado_color == 'verde' %}text-green-600
+                        {% elif resumen_ans.estado_color == 'amarillo' %}text-yellow-600
+                        {% else %}text-red-600{% endif %}">{{ resumen_ans.total_ponderado }}</td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+</section>

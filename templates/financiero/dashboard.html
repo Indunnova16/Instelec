@@ -178,58 +178,13 @@
             </article>
         </section>
 
-        <!-- Secondary KPIs row -->
-        <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Variables (Planeado)</p>
-                <p class="text-xl font-bold text-blue-600">${{ resumen_planeado.total_variables|floatformat:0|intcomma }}</p>
-            </article>
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Variables (Real)</p>
-                <p class="text-xl font-bold text-green-600">${{ resumen_real.total_variables|floatformat:0|intcomma }}</p>
-            </article>
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Fijos (Planeado)</p>
-                <p class="text-xl font-bold text-blue-600">${{ resumen_planeado.total_fijos|floatformat:0|intcomma }}</p>
-            </article>
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                <p class="text-xs text-gray-500 dark:text-gray-400">Costos Fijos (Real)</p>
-                <p class="text-xl font-bold text-green-600">${{ resumen_real.total_fijos|floatformat:0|intcomma }}</p>
-            </article>
-        </section>
-
-        <!-- Utility comparison -->
-        <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">% Utilidad Planeada</h3>
-                <div class="flex items-center gap-4">
-                    <div class="flex-1">
-                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                            <div class="h-4 rounded-full transition-all duration-700 {% if resumen_planeado.utilidad_pct >= 0 %}bg-blue-500{% else %}bg-red-500{% endif %}"
-                                style="width: min({{ resumen_planeado.utilidad_pct|floatformat:0 }}%, 100%)"></div>
-                        </div>
-                    </div>
-                    <span class="text-2xl font-bold {% if resumen_planeado.utilidad_pct >= 0 %}text-blue-600{% else %}text-red-600{% endif %}">
-                        {{ resumen_planeado.utilidad_pct|floatformat:1 }}%
-                    </span>
-                </div>
-            </article>
-
-            <article class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">% Utilidad Real</h3>
-                <div class="flex items-center gap-4">
-                    <div class="flex-1">
-                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                            <div class="h-4 rounded-full transition-all duration-700 {% if resumen_real.utilidad_pct >= 0 %}bg-green-500{% else %}bg-red-500{% endif %}"
-                                style="width: min({{ resumen_real.utilidad_pct|floatformat:0 }}%, 100%)"></div>
-                        </div>
-                    </div>
-                    <span class="text-2xl font-bold {% if resumen_real.utilidad_pct >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
-                        {{ resumen_real.utilidad_pct|floatformat:1 }}%
-                    </span>
-                </div>
-            </article>
-        </section>
+        {% comment %}
+        B2 (#122) — Reemplaza los KPIs secundarios legacy (Costos Variables/Fijos
+        Planeado/Real y % Utilidad Planeada/Real) por las dos nuevas tablas:
+        Indicadores Técnico-Financieros (6 KPIs) e Indicadores ANS (9 filas).
+        {% endcomment %}
+        {% include "financiero/_indicadores_tecnico_financieros.html" %}
+        {% include "financiero/_indicadores_ans.html" %}
 
         <!-- Charts Row -->
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
