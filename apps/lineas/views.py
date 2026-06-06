@@ -86,17 +86,30 @@ class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailVi
         from django.http import JsonResponse
         self.object = self.get_object()
 
-        # Check if user has permission to edit
-        if not self.request.user.is_authenticated or self.request.user.rol not in ['admin', 'director', 'coordinador']:
+        # Check if user has permission to edit. Incluye admin_general e
+        # ing_residente (RBAC v2 #44) — sin ellos esos roles recibían 403 al
+        # actualizar vanos. #101.
+        admin_roles = ['admin', 'admin_general', 'director', 'coordinador', 'ing_residente']
+        if not self.request.user.is_authenticated or self.request.user.rol not in admin_roles:
             return JsonResponse({'error': 'No autorizado'}, status=403)
 
         # Handle vanos update
         if request.POST.get('action') == 'actualizar_vanos':
             cantidad_vanos = request.POST.get('cantidad_vanos', '').strip()
             if cantidad_vanos.isdigit():
-                self.object.cantidad_vanos = int(cantidad_vanos)
+                n = int(cantidad_vanos)
+                self.object.cantidad_vanos = n
                 self.object.save(update_fields=['cantidad_vanos'])
-                return JsonResponse({'success': True})
+                # #101: materializar los registros Vano que la grilla de
+                # Registrar Avances necesita (antes cantidad_vanos era solo un
+                # contador y los vanos nunca se creaban → grid vacío).
+                creados = self.object.sincronizar_vanos(n)
+                return JsonResponse({
+                    'success': True,
+                    'cantidad_vanos': n,
+                    'vanos_creados': creados,
+                    'vanos_total': self.object.vanos.count(),
+                })
             else:
                 return JsonResponse({'error': 'Cantidad inválida'}, status=400)
 

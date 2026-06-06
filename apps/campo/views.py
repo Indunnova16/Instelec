@@ -816,8 +816,14 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         )
 
         # Materializar para reusar y para que ``{% if vanos %}`` del template
-        # no dispare un COUNT(*) adicional.
-        vanos_list = list(vanos)
+        # no dispare un COUNT(*) adicional. Orden numérico real: ``numero`` es
+        # CharField, así que ``order_by('numero')`` daría 1,10,100,11... — se
+        # reordena en Python para que la grilla vaya 1,2,...,100 (#101).
+        vanos_list = sorted(
+            vanos,
+            key=lambda v: (0, int(v.numero)) if (v.numero or '').isdigit()
+            else (1, v.numero or ''),
+        )
 
         context['linea'] = linea
         context['vanos'] = vanos_list
