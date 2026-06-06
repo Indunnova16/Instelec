@@ -63,7 +63,7 @@ class MontSeccionRecepcionForm(forms.ModelForm):
             'recepcion_observaciones',
         ]
         widgets = {
-            'fecha_recibida_patio': forms.DateInput(attrs={
+            'fecha_recibida_patio': forms.DateInput(format='%Y-%m-%d', attrs={
                 'type': 'date',
                 'class': 'block w-full rounded-md border-gray-300 shadow-sm '
                          'focus:border-blue-500 focus:ring-blue-500 sm:text-sm',
@@ -104,12 +104,12 @@ class MontSeccionPrearmadoForm(forms.ModelForm):
                 'class': 'h-4 w-4 rounded border-gray-300 text-blue-600 '
                          'focus:ring-blue-500',
             }),
-            'prearmado_fecha_inicio': forms.DateInput(attrs={
+            'prearmado_fecha_inicio': forms.DateInput(format='%Y-%m-%d', attrs={
                 'type': 'date',
                 'class': 'block w-full rounded-md border-gray-300 shadow-sm '
                          'focus:border-blue-500 focus:ring-blue-500 sm:text-sm',
             }),
-            'prearmado_fecha_fin': forms.DateInput(attrs={
+            'prearmado_fecha_fin': forms.DateInput(format='%Y-%m-%d', attrs={
                 'type': 'date',
                 'class': 'block w-full rounded-md border-gray-300 shadow-sm '
                          'focus:border-blue-500 focus:ring-blue-500 sm:text-sm',
@@ -159,12 +159,12 @@ class MontSeccionMontajeForm(forms.ModelForm):
                 'class': 'block w-full rounded-md border-gray-300 shadow-sm '
                          'focus:border-blue-500 focus:ring-blue-500 sm:text-sm',
             }),
-            'montaje_fecha_inicio': forms.DateInput(attrs={
+            'montaje_fecha_inicio': forms.DateInput(format='%Y-%m-%d', attrs={
                 'type': 'date',
                 'class': 'block w-full rounded-md border-gray-300 shadow-sm '
                          'focus:border-blue-500 focus:ring-blue-500 sm:text-sm',
             }),
-            'montaje_fecha_fin': forms.DateInput(attrs={
+            'montaje_fecha_fin': forms.DateInput(format='%Y-%m-%d', attrs={
                 'type': 'date',
                 'class': 'block w-full rounded-md border-gray-300 shadow-sm '
                          'focus:border-blue-500 focus:ring-blue-500 sm:text-sm',

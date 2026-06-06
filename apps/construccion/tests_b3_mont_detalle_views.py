@@ -412,3 +412,75 @@ def test_post_montaje_fechas_faltantes_dias_none(
     assert r.status_code == 200
     data = r.json()
     assert data['dias_montaje'] is None
+
+
+# ===========================================================================
+# REGRESION #130 - "No guarda fechas en bloque de montaje"
+# ===========================================================================
+# Causa raiz: los DateInput de forms_b3_mont_detalle.py no fijaban
+# format='%Y-%m-%d'. Con LANGUAGE_CODE='es-co' el value se renderizaba como
+# "dd/mm/yyyy", formato que <input type="date"> descarta silenciosamente ->
+# el campo queda vacio al recargar -> el cliente percibe "no guarda".
+# El POST si persistia (HTML5 siempre envia ISO); el bug era de RE-RENDER.
+
+@pytest.mark.django_db
+def test_montaje_fechas_render_iso_al_recargar(
+    authenticated_client, proyecto_b3b, torre_b3b
+):
+    """Tras guardar una fecha, el detalle debe re-renderizar el value en
+    formato ISO (YYYY-MM-DD), NO localizado (dd/mm/yyyy). El segundo es
+    rechazado por el navegador y deja el campo vacio (#130)."""
+    save_url = reverse('construccion:montaje_detalle_save', kwargs={
+        'proyecto_id': proyecto_b3b.id,
+        'torre_id': torre_b3b.id,
+        'seccion': 'montaje',
+    })
+    r = authenticated_client.post(save_url, {
+        'montaje_encargado': 'Ana',
+        'montaje_fecha_inicio': '2026-05-10',
+        'montaje_fecha_fin': '2026-05-17',
+        'montaje_observaciones': '',
+    })
+    assert r.status_code == 200, r.content
+
+    # Recargar el detalle (journey real del cliente: guardar -> recargar).
+    detalle_url = reverse('construccion:montaje_detalle', kwargs={
+        'proyecto_id': proyecto_b3b.id,
+        'torre_id': torre_b3b.id,
+    }) + '?seccion=montaje'
+    g = authenticated_client.get(detalle_url)
+    assert g.status_code == 200
+    html = g.content.decode()
+
+    # ISO presente (el navegador lo acepta) ...
+    assert 'value="2026-05-10"' in html
+    assert 'value="2026-05-17"' in html
+    # ... y el formato localizado NO debe aparecer (causaba el campo vacio).
+    assert 'value="10/05/2026"' not in html
+    assert 'value="17/05/2026"' not in html
+
+
+@pytest.mark.django_db
+def test_montaje_widgets_fecha_format_iso(db):
+    """Todos los DateInput del detalle de montaje fijan format='%Y-%m-%d'.
+    Guard estructural: evita la regresion #130 si alguien edita los forms."""
+    from apps.construccion.forms_b3_mont_detalle import (
+        MontSeccionRecepcionForm,
+        MontSeccionPrearmadoForm,
+        MontSeccionMontajeForm,
+    )
+    from django import forms as djforms
+
+    campos_fecha = [
+        (MontSeccionRecepcionForm, 'fecha_recibida_patio'),
+        (MontSeccionPrearmadoForm, 'prearmado_fecha_inicio'),
+        (MontSeccionPrearmadoForm, 'prearmado_fecha_fin'),
+        (MontSeccionMontajeForm, 'montaje_fecha_inicio'),
+        (MontSeccionMontajeForm, 'montaje_fecha_fin'),
+    ]
+    for form_cls, campo in campos_fecha:
+        widget = form_cls().fields[campo].widget
+        assert isinstance(widget, djforms.DateInput)
+        assert '%Y-%m-%d' in widget.format, (
+            f'{form_cls.__name__}.{campo} debe fijar format=%Y-%m-%d (#130)'
+        )
