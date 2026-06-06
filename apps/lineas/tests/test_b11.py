@@ -1,4 +1,4 @@
-"""Tests B1.1 — Renombre torres a formato T{numero}.
+"""Tests B1.1 — Renombre torres a formato T-{numero} (canónico Sofi #100).
 
 Cubre:
 - Happy path: Torre.__str__ retorna "T{numero}" sin variantes
@@ -48,22 +48,22 @@ class TestB11RenderTorresFormatTNumero:
 
     def test_b11_render_torres_format_T_numero(self, torre):
         """Happy path: __str__ retorna 'T{numero}' sin "Torre " ni linea."""
-        assert str(torre) == "T15"
+        assert str(torre) == "T-15"
         # No debe contener variantes legacy
         assert "Torre " not in str(torre)
         assert " - " not in str(torre)
 
     def test_b11_codigo_display_preserva_linea(self, torre):
         """codigo_display retiene la línea para casos cross-línea."""
-        assert torre.codigo_display == "T15 (LN-X)"
+        assert torre.codigo_display == "T-15 (LN-X)"
 
     def test_b11_numeros_multi_digito_sin_padding(self, db, linea):
         """T1, T15, T100, T999 — todos sin padding ni zeros."""
         casos = [
-            ("1", "T1"),
-            ("15", "T15"),
-            ("100", "T100"),
-            ("999", "T999"),
+            ("1", "T-1"),
+            ("15", "T-15"),
+            ("100", "T-100"),
+            ("999", "T-999"),
         ]
         for n, esperado in casos:
             t = Torre.objects.create(
@@ -84,7 +84,7 @@ class TestB11RenderTorresFormatTNumero:
             latitud=Decimal("6.0"), longitud=Decimal("-74.0"),
         )
         t.refresh_from_db()
-        assert str(t) == "T042"
+        assert str(t) == "T-42"
         # numero original (legacy) preservado intacto
         assert t.numero == "042"
 
@@ -95,7 +95,7 @@ class TestB11RenderTorresFormatTNumero:
             linea=linea, numero="TX-3", tipo="SUSPENSION", estado="BUENO",
             latitud=Decimal("5.0"), longitud=Decimal("-75.0"),
         )
-        assert str(t) == "TTX-3"  # T + numero literal — consistencia formato
+        assert str(t) == "TX-3"  # prefijo no-torre se preserva como {PREFIJO}-{n}
 
     def test_b11_poligono_servidumbre_usa_T_numero(self, db, linea, torre):
         """PoligonoServidumbre.__str__ también usa formato T{n}."""
@@ -109,7 +109,7 @@ class TestB11RenderTorresFormatTNumero:
             linea=linea, torre=torre, nombre="Servidumbre Test",
             geometria=poly,
         )
-        assert str(p) == "Servidumbre - T15"
+        assert str(p) == "Servidumbre - T-15"
         assert "Torre " not in str(p)
 
     def test_b11_poligono_sin_torre_no_rompe(self, db, linea):
@@ -158,7 +158,7 @@ class TestB11TorreConstruccionFormatTNumero:
         torre = TorreConstruccion.objects.create(
             proyecto=proyecto_construccion_b11, numero="42",
         )
-        assert str(torre) == "T42"
+        assert str(torre) == "T-42"
         assert "Torre " not in str(torre)
         assert "(" not in str(torre)  # proyecto NO en __str__ default
 
@@ -169,7 +169,7 @@ class TestB11TorreConstruccionFormatTNumero:
             proyecto=proyecto_construccion_b11, numero="7",
         )
         # Formato: "T{numero} ({proyecto.nombre})"
-        assert torre.codigo_display.startswith("T7 (")
+        assert torre.codigo_display.startswith("T-7 (")
         assert proyecto_construccion_b11.nombre in torre.codigo_display
 
     def test_b11_pataobra_str_format_T(self, proyecto_construccion_b11):
@@ -179,7 +179,7 @@ class TestB11TorreConstruccionFormatTNumero:
             proyecto=proyecto_construccion_b11, numero="10",
         )
         pata = PataObra.objects.create(torre=torre, pata="A")
-        assert str(pata) == "T10 - Pata A"
+        assert str(pata) == "T-10 - Pata A"
         assert "Torre " not in str(pata)
 
     def test_b11_dato_legacy_torreconstruccion(self, proyecto_construccion_b11):
@@ -190,7 +190,7 @@ class TestB11TorreConstruccionFormatTNumero:
             proyecto=proyecto_construccion_b11, numero="LEGACY-99",
         )
         torre.refresh_from_db()
-        assert str(torre) == "TLEGACY-99"
+        assert str(torre) == "LEGACY-99"
         assert torre.numero == "LEGACY-99"  # campo intacto
 
     def test_b11_no_residuos_torre_n_en_construccion_models(self):

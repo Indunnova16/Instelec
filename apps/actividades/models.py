@@ -372,7 +372,7 @@ class Actividad(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.tipo_actividad.nombre} - Torre {self.torre.numero} ({self.fecha_programada})"
+        return f"{self.tipo_actividad.nombre} - Torre {self.torre.numero_display} ({self.fecha_programada})"
 
     @property
     def fecha_efectiva(self):

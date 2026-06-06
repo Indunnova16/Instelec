@@ -189,7 +189,7 @@ class MontajeEstructuraTorreDetalle(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f'MontDetalle T{self.torre.numero}'
+        return f'MontDetalle {self.torre.numero_display}'
 
     # ======================================================================
     # Properties calculadas (paridad Excel)

@@ -329,7 +329,9 @@ def torres_geojson(
             'geometry': {'type': 'Point', 'coordinates': [float(t.longitud), float(t.latitud)]},
             'properties': {
                 'id': str(t.id),
-                'numero': t.numero,
+                # #100: etiqueta normalizada T-{n} para el popup del mapa (web).
+                # El identificador sigue siendo `id`.
+                'numero': t.numero_display,
                 'tipo': t.tipo,
                 'estado': t.estado,
                 'inspection_status': t.inspection_status,

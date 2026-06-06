@@ -123,7 +123,7 @@ class ProgramacionSemanalExporter:
             if actividad.tramo:
                 tramo_info = f"{actividad.tramo.nombre} (T{actividad.tramo.torre_inicio.numero} - T{actividad.tramo.torre_fin.numero})"
             elif actividad.torre:
-                tramo_info = f"Torre {actividad.torre.numero}"
+                tramo_info = f"Torre {actividad.torre.numero_display}"
             else:
                 tramo_info = '-'
 
@@ -368,7 +368,7 @@ class ReporteAvanceExporter:
             observaciones = '; '.join(obs_list) if obs_list else ''
 
             # Llenar fila
-            sheet.cell(row=row_num, column=1, value=torre.numero)
+            sheet.cell(row=row_num, column=1, value=torre.numero_display)
             sheet.cell(row=row_num, column=2, value=torre.get_tipo_display())
             sheet.cell(row=row_num, column=3, value=total_actividades)
             sheet.cell(row=row_num, column=4, value=f'{avance_promedio:.1f}%')
@@ -411,7 +411,7 @@ class ReporteAvanceExporter:
 
         row_num = 4
         for reg in registros:
-            sheet.cell(row=row_num, column=1, value=reg.actividad.torre.numero if reg.actividad.torre else '-')
+            sheet.cell(row=row_num, column=1, value=reg.actividad.torre.numero_display if reg.actividad.torre else '-')
             sheet.cell(row=row_num, column=2, value=reg.actividad.tipo_actividad.nombre)
             sheet.cell(row=row_num, column=3, value=reg.get_tipo_pendiente_display())
             sheet.cell(row=row_num, column=4, value=reg.descripcion_pendiente)
@@ -659,7 +659,7 @@ class InformeDiarioPDFExporter:
             for act in informe_diario.actividades_realizadas.all():
                 act_rows.append([
                     act.tipo_actividad.nombre,
-                    act.torre.numero if act.torre else '-',
+                    act.torre.numero_display if act.torre else '-',
                     act.aviso_sap or '-',
                     f'{act.porcentaje_avance}%'
                 ])

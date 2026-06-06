@@ -221,7 +221,7 @@ class ReporteAvanceServidumbre:
 
         row_num = 4
         for idx, reg in enumerate(registros, start=1):
-            torre = reg.actividad.torre.numero if reg.actividad.torre else '-'
+            torre = reg.actividad.torre.numero_display if reg.actividad.torre else '-'
             tipo = reg.get_tipo_pendiente_display() if reg.tipo_pendiente else '-'
             descripcion = reg.descripcion_pendiente or '-'
             actividad = reg.actividad.tipo_actividad.nombre

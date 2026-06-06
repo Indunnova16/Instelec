@@ -381,7 +381,7 @@ class ObraCivilTorreDetalle(BaseModel):
         ordering = ['torre__numero', 'pata']
 
     def __str__(self):
-        return f"T{self.torre.numero} - Pata {self.pata} (CANT OOCC)"
+        return f"{self.torre.numero_display} - Pata {self.pata} (CANT OOCC)"
 
     # =====================================================================
     # Computed properties — avance ponderado y desviaciones sub-bloques

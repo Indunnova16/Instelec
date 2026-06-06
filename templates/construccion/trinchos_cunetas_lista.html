@@ -39,7 +39,7 @@
                             class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         <option value="">--</option>
                         {% for t in torres_disponibles %}
-                        <option value="{{ t.id }}">{{ t.numero }}</option>
+                        <option value="{{ t.id }}">{{ t.numero_display }}</option>
                         {% endfor %}
                     </select>
                 </label>

@@ -90,5 +90,5 @@ def descargar_planilla_torre(request, codigo_ft, torre_id):
             f'Error generando planilla {codigo_ft}: {e}', status=500)
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = (
-        f'attachment; filename="{codigo_ft}_{torre.numero}.pdf"')
+        f'attachment; filename="{codigo_ft}_{torre.numero_display}.pdf"')
     return response

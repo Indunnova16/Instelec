@@ -202,7 +202,7 @@ class PermisoServidumbre(BaseModel):
         ordering = ['-fecha_autorizacion']
 
     def __str__(self):
-        return f"Permiso {self.propietario_nombre} - Torre {self.torre.numero}"
+        return f"Permiso {self.propietario_nombre} - Torre {self.torre.numero_display}"
 
     @property
     def vigente(self):

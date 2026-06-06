@@ -578,8 +578,15 @@ class TorresParaLineaView(LoginRequiredMixin, View):
         except ValueError:
             return JsonResponse([], safe=False)
 
-        torres = Torre.objects.filter(linea_id=linea_id).order_by('numero').values('id', 'numero')
-        return JsonResponse(list(torres), safe=False)
+        # #100: etiqueta normalizada (T-{n}) y orden numérico ascendente
+        # (no lexicográfico). `numero_display` es @property → iterar objetos,
+        # no usar .values(). El value del <option> sigue siendo el id.
+        torres = sorted(
+            Torre.objects.filter(linea_id=linea_id),
+            key=lambda t: t.orden_numerico,
+        )
+        data = [{'id': str(t.id), 'numero': t.numero_display} for t in torres]
+        return JsonResponse(data, safe=False)
 
 
 class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
@@ -1061,7 +1068,7 @@ class EventosAPIView(LoginRequiredMixin, View):
 
             events.append({
                 'id': str(actividad.id),
-                'title': f"T{actividad.torre.numero} - {actividad.linea.codigo}",
+                'title': f"{actividad.torre.numero_display} - {actividad.linea.codigo}",
                 'start': actividad.fecha_programada.isoformat(),
                 'backgroundColor': color,
                 'borderColor': color,

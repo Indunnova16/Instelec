@@ -137,7 +137,7 @@ def estampar_metadata_imagen(evidencia_id: str):
     torre = evidencia.registro_campo.actividad.torre
     linea = evidencia.registro_campo.actividad.linea
 
-    texto = f"""Torre: {torre.numero} | Línea: {linea.codigo}
+    texto = f"""Torre: {torre.numero_display} | Línea: {linea.codigo}
 Fecha: {evidencia.fecha_captura.strftime('%Y-%m-%d %H:%M')}
 GPS: {evidencia.latitud}, {evidencia.longitud}
 Tipo: {evidencia.get_tipo_display()}"""

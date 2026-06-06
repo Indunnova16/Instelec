@@ -486,7 +486,7 @@ class PoligonoServidumbre(BaseModel):
     def __str__(self):
         if self.torre:
             # B1.1 — usar formato T{numero} en lugar de "Torre N"
-            return f"Servidumbre - T{self.torre.numero}"
+            return f"Servidumbre - {self.torre.numero_display}"
         return f"Servidumbre - {self.nombre or self.id}"
 
     def punto_dentro(self, latitud: float, longitud: float) -> bool:

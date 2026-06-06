@@ -115,7 +115,7 @@ def generar_excel_informe(informe, actividades, registros):
         cell.font = Font(bold=True)
 
     for row, act in enumerate(actividades, 2):
-        ws_act.cell(row=row, column=1, value=act.torre.numero)
+        ws_act.cell(row=row, column=1, value=act.torre.numero_display)
         ws_act.cell(row=row, column=2, value=act.tipo_actividad.nombre)
         ws_act.cell(row=row, column=3, value=act.fecha_programada.isoformat())
         ws_act.cell(row=row, column=4, value=act.estado)
