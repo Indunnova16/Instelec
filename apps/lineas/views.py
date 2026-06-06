@@ -271,7 +271,7 @@ class MapaLineasView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             if torre.latitud and torre.longitud:
                 torres_data.append({
                     'id': str(torre.id),
-                    'numero': torre.numero,
+                    'numero': torre.numero_display,
                     'linea': linea.codigo if linea else '',
                     'tipo': torre.tipo,
                     'estado': torre.estado,
@@ -761,10 +761,10 @@ class TorreCreateView(LoginRequiredMixin, RoleRequiredMixin, View):
             tower.longitud = -74.2973
             try:
                 tower.save()
-                messages.success(request, f'Torre {tower.numero} creada exitosamente.')
+                messages.success(request, f'Torre {tower.numero_display} creada exitosamente.')
                 return redirect('lineas:detalle', pk=linea_pk)
             except IntegrityError:
-                messages.error(request, f'Ya existe una torre con número "{tower.numero}" en esta línea. Use un número diferente.')
+                messages.error(request, f'Ya existe una torre con número "{tower.numero_display}" en esta línea. Use un número diferente.')
                 return self.render_form(request, linea, form)
         else:
             messages.error(request, 'Error al crear la torre. Revise los datos.')
@@ -813,7 +813,7 @@ class TorreEditView(LoginRequiredMixin, RoleRequiredMixin, View):
 
         if form.is_valid():
             form.save()
-            messages.success(request, f'Torre {torre.numero} actualizada exitosamente.')
+            messages.success(request, f'Torre {torre.numero_display} actualizada exitosamente.')
             return redirect('lineas:detalle', pk=torre.linea.pk)
         else:
             messages.error(request, 'Error al actualizar la torre. Revise los datos.')

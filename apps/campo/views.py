@@ -951,7 +951,7 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
             )
             messages.success(
                 request,
-                f'Avance registrado en Torre {torre.numero} exitosamente.'
+                f'Avance registrado en Torre {torre.numero_display} exitosamente.'
             )
         except Exception as e:
             messages.error(request, f'Error al registrar avance: {str(e)}')

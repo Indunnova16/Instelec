@@ -312,7 +312,7 @@ class Evidencia(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.get_tipo_display()} - {self.registro_campo.actividad.torre.numero}"
+        return f"{self.get_tipo_display()} - {self.registro_campo.actividad.torre.numero_display}"
 
     @property
     def es_valida(self):
@@ -758,7 +758,7 @@ class RegistroAvance(BaseModel):
     def __str__(self):
         return (
             f"Avance {self.get_tipo_avance_display()} - "
-            f"Torre {self.torre.numero} - {self.usuario.get_full_name()}"
+            f"Torre {self.torre.numero_display} - {self.usuario.get_full_name()}"
         )
 
     def clean(self):

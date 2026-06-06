@@ -158,7 +158,7 @@ class ActividadFinalTorre(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f'ActividadesFinales T{self.torre.numero} ({self.pct_avance:.0f}%)'
+        return f'ActividadesFinales {self.torre.numero_display} ({self.pct_avance:.0f}%)'
 
     # ==================================================================
     # Validaciones de progresión lógica (server-side)

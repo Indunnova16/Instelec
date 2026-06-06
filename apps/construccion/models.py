@@ -550,7 +550,7 @@ class PataObra(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"T{self.torre.numero} - Pata {self.pata}"
+        return f"{self.torre.numero_display} - Pata {self.pata}"
 
     @property
     def porcentaje_completado(self):
@@ -736,7 +736,7 @@ class ObraCivilTorre(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f"OC {self.torre.numero}"
+        return f"OC {self.torre.numero_display}"
 
     COLUMNAS = [
         ('cerramiento', 'Cerramiento'),
@@ -857,7 +857,7 @@ class MontajeEstructuraTorre(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f"Montaje {self.torre.numero}"
+        return f"Montaje {self.torre.numero_display}"
 
     COLUMNAS = [
         ('estructura_sitio', 'Estructura en sitio'),
@@ -949,7 +949,7 @@ class SPTTorre(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f"SPT {self.torre.numero}"
+        return f"SPT {self.torre.numero_display}"
 
     @property
     def diferencia_cable(self):
@@ -987,7 +987,7 @@ class PinturaPatasTorre(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f"Pintura patas {self.torre.numero}"
+        return f"Pintura patas {self.torre.numero_display}"
 
 
 class PinturaAeronauticaTorre(BaseModel):
@@ -1009,7 +1009,7 @@ class PinturaAeronauticaTorre(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f"Pintura aero {self.torre.numero}"
+        return f"Pintura aero {self.torre.numero_display}"
 
 
 class PinturaFranja(BaseModel):
@@ -1127,7 +1127,7 @@ class TendidoTorre(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f"Tendido {self.torre.numero}"
+        return f"Tendido {self.torre.numero_display}"
 
     COLUMNAS_CONDUCTOR = [
         ('riega_manila_conductor', 'Riega manila'),
@@ -1279,7 +1279,7 @@ class TrinchoCuneta(BaseModel):
         ordering = ['torre__numero']
 
     def __str__(self):
-        return f"{self.torre.numero} - {self.get_medida_manejo_display()}"
+        return f"{self.torre.numero_display} - {self.get_medida_manejo_display()}"
 
     @property
     def total_metros_obra(self):
@@ -1563,7 +1563,7 @@ class FaseTorre(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"Fases - T{self.torre.numero}"
+        return f"Fases - {self.torre.numero_display}"
 
     @property
     def porcentaje_montaje(self):
@@ -1690,7 +1690,7 @@ class SocialPredial(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"Social - T{self.torre.numero}"
+        return f"Social - {self.torre.numero_display}"
 
     @property
     def semaforo(self):
@@ -1787,7 +1787,7 @@ class AmbientalTorre(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"Ambiental - T{self.torre.numero}"
+        return f"Ambiental - {self.torre.numero_display}"
 
     @property
     def semaforo(self):
@@ -1842,7 +1842,7 @@ class ControlLluvia(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"Lluvia - T{self.torre.numero} ({self.fecha})"
+        return f"Lluvia - {self.torre.numero_display} ({self.fecha})"
 
 
 class ReporteReplanteo(BaseModel):
@@ -1970,7 +1970,7 @@ class EntregaElectromecanica(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"Entrega - T{self.torre.numero}"
+        return f"Entrega - {self.torre.numero_display}"
 
 
 class CorreccionEntrega(BaseModel):
@@ -2004,7 +2004,7 @@ class CorreccionEntrega(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"Corrección - T{self.torre.numero}"
+        return f"Corrección - {self.torre.numero_display}"
 
 
 class ObraProteccion(BaseModel):
@@ -2063,7 +2063,7 @@ class ObraProteccion(BaseModel):
 
     def __str__(self):
         # B1.1 — formato T{numero}
-        return f"Protección - T{self.torre.numero}"
+        return f"Protección - {self.torre.numero_display}"
 
 
 class PruebaTecnica(BaseModel):
