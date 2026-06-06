@@ -207,6 +207,39 @@ class Linea(BaseModel):
             return (self.cantidad_torres or 0) + (self.cantidad_postes or 0)
         return self.cantidad_torres or 0
 
+    # Tope defensivo: evita que un número tecleado por error (ej. 100000)
+    # genere una avalancha de filas Vano. #101.
+    MAX_VANOS_AUTOGENERADOS = 5000
+
+    def sincronizar_vanos(self, cantidad):
+        """Materializa filas ``Vano`` numeradas ``1..cantidad`` para esta línea.
+
+        Idempotente y NO destructivo: crea solo los vanos faltantes y nunca
+        borra los existentes (que pueden tener estado/pendientes registrados).
+        Devuelve la cantidad de vanos efectivamente creados.
+
+        Resuelve #101: ``cantidad_vanos`` era solo un contador y no
+        materializaba los registros que la grilla de Registrar Avances
+        necesita, por lo que la grilla salía vacía pese a "tener 100 vanos".
+        """
+        try:
+            n = int(cantidad)
+        except (TypeError, ValueError):
+            return 0
+        if n <= 0:
+            return 0
+        n = min(n, self.MAX_VANOS_AUTOGENERADOS)
+
+        existentes = set(self.vanos.values_list('numero', flat=True))
+        nuevos = [
+            Vano(linea=self, numero=str(i))
+            for i in range(1, n + 1)
+            if str(i) not in existentes
+        ]
+        if nuevos:
+            Vano.objects.bulk_create(nuevos, batch_size=500, ignore_conflicts=True)
+        return len(nuevos)
+
 
 class Torre(BaseModel):
     """
