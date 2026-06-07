@@ -126,6 +126,14 @@ jobs:
             --max-instances 2 \
             --quiet
 
+
+      # Red idempotente anti-reproceso (P2, 2026-06-07): 100% del trafico a la
+      # revision recien deployada. NO-OP si ya sigue a LATEST; promueve si quedo
+      # clavado a una revision por un --to-revision manual previo.
+      - name: Ensure traffic on latest revision
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} --to-latest --quiet
       - name: Get Service URL
         run: |
           URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')
