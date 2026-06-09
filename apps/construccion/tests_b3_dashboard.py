@@ -562,14 +562,25 @@ def test_141_dashboard_oc_renderiza_tres_canvas_y_ready_flag(
 
 
 @pytest.mark.django_db
-def test_141_dashboard_montaje_no_muestra_graficas_141(
+def test_141_dashboard_montaje_no_muestra_graficas_oc_only(
         authenticated_client, proyecto_indicadores):
-    """El template es compartido: el dashboard de Montaje NO debe mostrar las 3
-    gráficas de #141 (solo aplican a Obra Civil)."""
+    """Tras el bloque dashboards (#139, F4 wiring), ``dashboard_montaje`` abre el
+    dashboard REAL de Montaje (``DashboardMontajeRealView`` con su template
+    propio ``dashboard_montaje.html``), NO el view del semanal vacío.
+
+    Actualizado en integración F4: antes (#141) este name resolvía a la vista del
+    template compartido sin gráficas y el test afirmaba que NO había ``avance-
+    etapas-chart``. Ahora el dashboard de Montaje SÍ tiene su Curva S + avance por
+    etapa (chart genérico del parcial base + ``#montaje-etapas-chart`` dedicado),
+    que es justamente el objetivo de #139. Lo que sigue sin aplicar a Montaje es
+    la gráfica de desviación de materiales de vaciado, que es OC-only (#141).
+    """
     url = reverse('construccion:dashboard_montaje',
                   kwargs={'proyecto_id': proyecto_indicadores.id})
     resp = authenticated_client.get(url)
     assert resp.status_code == 200
     body = resp.content.decode()
-    assert 'id="avance-etapas-chart"' not in body
+    # Montaje real renderiza su propia gráfica de etapas (OK que exista).
+    assert 'id="montaje-etapas-chart"' in body
+    # La desviación de materiales de vaciado es exclusiva de Obra Civil (#141).
     assert 'id="desviacion-materiales-chart"' not in body

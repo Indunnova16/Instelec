@@ -80,17 +80,25 @@ class _DashboardCurvaSBase(_DashboardCurvaSBaseLegacy):
     def build_curva_real(self, proyecto, fase):
         """Series reales ejecutado + planeado, listas para el template.
 
-        Devuelve un STRING JSON pre-serializado (guard es-CO: nunca floats
-        crudos en JS inline). B1 lo consume como dataset principal de la Curva S
-        de OC; B2/B3 para Montaje/Tendido.
+        Devuelve un **DICT** (NO un string json.dumps). El parcial base
+        ``_dashboard_fase_base.html`` lo emite con ``{{ curva_real_json|json_script }}``
+        y su JS hace ``JSON.parse(...).ejecutado`` / ``.planeado``. ``json_script``
+        ya serializa+escapa el valor de forma segura (guard es-CO: nunca floats
+        crudos en JS inline), así que el contexto debe traer el dict, no el string.
+        Si pasáramos un string pre-serializado quedaría doble-codificado:
+        ``JSON.parse`` devolvería un string y ``.ejecutado`` sería ``undefined`` →
+        la Curva S no pintaría (bug de integración B2/B4 que reusan este parcial).
+
+        B1 (Obra Civil) usa su propio ``datos_chart`` para el canvas legacy y NO
+        depende de este dict; B2/B3 (Montaje/Tendido) sí lo consumen vía el parcial.
         """
         ejecutado = car.serie_curva_s_real(proyecto, fase)
         planeado = car.serie_planeado(proyecto, fase)
-        return json.dumps({
+        return {
             'fase': fase,
             'ejecutado': ejecutado,   # {'labels':[...], 'ejecutado':[...]}
             'planeado': planeado,     # {'labels':[...], 'planeado':[...]}
-        })
+        }
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)

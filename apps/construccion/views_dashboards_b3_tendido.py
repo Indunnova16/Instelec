@@ -83,19 +83,12 @@ class DashboardTendidoView(_DashboardCurvaSBase):
             'vista_torres': vista_torres,
             'pct_conductor': pct_conductor,
             'pct_fibra': pct_fibra,
-            # El parcial base (_dashboard_fase_base.html) hace
-            # ``{{ curva_real_json|json_script:... }}`` y su JS lee
-            # ``curva.ejecutado`` / ``curva.planeado``. ``json_script`` espera un
-            # OBJETO (lo serializa él); si le pasáramos el string que produce
-            # ``_DashboardCurvaSBase.build_curva_real`` quedaría doble-codificado
-            # (JSON.parse devolvería un string, no el dict) y la Curva S no
-            # pintaría. Por eso sobreescribimos con un dict con las claves que el
-            # parcial espera. Guard es-CO igualmente cubierto: json_script escapa
-            # y no hay floats crudos en el JS inline.
-            'curva_real_json': {
-                'ejecutado': car.serie_curva_s_real(proyecto, car.FASE_TENDIDO),
-                'planeado': car.serie_planeado(proyecto, car.FASE_TENDIDO),
-            },
+            # NOTA (F4 integración): ``curva_real_json`` lo inyecta ya como DICT la
+            # base ``_DashboardCurvaSBase.build_curva_real`` (corregido en la fuente
+            # para que NO sea un string json.dumps doble-codificado). El parcial
+            # base lo emite con ``{{ curva_real_json|json_script }}`` y su JS lee
+            # ``curva.ejecutado`` / ``.planeado``. Ya no hace falta el workaround
+            # local de B3 — se eliminó para no divergir de B2/B4.
             # Para que el parcial base NO pinte su gráfica genérica de etapas
             # (B3 usa dos charts propios) le pasamos avance_etapas vacío.
             'avance_etapas': [],
