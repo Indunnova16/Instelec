@@ -92,7 +92,7 @@ class ObraCivilTorreDetalle(BaseModel):
         'Cerramiento — madera (un)', null=True, blank=True,
     )
     cerr_lona_m = models.DecimalField(
-        'Cerramiento — lona (m)', max_digits=8, decimal_places=2,
+        'Cerramiento — lona o alambre de púa (m)', max_digits=8, decimal_places=2,
         null=True, blank=True,
     )
     cerr_senalizacion_ok = models.BooleanField(

@@ -327,3 +327,41 @@ def test_oc_detalle_ordering_por_torre_numero(proyecto_oc):
     numeros_distintos = [d.torre.numero for d in qs]
     assert numeros_distintos[0] == '03'
     assert numeros_distintos[-1] == '15'
+
+
+# ===========================================================================
+# 9. (#132) verbose_name de cerr_lona_m incluye 'alambre de púa'
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_oc_detalle_cerr_lona_verbose_incluye_alambre_pua(detalle_default):
+    """#132 — la etiqueta de cerramiento debe mencionar lona O alambre de púa.
+
+    El cliente registra el cerramiento tanto en lona como en alambre de púa
+    sobre el mismo campo (cantidades no cambian, solo la descripción).
+    """
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    field = ObraCivilTorreDetalle._meta.get_field('cerr_lona_m')
+    assert field.verbose_name == 'Cerramiento — lona o alambre de púa (m)'
+    # No tocamos cerramiento en madera (ítem separado, ya correcto)
+    madera = ObraCivilTorreDetalle._meta.get_field('cerr_madera_un')
+    assert madera.verbose_name == 'Cerramiento — madera (un)'
+
+
+@pytest.mark.django_db
+def test_oc_detalle_cerr_lona_form_mensaje_error_legacy(detalle_default):
+    """#132 — el form rechaza lona negativa con la etiqueta actualizada.
+
+    Valida contra dato legacy: el detalle ya existe (detalle_default), se
+    edita su campo lona con un valor inválido y se espera el mensaje nuevo.
+    """
+    from apps.construccion.forms_b3_oc_detalle import OCSeccionCerramientoForm
+
+    form = OCSeccionCerramientoForm(
+        data={'cerr_lona_m': '-3', 'cerr_madera_un': '', 'cerr_notas': ''},
+        instance=detalle_default,
+    )
+    assert not form.is_valid()
+    assert 'cerr_lona_m' in form.errors
+    assert 'Lona o alambre de púa (m)' in ' '.join(form.errors['cerr_lona_m'])

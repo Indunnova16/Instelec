@@ -76,7 +76,7 @@ class OCSeccionCerramientoForm(forms.ModelForm):
 
     def clean_cerr_lona_m(self):
         return _validar_no_negativo(
-            self.cleaned_data.get('cerr_lona_m'), 'Lona (m)'
+            self.cleaned_data.get('cerr_lona_m'), 'Lona o alambre de púa (m)'
         )
 
 
