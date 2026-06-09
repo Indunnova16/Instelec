@@ -1,0 +1,173 @@
+{% comment %}
+Parcial base reutilizable para los Dashboards de fase (#139 · S3).
+
+Reutilizado por los dashboards de Obra Civil (B1), Montaje (B2), Tendido (B3) y
+Vista por torre (B4). Provee el esqueleto común:
+  - canvas #curva-s-chart           (serie Ejecutado real + Planeado)
+  - canvas #avance-etapas-chart     (% torres completas por etapa)
+  - bloque vista-por-torre          (cuáles 100% / pendientes)
+  - atributo [data-charts-ready]    (gate del E2E: 'true' cuando los charts cargan)
+  - atributo [data-fase]            (OOCC / MONTAJE / TENDIDO)
+
+GUARDS es-CO (memorias recurrentes del portafolio):
+  - Los datasets viajan PRE-SERIALIZADOS vía {{ ...|json_script }} (NO floats
+    crudos ni JSON crudo dentro de x-data / JS inline). El JS los lee con
+    JSON.parse(document.getElementById('id').textContent).
+  - No coma decimal localizada en números inline.
+
+Contexto esperado (lo provee la vista que incluye este parcial):
+  - fase_codigo        : str  'OOCC' | 'MONTAJE' | 'TENDIDO'
+  - fase_label         : str  etiqueta humana
+  - curva_real_json    : str  JSON {'ejecutado':{labels,ejecutado}, 'planeado':{labels,planeado}}
+  - avance_etapas      : list [{etapa,label,pct,completas,totales}]
+  - vista_torres       : list [{torre_id,numero,pct,completa,pendientes:[...]}]
+  - El que incluye puede pasar overrides con `{% include ... with fase_codigo=... %}`.
+
+Las sub-features pueden agregar canvas adicionales (p.ej. #tendido-fibra-chart
+en B3) en su propio template, alrededor de este include.
+{% endcomment %}
+{% load l10n %}
+
+{% comment %} Datasets pre-serializados — guard es-CO. {% endcomment %}
+{{ curva_real_json|json_script:"dashboard-fase-curva-data" }}
+{{ avance_etapas|json_script:"dashboard-fase-etapas-data" }}
+
+<div class="space-y-6 dashboard-fase-base"
+     data-fase="{{ fase_codigo|default:'OOCC' }}"
+     data-charts-ready="false">
+
+    {% comment %} === Curva S real (Ejecutado vs Planeado) === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Curva S — {{ fase_label|default:'Avance' }}</h2>
+            <span class="text-xs text-gray-500 dark:text-gray-400">Ejecutado real vs. Planeado</span>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            "Ejecutado" refleja el avance real ponderado por torre, distribuido en
+            el tiempo. "Planeado" sale del cronograma de la fase.
+        </p>
+        <div class="relative" style="height: 400px;">
+            <canvas id="curva-s-chart" width="1200" height="400"></canvas>
+        </div>
+    </div>
+
+    {% comment %} === Avance por etapa === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h2 class="font-semibold mb-1">Avance por etapa — {{ fase_label|default:'Fase' }}</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            % de torres con la etapa completa.
+        </p>
+        <div class="relative" style="height: 320px;">
+            <canvas id="avance-etapas-chart" width="1200" height="320"></canvas>
+        </div>
+        <div class="mt-3 grid grid-cols-2 md:grid-cols-6 gap-2 text-sm">
+            {% for e in avance_etapas %}
+            <div class="rounded border border-gray-200 dark:border-gray-700 p-2 text-center" data-etapa="{{ e.etapa }}">
+                <p class="font-medium text-gray-700 dark:text-gray-200">{{ e.label }}</p>
+                <p class="text-lg font-bold text-blue-700 dark:text-blue-300">{{ e.pct }}%</p>
+                <p class="text-xs text-gray-500">{{ e.completas }} / {{ e.totales }} torres</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% comment %} === Vista por torre === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h2 class="font-semibold mb-3">Vista por torre</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Torre</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">% avance</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Pendientes</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for t in vista_torres %}
+                    <tr data-torre-pct="{{ t.pct }}" data-torre-id="{{ t.torre_id }}">
+                        <td class="px-3 py-2 font-medium text-gray-700 dark:text-gray-200">{{ t.numero }}</td>
+                        <td class="px-3 py-2">{{ t.pct }}%</td>
+                        <td class="px-3 py-2">
+                            {% if t.completa %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-xs font-semibold">100%</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-xs font-semibold">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                            {% if t.pendientes %}{{ t.pendientes|join:", " }}{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="px-3 py-4 text-center text-gray-400">Sin datos de avance para esta fase.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% comment %}
+    Render de los charts. Lee los datasets pre-serializados (NO floats inline).
+    Marca [data-charts-ready=true] al terminar — gate del E2E. Las sub-features
+    pueden sobreescribir/extender este script (p.ej. añadir un 2do chart de
+    fibra en B3) en su propio template.
+    {% endcomment %}
+    <script>
+    (function () {
+        function readJSON(id) {
+            var el = document.getElementById(id);
+            if (!el) { return null; }
+            try { return JSON.parse(el.textContent); } catch (e) { return null; }
+        }
+        function renderDashboardFase() {
+            var root = document.querySelector('.dashboard-fase-base');
+            if (!root || typeof Chart === 'undefined') { return; }
+            var curva = readJSON('dashboard-fase-curva-data') || {};
+            var etapas = readJSON('dashboard-fase-etapas-data') || [];
+
+            var ejec = (curva.ejecutado) || { labels: [], ejecutado: [] };
+            var plan = (curva.planeado) || { labels: [], planeado: [] };
+
+            var elCurva = document.getElementById('curva-s-chart');
+            if (elCurva) {
+                new Chart(elCurva.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: ejec.labels && ejec.labels.length ? ejec.labels : plan.labels,
+                        datasets: [
+                            { label: 'Ejecutado', data: ejec.ejecutado || [], borderColor: '#2563eb', tension: 0.2 },
+                            { label: 'Planeado', data: plan.planeado || [], borderColor: '#9ca3af', borderDash: [6, 4], tension: 0.2 }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+            }
+
+            var elEtapas = document.getElementById('avance-etapas-chart');
+            if (elEtapas && etapas.length) {
+                new Chart(elEtapas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: etapas.map(function (e) { return e.label; }),
+                        datasets: [{ label: '% torres completas',
+                            data: etapas.map(function (e) { return e.pct; }),
+                            backgroundColor: '#3b82f6' }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+            }
+
+            root.setAttribute('data-charts-ready', 'true');
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', renderDashboardFase);
+        } else {
+            renderDashboardFase();
+        }
+    })();
+    </script>
+</div>

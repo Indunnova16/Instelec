@@ -239,3 +239,41 @@ urlpatterns += urls_pdeo_complement.urlpatterns
 # F2 scaffolding: B4 (#123) llena urls_fin con las 6 rutas /financiero/<subruta>/.
 from . import urls_fin  # noqa: E402
 urlpatterns += urls_fin.urlpatterns
+
+# === /modulo dashboards (#139) — dashboards de avance real por fase ===
+# F2 scaffolding (S2): partición física de views.py/urls.py. B1 cablea la
+# Curva S real de Obra Civil; B2–B5 agregan Montaje/Tendido/Vista-torres/General.
+from .urls_dashboards import urlpatterns as dashboards_urls  # noqa: E402
+from .urls_dashboards_b2_montaje import urlpatterns as dashboards_b2_urls  # noqa: E402
+from .urls_dashboards_b3_tendido import urlpatterns as dashboards_b3_urls  # noqa: E402
+from .urls_dashboards_b4_torres import urlpatterns as dashboards_b4_urls  # noqa: E402
+from .urls_dashboards_b5_general import urlpatterns as dashboards_b5_urls  # noqa: E402
+urlpatterns += dashboards_urls
+urlpatterns += dashboards_b2_urls + dashboards_b3_urls + dashboards_b4_urls + dashboards_b5_urls
+
+# === F4 wiring (#139): el menú/selector abre los dashboards REALES ===
+# El sidebar construye URLs por path literal (catUrl(slug) -> /construccion/<id>/
+# <slug>/), NO por reverse(). Por eso el override de *name* que hicieron B1/B2 no
+# basta para que el menú abra la vista real: el request entrante a la ruta legacy
+# (matching first-wins, declarada arriba) seguía cayendo en la vista del semanal
+# vacío. Aquí re-apuntamos las rutas legacy de menú a las vistas reales del
+# backbone para que TODOS los dashboards que el usuario abre desde el menú
+# muestren el avance real, consistente con lo que B1 hizo para Obra Civil.
+from django.urls import path as _df_path  # noqa: E402, I001
+from .views_dashboards import DashboardObraCivilRealView as _DObraCivilReal  # noqa: E402, I001
+from .views_dashboards_b2_montaje import DashboardMontajeRealView as _DMontajeReal  # noqa: E402, I001
+
+# Reemplazar in-place la ruta legacy 'dashboard-obra-civil/' y 'dashboard-montaje/'
+# por las vistas reales (mismo name + mismo path → el menú abre el dashboard real).
+_DASHBOARD_MENU_OVERRIDES = {
+    'dashboard_obra_civil': _DObraCivilReal,
+    'dashboard_montaje': _DMontajeReal,
+}
+for _i, _p in enumerate(urlpatterns):
+    _name = getattr(_p, 'name', None)
+    if _name in _DASHBOARD_MENU_OVERRIDES:
+        urlpatterns[_i] = _df_path(
+            str(_p.pattern),
+            _DASHBOARD_MENU_OVERRIDES[_name].as_view(),
+            name=_name,
+        )

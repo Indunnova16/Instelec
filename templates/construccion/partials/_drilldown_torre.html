@@ -1,0 +1,56 @@
+{% load l10n %}
+{% comment %}
+B4 (#139) — Parcial drill-down: detalle de "lo atrasado" de una torre en una fase.
+
+Reusable por B1/B2/B3: cualquier dashboard de fase puede inyectar este parcial
+pegándole al endpoint ``construccion:dashboard_drilldown_torre`` con
+``?torre=<id>&fase=<OOCC|MONTAJE|TENDIDO>&format=html``.
+
+Contexto esperado:
+  - detalle : dict | None  con
+      {torre_id, numero, fase, fase_label, pct, completa, registrada,
+       pendientes:[labels], total_pendientes}
+  - error   : str (opcional) — mensaje si la consulta fue inválida.
+
+GUARDS es-CO: el bloque numérico va dentro de {% localize off %} (el % no debe
+salir con coma decimal). Sin floats crudos en JS — este parcial es HTML puro.
+{% endcomment %}
+{% localize off %}
+<div data-drilldown-torre
+     {% if detalle %}data-torre-id="{{ detalle.torre_id }}" data-fase="{{ detalle.fase }}"{% endif %}>
+    {% if error %}
+        <p class="text-sm text-red-600" data-dd-error>{{ error }}</p>
+    {% elif not detalle %}
+        <p class="text-sm text-gray-400" data-dd-vacio>Seleccione una celda para ver el detalle.</p>
+    {% else %}
+        <div class="mb-2">
+            <span class="font-semibold">Torre {{ detalle.numero }}</span>
+            · <span class="text-gray-500 dark:text-gray-400">{{ detalle.fase_label }}</span>
+            · <span class="font-medium {% if detalle.completa %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">{{ detalle.pct }}%</span>
+        </div>
+
+        {% if not detalle.registrada %}
+            <p class="text-sm text-gray-500 dark:text-gray-400" data-dd-sin-registro>
+                Esta torre aún no tiene avance registrado en esta fase.
+            </p>
+        {% elif detalle.completa %}
+            <p class="text-sm text-green-700 dark:text-green-300" data-dd-completa>
+                Fase completa al 100%. No hay etapas atrasadas.
+            </p>
+        {% elif detalle.pendientes %}
+            <p class="text-sm mb-2 text-gray-600 dark:text-gray-300">
+                {{ detalle.total_pendientes }} etapa(s) atrasada(s):
+            </p>
+            <ul class="space-y-1 text-sm" data-dd-pendientes>
+                {% for p in detalle.pendientes %}
+                <li class="px-2 py-1 rounded bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">{{ p }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-sm text-gray-500 dark:text-gray-400" data-dd-sin-pendientes>
+                Sin etapas atrasadas registradas.
+            </p>
+        {% endif %}
+    {% endif %}
+</div>
+{% endlocalize %}
