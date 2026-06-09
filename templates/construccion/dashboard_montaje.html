@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% comment %}
+Dashboard de Montaje con avance REAL (#139 · B2).
+
+Reutiliza el parcial base S3 ``_dashboard_fase_base.html`` (Curva S
+#curva-s-chart + #avance-etapas-chart + vista por torre + [data-charts-ready] +
+[data-fase]) y AÑADE el canvas dedicado del scope B2 ``#montaje-etapas-chart``
+con las 4 etapas de Montaje (Estructura en sitio 10% · Prearmada 20% · Torre
+montada 45% · Revisada 25%) y el drill-down por torre a ``montaje_torre``.
+
+Contexto (lo provee DashboardMontajeRealView):
+  - proyecto, fase_codigo='MONTAJE', fase_label='Montaje'
+  - curva_real_json (str JSON: ejecutado/planeado)  ← base de avance real
+  - avance_etapas (list)  ← consumida por el parcial base y por mi chart
+  - vista_torres (list)   ← consumida por el parcial base
+  - montaje_etapas_json (str JSON)  ← dataset dedicado de #montaje-etapas-chart
+  - montaje_sin_datos (bool)
+
+GUARDS es-CO (memorias recurrentes del portafolio):
+  - Datasets vía {{ ...|json_script }} (NUNCA floats crudos ni JSON crudo en JS
+    inline / x-data). El JS los lee con JSON.parse(...textContent).
+  - {% localize off %} alrededor de cualquier número renderizado en JS.
+{% endcomment %}
+
+{% block title %}Dashboard Montaje — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% comment %} Chart.js (mismo CDN que dashboard_curva_s.html). {% endcomment %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<div class="max-w-7xl mx-auto px-4 py-6 space-y-6"
+     data-dashboard="montaje" data-fase="MONTAJE">
+
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                Dashboard de Montaje
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ proyecto.nombre }} — avance real ponderado por torre
+            </p>
+        </div>
+        <a href="{% url 'construccion:montaje_lista' proyecto_id=proyecto.id %}"
+           class="text-sm text-blue-700 dark:text-blue-300 hover:underline">
+            Ir a la matriz de Montaje →
+        </a>
+    </div>
+
+    {% comment %} Estado vacío: proyecto sin montaje → mensaje, sin crash. {% endcomment %}
+    {% if montaje_sin_datos %}
+    <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-200"
+         data-montaje-empty="true">
+        Aún no hay registros de avance de Montaje para este proyecto. La Curva S y
+        las etapas aparecerán cuando se cargue el avance por torre.
+    </div>
+    {% endif %}
+
+    {% comment %} === Parcial base (Curva S real + etapas + vista por torre) === {% endcomment %}
+    {% include "construccion/_dashboard_fase_base.html" with fase_codigo='MONTAJE' fase_label='Montaje' %}
+
+    {% comment %}
+    === Canvas dedicado de etapas de Montaje (#montaje-etapas-chart) ===
+    Contrato del scope B2. Dataset pre-serializado (guard es-CO). El parcial base
+    ya pinta #avance-etapas-chart; este chart es el específico de Montaje con sus
+    4 etapas + pesos para el tablero gerencial.
+    {% endcomment %}
+    {{ montaje_etapas_json|json_script:"montaje-etapas-data" }}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4"
+         data-block="montaje-etapas">
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Etapas de Montaje</h2>
+            <span class="text-xs text-gray-500 dark:text-gray-400">
+                Estructura 10% · Prearmada 20% · Torre montada 45% · Revisada 25%
+            </span>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            % de torres con cada etapa de Montaje completa.
+        </p>
+        <div class="relative" style="height: 320px;">
+            <canvas id="montaje-etapas-chart" width="1200" height="320"></canvas>
+        </div>
+        <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            {% for e in avance_etapas %}
+            <div class="rounded border border-gray-200 dark:border-gray-700 p-2 text-center"
+                 data-montaje-etapa="{{ e.etapa }}">
+                <p class="font-medium text-gray-700 dark:text-gray-200">{{ e.label }}</p>
+                <p class="text-lg font-bold text-indigo-700 dark:text-indigo-300">{{ e.pct }}%</p>
+                <p class="text-xs text-gray-500">{{ e.completas }} / {{ e.totales }} torres</p>
+            </div>
+            {% empty %}
+            <p class="col-span-full text-center text-gray-400 text-xs py-2">
+                Sin datos de etapas de Montaje.
+            </p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% comment %}
+    === Drill-down por torre a montaje_torre ===
+    Tabla de torres de Montaje con enlace al detalle de la torre (la vista
+    por-torre del parcial base es de solo lectura; aquí agregamos el link de
+    drill-down que pide el scope B2).
+    {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4"
+         data-block="montaje-drill">
+        <h2 class="font-semibold mb-3">Drill-down por torre</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Torre</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">% Montaje</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Pendientes</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Detalle</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for t in vista_torres %}
+                    <tr data-montaje-torre-id="{{ t.torre_id }}" data-montaje-torre-pct="{{ t.pct }}">
+                        <td class="px-3 py-2 font-medium text-gray-700 dark:text-gray-200">{{ t.numero }}</td>
+                        <td class="px-3 py-2">{{ t.pct }}%</td>
+                        <td class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                            {% if t.pendientes %}{{ t.pendientes|join:", " }}{% else %}—{% endif %}
+                        </td>
+                        <td class="px-3 py-2">
+                            <a href="{% url 'construccion:montaje_torre' proyecto_id=proyecto.id torre_id=t.torre_id %}"
+                               class="text-blue-700 dark:text-blue-300 hover:underline"
+                               data-drill-montaje="{{ t.torre_id }}">
+                                Ver torre →
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-3 py-4 text-center text-gray-400">
+                            Sin torres con avance de Montaje.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    function readJSON(id) {
+        var el = document.getElementById(id);
+        if (!el) { return null; }
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    function renderMontajeEtapas() {
+        var el = document.getElementById('montaje-etapas-chart');
+        if (!el || typeof Chart === 'undefined') { return; }
+        var etapas = readJSON('montaje-etapas-data') || [];
+        if (!etapas.length) { return; }
+        new Chart(el.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: etapas.map(function (e) { return e.label; }),
+                datasets: [{
+                    label: '% torres con etapa completa',
+                    data: etapas.map(function (e) { return e.pct; }),
+                    backgroundColor: '#6366f1'
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, max: 100 } }
+            }
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderMontajeEtapas);
+    } else {
+        renderMontajeEtapas();
+    }
+})();
+</script>
+{% endblock %}
