@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% block title %}Vista por torre — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% comment %}
+B4 (#139) — Vista por torre CONSOLIDADA (cross-fase) + drill-down.
+
+Tabla torre × fase (Obra Civil / Montaje / Tendido) con % y estado 100%/pendiente
+por celda + un % global por torre. Cada celda con avance abre el drill-down (lo
+atrasado por torre+fase) consultando el endpoint JSON reusable.
+
+GUARDS es-CO:
+  - Todo el bloque numérico va dentro de {% localize off %} → sin coma decimal.
+  - La URL del drill-down viaja pre-serializada vía json_script (NO JS inline con
+    JSON crudo / floats crudos). El JS la lee con JSON.parse(textContent).
+  - No se usa x-data con JSON crudo (lección recurrente "algo rompe Alpine").
+{% endcomment %}
+{% localize off %}
+
+{% comment %} Config pre-serializada para el JS (guard es-CO). {% endcomment %}
+{{ drilldown_cfg|json_script:"vista-torres-cfg" }}
+
+<div class="space-y-6" data-vista-torres data-charts-ready="true">
+
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🗼 Vista por torre — consolidada</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Total torres: <span class="font-medium">{{ total_torres }}</span>
+                · Con avance: <span class="font-medium">{{ torres_con_avance }}</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Resumen por fase: cuántas torres al 100% -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {% for rf in resumen_fases %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3 text-center"
+             data-resumen-fase="{{ rf.codigo }}">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ rf.label }}</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ rf.completas }} / {{ rf.registradas }}</p>
+            <p class="text-xs text-gray-500">torres al 100%</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Tabla consolidada torre × fase -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h2 class="font-semibold mb-3">Avance por torre y fase</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm" data-tabla-vista-torres>
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Torre</th>
+                        {% for f in fases %}
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400" data-col-fase="{{ f.codigo }}">{{ f.label }}</th>
+                        {% endfor %}
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Global</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for t in torres %}
+                    <tr data-torre-id="{{ t.torre_id }}" data-torre-global-pct="{{ t.global_pct }}">
+                        <td class="px-3 py-2 font-medium text-gray-700 dark:text-gray-200">{{ t.numero }}</td>
+                        {% for f in fases %}
+                        <td class="px-3 py-2" data-cell-fase="{{ f.codigo }}">
+                            {% comment %} Django no permite lookup dict por variable → for+if. {% endcomment %}
+                            {% for codigo, celda in t.celdas.items %}{% if codigo == f.codigo %}
+                            {% if celda.registrada %}
+                            <button type="button"
+                                    class="js-drilldown inline-flex items-center gap-2 group"
+                                    data-torre-id="{{ t.torre_id }}"
+                                    data-torre-numero="{{ t.numero }}"
+                                    data-fase="{{ f.codigo }}"
+                                    data-fase-label="{{ f.label }}">
+                                <span class="font-medium {% if celda.completa %}text-green-700 dark:text-green-300{% else %}text-amber-700 dark:text-amber-300{% endif %}"
+                                      data-cell-pct>{{ celda.pct }}%</span>
+                                {% if celda.completa %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-xs font-semibold" data-cell-estado>100%</span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-xs font-semibold group-hover:underline" data-cell-estado>Pendiente</span>
+                                {% endif %}
+                            </button>
+                            {% else %}
+                            <span class="text-gray-400 dark:text-gray-500 text-xs" data-cell-estado="sin-registro">— sin registro</span>
+                            {% endif %}
+                            {% endif %}{% endfor %}
+                        </td>
+                        {% endfor %}
+                        <td class="px-3 py-2">
+                            <span class="font-bold {% if t.completa_global %}text-green-700 dark:text-green-300{% else %}text-gray-700 dark:text-gray-200{% endif %}" data-cell-global>{{ t.global_pct }}%</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="{{ fases|length|add:'2' }}" class="px-3 py-6 text-center text-gray-400" data-empty>
+                        Sin datos de avance para ninguna torre todavía.
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            Clic en una celda con avance para ver el detalle de lo atrasado de esa torre en esa fase.
+        </p>
+    </div>
+
+    <!-- Panel drill-down (se llena vía fetch al endpoint JSON reusable) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4 hidden"
+         id="drilldown-panel" data-drilldown-panel>
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold">Detalle — lo atrasado</h2>
+            <button type="button" id="drilldown-cerrar" data-drilldown-cerrar
+                    class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">Cerrar ✕</button>
+        </div>
+        <div id="drilldown-body" data-drilldown-body>
+            <p class="text-sm text-gray-400">Seleccione una celda…</p>
+        </div>
+    </div>
+</div>
+{% endlocalize %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    "use strict";
+
+    function readJSON(id) {
+        var el = document.getElementById(id);
+        if (!el) { return null; }
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+
+    var cfg = readJSON("vista-torres-cfg") || {};
+    var drilldownUrl = cfg.drilldown_url || "";
+
+    var panel = document.getElementById("drilldown-panel");
+    var body = document.getElementById("drilldown-body");
+    var cerrar = document.getElementById("drilldown-cerrar");
+
+    function esc(s) {
+        var d = document.createElement("div");
+        d.textContent = (s === null || s === undefined) ? "" : String(s);
+        return d.innerHTML;
+    }
+
+    function renderDetalle(d) {
+        if (!d) {
+            body.innerHTML = '<p class="text-sm text-red-600">No se pudo cargar el detalle.</p>';
+            return;
+        }
+        var header = '<div class="mb-2">'
+            + '<span class="font-semibold">Torre ' + esc(d.numero) + '</span>'
+            + ' · <span class="text-gray-500">' + esc(d.fase_label) + '</span>'
+            + ' · <span class="font-medium">' + esc(d.pct) + '%</span>'
+            + '</div>';
+        var cuerpo;
+        if (!d.registrada) {
+            cuerpo = '<p class="text-sm text-gray-500" data-dd-sin-registro>Esta torre aún no tiene avance registrado en esta fase.</p>';
+        } else if (d.completa) {
+            cuerpo = '<p class="text-sm text-green-700 dark:text-green-300" data-dd-completa>Fase completa al 100%. No hay etapas atrasadas.</p>';
+        } else if (d.pendientes && d.pendientes.length) {
+            var items = d.pendientes.map(function (p) {
+                return '<li class="px-2 py-1 rounded bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">' + esc(p) + '</li>';
+            }).join("");
+            cuerpo = '<p class="text-sm mb-2 text-gray-600 dark:text-gray-300">'
+                + esc(d.total_pendientes) + ' etapa(s) atrasada(s):</p>'
+                + '<ul class="space-y-1 text-sm" data-dd-pendientes>' + items + '</ul>';
+        } else {
+            cuerpo = '<p class="text-sm text-gray-500">Sin etapas atrasadas registradas.</p>';
+        }
+        body.innerHTML = header + cuerpo;
+    }
+
+    function abrirDrilldown(torreId, fase) {
+        if (!drilldownUrl) { return; }
+        body.innerHTML = '<p class="text-sm text-gray-400" data-dd-loading>Cargando…</p>';
+        panel.classList.remove("hidden");
+        var sep = drilldownUrl.indexOf("?") >= 0 ? "&" : "?";
+        var url = drilldownUrl + sep + "torre=" + encodeURIComponent(torreId)
+            + "&fase=" + encodeURIComponent(fase);
+        fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (res) {
+                if (res.ok && res.j && res.j.ok) {
+                    renderDetalle(res.j.detalle);
+                } else {
+                    var msg = (res.j && res.j.error) ? res.j.error : "Error al cargar el detalle.";
+                    body.innerHTML = '<p class="text-sm text-red-600" data-dd-error>' + esc(msg) + '</p>';
+                }
+            })
+            .catch(function () {
+                body.innerHTML = '<p class="text-sm text-red-600" data-dd-error>Error de red al cargar el detalle.</p>';
+            });
+    }
+
+    document.addEventListener("click", function (ev) {
+        var btn = ev.target.closest ? ev.target.closest(".js-drilldown") : null;
+        if (btn) {
+            abrirDrilldown(btn.getAttribute("data-torre-id"), btn.getAttribute("data-fase"));
+        }
+    });
+
+    if (cerrar) {
+        cerrar.addEventListener("click", function () { panel.classList.add("hidden"); });
+    }
+})();
+</script>
+{% endblock %}
