@@ -167,16 +167,18 @@ class DashboardGeneralView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         total_peso = sum(f['peso'] for f in fases)
         pesos_equiponderados = total_peso == 0
 
-        # 3) Dataset pre-serializado para el chart global (#general-fases-chart)
-        #    y para la curva S — guard es-CO: viaja como JSON, no floats inline.
-        chart_payload = json.dumps({
+        # 3) Dataset para el chart global (#general-fases-chart) y la curva S.
+        #    #139: objeto CRUDO — `json_script` en el template ya lo serializa.
+        #    Pasar json.dumps acá causaba doble-encoding → JSON.parse devolvía un
+        #    string y `.fases`/`.map` rompía (gráficas en blanco).
+        chart_payload = {
             'fases': [
                 {'label': f['label'], 'pct': f['pct'], 'seccion': f['seccion']}
                 for f in fases_ui
             ],
             'global_pct': global_pct,
             'curva_s': curva_real,   # {'labels':[...], 'ejecutado':[...]}
-        })
+        }
 
         ctx.update({
             'proyecto': proyecto,

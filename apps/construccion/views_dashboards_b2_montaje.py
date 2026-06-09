@@ -76,9 +76,11 @@ class DashboardMontajeRealView(_DashboardCurvaSBase):
             'fase_label': 'Montaje',
             'avance_etapas': avance_etapas,
             'vista_torres': vista_torres,
-            # Dataset dedicado del canvas #montaje-etapas-chart (guard es-CO:
-            # json_script en el template, NUNCA floats crudos en JS inline).
-            'montaje_etapas_json': json.dumps(avance_etapas),
+            # Dataset dedicado del canvas #montaje-etapas-chart. #139: objeto
+            # CRUDO — `json_script` en el template ya lo serializa. Pasar
+            # json.dumps causaba doble-encoding → JSON.parse devolvía un string
+            # y `etapas.map` rompía (gráfica de etapas en blanco).
+            'montaje_etapas_json': avance_etapas,
             # Bandera de estado vacío para la UI (loading/success/empty).
             'montaje_sin_datos': montaje_sin_datos,
         })
