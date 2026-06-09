@@ -239,3 +239,9 @@ urlpatterns += urls_pdeo_complement.urlpatterns
 # F2 scaffolding: B4 (#123) llena urls_fin con las 6 rutas /financiero/<subruta>/.
 from . import urls_fin  # noqa: E402
 urlpatterns += urls_fin.urlpatterns
+
+# === /modulo dashboards (#139) — dashboards de avance real por fase ===
+# F2 scaffolding (S2): partición física de views.py/urls.py. B1 cablea la
+# Curva S real de Obra Civil; B2–B5 agregan Montaje/Tendido/Vista-torres/General.
+from .urls_dashboards import urlpatterns as dashboards_urls  # noqa: E402
+urlpatterns += dashboards_urls
