@@ -29,6 +29,8 @@ GUARDS es-CO (memorias recurrentes del portafolio):
 {% block content %}
 {% comment %} Chart.js (mismo CDN que dashboard_curva_s.html). {% endcomment %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{# #139: sin animación — evita getContext-null que deja los canvas en blanco #}
+<script>try { if (window.Chart) { Chart.defaults.animation = false; } } catch (e) {}</script>
 
 <div class="max-w-7xl mx-auto px-4 py-6 space-y-6"
      data-dashboard="montaje" data-fase="MONTAJE">

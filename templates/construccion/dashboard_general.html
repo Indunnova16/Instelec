@@ -141,6 +141,8 @@ Contexto (lo provee DashboardGeneralView):
 {% endlocalize %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{# #139: sin animación — evita getContext-null que deja los canvas en blanco #}
+<script>try { if (window.Chart) { Chart.defaults.animation = false; } } catch (e) {}</script>
 <script>
 (function () {
     function readJSON(id) {
