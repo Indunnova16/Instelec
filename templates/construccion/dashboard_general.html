@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% comment %}
+B5 (#139) — Dashboard GENERAL del proyecto (7 fases).
+
+Provee:
+  - Gráfica global agregando las 7 fases  -> canvas #general-fases-chart
+  - Curva S consolidada real del proyecto -> canvas #general-curva-s-chart
+  - Tarjeta del global ponderado + drill-down por fase a su dashboard.
+
+GUARDS es-CO (memorias recurrentes):
+  - El dataset viaja PRE-SERIALIZADO vía {{ general_chart_json|json_script }}
+    (string JSON), NUNCA floats crudos ni JSON crudo en JS inline. El JS lo lee
+    con JSON.parse(document.getElementById('...').textContent).
+  - Los números visibles van dentro de {% localize off %} para no emitir la coma
+    decimal es-CO en contextos que el navegador no espera.
+
+Contexto (lo provee DashboardGeneralView):
+  proyecto, fases[{seccion,label,pct,peso,drill_url,completa}], global_pct,
+  pesos_equiponderados, tiene_avance, tiene_curva_s, vista_torres_url,
+  general_chart_json (str).
+{% endcomment %}
+
+{% block title %}Dashboard General — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+
+{% comment %} Dataset pre-serializado — guard es-CO. {% endcomment %}
+{{ general_chart_json|json_script:"general-chart-data" }}
+
+<div class="space-y-6 dashboard-general"
+     data-fase="GENERAL"
+     data-charts-ready="false">
+
+    {% comment %} === Header + global ponderado === {% endcomment %}
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                Dashboard General
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ proyecto.nombre }} — avance consolidado de las 7 fases.
+            </p>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right">
+                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Avance global</p>
+                <p class="text-3xl font-extrabold text-blue-700 dark:text-blue-300"
+                   data-global-pct="{{ global_pct }}">{{ global_pct }}%</p>
+                {% if pesos_equiponderados %}
+                <p class="text-[11px] text-amber-600 dark:text-amber-400">
+                    Pesos equiponderados (1/7) — sin pesos definidos en el cronograma.
+                </p>
+                {% else %}
+                <p class="text-[11px] text-gray-400">Ponderado por ProgramacionFase.peso_pct</p>
+                {% endif %}
+            </div>
+            {% if vista_torres_url %}
+            <a href="{{ vista_torres_url }}"
+               class="inline-flex items-center px-3 py-2 rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-sm font-medium text-gray-700 dark:text-gray-200">
+                Vista por torre
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not tiene_avance %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-200"
+         data-estado="sin-avance">
+        Aún no hay avance registrado en ninguna fase de este proyecto. Las
+        gráficas aparecerán a medida que se registre obra civil, montaje, tendido
+        u otras fases.
+    </div>
+    {% endif %}
+
+    {% comment %} === Gráfica global de las 7 fases === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Avance por fase</h2>
+            <span class="text-xs text-gray-500 dark:text-gray-400">% de avance real de cada una de las 7 fases</span>
+        </div>
+        <div class="relative" style="height: 380px;">
+            <canvas id="general-fases-chart" width="1200" height="380"></canvas>
+        </div>
+    </div>
+
+    {% comment %} === Tarjetas por fase con drill-down === {% endcomment %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {% for f in fases %}
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
+             data-fase-seccion="{{ f.seccion }}" data-fase-pct="{{ f.pct }}">
+            <div class="flex items-center justify-between">
+                <p class="font-medium text-gray-700 dark:text-gray-200">{{ f.label }}</p>
+                {% if f.completa %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-xs font-semibold">100%</span>
+                {% endif %}
+            </div>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300 mt-1">{{ f.pct }}%</p>
+            <div class="mt-1 h-2 w-full rounded bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                <div class="h-2 bg-blue-500" style="width: {{ f.pct }}%;"></div>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-xs">
+                <span class="text-gray-400">Peso: {{ f.peso }}%</span>
+                {% if f.drill_url %}
+                <a href="{{ f.drill_url }}"
+                   class="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                   data-drilldown="{{ f.seccion }}">Ver detalle →</a>
+                {% else %}
+                <span class="text-gray-300 dark:text-gray-600" data-drilldown-disabled="{{ f.seccion }}">Sin dashboard</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% comment %} === Curva S consolidada real === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Curva S consolidada (real)</h2>
+            <span class="text-xs text-gray-500 dark:text-gray-400">Avance real acumulado del proyecto</span>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Agrega el avance real por torre de Obra Civil, Montaje y Tendido,
+            distribuido en el tiempo.
+        </p>
+        {% if tiene_curva_s %}
+        <div class="relative" style="height: 360px;">
+            <canvas id="general-curva-s-chart" width="1200" height="360"></canvas>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400 py-8 text-center" data-estado="sin-curva">
+            Sin avance temporal aún para construir la curva consolidada.
+        </p>
+        {% endif %}
+    </div>
+
+</div>
+
+{% endlocalize %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    function readJSON(id) {
+        var el = document.getElementById(id);
+        if (!el) { return null; }
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    function render() {
+        var root = document.querySelector('.dashboard-general');
+        if (!root) { return; }
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js todavía no cargado');
+            return;
+        }
+        var data = readJSON('general-chart-data') || {};
+        var fases = data.fases || [];
+        var curva = data.curva_s || { labels: [], ejecutado: [] };
+
+        var elFases = document.getElementById('general-fases-chart');
+        if (elFases && fases.length) {
+            new Chart(elFases.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: fases.map(function (f) { return f.label; }),
+                    datasets: [{
+                        label: '% avance real',
+                        data: fases.map(function (f) { return f.pct; }),
+                        backgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 100 } }
+                }
+            });
+        }
+
+        var elCurva = document.getElementById('general-curva-s-chart');
+        if (elCurva && curva.labels && curva.labels.length) {
+            new Chart(elCurva.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: curva.labels,
+                    datasets: [{
+                        label: 'Ejecutado (real)',
+                        data: curva.ejecutado || [],
+                        borderColor: '#2563eb',
+                        tension: 0.2,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 100 } }
+                }
+            });
+        }
+
+        root.setAttribute('data-charts-ready', 'true');
+    }
+    if (document.readyState === 'complete') {
+        render();
+    } else {
+        window.addEventListener('load', render);
+    }
+})();
+</script>
+{% endblock %}
