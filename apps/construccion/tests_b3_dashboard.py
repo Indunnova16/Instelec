@@ -257,3 +257,319 @@ def test_b3_login_requerido(client, proyecto_indicadores):
     )
     resp = client.get(url)
     assert resp.status_code in (302, 403)
+
+
+# ===========================================================================
+# #141 — Dashboard Obra Civil: 3 gráficas de seguimiento gerencial
+# ===========================================================================
+#
+# G1 Curva S consolidada · G2 avance por etapa OC · G3 desviación materiales.
+# Cubre los calculators puros (calculators.py), el endpoint JSON
+# (DashboardGraficasDataView), el render del dashboard OC con los 3 canvas y
+# el flag data-charts-ready, más edge cases (proyecto sin torres, torre sin
+# vaciado, desviación dentro de umbral = verde).
+
+def _torre_con_patas(proyecto, numero, **pata_flags):
+    """Helper: crea una torre con 4 patas (A-D) seteando los booleanos dados
+    en TODAS las patas. Devuelve (torre, [patas])."""
+    from apps.construccion.models import TorreConstruccion, PataObra
+    torre = TorreConstruccion.objects.create(proyecto=proyecto, numero=numero, tipo='D6')
+    patas = []
+    for letra in ('A', 'B', 'C', 'D'):
+        patas.append(PataObra.objects.create(torre=torre, pata=letra, **pata_flags))
+    return torre, patas
+
+
+# ---- Calculators puros ----
+
+@pytest.mark.django_db
+def test_141_avance_por_etapa_oc_pct_torres_completas(proyecto_indicadores):
+    """G2: 2 torres, 1 con excavación completa en las 4 patas, otra sin →
+    50% en EXCAVACION; 0% en las demás etapas. Estructura de 5 etapas siempre."""
+    from apps.construccion.calculators import avance_por_etapa_oc
+    _torre_con_patas(proyecto_indicadores, 'T1', excavacion_ok=True)
+    _torre_con_patas(proyecto_indicadores, 'T2', excavacion_ok=False)
+
+    etapas = avance_por_etapa_oc(proyecto_indicadores)
+    # Siempre las 5 etapas, en orden.
+    assert [e['etapa'] for e in etapas] == [
+        'EXCAVACION', 'SOLADO', 'ACERO', 'VACIADO', 'COMPACTACION']
+    exc = next(e for e in etapas if e['etapa'] == 'EXCAVACION')
+    assert exc['totales'] == 2
+    assert exc['completas'] == 1
+    assert exc['pct'] == 50.0
+    # Etapa sin avance → 0%.
+    sol = next(e for e in etapas if e['etapa'] == 'SOLADO')
+    assert sol['completas'] == 0 and sol['pct'] == 0.0
+
+
+@pytest.mark.django_db
+def test_141_avance_etapa_completa_solo_si_todas_las_patas(proyecto_indicadores):
+    """G2: una torre cuenta como completa SOLO si las 4 patas tienen la etapa.
+    3/4 patas con vaciado → torre NO completa (0%)."""
+    from apps.construccion.models import TorreConstruccion, PataObra
+    from apps.construccion.calculators import avance_por_etapa_oc
+    torre = TorreConstruccion.objects.create(proyecto=proyecto_indicadores, numero='T9', tipo='D6')
+    for letra, ok in (('A', True), ('B', True), ('C', True), ('D', False)):
+        PataObra.objects.create(torre=torre, pata=letra, vaciado_ok=ok)
+    etapas = avance_por_etapa_oc(proyecto_indicadores)
+    vac = next(e for e in etapas if e['etapa'] == 'VACIADO')
+    assert vac['totales'] == 1
+    assert vac['completas'] == 0
+    assert vac['pct'] == 0.0
+
+
+@pytest.mark.django_db
+def test_141_avance_por_etapa_acero_y_compactacion_mapean_campo_real(proyecto_indicadores):
+    """R3: 'Acero' → acero_refuerzo_ok y 'Compactación' → relleno_compactacion_ok
+    (NO acero_ok / compactacion_ok). 1 torre con esos 2 flags en las 4 patas."""
+    from apps.construccion.calculators import avance_por_etapa_oc
+    _torre_con_patas(proyecto_indicadores, 'T1',
+                     acero_refuerzo_ok=True, relleno_compactacion_ok=True)
+    etapas = {e['etapa']: e for e in avance_por_etapa_oc(proyecto_indicadores)}
+    assert etapas['ACERO']['pct'] == 100.0
+    assert etapas['COMPACTACION']['pct'] == 100.0
+
+
+@pytest.mark.django_db
+def test_141_avance_por_etapa_proyecto_sin_torres_no_crashea(proyecto_indicadores):
+    """Edge: proyecto sin torres → 5 etapas con totales=0, pct=0.0 (no error)."""
+    from apps.construccion.calculators import avance_por_etapa_oc
+    etapas = avance_por_etapa_oc(proyecto_indicadores)
+    assert len(etapas) == 5
+    assert all(e['totales'] == 0 and e['pct'] == 0.0 for e in etapas)
+
+
+@pytest.mark.django_db
+def test_141_desviacion_materiales_calc_real_y_semaforo(proyecto_indicadores):
+    """G3: cemento 41 calc / 42 real → desv ~2.44% (verde); agua sobreconsumo
+    grande → rojo. Verifica los 4 materiales y el semáforo por umbral."""
+    from apps.construccion.models import VaciadoDetalle
+    from apps.construccion.calculators import desviacion_materiales_vaciado
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', vaciado_ok=True)
+    # Una sola pata con vaciado para mantener el cálculo claro.
+    VaciadoDetalle.objects.create(
+        pata=patas[0],
+        cemento_calc_bultos=41.0, cemento_util_bultos=42.0,   # +2.44% → verde
+        agua_calc_m3=10.0, agua_util_m3=13.0,                 # +30%   → rojo
+        arena_calc_m3=5.0, arena_util_m3=5.4,                 # +8%    → amarillo
+        grava_calc_m3=8.0, grava_util_m3=8.0,                 # 0%     → verde
+    )
+    mats = {m['material']: m for m in desviacion_materiales_vaciado(proyecto_indicadores, umbral=10.0)}
+    assert mats['cemento']['calc'] == 41.0 and mats['cemento']['real'] == 42.0
+    assert round(mats['cemento']['desv_pct'], 2) == 2.44
+    assert mats['cemento']['semaforo'] == 'verde'
+    assert mats['agua']['semaforo'] == 'rojo'      # 30% > umbral 10%
+    assert mats['arena']['semaforo'] == 'amarillo'  # 8% en (5,10]
+    assert mats['grava']['semaforo'] == 'verde'     # 0%
+
+
+@pytest.mark.django_db
+def test_141_desviacion_dentro_de_umbral_es_verde(proyecto_indicadores):
+    """G3 happy: desviación pequeña (<= umbral/2) → verde, sin alerta roja."""
+    from apps.construccion.models import VaciadoDetalle
+    from apps.construccion.calculators import desviacion_materiales_vaciado
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', vaciado_ok=True)
+    VaciadoDetalle.objects.create(
+        pata=patas[0],
+        cemento_calc_bultos=100.0, cemento_util_bultos=102.0,  # +2% → verde
+        agua_calc_m3=20.0, agua_util_m3=20.0,
+        arena_calc_m3=10.0, arena_util_m3=10.0,
+        grava_calc_m3=15.0, grava_util_m3=15.0,
+    )
+    mats = desviacion_materiales_vaciado(proyecto_indicadores, umbral=10.0)
+    assert all(m['semaforo'] in ('verde', 'sin_datos') for m in mats)
+    assert not any(m['semaforo'] == 'rojo' for m in mats)
+
+
+@pytest.mark.django_db
+def test_141_desviacion_materiales_proyecto_sin_vaciado(proyecto_indicadores):
+    """Edge R4: proyecto con torres pero SIN VaciadoDetalle → materiales en 0,
+    desv_pct None, semáforo 'sin_datos'. No rompe."""
+    from apps.construccion.calculators import desviacion_materiales_vaciado
+    _torre_con_patas(proyecto_indicadores, 'T1', vaciado_ok=False)
+    mats = desviacion_materiales_vaciado(proyecto_indicadores)
+    assert [m['material'] for m in mats] == ['agua', 'cemento', 'arena', 'grava']
+    assert all(m['calc'] == 0 and m['real'] == 0 for m in mats)
+    assert all(m['desv_pct'] is None and m['semaforo'] == 'sin_datos' for m in mats)
+
+
+@pytest.mark.django_db
+def test_141_vaciado_detalle_desviacion_pct_property(proyecto_indicadores):
+    """La property VaciadoDetalle.desviacion_pct devuelve dict por material."""
+    from apps.construccion.models import VaciadoDetalle
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', vaciado_ok=True)
+    v = VaciadoDetalle.objects.create(
+        pata=patas[0],
+        cemento_calc_bultos=50.0, cemento_util_bultos=55.0,  # +10%
+        agua_calc_m3=0.0, agua_util_m3=5.0,                  # calc 0 → None
+    )
+    desv = v.desviacion_pct
+    assert set(desv.keys()) == {'agua', 'cemento', 'arena', 'grava'}
+    assert round(desv['cemento'], 2) == 10.0
+    assert desv['agua'] is None  # calc 0 → sin base
+
+
+@pytest.mark.django_db
+def test_141_curva_consolidada_une_fases(proyecto_indicadores):
+    """G1: la curva consolidada une OOCC + MONTAJE; con 2 fases y 1 torre,
+    cada fase al 100% acumulado → consolidada al 50% por fecha (denom = 2 fases)."""
+    from datetime import date
+    from decimal import Decimal
+    from apps.construccion.models import (
+        TorreConstruccion, DashboardAvanceSemanal)
+    from apps.construccion.calculators import curva_s_consolidada
+    TorreConstruccion.objects.create(proyecto=proyecto_indicadores, numero='T1', tipo='D6')
+
+    DashboardAvanceSemanal.objects.create(
+        proyecto=proyecto_indicadores, fase='OOCC', semana=date(2026, 1, 5),
+        torres_programadas_semana=1, torres_construidas_semana=1,
+        torres_programadas_acum=1, torres_construidas_acum=1,
+        pct_programado=Decimal('100'), pct_construido=Decimal('100'))
+    DashboardAvanceSemanal.objects.create(
+        proyecto=proyecto_indicadores, fase='MONTAJE', semana=date(2026, 1, 5),
+        torres_programadas_semana=1, torres_construidas_semana=0,
+        torres_programadas_acum=1, torres_construidas_acum=0,
+        pct_programado=Decimal('100'), pct_construido=Decimal('0'))
+
+    cons = curva_s_consolidada(proyecto_indicadores)
+    assert cons['labels'] == ['2026-01-05']
+    # denom = total_torres(1) * n_fases(2) = 2.
+    # planeado: prog_acum OOCC(1) + MONTAJE(1) = 2 / 2 * 100 = 100
+    assert cons['planeado'] == [100.0]
+    # ejecutado: cons_acum OOCC(1) + MONTAJE(0) = 1 / 2 * 100 = 50
+    assert cons['ejecutado'] == [50.0]
+
+
+@pytest.mark.django_db
+def test_141_curva_consolidada_sin_semanas_vacia(proyecto_indicadores):
+    """Edge: proyecto sin semanas capturadas → arreglos vacíos, no error."""
+    from apps.construccion.calculators import curva_s_consolidada
+    cons = curva_s_consolidada(proyecto_indicadores)
+    assert cons == {'labels': [], 'planeado': [], 'ejecutado': []}
+
+
+# ---- Endpoint JSON DashboardGraficasDataView ----
+
+@pytest.mark.django_db
+def test_141_endpoint_datos_graficas_shape(authenticated_client, proyecto_indicadores):
+    """El endpoint responde 200 + shape JSON con curva_s/avance_etapas/
+    desviacion_materiales. Happy path con torres + vaciado."""
+    from apps.construccion.models import VaciadoDetalle
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', excavacion_ok=True, vaciado_ok=True)
+    VaciadoDetalle.objects.create(
+        pata=patas[0], cemento_calc_bultos=40.0, cemento_util_bultos=44.0)
+
+    url = reverse('construccion:dashboard_graficas_data',
+                  kwargs={'proyecto_id': proyecto_indicadores.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert 'curva_s' in data
+    assert 'consolidada' in data['curva_s']
+    assert len(data['avance_etapas']) == 5
+    assert [m['material'] for m in data['desviacion_materiales']] == [
+        'agua', 'cemento', 'arena', 'grava']
+    assert data['umbral'] == 10.0
+
+
+@pytest.mark.django_db
+def test_141_endpoint_umbral_param_filtra_semaforo(authenticated_client, proyecto_indicadores):
+    """?umbral= ajusta el semáforo. desv 15% es rojo con umbral=10 pero verde
+    con umbral=40."""
+    from apps.construccion.models import VaciadoDetalle
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', vaciado_ok=True)
+    VaciadoDetalle.objects.create(
+        pata=patas[0], cemento_calc_bultos=100.0, cemento_util_bultos=115.0)  # +15%
+
+    url = reverse('construccion:dashboard_graficas_data',
+                  kwargs={'proyecto_id': proyecto_indicadores.id})
+    d10 = authenticated_client.get(url + '?umbral=10').json()
+    cem10 = next(m for m in d10['desviacion_materiales'] if m['material'] == 'cemento')
+    assert cem10['semaforo'] == 'rojo'
+
+    d40 = authenticated_client.get(url + '?umbral=40').json()
+    cem40 = next(m for m in d40['desviacion_materiales'] if m['material'] == 'cemento')
+    assert cem40['semaforo'] == 'verde'
+
+
+@pytest.mark.django_db
+def test_141_endpoint_umbral_invalido_cae_a_default(authenticated_client, proyecto_indicadores):
+    """?umbral=basura → no 500, cae a 10.0."""
+    url = reverse('construccion:dashboard_graficas_data',
+                  kwargs={'proyecto_id': proyecto_indicadores.id})
+    resp = authenticated_client.get(url + '?umbral=foo')
+    assert resp.status_code == 200
+    assert resp.json()['umbral'] == 10.0
+
+
+@pytest.mark.django_db
+def test_141_endpoint_proyecto_sin_torres_arreglos_vacios(authenticated_client, proyecto_indicadores):
+    """Edge: proyecto sin torres → endpoint 200, avance_etapas con 5 etapas en 0,
+    materiales en sin_datos, curva consolidada vacía."""
+    url = reverse('construccion:dashboard_graficas_data',
+                  kwargs={'proyecto_id': proyecto_indicadores.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert all(e['totales'] == 0 for e in data['avance_etapas'])
+    assert all(m['semaforo'] == 'sin_datos' for m in data['desviacion_materiales'])
+    assert data['curva_s']['consolidada']['labels'] == []
+
+
+@pytest.mark.django_db
+def test_141_endpoint_login_requerido(client, proyecto_indicadores):
+    """Endpoint protegido por LoginRequiredMixin."""
+    url = reverse('construccion:dashboard_graficas_data',
+                  kwargs={'proyecto_id': proyecto_indicadores.id})
+    resp = client.get(url)
+    assert resp.status_code in (302, 403)
+
+
+# ---- Render del dashboard OC con los 3 canvas + ready flag ----
+
+@pytest.mark.django_db
+def test_141_dashboard_oc_renderiza_tres_canvas_y_ready_flag(
+        authenticated_client, proyecto_indicadores):
+    """El dashboard OC renderiza los 3 canvas, las 5 etapas, los 4 materiales,
+    el selector Consolidada y el flag data-charts-ready (probe E2E)."""
+    from apps.construccion.models import VaciadoDetalle
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', excavacion_ok=True, vaciado_ok=True)
+    VaciadoDetalle.objects.create(
+        pata=patas[0], cemento_calc_bultos=40.0, cemento_util_bultos=60.0)  # +50% → rojo
+
+    url = reverse('construccion:dashboard_obra_civil',
+                  kwargs={'proyecto_id': proyecto_indicadores.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    # 3 canvas
+    for cid in ('curva-s-chart', 'avance-etapas-chart', 'desviacion-materiales-chart'):
+        assert f'id="{cid}"' in body, f'canvas {cid} faltante'
+    # 5 etapas como texto visible (assert_contains del journey)
+    for etapa in ('Excavación', 'Solado', 'Acero', 'Vaciado', 'Compactación'):
+        assert etapa in body, f'etapa {etapa} faltante'
+    # 4 materiales
+    for mat in ('Agua', 'Cemento', 'Arena', 'Grava'):
+        assert mat in body, f'material {mat} faltante'
+    # Selector consolidada
+    assert 'Consolidada' in body
+    # Flag de probe (Alpine lo bindea; el atributo debe existir en el HTML)
+    assert 'data-charts-ready' in body
+    # Alerta roja presente (desviación 50% > umbral 10%)
+    assert "data-semaforo=\"rojo\"" in body
+
+
+@pytest.mark.django_db
+def test_141_dashboard_montaje_no_muestra_graficas_141(
+        authenticated_client, proyecto_indicadores):
+    """El template es compartido: el dashboard de Montaje NO debe mostrar las 3
+    gráficas de #141 (solo aplican a Obra Civil)."""
+    url = reverse('construccion:dashboard_montaje',
+                  kwargs={'proyecto_id': proyecto_indicadores.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert 'id="avance-etapas-chart"' not in body
+    assert 'id="desviacion-materiales-chart"' not in body

@@ -13,9 +13,12 @@
         csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
         faseActiva: "{{ fase_activa }}",
         totalTorres: {{ total_torres }},
-        chartInicial: {{ datos_chart|safe }}
+        chartInicial: {{ datos_chart|safe }},
+        mostrarGraficas141: {% if mostrar_graficas_141 %}true{% else %}false{% endif %},
+        graficas141: {% if mostrar_graficas_141 %}{{ graficas_json|safe }}{% else %}null{% endif %}
      })'
-     x-init="init()">
+     x-init="init()"
+     :data-charts-ready="chartsReady ? 'true' : 'false'">
 
     <!-- Header con tabs de fase -->
     <div class="flex items-center gap-4">
@@ -55,13 +58,105 @@
         </div>
     </div>
 
-    <!-- Curva S -->
+    <!-- G1 · Curva S -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
-        <h2 class="font-semibold mb-2">Curva S — Planeado vs Ejecutado</h2>
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="font-semibold">Curva S — Planeado vs Ejecutado</h2>
+            {% if mostrar_graficas_141 %}
+            <label class="flex items-center gap-2 text-sm">
+                <span class="text-gray-500">Serie:</span>
+                <select x-model="curvaVista" @change="cambiarVistaCurva()"
+                        class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm">
+                    <option value="OOCC">Obra Civil</option>
+                    <option value="MONTAJE">Montaje</option>
+                    <option value="TENDIDO">Tendido</option>
+                    <option value="CONSOLIDADA">Consolidada (todo el proyecto)</option>
+                </select>
+            </label>
+            {% endif %}
+        </div>
         <div class="relative" style="height: 400px;">
             <canvas id="curva-s-chart" width="1200" height="400"></canvas>
         </div>
     </div>
+
+    {% if mostrar_graficas_141 %}
+    <!-- G2 · Avance por etapa de Obra Civil -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h2 class="font-semibold mb-1">Avance por etapa de Obra Civil</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            % de torres con la etapa completa (todas las patas). Una torre cuenta
+            como completa en una etapa cuando sus 4 patas tienen esa actividad lista.
+        </p>
+        <div class="relative" style="height: 320px;">
+            <canvas id="avance-etapas-chart" width="1200" height="320"></canvas>
+        </div>
+        <!-- Resumen textual (también alimenta los assert_contains del journey) -->
+        <div class="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+            {% for e in avance_etapas %}
+            <div class="rounded border border-gray-200 dark:border-gray-700 p-2 text-center">
+                <p class="font-medium text-gray-700 dark:text-gray-200">{{ e.label }}</p>
+                <p class="text-lg font-bold text-blue-700 dark:text-blue-300">{{ e.pct }}%</p>
+                <p class="text-xs text-gray-500">{{ e.completas }} / {{ e.totales }} torres</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- G3 · Desviación de materiales en vaciado -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Desviación de materiales — Vaciado</h2>
+            {% if tiene_alerta_desviacion %}
+            <span data-semaforo="rojo"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold">
+                ⚠️ Alerta: desviación supera el umbral ({{ umbral_desviacion }}%)
+            </span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Material calculado vs. utilizado (agregado del proyecto). Una desviación
+            mayor al umbral ({{ umbral_desviacion }}%) marca alerta roja — debe
+            justificarse (ej. "+1 bulto de cemento de 42.5&nbsp;kg por sobreconsumo puntual").
+        </p>
+        <div class="relative" style="height: 300px;">
+            <canvas id="desviacion-materiales-chart" width="1200" height="300"></canvas>
+        </div>
+        <!-- Tabla calc vs real con semáforo por material -->
+        <div class="overflow-x-auto mt-3">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-semibold">Material</th>
+                        <th class="px-3 py-2 text-right font-semibold">Calculado</th>
+                        <th class="px-3 py-2 text-right font-semibold">Real</th>
+                        <th class="px-3 py-2 text-right font-semibold">Desviación</th>
+                        <th class="px-3 py-2 text-center font-semibold">Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for m in desviacion_materiales %}
+                    <tr data-semaforo="{{ m.semaforo }}" data-material="{{ m.material }}"
+                        class="{% if m.semaforo == 'rojo' %}bg-red-50 dark:bg-red-900/20{% endif %}">
+                        <td class="px-3 py-2 font-medium">{{ m.label }} <span class="text-xs text-gray-400">({{ m.unidad }})</span></td>
+                        <td class="px-3 py-2 text-right">{{ m.calc }}</td>
+                        <td class="px-3 py-2 text-right">{{ m.real }}</td>
+                        <td class="px-3 py-2 text-right">{% if m.desv_pct is None %}—{% else %}{{ m.desv_pct }}%{% endif %}</td>
+                        <td class="px-3 py-2 text-center">
+                            {% if m.semaforo == 'rojo' %}<span class="text-red-600 font-bold">● Rojo</span>
+                            {% elif m.semaforo == 'amarillo' %}<span class="text-amber-500 font-bold">● Amarillo</span>
+                            {% elif m.semaforo == 'verde' %}<span class="text-green-600 font-bold">● Verde</span>
+                            {% else %}<span class="text-gray-400">sin datos</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="px-3 py-6 text-center text-gray-500">Sin datos de vaciado registrados.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Form agregar/editar semana -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
@@ -152,18 +247,107 @@ function dashboardCurvaS(cfg) {
         faseActiva: cfg.faseActiva,
         totalTorres: cfg.totalTorres,
         chartInicial: cfg.chartInicial,
+        mostrarGraficas141: cfg.mostrarGraficas141 || false,
+        graficas141: cfg.graficas141 || null,
+        curvaVista: cfg.faseActiva || 'OOCC',
         chart: null,
+        chartEtapas: null,
+        chartDesviacion: null,
+        chartsReady: false,
         form: { semana: '', prog: 0, cons: 0, torres_prog: '', pendientes: '' },
         mensaje: '', mensajeTipo: '',
         init() {
             // Esperar a window.load (todos los recursos cargados, incluido Chart.js script)
             // + un rAF para garantizar paint del canvas.
+            const arrancar = () => requestAnimationFrame(() => this.renderTodo());
             if (document.readyState === 'complete') {
-                requestAnimationFrame(() => this.renderChart(this.chartInicial));
+                arrancar();
             } else {
-                window.addEventListener('load', () => {
-                    requestAnimationFrame(() => this.renderChart(this.chartInicial));
-                }, { once: true });
+                window.addEventListener('load', arrancar, { once: true });
+            }
+        },
+        renderTodo() {
+            this.renderChart(this.chartInicial);
+            if (this.mostrarGraficas141 && this.graficas141) {
+                this.renderEtapas(this.graficas141.avance_etapas || []);
+                this.renderDesviacion(this.graficas141.desviacion_materiales || []);
+            }
+            // Marcar listo solo tras instanciar lo que corresponde (probe E2E
+            // anti falso-verde). Si no aplican las 3 gráficas (dashboard Montaje),
+            // basta la Curva S.
+            this.chartsReady = true;
+        },
+        renderEtapas(etapas) {
+            try {
+                if (typeof Chart === 'undefined') return;
+                const canvas = document.getElementById('avance-etapas-chart');
+                if (!canvas || !canvas.getContext) return;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                if (this.chartEtapas) { try { this.chartEtapas.destroy(); } catch (e) {} this.chartEtapas = null; }
+                const colores = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#06b6d4'];
+                this.chartEtapas = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: etapas.map(e => e.label),
+                        datasets: [{
+                            label: '% torres completas',
+                            data: etapas.map(e => e.pct),
+                            backgroundColor: etapas.map((e, i) => colores[i % colores.length]),
+                            _meta: etapas.map(e => ({ completas: e.completas, totales: e.totales })),
+                        }],
+                    },
+                    options: {
+                        responsive: false, maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { afterLabel: (item) => {
+                                const e = etapas[item.dataIndex] || {};
+                                return (e.completas != null) ? `${e.completas} / ${e.totales} torres` : '';
+                            } } },
+                        },
+                    },
+                });
+            } catch (e) { console.warn('Chart etapas falló:', e && e.message); }
+        },
+        renderDesviacion(materiales) {
+            try {
+                if (typeof Chart === 'undefined') return;
+                const canvas = document.getElementById('desviacion-materiales-chart');
+                if (!canvas || !canvas.getContext) return;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                if (this.chartDesviacion) { try { this.chartDesviacion.destroy(); } catch (e) {} this.chartDesviacion = null; }
+                this.chartDesviacion = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: materiales.map(m => m.label),
+                        datasets: [
+                            { label: 'Calculado', data: materiales.map(m => m.calc), backgroundColor: '#93c5fd' },
+                            { label: 'Real', data: materiales.map(m => m.real),
+                              backgroundColor: materiales.map(m => m.semaforo === 'rojo' ? '#ef4444' : (m.semaforo === 'amarillo' ? '#f59e0b' : '#10b981')) },
+                        ],
+                    },
+                    options: {
+                        responsive: false, maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } },
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: { callbacks: { afterLabel: (item) => {
+                                const m = materiales[item.dataIndex] || {};
+                                return (m.desv_pct != null) ? `Desviación: ${m.desv_pct}% (${m.semaforo})` : 'sin datos';
+                            } } },
+                        },
+                    },
+                });
+            } catch (e) { console.warn('Chart desviación falló:', e && e.message); }
+        },
+        async cambiarVistaCurva() {
+            const r = await fetch(this.urlChart + '?fase=' + this.curvaVista);
+            if (r.ok) {
+                const d = await r.json();
+                this.renderChart(d);
             }
         },
         renderChart(datos) {

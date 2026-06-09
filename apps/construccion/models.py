@@ -2539,6 +2539,23 @@ class VaciadoDetalle(BaseModel):
     def __str__(self):
         return f"Vaciado {self.pata}"
 
+    @property
+    def desviacion_pct(self):
+        """Desviación % (real vs calculado) por material de esta pata (#141).
+
+        Retorna dict ``{material: pct|None}`` para agua/cemento/arena/grava.
+        ``None`` cuando el calculado es 0/None (no hay base de comparación).
+        Se usa en G3 del Dashboard de Obra Civil para el semáforo de alerta
+        (ej. "+1 bulto de cemento justificado").
+        """
+        from .calculators import desviacion_material_pct
+        return {
+            'agua': desviacion_material_pct(self.agua_calc_m3, self.agua_util_m3),
+            'cemento': desviacion_material_pct(self.cemento_calc_bultos, self.cemento_util_bultos),
+            'arena': desviacion_material_pct(self.arena_calc_m3, self.arena_util_m3),
+            'grava': desviacion_material_pct(self.grava_calc_m3, self.grava_util_m3),
+        }
+
 
 class CompactacionDetalle(BaseModel):
     """Detalles del bloque 6 Compactación (#53 iteración 2)."""
