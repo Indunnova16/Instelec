@@ -181,6 +181,9 @@ urlpatterns = [
     # Dashboards Curva S (#75 #77)
     path('<uuid:proyecto_id>/dashboard-obra-civil/',
          views.DashboardObraCivilView.as_view(), name='dashboard_obra_civil'),
+    # #141 — datos JSON de las 3 gráficas del Dashboard de Obra Civil
+    path('<uuid:proyecto_id>/dashboard-obra-civil/datos-graficas/',
+         views.DashboardGraficasDataView.as_view(), name='dashboard_graficas_data'),
     path('<uuid:proyecto_id>/dashboard-montaje/',
          views.DashboardMontajeView.as_view(), name='dashboard_montaje'),
     path('<uuid:proyecto_id>/dashboard/semana/',

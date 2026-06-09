@@ -2199,9 +2199,58 @@ class _DashboardCurvaSBase(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
 
 
 class DashboardObraCivilView(_DashboardCurvaSBase):
-    """Dashboard Curva S de Obra Civil (#75)."""
+    """Dashboard Curva S de Obra Civil (#75) + 3 gráficas gerenciales (#141).
+
+    Además de la Curva S por torres-construidas, expone:
+      G1  serie consolidada de la Curva S (todo el proyecto)
+      G2  avance por etapa OC (barras % torres completas)
+      G3  desviación de materiales de vaciado (calc vs real + semáforo)
+    Los 3 datasets viajan pre-serializados (JSON) al template para evitar
+    floats es-CO crudos en el JS inline (memoria recurrente del portafolio).
+    """
     template_name = 'construccion/dashboard_curva_s.html'
     FASE_DEFAULT = 'OOCC'
+
+    def get_context_data(self, **kwargs):
+        import json
+        from .calculators import (
+            avance_por_etapa_oc,
+            curva_s_consolidada,
+            desviacion_materiales_vaciado,
+            UMBRAL_DESVIACION_DEFAULT,
+        )
+        ctx = super().get_context_data(**kwargs)
+        proyecto = ctx['proyecto']
+
+        try:
+            umbral = float(self.request.GET.get('umbral', UMBRAL_DESVIACION_DEFAULT))
+            if umbral <= 0:
+                umbral = UMBRAL_DESVIACION_DEFAULT
+        except (TypeError, ValueError):
+            umbral = UMBRAL_DESVIACION_DEFAULT
+
+        avance_etapas = avance_por_etapa_oc(proyecto)
+        desviacion_materiales = desviacion_materiales_vaciado(proyecto, umbral)
+        consolidada = curva_s_consolidada(proyecto)
+
+        # Para los assert_contains del journey y las leyendas visibles, también
+        # pasamos las listas crudas (Django las escapa) además del JSON para el
+        # Chart.js init.
+        ctx.update({
+            'mostrar_graficas_141': True,
+            'umbral_desviacion': umbral,
+            'avance_etapas': avance_etapas,
+            'desviacion_materiales': desviacion_materiales,
+            'tiene_alerta_desviacion': any(
+                m['semaforo'] == 'rojo' for m in desviacion_materiales
+            ),
+            'graficas_json': json.dumps({
+                'avance_etapas': avance_etapas,
+                'desviacion_materiales': desviacion_materiales,
+                'curva_consolidada': consolidada,
+            }),
+        })
+        return ctx
 
 
 class DashboardMontajeView(_DashboardCurvaSBase):
@@ -2284,13 +2333,21 @@ class DashboardSemanaDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 
 class DashboardChartDataView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """GET JSON con los datos de la Curva S para Chart.js."""
+    """GET JSON con los datos de la Curva S para Chart.js.
+
+    Soporta ``?fase=OOCC|MONTAJE|TENDIDO`` (serie por fase) y
+    ``?fase=CONSOLIDADA`` (#141 — serie consolidada de todo el proyecto,
+    unión de todas las fases con datos).
+    """
     allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
 
     def get(self, request, proyecto_id, *args, **kwargs):
         from django.http import JsonResponse
+        from .calculators import curva_s_consolidada
         proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
         fase = request.GET.get('fase', 'OOCC').upper()
+        if fase == 'CONSOLIDADA':
+            return JsonResponse(curva_s_consolidada(proyecto))
         if fase not in {f for f, _ in DashboardAvanceSemanal.Fase.choices}:
             return JsonResponse({'error': 'fase inválida'}, status=400)
         semanas = DashboardAvanceSemanal.objects.filter(
@@ -2299,6 +2356,59 @@ class DashboardChartDataView(LoginRequiredMixin, RoleRequiredMixin, View):
             'labels': [s.semana.isoformat() for s in semanas],
             'planeado': [float(s.pct_programado) for s in semanas],
             'ejecutado': [float(s.pct_construido) for s in semanas],
+        })
+
+
+class DashboardGraficasDataView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """GET JSON con los datos de las 3 gráficas del Dashboard de Obra Civil (#141).
+
+    Single source of truth para G1 (Curva S consolidada), G2 (avance por etapa)
+    y G3 (desviación de materiales de vaciado). Reusa los agregadores puros de
+    ``calculators.py`` — el template del dashboard también los consume vía el
+    context para el render inicial; este endpoint sirve el refresh/AJAX y el
+    contrato que valida el journey E2E.
+
+    Query params:
+      - ``?umbral=`` (float, default 10.0): umbral del semáforo de G3.
+
+    Robusto ante proyecto sin torres / sin vaciado: devuelve arreglos vacíos o
+    materiales en 0 con semáforo 'sin_datos', siempre HTTP 200.
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get(self, request, proyecto_id, *args, **kwargs):
+        from django.http import JsonResponse
+        from .calculators import (
+            avance_por_etapa_oc,
+            curva_s_consolidada,
+            desviacion_materiales_vaciado,
+            UMBRAL_DESVIACION_DEFAULT,
+        )
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+
+        # Umbral del semáforo — edge: valor inválido cae al default (no 500).
+        try:
+            umbral = float(request.GET.get('umbral', UMBRAL_DESVIACION_DEFAULT))
+            if umbral <= 0:
+                umbral = UMBRAL_DESVIACION_DEFAULT
+        except (TypeError, ValueError):
+            umbral = UMBRAL_DESVIACION_DEFAULT
+
+        # Curva S: planeado/ejecutado de la fase OOCC + serie consolidada.
+        semanas_oc = DashboardAvanceSemanal.objects.filter(
+            proyecto=proyecto, fase='OOCC').order_by('semana')
+        consolidada = curva_s_consolidada(proyecto)
+
+        return JsonResponse({
+            'curva_s': {
+                'labels': [s.semana.isoformat() for s in semanas_oc],
+                'planeado': [float(s.pct_programado) for s in semanas_oc],
+                'ejecutado': [float(s.pct_construido) for s in semanas_oc],
+                'consolidada': consolidada,
+            },
+            'avance_etapas': avance_por_etapa_oc(proyecto),
+            'desviacion_materiales': desviacion_materiales_vaciado(proyecto, umbral),
+            'umbral': umbral,
         })
 
 
