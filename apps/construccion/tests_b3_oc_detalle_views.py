@@ -593,3 +593,106 @@ def test_vaciado_render_sin_datos_muestra_guion_sin_alerta(
     assert 'data-desv-pct="agua" data-supera-umbral="false"' in body
     # Sin datos no debe haber ninguna celda de vaciado marcada como alerta
     assert 'data-desv-pct="agua" data-supera-umbral="true"' not in body
+
+
+# ===========================================================================
+# (#135 / absorbe #134) Excavación: clase de cimentación independiente
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_post_excavacion_persiste_tipo_y_clase_cimentacion(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#135 — POST con exc_tipo=MANUAL + exc_clase_cimentacion=ZAPATA persiste
+    ambos campos (caso CREATE vía get_or_create)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    url = reverse(
+        'construccion:obra_civil_detalle_seccion',
+        kwargs={
+            'proyecto_id': proyecto_oc_b2b.id,
+            'torre_id': torre_oc_b2b.id,
+            'pata': 'A',
+            'seccion': 'excavacion',
+        },
+    )
+    resp = authenticated_client.post(url, {
+        'exc_tipo': 'MANUAL',
+        'exc_clase_cimentacion': 'ZAPATA',
+        'exc_ejecutada_pct': '0',
+    })
+    assert resp.status_code == 200, resp.content[:500]
+    assert resp.json()['ok'] is True
+
+    det = ObraCivilTorreDetalle.objects.get(torre=torre_oc_b2b, pata='A')
+    assert det.exc_tipo == 'MANUAL'
+    assert det.exc_clase_cimentacion == 'ZAPATA'
+
+
+@pytest.mark.django_db
+def test_post_excavacion_update_legacy_setea_clase(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#135 — sobre un detalle LEGACY ya existente (UPDATE), el POST setea la
+    clase de cimentación sin perder otros campos."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    # Registro legacy preexistente (simula dato migrado: clase HELICOIDAL)
+    legacy = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='C',
+        exc_cuadrilla='Cuadrilla legacy',
+        exc_clase_cimentacion='HELICOIDAL',
+    )
+    url = reverse(
+        'construccion:obra_civil_detalle_seccion',
+        kwargs={
+            'proyecto_id': proyecto_oc_b2b.id,
+            'torre_id': torre_oc_b2b.id,
+            'pata': 'C',
+            'seccion': 'excavacion',
+        },
+    )
+    resp = authenticated_client.post(url, {
+        'exc_cuadrilla': 'Cuadrilla legacy',
+        'exc_tipo': 'MAQUINA',
+        'exc_clase_cimentacion': 'PARRILLA_PESADA',
+        'exc_ejecutada_pct': '0',
+    })
+    assert resp.status_code == 200, resp.content[:500]
+    legacy.refresh_from_db()
+    assert legacy.exc_tipo == 'MAQUINA'
+    assert legacy.exc_clase_cimentacion == 'PARRILLA_PESADA'
+    assert legacy.exc_cuadrilla == 'Cuadrilla legacy'
+
+
+@pytest.mark.django_db
+def test_excavacion_render_select_clase_cimentacion(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#135 — el detalle de Excavación renderiza el <select> de clase de
+    cimentación con las 4 opciones; un legacy con clase HELICOIDAL la muestra
+    seleccionada."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='D',
+        exc_clase_cimentacion='HELICOIDAL',
+    )
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=D&seccion=excavacion')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    assert 'name="exc_clase_cimentacion"' in body
+    assert 'Clase de cimentación' in body
+    for label in ('Helicoidal', 'Zapata', 'Parrilla', 'Parrilla pesada'):
+        assert label in body
+    # El legacy con HELICOIDAL aparece seleccionado
+    assert 'value="HELICOIDAL" selected' in body
+    # exc_tipo ya no ofrece HELICOIDAL como opción (resuelve #134)
+    # (Manual y Con máquina sí)
+    assert 'value="MANUAL"' in body
+    assert 'value="MAQUINA"' in body

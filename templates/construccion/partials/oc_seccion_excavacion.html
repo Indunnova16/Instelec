@@ -8,7 +8,7 @@
 
   <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Excavación</h2>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
     <label class="flex flex-col">
       <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_cuadrilla.label }}</span>
       {{ form.exc_cuadrilla }}
@@ -21,6 +21,13 @@
       {{ form.exc_tipo }}
       {% if form.exc_tipo.errors %}
         <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_tipo.errors|join:", " }}</span>
+      {% endif %}
+    </label>
+    <label class="flex flex-col">
+      <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.exc_clase_cimentacion.label }}</span>
+      {{ form.exc_clase_cimentacion }}
+      {% if form.exc_clase_cimentacion.errors %}
+        <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.exc_clase_cimentacion.errors|join:", " }}</span>
       {% endif %}
     </label>
   </div>

@@ -33,7 +33,16 @@ PATA_CHOICES = [
 EXC_TIPO_CHOICES = [
     ('MANUAL', 'Manual'),
     ('MAQUINA', 'Con máquina'),
+]
+
+# #135 (absorbe #134) — La clase de cimentación es un concepto independiente
+# del método de excavación. HELICOIDAL era un valor mal ubicado en
+# EXC_TIPO_CHOICES; ahora vive en su propio campo `exc_clase_cimentacion`.
+EXC_CLASE_CIMENTACION_CHOICES = [
     ('HELICOIDAL', 'Helicoidal'),
+    ('ZAPATA', 'Zapata'),
+    ('PARRILLA', 'Parrilla'),
+    ('PARRILLA_PESADA', 'Parrilla pesada'),
 ]
 
 EXC_MONITOREO_CHOICES = [
@@ -128,6 +137,10 @@ class ObraCivilTorreDetalle(BaseModel):
     exc_ft928_ok = models.BooleanField('FT-928 OK', default=False)
     exc_tipo = models.CharField(
         'Tipo excavación', max_length=20, choices=EXC_TIPO_CHOICES, blank=True,
+    )
+    exc_clase_cimentacion = models.CharField(
+        'Clase de cimentación', max_length=20,
+        choices=EXC_CLASE_CIMENTACION_CHOICES, blank=True,
     )
     exc_metros_m3 = models.DecimalField(
         'Excavación (m3)', max_digits=10, decimal_places=2,
