@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% comment %}
+Dashboard de Tendido (Conductor + Fibra OPGW) — B3 (#139).
+
+Reusa el parcial base de fase (_dashboard_fase_base.html · S3) para la Curva S
+real + la vista por torre, y añade las DOS gráficas de avance por etapa propias
+de Tendido (Conductor 6 etapas + Fibra OPGW 5 etapas), que la base genérica
+(una sola gráfica) no cubre.
+
+GUARDS es-CO (memorias recurrentes del portafolio):
+  - {% localize off %} en todo el bloque (evita coma decimal localizada que
+    rompe el JS inline / el render de inputs).
+  - Datasets de las 2 gráficas PRE-SERIALIZADOS vía {{ ...|json_script }}; el JS
+    los lee con JSON.parse(textContent). NUNCA floats crudos ni JSON crudo dentro
+    de x-data / atributos HTML.
+  - Sin x-data en este template (no usamos Alpine aquí): el render es JS vanilla.
+
+Contrato de selectores (BLUEPRINT — Selectores template):
+  #tendido-conductor-chart, #tendido-fibra-chart, [data-fase], [data-charts-ready],
+  [data-torre-pct]  (los 3 últimos los aporta el parcial base + esta vista).
+
+Contexto esperado (DashboardTendidoView):
+  fase_codigo='TENDIDO', fase_label='Tendido', curva_real_json (str JSON),
+  avance_conductor / avance_fibra (list), vista_torres (list), pct_conductor,
+  pct_fibra, etapas_tendido_json (str JSON {'conductor':[...], 'fibra':[...]}).
+{% endcomment %}
+
+{% block title %}Dashboard Tendido — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+<div class="space-y-6" data-dashboard="tendido">
+
+    {% comment %} Header {% endcomment %}
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🔌 Dashboard Tendido</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Total torres: <span class="font-medium">{{ total_torres }}</span>
+            </p>
+        </div>
+    </div>
+
+    {% comment %} Tarjetas resumen por sección — % global real de cada una. {% endcomment %}
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3 text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">% Conductor (real)</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300" data-pct-conductor="{{ pct_conductor }}">{{ pct_conductor }}%</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3 text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">% Fibra OPGW (real)</p>
+            <p class="text-2xl font-bold text-purple-700 dark:text-purple-300" data-pct-fibra="{{ pct_fibra }}">{{ pct_fibra }}%</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3 text-center">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">% Ejecutado total</p>
+            <p class="text-2xl font-bold text-green-700 dark:text-green-300">{{ pct_construido_total }}%</p>
+        </div>
+    </div>
+
+    {% comment %}
+    Parcial base: Curva S real (Ejecutado vs Planeado) + vista por torre.
+    Le pasamos avance_etapas vacío (la vista ya lo deja []) para que NO pinte su
+    gráfica genérica de etapas — B3 usa sus dos charts propios abajo. El parcial
+    consume curva_real_json/fase_codigo/fase_label/vista_torres del contexto y
+    marca [data-charts-ready=true] al renderizar la Curva S.
+    {% endcomment %}
+    {% include "construccion/_dashboard_fase_base.html" %}
+
+    {% comment %} === Gráfica de avance por etapa — Conductor === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4"
+         data-fase="TENDIDO" data-seccion="CONDUCTOR">
+        <h2 class="font-semibold mb-1">Avance por etapa — Conductor</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            % de torres con la etapa de conductor completa (6 etapas ponderadas).
+        </p>
+        <div class="relative" style="height: 320px;">
+            <canvas id="tendido-conductor-chart" width="1200" height="320"></canvas>
+        </div>
+        <div class="mt-3 grid grid-cols-2 md:grid-cols-6 gap-2 text-sm">
+            {% for e in avance_conductor %}
+            <div class="rounded border border-gray-200 dark:border-gray-700 p-2 text-center" data-etapa-conductor="{{ e.etapa }}">
+                <p class="font-medium text-gray-700 dark:text-gray-200">{{ e.label }}</p>
+                <p class="text-lg font-bold text-blue-700 dark:text-blue-300">{{ e.pct }}%</p>
+                <p class="text-xs text-gray-500">{{ e.completas }} / {{ e.totales }} torres</p>
+            </div>
+            {% empty %}
+            <p class="col-span-full text-center text-gray-400 text-sm">Sin datos de tendido (conductor).</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% comment %} === Gráfica de avance por etapa — Fibra OPGW === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4"
+         data-fase="TENDIDO" data-seccion="FIBRA">
+        <h2 class="font-semibold mb-1">Avance por etapa — Fibra OPGW</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            % de torres con la etapa de fibra OPGW completa (5 etapas ponderadas).
+        </p>
+        <div class="relative" style="height: 320px;">
+            <canvas id="tendido-fibra-chart" width="1200" height="320"></canvas>
+        </div>
+        <div class="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+            {% for e in avance_fibra %}
+            <div class="rounded border border-gray-200 dark:border-gray-700 p-2 text-center" data-etapa-fibra="{{ e.etapa }}">
+                <p class="font-medium text-gray-700 dark:text-gray-200">{{ e.label }}</p>
+                <p class="text-lg font-bold text-purple-700 dark:text-purple-300">{{ e.pct }}%</p>
+                <p class="text-xs text-gray-500">{{ e.completas }} / {{ e.totales }} torres</p>
+            </div>
+            {% empty %}
+            <p class="col-span-full text-center text-gray-400 text-sm">Sin datos de tendido (fibra OPGW).</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% comment %}
+    Drill-down: enlaces por torre al detalle de tendido. El parcial base ya pinta
+    la tabla por torre (data-torre-pct / data-torre-id); aquí añadimos los enlaces
+    explícitos al detalle tendido_torre por si la torre tiene pendientes.
+    {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h2 class="font-semibold mb-3">Drill-down por torre — detalle de Tendido</h2>
+        <div class="flex flex-wrap gap-2">
+            {% for t in vista_torres %}
+            <a href="{% url 'construccion:tendido_torre' proyecto_id=proyecto.id torre_id=t.torre_id %}"
+               data-drilldown-torre="{{ t.torre_id }}" data-torre-pct="{{ t.pct }}"
+               class="px-3 py-1 rounded-full border text-xs font-medium
+                      {% if t.completa %}bg-green-100 text-green-700 border-green-300 dark:bg-green-900/40 dark:text-green-300{% else %}bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300{% endif %}">
+                Torre {{ t.numero }} · {{ t.pct }}%
+            </a>
+            {% empty %}
+            <p class="text-gray-400 text-sm">Sin torres con registro de tendido.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% comment %} Datasets de las 2 gráficas serializados con json_script (guard es-CO). {% endcomment %}
+    {{ etapas_tendido|json_script:"tendido-etapas-data" }}
+
+    {% comment %}
+    Chart.js (mismo CDN que dashboard_curva_s.html). JS vanilla: lee el JSON
+    pre-serializado y pinta las dos gráficas de etapa. NO toca [data-charts-ready]
+    (lo gobierna el parcial base con la Curva S — gate del E2E).
+    {% endcomment %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+    (function () {
+        function readJSON(id) {
+            var el = document.getElementById(id);
+            if (!el) { return null; }
+            try { return JSON.parse(el.textContent); } catch (e) { return null; }
+        }
+        function barChart(canvasId, etapas, color) {
+            if (typeof Chart === 'undefined') { return; }
+            var canvas = document.getElementById(canvasId);
+            if (!canvas || !canvas.getContext) { return; }
+            var ctx = canvas.getContext('2d');
+            if (!ctx) { return; }
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: etapas.map(function (e) { return e.label; }),
+                    datasets: [{
+                        label: '% torres completas',
+                        data: etapas.map(function (e) { return e.pct; }),
+                        backgroundColor: color
+                    }]
+                },
+                options: {
+                    responsive: false, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 100,
+                        ticks: { callback: function (v) { return v + '%'; } } } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { afterLabel: function (item) {
+                            var e = etapas[item.dataIndex] || {};
+                            return (e.completas != null) ? (e.completas + ' / ' + e.totales + ' torres') : '';
+                        } } }
+                    }
+                }
+            });
+        }
+        function renderTendido() {
+            var data = readJSON('tendido-etapas-data') || { conductor: [], fibra: [] };
+            barChart('tendido-conductor-chart', data.conductor || [], '#2563eb');
+            barChart('tendido-fibra-chart', data.fibra || [], '#9333ea');
+        }
+        if (document.readyState === 'complete') {
+            renderTendido();
+        } else {
+            window.addEventListener('load', renderTendido, { once: true });
+        }
+    })();
+    </script>
+</div>
+{% endlocalize %}
+{% endblock %}
