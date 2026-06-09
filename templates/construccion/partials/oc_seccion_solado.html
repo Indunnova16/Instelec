@@ -26,33 +26,34 @@
       <span class="font-medium text-gray-500">Real</span>
       <span class="font-medium text-gray-500">Observaciones</span>
 
-      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Agua</span>
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Agua (m³)</span>
       <div>{{ form.sol_agua_calc }}{% if form.sol_agua_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_agua_real }}{% if form.sol_agua_real.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_real.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_agua_obs }}{% if form.sol_agua_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_obs.errors|join:", " }}</span>{% endif %}</div>
 
-      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Arena</span>
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Arena (m³)</span>
       <div>{{ form.sol_arena_calc }}{% if form.sol_arena_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_arena_real }}{% if form.sol_arena_real.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_real.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_arena_obs }}{% if form.sol_arena_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_obs.errors|join:", " }}</span>{% endif %}</div>
 
-      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Grava</span>
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Grava (m³)</span>
       <div>{{ form.sol_grava_calc }}{% if form.sol_grava_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_grava_real }}{% if form.sol_grava_real.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_real.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_grava_obs }}{% if form.sol_grava_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_obs.errors|join:", " }}</span>{% endif %}</div>
 
-      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Cemento</span>
+      <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Cemento (kg)</span>
       <div>{{ form.sol_cemento_calc }}{% if form.sol_cemento_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_cemento_real }}{% if form.sol_cemento_real.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_real.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_cemento_obs }}{% if form.sol_cemento_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_obs.errors|join:", " }}</span>{% endif %}</div>
     </div>
 
     {% if detalle %}
-    <div class="grid grid-cols-4 gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
+    <div class="grid grid-cols-5 gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
       <span>Desviación (real − calc)</span>
-      <span data-desv="agua">Agua: {{ detalle.sol_agua_desv|default:"—" }}</span>
-      <span data-desv="arena">Arena: {{ detalle.sol_arena_desv|default:"—" }}</span>
-      <span data-desv="grava">Grava: {{ detalle.sol_grava_desv|default:"—" }}</span>
+      <span data-desv="agua">Agua: {{ detalle.sol_agua_desv|default:"—" }} m³</span>
+      <span data-desv="arena">Arena: {{ detalle.sol_arena_desv|default:"—" }} m³</span>
+      <span data-desv="grava">Grava: {{ detalle.sol_grava_desv|default:"—" }} m³</span>
+      <span data-desv="cemento">Cemento: {{ detalle.sol_cemento_desv|default:"—" }} kg</span>
     </div>
     {% endif %}
   </fieldset>

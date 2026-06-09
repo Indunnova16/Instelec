@@ -151,11 +151,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Agua
     sol_agua_calc = models.DecimalField(
         'Solado agua (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_agua_real = models.DecimalField(
         'Solado agua (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_agua_obs = models.CharField(
         'Solado agua (obs)', max_length=200, blank=True,
@@ -163,11 +163,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Arena
     sol_arena_calc = models.DecimalField(
         'Solado arena (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_arena_real = models.DecimalField(
         'Solado arena (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_arena_obs = models.CharField(
         'Solado arena (obs)', max_length=200, blank=True,
@@ -175,11 +175,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Grava
     sol_grava_calc = models.DecimalField(
         'Solado grava (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_grava_real = models.DecimalField(
         'Solado grava (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_grava_obs = models.CharField(
         'Solado grava (obs)', max_length=200, blank=True,
@@ -187,11 +187,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Cemento
     sol_cemento_calc = models.DecimalField(
         'Solado cemento (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='kg',
     )
     sol_cemento_real = models.DecimalField(
         'Solado cemento (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='kg',
     )
     sol_cemento_obs = models.CharField(
         'Solado cemento (obs)', max_length=200, blank=True,

@@ -456,3 +456,66 @@ def test_post_excavacion_pct_fuera_rango_400(
     data = resp.json()
     assert data['ok'] is False
     assert 'errors' in data
+
+
+# ===========================================================================
+# (#136) Solado: unidades m³/kg en etiquetas + fila desviación con Cemento
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_solado_render_unidades_m3_kg_y_desviacion_cemento(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#136 — el detalle de Solado debe mostrar unidades (Agua/Arena/Grava en
+    m³, Cemento en kg) en las etiquetas y la fila Desviación debe incluir
+    Cemento (antes omitido por grid-cols-4).
+
+    Se valida contra un detalle con valores reales (calc/real) que producen
+    desviación calculada por @property — reproduce el escenario '22 kg de
+    cemento' del issue.
+    """
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+    from decimal import Decimal
+
+    # Detalle legacy con valores: cemento calc 0.75 / real 23.00 (escenario issue)
+    detalle = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='B',
+        sol_agua_calc=Decimal('0.02'), sol_agua_real=Decimal('0.08'),
+        sol_arena_calc=Decimal('0.50'), sol_arena_real=Decimal('0.55'),
+        sol_grava_calc=Decimal('0.30'), sol_grava_real=Decimal('0.30'),
+        sol_cemento_calc=Decimal('0.75'), sol_cemento_real=Decimal('23.00'),
+    )
+
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=B&seccion=solado')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    # Unidades en las etiquetas de fila (no dentro del input)
+    assert 'Agua (m³)' in body
+    assert 'Arena (m³)' in body
+    assert 'Grava (m³)' in body
+    assert 'Cemento (kg)' in body
+
+    # Fila Desviación ahora incluye Cemento (antes omitido) con unidad kg
+    assert 'data-desv="cemento"' in body
+    # La desviación de cemento es real - calc = 23.00 - 0.75 = 22.25
+    assert '22.25' in body
+    assert 'Cemento: 22.25 kg' in body
+    # Agua sigue presente con m³
+    assert 'data-desv="agua"' in body
+
+
+@pytest.mark.django_db
+def test_solado_help_text_unidades_en_modelo(db):
+    """#136 — los campos del modelo llevan help_text de unidad (m³/kg)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    for campo in ('sol_agua_calc', 'sol_agua_real', 'sol_arena_calc',
+                  'sol_arena_real', 'sol_grava_calc', 'sol_grava_real'):
+        assert ObraCivilTorreDetalle._meta.get_field(campo).help_text == 'm³'
+    for campo in ('sol_cemento_calc', 'sol_cemento_real'):
+        assert ObraCivilTorreDetalle._meta.get_field(campo).help_text == 'kg'
