@@ -392,3 +392,65 @@ def curva_s_consolidada(proyecto) -> dict:
         'planeado': planeado,
         'ejecutado': ejecutado,
     }
+
+
+# ===========================================================================
+# B1 (#139) — payload del Dashboard de Obra Civil con avance REAL
+# ===========================================================================
+#
+# Punto de entrada único que bundla los datos del Dashboard de OC desde el
+# avance REAL (257 oc_detalle de prod), reusando el backbone S1
+# (`calculators_avance_real`) — NO re-implementa el cálculo. Lo consume la vista
+# `DashboardObraCivilRealView` y los tests. Mantiene `calculators.py` como la
+# fachada de agregadores del dashboard de obra civil.
+
+
+def dashboard_oc_real_payload(proyecto) -> dict:
+    """Bundla los datos REALES del Dashboard de Obra Civil (#139).
+
+    Reusa el backbone S1 ``calculators_avance_real``:
+      - ``curva_s``: {labels, planeado, ejecutado} de la Curva S REAL de OC.
+      - ``avance_etapas``: las 6 etapas OC (con Cerramiento) + pesos.
+      - ``vista_torres``: lista por torre (% / completa / pendientes).
+      - ``tarjetas``: {pct_construido, pct_programado, varianza_pct} del REAL.
+
+    Edge (proyecto sin avance / sin oc_detalle): curva vacía, etapas en 0%,
+    vista vacía, tarjetas en 0.0 — NUNCA lanza ni divide por cero.
+    """
+    from . import calculators_avance_real as car
+
+    ejecutado = car.serie_curva_s_real(proyecto, car.FASE_OOCC)
+    planeado = car.serie_planeado(proyecto, car.FASE_OOCC)
+
+    # Eje X común (carry forward) para alinear las dos líneas en Chart.js.
+    labels = sorted(set(ejecutado.get('labels', [])) | set(planeado.get('labels', [])))
+
+    def _carry(series_labels, series_vals):
+        pares = list(zip(series_labels, series_vals, strict=False))
+        out, ult, idx = [], 0.0, 0
+        for lab in labels:
+            while idx < len(pares) and pares[idx][0] <= lab:
+                ult = pares[idx][1]
+                idx += 1
+            out.append(round(ult, 2))
+        return out
+
+    if labels:
+        ejec_eje = _carry(ejecutado.get('labels', []), ejecutado.get('ejecutado', []))
+        plan_eje = _carry(planeado.get('labels', []), planeado.get('planeado', []))
+    else:
+        ejec_eje, plan_eje = [], []
+
+    pct_ejec = ejec_eje[-1] if ejec_eje else 0.0
+    pct_plan = plan_eje[-1] if plan_eje else 0.0
+
+    return {
+        'curva_s': {'labels': labels, 'planeado': plan_eje, 'ejecutado': ejec_eje},
+        'avance_etapas': car.avance_por_etapa(proyecto, car.FASE_OOCC),
+        'vista_torres': car.vista_por_torre(proyecto, car.FASE_OOCC),
+        'tarjetas': {
+            'pct_construido': round(pct_ejec, 1),
+            'pct_programado': round(pct_plan, 1),
+            'varianza_pct': round(pct_ejec - pct_plan, 1),
+        },
+    }
