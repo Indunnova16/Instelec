@@ -47,6 +47,13 @@ VAC_TIPO_CONCRETO_CHOICES = [
 ]
 
 
+# Umbral de alerta de desviación de materiales en Vaciado (#140).
+# Si |% desviación (real vs calc)| supera este valor → alerta visual roja.
+# Patrón espejo de UMBRAL_ANS_PARCIAL_PCT (models_fin.py): constante de módulo
+# configurable, no hardcode disperso en plantilla/vista.
+UMBRAL_DESVIACION_VACIADO_PCT = Decimal('5')
+
+
 class ObraCivilTorreDetalle(BaseModel):
     """Detalle CANT OOCC paridad Excel — torre × pata, ~110 campos en 7 secciones.
 
@@ -433,6 +440,29 @@ class ObraCivilTorreDetalle(BaseModel):
             return None
         return Decimal(real) - Decimal(calc)
 
+    @staticmethod
+    def _desv_pct(real, calc):
+        """% de desviación (real - calc) / calc * 100, 1 decimal.
+
+        None si falta `real`/`calc` o si `calc` es 0 (división indefinida).
+        Usado por la columna de % desviación + alerta de Vaciado (#140).
+        """
+        if real is None or calc is None:
+            return None
+        calc_d = Decimal(calc)
+        if calc_d == 0:
+            return None
+        return ((Decimal(real) - calc_d) / calc_d * Decimal('100')).quantize(
+            Decimal('0.1')
+        )
+
+    @staticmethod
+    def _supera_umbral_desv(pct):
+        """True si |pct| supera UMBRAL_DESVIACION_VACIADO_PCT. False si None."""
+        if pct is None:
+            return False
+        return abs(pct) > UMBRAL_DESVIACION_VACIADO_PCT
+
     @property
     def sol_agua_desv(self):
         return self._desv(self.sol_agua_real, self.sol_agua_calc)
@@ -466,6 +496,40 @@ class ObraCivilTorreDetalle(BaseModel):
     @property
     def vac_cemento_desv(self):
         return self._desv(self.vac_cemento_real, self.vac_cemento_calc)
+
+    # ----- % Desviación + alerta de umbral Vaciado (#140) -----
+
+    @property
+    def vac_agua_desv_pct(self):
+        return self._desv_pct(self.vac_agua_real, self.vac_agua_calc)
+
+    @property
+    def vac_arena_desv_pct(self):
+        return self._desv_pct(self.vac_arena_real, self.vac_arena_calc)
+
+    @property
+    def vac_grava_desv_pct(self):
+        return self._desv_pct(self.vac_grava_real, self.vac_grava_calc)
+
+    @property
+    def vac_cemento_desv_pct(self):
+        return self._desv_pct(self.vac_cemento_real, self.vac_cemento_calc)
+
+    @property
+    def vac_agua_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_agua_desv_pct)
+
+    @property
+    def vac_arena_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_arena_desv_pct)
+
+    @property
+    def vac_grava_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_grava_desv_pct)
+
+    @property
+    def vac_cemento_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_cemento_desv_pct)
 
     # ----- Desviación Acero -----
 

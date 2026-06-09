@@ -365,3 +365,76 @@ def test_oc_detalle_cerr_lona_form_mensaje_error_legacy(detalle_default):
     assert not form.is_valid()
     assert 'cerr_lona_m' in form.errors
     assert 'Lona o alambre de púa (m)' in ' '.join(form.errors['cerr_lona_m'])
+
+
+# ===========================================================================
+# 10. (#140) % desviación Vaciado + alerta de umbral
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_vac_desv_pct_happy(proyecto_oc, torre_oc):
+    """% desviación = (real - calc)/calc*100, 1 decimal."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_agua_calc=Decimal('1.34'), vac_agua_real=Decimal('0.44'),
+    )
+    # (0.44 - 1.34)/1.34*100 = -67.2%
+    assert d.vac_agua_desv_pct == Decimal('-67.2')
+    assert d.vac_agua_supera_umbral is True
+
+
+@pytest.mark.django_db
+def test_vac_desv_pct_none_cuando_falta_dato(proyecto_oc, torre_oc):
+    """None si falta real o calc; supera_umbral False (no alerta)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_agua_calc=Decimal('1.00'),  # real ausente
+    )
+    assert d.vac_agua_desv_pct is None
+    assert d.vac_agua_supera_umbral is False
+
+
+@pytest.mark.django_db
+def test_vac_desv_pct_calc_cero_es_none(proyecto_oc, torre_oc):
+    """calc=0 → división indefinida → None (no ZeroDivisionError)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_agua_calc=Decimal('0'), vac_agua_real=Decimal('5'),
+    )
+    assert d.vac_agua_desv_pct is None
+    assert d.vac_agua_supera_umbral is False
+
+
+@pytest.mark.django_db
+def test_vac_supera_umbral_borde_exacto_5pct_no_alerta(proyecto_oc, torre_oc):
+    """|%| == 5 NO supera (umbral es estricto > 5). 5.4% sí supera."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    # calc=100, real=105 → exactamente +5.0% → NO alerta (borde)
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_cemento_calc=Decimal('100'), vac_cemento_real=Decimal('105'),
+    )
+    assert d.vac_cemento_desv_pct == Decimal('5.0')
+    assert d.vac_cemento_supera_umbral is False
+
+    # calc=786.25, real=828.75 → +5.4% → SÍ alerta (escenario legacy E38)
+    d2 = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='B',
+        vac_cemento_calc=Decimal('786.25'), vac_cemento_real=Decimal('828.75'),
+    )
+    assert d2.vac_cemento_desv_pct == Decimal('5.4')
+    assert d2.vac_cemento_supera_umbral is True
+
+
+@pytest.mark.django_db
+def test_vac_umbral_constante_modulo():
+    """El umbral es una constante de módulo configurable = 5 (patrón ANS)."""
+    from apps.construccion import models_b3_oc_detalle as m
+    assert m.UMBRAL_DESVIACION_VACIADO_PCT == Decimal('5')

@@ -519,3 +519,77 @@ def test_solado_help_text_unidades_en_modelo(db):
         assert ObraCivilTorreDetalle._meta.get_field(campo).help_text == 'm³'
     for campo in ('sol_cemento_calc', 'sol_cemento_real'):
         assert ObraCivilTorreDetalle._meta.get_field(campo).help_text == 'kg'
+
+
+# ===========================================================================
+# (#140) Vaciado: columna % Desviación + alerta roja por umbral
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_vaciado_render_columna_pct_desviacion_y_alerta(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#140 — el detalle de Vaciado debe mostrar la columna '% Desviación'
+    con alerta roja (data-supera-umbral=true) cuando |%| > 5.
+
+    Reproduce el registro legacy E38 pata B: agua calc 1.34/real 0.44 (-67.2%,
+    rojo) y cemento 786.25/828.75 (+5.4%, rojo); arena 3.47/3.47 (0%, sin
+    alerta).
+    """
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+    from decimal import Decimal
+
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='B',
+        vac_agua_calc=Decimal('1.34'), vac_agua_real=Decimal('0.44'),
+        vac_arena_calc=Decimal('3.47'), vac_arena_real=Decimal('3.47'),
+        vac_cemento_calc=Decimal('786.25'), vac_cemento_real=Decimal('828.75'),
+    )
+
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=B&seccion=vaciado')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    # Header de la nueva columna
+    assert '% Desviación' in body
+    # Celdas con data-attrs por material
+    assert 'data-desv-pct="agua"' in body
+    assert 'data-desv-pct="arena"' in body
+    assert 'data-desv-pct="cemento"' in body
+
+    # Agua -67.2% supera umbral → rojo
+    assert 'data-desv-pct="agua" data-supera-umbral="true"' in body
+    assert '-67.2%' in body  # localize off → punto, no coma
+    # Cemento +5.4% supera umbral → rojo
+    assert 'data-desv-pct="cemento" data-supera-umbral="true"' in body
+    assert '5.4%' in body
+    # Arena 0% NO supera umbral
+    assert 'data-desv-pct="arena" data-supera-umbral="false"' in body
+    # La clase roja acompaña a las celdas que superan
+    assert 'text-red-600' in body
+
+
+@pytest.mark.django_db
+def test_vaciado_render_sin_datos_muestra_guion_sin_alerta(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#140 — sin calc/real, la celda muestra '—' y NO marca alerta."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='C',
+    )
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=C&seccion=vaciado')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert 'data-desv-pct="agua" data-supera-umbral="false"' in body
+    # Sin datos no debe haber ninguna celda de vaciado marcada como alerta
+    assert 'data-desv-pct="agua" data-supera-umbral="true"' not in body
