@@ -33,7 +33,16 @@ PATA_CHOICES = [
 EXC_TIPO_CHOICES = [
     ('MANUAL', 'Manual'),
     ('MAQUINA', 'Con máquina'),
+]
+
+# #135 (absorbe #134) — La clase de cimentación es un concepto independiente
+# del método de excavación. HELICOIDAL era un valor mal ubicado en
+# EXC_TIPO_CHOICES; ahora vive en su propio campo `exc_clase_cimentacion`.
+EXC_CLASE_CIMENTACION_CHOICES = [
     ('HELICOIDAL', 'Helicoidal'),
+    ('ZAPATA', 'Zapata'),
+    ('PARRILLA', 'Parrilla'),
+    ('PARRILLA_PESADA', 'Parrilla pesada'),
 ]
 
 EXC_MONITOREO_CHOICES = [
@@ -45,6 +54,13 @@ VAC_TIPO_CONCRETO_CHOICES = [
     ('PREMEZCLADO', 'Premezclado'),
     ('OBRA', 'Hecho en obra'),
 ]
+
+
+# Umbral de alerta de desviación de materiales en Vaciado (#140).
+# Si |% desviación (real vs calc)| supera este valor → alerta visual roja.
+# Patrón espejo de UMBRAL_ANS_PARCIAL_PCT (models_fin.py): constante de módulo
+# configurable, no hardcode disperso en plantilla/vista.
+UMBRAL_DESVIACION_VACIADO_PCT = Decimal('5')
 
 
 class ObraCivilTorreDetalle(BaseModel):
@@ -92,7 +108,7 @@ class ObraCivilTorreDetalle(BaseModel):
         'Cerramiento — madera (un)', null=True, blank=True,
     )
     cerr_lona_m = models.DecimalField(
-        'Cerramiento — lona (m)', max_digits=8, decimal_places=2,
+        'Cerramiento — lona o alambre de púa (m)', max_digits=8, decimal_places=2,
         null=True, blank=True,
     )
     cerr_senalizacion_ok = models.BooleanField(
@@ -121,6 +137,10 @@ class ObraCivilTorreDetalle(BaseModel):
     exc_ft928_ok = models.BooleanField('FT-928 OK', default=False)
     exc_tipo = models.CharField(
         'Tipo excavación', max_length=20, choices=EXC_TIPO_CHOICES, blank=True,
+    )
+    exc_clase_cimentacion = models.CharField(
+        'Clase de cimentación', max_length=20,
+        choices=EXC_CLASE_CIMENTACION_CHOICES, blank=True,
     )
     exc_metros_m3 = models.DecimalField(
         'Excavación (m3)', max_digits=10, decimal_places=2,
@@ -151,11 +171,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Agua
     sol_agua_calc = models.DecimalField(
         'Solado agua (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_agua_real = models.DecimalField(
         'Solado agua (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_agua_obs = models.CharField(
         'Solado agua (obs)', max_length=200, blank=True,
@@ -163,11 +183,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Arena
     sol_arena_calc = models.DecimalField(
         'Solado arena (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_arena_real = models.DecimalField(
         'Solado arena (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_arena_obs = models.CharField(
         'Solado arena (obs)', max_length=200, blank=True,
@@ -175,11 +195,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Grava
     sol_grava_calc = models.DecimalField(
         'Solado grava (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_grava_real = models.DecimalField(
         'Solado grava (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='m³',
     )
     sol_grava_obs = models.CharField(
         'Solado grava (obs)', max_length=200, blank=True,
@@ -187,11 +207,11 @@ class ObraCivilTorreDetalle(BaseModel):
     # Cemento
     sol_cemento_calc = models.DecimalField(
         'Solado cemento (calc)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='kg',
     )
     sol_cemento_real = models.DecimalField(
         'Solado cemento (real)', max_digits=8, decimal_places=2,
-        null=True, blank=True,
+        null=True, blank=True, help_text='kg',
     )
     sol_cemento_obs = models.CharField(
         'Solado cemento (obs)', max_length=200, blank=True,
@@ -433,6 +453,29 @@ class ObraCivilTorreDetalle(BaseModel):
             return None
         return Decimal(real) - Decimal(calc)
 
+    @staticmethod
+    def _desv_pct(real, calc):
+        """% de desviación (real - calc) / calc * 100, 1 decimal.
+
+        None si falta `real`/`calc` o si `calc` es 0 (división indefinida).
+        Usado por la columna de % desviación + alerta de Vaciado (#140).
+        """
+        if real is None or calc is None:
+            return None
+        calc_d = Decimal(calc)
+        if calc_d == 0:
+            return None
+        return ((Decimal(real) - calc_d) / calc_d * Decimal('100')).quantize(
+            Decimal('0.1')
+        )
+
+    @staticmethod
+    def _supera_umbral_desv(pct):
+        """True si |pct| supera UMBRAL_DESVIACION_VACIADO_PCT. False si None."""
+        if pct is None:
+            return False
+        return abs(pct) > UMBRAL_DESVIACION_VACIADO_PCT
+
     @property
     def sol_agua_desv(self):
         return self._desv(self.sol_agua_real, self.sol_agua_calc)
@@ -466,6 +509,40 @@ class ObraCivilTorreDetalle(BaseModel):
     @property
     def vac_cemento_desv(self):
         return self._desv(self.vac_cemento_real, self.vac_cemento_calc)
+
+    # ----- % Desviación + alerta de umbral Vaciado (#140) -----
+
+    @property
+    def vac_agua_desv_pct(self):
+        return self._desv_pct(self.vac_agua_real, self.vac_agua_calc)
+
+    @property
+    def vac_arena_desv_pct(self):
+        return self._desv_pct(self.vac_arena_real, self.vac_arena_calc)
+
+    @property
+    def vac_grava_desv_pct(self):
+        return self._desv_pct(self.vac_grava_real, self.vac_grava_calc)
+
+    @property
+    def vac_cemento_desv_pct(self):
+        return self._desv_pct(self.vac_cemento_real, self.vac_cemento_calc)
+
+    @property
+    def vac_agua_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_agua_desv_pct)
+
+    @property
+    def vac_arena_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_arena_desv_pct)
+
+    @property
+    def vac_grava_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_grava_desv_pct)
+
+    @property
+    def vac_cemento_supera_umbral(self):
+        return self._supera_umbral_desv(self.vac_cemento_desv_pct)
 
     # ----- Desviación Acero -----
 

@@ -44,32 +44,44 @@
     <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">
       Materiales (calculado vs real)
     </legend>
-    <div class="grid grid-cols-4 gap-3 mt-2 text-sm">
+    {# #140 — columna '% Desviación' con alerta roja si |%| supera el umbral #}
+    {% localize off %}
+    <div class="grid grid-cols-5 gap-3 mt-2 text-sm">
       <span class="font-medium text-gray-500"></span>
       <span class="font-medium text-gray-500">Calculado</span>
       <span class="font-medium text-gray-500">Real</span>
+      <span class="font-medium text-gray-500">% Desviación</span>
       <span class="font-medium text-gray-500">Observaciones</span>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Agua</span>
       <div>{{ form.vac_agua_calc }}{% if form.vac_agua_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_agua_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.vac_agua_real }}{% if form.vac_agua_real.errors %}<span class="text-xs text-red-600">{{ form.vac_agua_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.vac_agua_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="agua" data-supera-umbral="{% if detalle.vac_agua_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.vac_agua_desv_pct is not None %}{{ detalle.vac_agua_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.vac_agua_obs }}{% if form.vac_agua_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_agua_obs.errors|join:", " }}</span>{% endif %}</div>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Arena</span>
       <div>{{ form.vac_arena_calc }}{% if form.vac_arena_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_arena_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.vac_arena_real }}{% if form.vac_arena_real.errors %}<span class="text-xs text-red-600">{{ form.vac_arena_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.vac_arena_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="arena" data-supera-umbral="{% if detalle.vac_arena_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.vac_arena_desv_pct is not None %}{{ detalle.vac_arena_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.vac_arena_obs }}{% if form.vac_arena_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_arena_obs.errors|join:", " }}</span>{% endif %}</div>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Grava</span>
       <div>{{ form.vac_grava_calc }}{% if form.vac_grava_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_grava_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.vac_grava_real }}{% if form.vac_grava_real.errors %}<span class="text-xs text-red-600">{{ form.vac_grava_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.vac_grava_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="grava" data-supera-umbral="{% if detalle.vac_grava_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.vac_grava_desv_pct is not None %}{{ detalle.vac_grava_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.vac_grava_obs }}{% if form.vac_grava_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_grava_obs.errors|join:", " }}</span>{% endif %}</div>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Cemento</span>
       <div>{{ form.vac_cemento_calc }}{% if form.vac_cemento_calc.errors %}<span class="text-xs text-red-600">{{ form.vac_cemento_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.vac_cemento_real }}{% if form.vac_cemento_real.errors %}<span class="text-xs text-red-600">{{ form.vac_cemento_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.vac_cemento_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="cemento" data-supera-umbral="{% if detalle.vac_cemento_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.vac_cemento_desv_pct is not None %}{{ detalle.vac_cemento_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.vac_cemento_obs }}{% if form.vac_cemento_obs.errors %}<span class="text-xs text-red-600">{{ form.vac_cemento_obs.errors|join:", " }}</span>{% endif %}</div>
     </div>
+    {% endlocalize %}
   </fieldset>
 
   <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">

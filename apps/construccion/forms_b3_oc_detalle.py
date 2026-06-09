@@ -76,7 +76,7 @@ class OCSeccionCerramientoForm(forms.ModelForm):
 
     def clean_cerr_lona_m(self):
         return _validar_no_negativo(
-            self.cleaned_data.get('cerr_lona_m'), 'Lona (m)'
+            self.cleaned_data.get('cerr_lona_m'), 'Lona o alambre de púa (m)'
         )
 
 
@@ -90,6 +90,7 @@ class OCSeccionExcavacionForm(forms.ModelForm):
             'exc_ft022_ok', 'exc_ft929_ok', 'exc_ft923_ok', 'exc_ft924_ok',
             'exc_ft925_ok', 'exc_ft926_ok', 'exc_ft927_ok', 'exc_ft928_ok',
             'exc_tipo',
+            'exc_clase_cimentacion',
             'exc_metros_m3',
             'exc_penetrometro_ok',
             'exc_monitoreo_arq',

@@ -456,3 +456,243 @@ def test_post_excavacion_pct_fuera_rango_400(
     data = resp.json()
     assert data['ok'] is False
     assert 'errors' in data
+
+
+# ===========================================================================
+# (#136) Solado: unidades m³/kg en etiquetas + fila desviación con Cemento
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_solado_render_unidades_m3_kg_y_desviacion_cemento(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#136 — el detalle de Solado debe mostrar unidades (Agua/Arena/Grava en
+    m³, Cemento en kg) en las etiquetas y la fila Desviación debe incluir
+    Cemento (antes omitido por grid-cols-4).
+
+    Se valida contra un detalle con valores reales (calc/real) que producen
+    desviación calculada por @property — reproduce el escenario '22 kg de
+    cemento' del issue.
+    """
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+    from decimal import Decimal
+
+    # Detalle legacy con valores: cemento calc 0.75 / real 23.00 (escenario issue)
+    detalle = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='B',
+        sol_agua_calc=Decimal('0.02'), sol_agua_real=Decimal('0.08'),
+        sol_arena_calc=Decimal('0.50'), sol_arena_real=Decimal('0.55'),
+        sol_grava_calc=Decimal('0.30'), sol_grava_real=Decimal('0.30'),
+        sol_cemento_calc=Decimal('0.75'), sol_cemento_real=Decimal('23.00'),
+    )
+
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=B&seccion=solado')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    # Unidades en las etiquetas de fila (no dentro del input)
+    assert 'Agua (m³)' in body
+    assert 'Arena (m³)' in body
+    assert 'Grava (m³)' in body
+    assert 'Cemento (kg)' in body
+
+    # Fila Desviación ahora incluye Cemento (antes omitido) con unidad kg
+    assert 'data-desv="cemento"' in body
+    # La desviación de cemento es real - calc = 23.00 - 0.75 = 22.25
+    assert '22.25' in body
+    assert 'Cemento: 22.25 kg' in body
+    # Agua sigue presente con m³
+    assert 'data-desv="agua"' in body
+
+
+@pytest.mark.django_db
+def test_solado_help_text_unidades_en_modelo(db):
+    """#136 — los campos del modelo llevan help_text de unidad (m³/kg)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    for campo in ('sol_agua_calc', 'sol_agua_real', 'sol_arena_calc',
+                  'sol_arena_real', 'sol_grava_calc', 'sol_grava_real'):
+        assert ObraCivilTorreDetalle._meta.get_field(campo).help_text == 'm³'
+    for campo in ('sol_cemento_calc', 'sol_cemento_real'):
+        assert ObraCivilTorreDetalle._meta.get_field(campo).help_text == 'kg'
+
+
+# ===========================================================================
+# (#140) Vaciado: columna % Desviación + alerta roja por umbral
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_vaciado_render_columna_pct_desviacion_y_alerta(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#140 — el detalle de Vaciado debe mostrar la columna '% Desviación'
+    con alerta roja (data-supera-umbral=true) cuando |%| > 5.
+
+    Reproduce el registro legacy E38 pata B: agua calc 1.34/real 0.44 (-67.2%,
+    rojo) y cemento 786.25/828.75 (+5.4%, rojo); arena 3.47/3.47 (0%, sin
+    alerta).
+    """
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+    from decimal import Decimal
+
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='B',
+        vac_agua_calc=Decimal('1.34'), vac_agua_real=Decimal('0.44'),
+        vac_arena_calc=Decimal('3.47'), vac_arena_real=Decimal('3.47'),
+        vac_cemento_calc=Decimal('786.25'), vac_cemento_real=Decimal('828.75'),
+    )
+
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=B&seccion=vaciado')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    # Header de la nueva columna
+    assert '% Desviación' in body
+    # Celdas con data-attrs por material
+    assert 'data-desv-pct="agua"' in body
+    assert 'data-desv-pct="arena"' in body
+    assert 'data-desv-pct="cemento"' in body
+
+    # Agua -67.2% supera umbral → rojo
+    assert 'data-desv-pct="agua" data-supera-umbral="true"' in body
+    assert '-67.2%' in body  # localize off → punto, no coma
+    # Cemento +5.4% supera umbral → rojo
+    assert 'data-desv-pct="cemento" data-supera-umbral="true"' in body
+    assert '5.4%' in body
+    # Arena 0% NO supera umbral
+    assert 'data-desv-pct="arena" data-supera-umbral="false"' in body
+    # La clase roja acompaña a las celdas que superan
+    assert 'text-red-600' in body
+
+
+@pytest.mark.django_db
+def test_vaciado_render_sin_datos_muestra_guion_sin_alerta(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#140 — sin calc/real, la celda muestra '—' y NO marca alerta."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='C',
+    )
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=C&seccion=vaciado')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert 'data-desv-pct="agua" data-supera-umbral="false"' in body
+    # Sin datos no debe haber ninguna celda de vaciado marcada como alerta
+    assert 'data-desv-pct="agua" data-supera-umbral="true"' not in body
+
+
+# ===========================================================================
+# (#135 / absorbe #134) Excavación: clase de cimentación independiente
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_post_excavacion_persiste_tipo_y_clase_cimentacion(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#135 — POST con exc_tipo=MANUAL + exc_clase_cimentacion=ZAPATA persiste
+    ambos campos (caso CREATE vía get_or_create)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    url = reverse(
+        'construccion:obra_civil_detalle_seccion',
+        kwargs={
+            'proyecto_id': proyecto_oc_b2b.id,
+            'torre_id': torre_oc_b2b.id,
+            'pata': 'A',
+            'seccion': 'excavacion',
+        },
+    )
+    resp = authenticated_client.post(url, {
+        'exc_tipo': 'MANUAL',
+        'exc_clase_cimentacion': 'ZAPATA',
+        'exc_ejecutada_pct': '0',
+    })
+    assert resp.status_code == 200, resp.content[:500]
+    assert resp.json()['ok'] is True
+
+    det = ObraCivilTorreDetalle.objects.get(torre=torre_oc_b2b, pata='A')
+    assert det.exc_tipo == 'MANUAL'
+    assert det.exc_clase_cimentacion == 'ZAPATA'
+
+
+@pytest.mark.django_db
+def test_post_excavacion_update_legacy_setea_clase(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#135 — sobre un detalle LEGACY ya existente (UPDATE), el POST setea la
+    clase de cimentación sin perder otros campos."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    # Registro legacy preexistente (simula dato migrado: clase HELICOIDAL)
+    legacy = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='C',
+        exc_cuadrilla='Cuadrilla legacy',
+        exc_clase_cimentacion='HELICOIDAL',
+    )
+    url = reverse(
+        'construccion:obra_civil_detalle_seccion',
+        kwargs={
+            'proyecto_id': proyecto_oc_b2b.id,
+            'torre_id': torre_oc_b2b.id,
+            'pata': 'C',
+            'seccion': 'excavacion',
+        },
+    )
+    resp = authenticated_client.post(url, {
+        'exc_cuadrilla': 'Cuadrilla legacy',
+        'exc_tipo': 'MAQUINA',
+        'exc_clase_cimentacion': 'PARRILLA_PESADA',
+        'exc_ejecutada_pct': '0',
+    })
+    assert resp.status_code == 200, resp.content[:500]
+    legacy.refresh_from_db()
+    assert legacy.exc_tipo == 'MAQUINA'
+    assert legacy.exc_clase_cimentacion == 'PARRILLA_PESADA'
+    assert legacy.exc_cuadrilla == 'Cuadrilla legacy'
+
+
+@pytest.mark.django_db
+def test_excavacion_render_select_clase_cimentacion(
+    authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
+):
+    """#135 — el detalle de Excavación renderiza el <select> de clase de
+    cimentación con las 4 opciones; un legacy con clase HELICOIDAL la muestra
+    seleccionada."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc_b2b, torre=torre_oc_b2b, pata='D',
+        exc_clase_cimentacion='HELICOIDAL',
+    )
+    url = reverse(
+        'construccion:obra_civil_detalle',
+        kwargs={'proyecto_id': proyecto_oc_b2b.id, 'torre_id': torre_oc_b2b.id},
+    )
+    resp = authenticated_client.get(url + '?pata=D&seccion=excavacion')
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    assert 'name="exc_clase_cimentacion"' in body
+    assert 'Clase de cimentación' in body
+    for label in ('Helicoidal', 'Zapata', 'Parrilla', 'Parrilla pesada'):
+        assert label in body
+    # El legacy con HELICOIDAL aparece seleccionado
+    assert 'value="HELICOIDAL" selected' in body
+    # exc_tipo ya no ofrece HELICOIDAL como opción (resuelve #134)
+    # (Manual y Con máquina sí)
+    assert 'value="MANUAL"' in body
+    assert 'value="MAQUINA"' in body

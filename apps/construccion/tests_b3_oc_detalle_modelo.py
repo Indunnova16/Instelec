@@ -327,3 +327,234 @@ def test_oc_detalle_ordering_por_torre_numero(proyecto_oc):
     numeros_distintos = [d.torre.numero for d in qs]
     assert numeros_distintos[0] == '03'
     assert numeros_distintos[-1] == '15'
+
+
+# ===========================================================================
+# 9. (#132) verbose_name de cerr_lona_m incluye 'alambre de púa'
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_oc_detalle_cerr_lona_verbose_incluye_alambre_pua(detalle_default):
+    """#132 — la etiqueta de cerramiento debe mencionar lona O alambre de púa.
+
+    El cliente registra el cerramiento tanto en lona como en alambre de púa
+    sobre el mismo campo (cantidades no cambian, solo la descripción).
+    """
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    field = ObraCivilTorreDetalle._meta.get_field('cerr_lona_m')
+    assert field.verbose_name == 'Cerramiento — lona o alambre de púa (m)'
+    # No tocamos cerramiento en madera (ítem separado, ya correcto)
+    madera = ObraCivilTorreDetalle._meta.get_field('cerr_madera_un')
+    assert madera.verbose_name == 'Cerramiento — madera (un)'
+
+
+@pytest.mark.django_db
+def test_oc_detalle_cerr_lona_form_mensaje_error_legacy(detalle_default):
+    """#132 — el form rechaza lona negativa con la etiqueta actualizada.
+
+    Valida contra dato legacy: el detalle ya existe (detalle_default), se
+    edita su campo lona con un valor inválido y se espera el mensaje nuevo.
+    """
+    from apps.construccion.forms_b3_oc_detalle import OCSeccionCerramientoForm
+
+    form = OCSeccionCerramientoForm(
+        data={'cerr_lona_m': '-3', 'cerr_madera_un': '', 'cerr_notas': ''},
+        instance=detalle_default,
+    )
+    assert not form.is_valid()
+    assert 'cerr_lona_m' in form.errors
+    assert 'Lona o alambre de púa (m)' in ' '.join(form.errors['cerr_lona_m'])
+
+
+# ===========================================================================
+# 10. (#140) % desviación Vaciado + alerta de umbral
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_vac_desv_pct_happy(proyecto_oc, torre_oc):
+    """% desviación = (real - calc)/calc*100, 1 decimal."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_agua_calc=Decimal('1.34'), vac_agua_real=Decimal('0.44'),
+    )
+    # (0.44 - 1.34)/1.34*100 = -67.2%
+    assert d.vac_agua_desv_pct == Decimal('-67.2')
+    assert d.vac_agua_supera_umbral is True
+
+
+@pytest.mark.django_db
+def test_vac_desv_pct_none_cuando_falta_dato(proyecto_oc, torre_oc):
+    """None si falta real o calc; supera_umbral False (no alerta)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_agua_calc=Decimal('1.00'),  # real ausente
+    )
+    assert d.vac_agua_desv_pct is None
+    assert d.vac_agua_supera_umbral is False
+
+
+@pytest.mark.django_db
+def test_vac_desv_pct_calc_cero_es_none(proyecto_oc, torre_oc):
+    """calc=0 → división indefinida → None (no ZeroDivisionError)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_agua_calc=Decimal('0'), vac_agua_real=Decimal('5'),
+    )
+    assert d.vac_agua_desv_pct is None
+    assert d.vac_agua_supera_umbral is False
+
+
+@pytest.mark.django_db
+def test_vac_supera_umbral_borde_exacto_5pct_no_alerta(proyecto_oc, torre_oc):
+    """|%| == 5 NO supera (umbral es estricto > 5). 5.4% sí supera."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    # calc=100, real=105 → exactamente +5.0% → NO alerta (borde)
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        vac_cemento_calc=Decimal('100'), vac_cemento_real=Decimal('105'),
+    )
+    assert d.vac_cemento_desv_pct == Decimal('5.0')
+    assert d.vac_cemento_supera_umbral is False
+
+    # calc=786.25, real=828.75 → +5.4% → SÍ alerta (escenario legacy E38)
+    d2 = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='B',
+        vac_cemento_calc=Decimal('786.25'), vac_cemento_real=Decimal('828.75'),
+    )
+    assert d2.vac_cemento_desv_pct == Decimal('5.4')
+    assert d2.vac_cemento_supera_umbral is True
+
+
+@pytest.mark.django_db
+def test_vac_umbral_constante_modulo():
+    """El umbral es una constante de módulo configurable = 5 (patrón ANS)."""
+    from apps.construccion import models_b3_oc_detalle as m
+    assert m.UMBRAL_DESVIACION_VACIADO_PCT == Decimal('5')
+
+
+# ===========================================================================
+# 11. (#135 / absorbe #134) Clase de cimentación + data-migration HELICOIDAL
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_exc_clase_cimentacion_choices_y_blank(detalle_default):
+    """#135 — el campo existe, es blank y tiene las 4 clases de cimentación."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    field = ObraCivilTorreDetalle._meta.get_field('exc_clase_cimentacion')
+    assert field.blank is True
+    valores = [c[0] for c in field.choices]
+    assert valores == ['HELICOIDAL', 'ZAPATA', 'PARRILLA', 'PARRILLA_PESADA']
+    assert field.verbose_name == 'Clase de cimentación'
+    # blank permitido: detalle por defecto lo deja vacío
+    assert detalle_default.exc_clase_cimentacion == ''
+
+
+@pytest.mark.django_db
+def test_exc_tipo_ya_no_incluye_helicoidal():
+    """#134 — exc_tipo queda limpio: solo MANUAL / MAQUINA."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    field = ObraCivilTorreDetalle._meta.get_field('exc_tipo')
+    valores = [c[0] for c in field.choices]
+    assert valores == ['MANUAL', 'MAQUINA']
+    assert 'HELICOIDAL' not in valores
+
+
+@pytest.mark.django_db
+def test_exc_form_acepta_clase_valida_rechaza_invalida(detalle_default):
+    """#135 — el form acepta una clase válida y rechaza una inválida."""
+    from apps.construccion.forms_b3_oc_detalle import OCSeccionExcavacionForm
+
+    ok = OCSeccionExcavacionForm(
+        data={'exc_tipo': 'MANUAL', 'exc_clase_cimentacion': 'ZAPATA',
+              'exc_ejecutada_pct': '0'},
+        instance=detalle_default,
+    )
+    assert ok.is_valid(), ok.errors
+    obj = ok.save()
+    assert obj.exc_tipo == 'MANUAL'
+    assert obj.exc_clase_cimentacion == 'ZAPATA'
+
+    # Clase inválida → rechazada
+    bad = OCSeccionExcavacionForm(
+        data={'exc_tipo': 'MANUAL', 'exc_clase_cimentacion': 'NO_EXISTE',
+              'exc_ejecutada_pct': '0'},
+        instance=detalle_default,
+    )
+    assert not bad.is_valid()
+    assert 'exc_clase_cimentacion' in bad.errors
+
+    # HELICOIDAL ya NO es válido en exc_tipo (resuelve #134)
+    bad_tipo = OCSeccionExcavacionForm(
+        data={'exc_tipo': 'HELICOIDAL', 'exc_ejecutada_pct': '0'},
+        instance=detalle_default,
+    )
+    assert not bad_tipo.is_valid()
+    assert 'exc_tipo' in bad_tipo.errors
+
+
+@pytest.mark.django_db
+def test_data_migration_helicoidal_forward_reverse_idempotente(
+    proyecto_oc, torre_oc,
+):
+    """#135 — RunPython mueve fila legacy HELICOIDAL; reverse restaura; 0 filas OK.
+
+    Importa las funciones reales de la migración 0026 y las ejecuta contra
+    datos ORM, validando forward, reverse e idempotencia (data-safe).
+    """
+    import importlib
+
+    from django.apps import apps as django_apps
+    from apps.construccion.models import TorreConstruccion
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    mig = importlib.import_module(
+        'apps.construccion.migrations.0026_oc_clase_cimentacion'
+    )
+
+    # Fila legacy con el valor viejo HELICOIDAL en exc_tipo
+    torre2 = TorreConstruccion.objects.create(proyecto=proyecto_oc, numero='99')
+    legacy = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre2, pata='A',
+        exc_tipo='HELICOIDAL',
+    )
+    # Fila MANUAL no debe tocarse
+    otra = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        exc_tipo='MANUAL',
+    )
+
+    # FORWARD
+    mig.mover_helicoidal_a_clase_cimentacion(django_apps, None)
+    legacy.refresh_from_db()
+    otra.refresh_from_db()
+    assert legacy.exc_tipo == ''
+    assert legacy.exc_clase_cimentacion == 'HELICOIDAL'
+    assert otra.exc_tipo == 'MANUAL'  # intacta
+    assert otra.exc_clase_cimentacion == ''
+
+    # FORWARD de nuevo = idempotente (no quedan HELICOIDAL en exc_tipo)
+    mig.mover_helicoidal_a_clase_cimentacion(django_apps, None)
+    legacy.refresh_from_db()
+    assert legacy.exc_clase_cimentacion == 'HELICOIDAL'
+    assert legacy.exc_tipo == ''
+
+    # REVERSE restaura el estado previo
+    mig.restaurar_helicoidal_a_exc_tipo(django_apps, None)
+    legacy.refresh_from_db()
+    assert legacy.exc_tipo == 'HELICOIDAL'
+    assert legacy.exc_clase_cimentacion == ''
+
+    # Data-safe con 0 filas: borrar todo y correr forward no falla
+    ObraCivilTorreDetalle.objects.all().delete()
+    mig.mover_helicoidal_a_clase_cimentacion(django_apps, None)  # no raise
+    mig.restaurar_helicoidal_a_exc_tipo(django_apps, None)  # no raise
