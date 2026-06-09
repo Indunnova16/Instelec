@@ -81,7 +81,7 @@
             {% endif %}
         </div>
         <div class="relative" style="height: 400px;">
-            <canvas id="curva-s-chart" width="1200" height="400"></canvas>
+            <canvas id="curva-s-chart" height="400"></canvas>
         </div>
     </div>
 
@@ -94,7 +94,7 @@
             como completa en una etapa cuando sus 4 patas tienen esa actividad lista.
         </p>
         <div class="relative" style="height: 320px;">
-            <canvas id="avance-etapas-chart" width="1200" height="320"></canvas>
+            <canvas id="avance-etapas-chart" height="320"></canvas>
         </div>
         <!-- Resumen textual de las 6 etapas REALES de OC (B1 #139): Cerramiento,
              Excavación, Solado, Acero, Vaciado, Compactación. Si no hay datos
@@ -187,7 +187,7 @@
             justificarse (ej. "+1 bulto de cemento de 42.5&nbsp;kg por sobreconsumo puntual").
         </p>
         <div class="relative" style="height: 300px;">
-            <canvas id="desviacion-materiales-chart" width="1200" height="300"></canvas>
+            <canvas id="desviacion-materiales-chart" height="300"></canvas>
         </div>
         <!-- Tabla calc vs real con semáforo por material -->
         <div class="overflow-x-auto mt-3">
@@ -373,7 +373,7 @@ function dashboardCurvaS(cfg) {
                         }],
                     },
                     options: {
-                        responsive: false, maintainAspectRatio: false,
+                        responsive: true, maintainAspectRatio: false,
                         scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
                         plugins: {
                             legend: { display: false },
@@ -405,7 +405,7 @@ function dashboardCurvaS(cfg) {
                         ],
                     },
                     options: {
-                        responsive: false, maintainAspectRatio: false,
+                        responsive: true, maintainAspectRatio: false,
                         scales: { y: { beginAtZero: true } },
                         plugins: {
                             legend: { position: 'top' },
@@ -461,7 +461,7 @@ function dashboardCurvaS(cfg) {
                     // responsive=false evita resize listener que falla si el canvas se
                     // detacha (Alpine re-render). El size lo controlamos vía CSS height
                     // del contenedor.
-                    responsive: false, maintainAspectRatio: false,
+                    responsive: true, maintainAspectRatio: false,
                     scales: {
                         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } },
                         x: { ticks: { maxRotation: 45 } },
