@@ -42,6 +42,47 @@
         [x-cloak] { display: none !important; }
         .htmx-request .htmx-indicator { display: inline-block; }
         .htmx-indicator { display: none; }
+
+        /* issue #138: borde visible en campos de texto vacios (global, todos los modulos).
+           Las class strings llevan border-gray-300 (color) pero falta la utilidad `border`
+           (ancho) -> Tailwind no pinta borde hasta :focus. Esta regla plana fija el ancho
+           base sobre input(texto)/textarea/select. Es CSS plano en <style>, NO va en x-data
+           ni en comentarios multilinea -> no rompe Alpine.
+
+           Especificidad DELIBERADAMENTE baja (selector de elemento, 0,0,1): cualquier
+           utilidad Tailwind aplicada en la clase (border-2, border-0, border-none,
+           border-gray-X, border-blue-500) gana por especificidad (0,1,0) y/o orden, asi
+           que NO se aplastan bordes gruesos intencionales ni se obliga borde a inputs que
+           lo quitaron a proposito (ej. select border-0). Solo se materializa el ancho
+           cuando el campo no trae ninguna utilidad de borde, que es justo el caso del bug. */
+        input,
+        textarea,
+        select {
+            border-width: 1px;
+            border-style: solid;
+            border-color: rgb(209 213 219); /* gray-300 (light) */
+        }
+        .dark input,
+        .dark textarea,
+        .dark select {
+            border-color: rgb(75 85 99); /* gray-600 (dark) */
+        }
+        /* checkbox/radio/file/range y botones-input no llevan borde de caja base:
+           se excluyen aqui con la MISMA especificidad de tipo (attribute selector
+           sobre el elemento mantiene la cadena baja) para no deformarlos. */
+        input[type="checkbox"],
+        input[type="radio"],
+        input[type="file"],
+        input[type="range"],
+        input[type="hidden"],
+        input[type="submit"],
+        input[type="button"],
+        input[type="reset"],
+        input[type="image"],
+        input[type="color"] {
+            border-width: 0;
+            border-style: none;
+        }
     </style>
 
     {% block extra_head %}{% endblock %}
