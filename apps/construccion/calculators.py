@@ -189,14 +189,44 @@ ETAPAS_OC = [
     ('COMPACTACION', 'Compactación', 'relleno_compactacion_ok'),
 ]
 
-#: Materiales de vaciado para G3 (label + nombre de campo calc/real en
-#: ``VaciadoDetalle``). Agua/arena/grava en m³; cemento en bultos.
-MATERIALES_VACIADO = [
+#: Materiales de obra civil para G3 en los modelos de detalle SECUENCIAL
+#: (``SoladoDetalle`` / ``VaciadoDetalle``, tablas construccion_*_detalle).
+#: SoladoDetalle y VaciadoDetalle tienen los MISMOS campos de materiales
+#: (agua/arena/grava _calc_m3/_util_m3, cemento _calc/_util_bultos), así que
+#: este mapa se reusa tal cual para ambas etapas (#141). Agua/arena/grava en
+#: m³; cemento en bultos.
+MATERIALES_OC = [
     ('agua', 'Agua', 'agua_calc_m3', 'agua_util_m3', 'm³'),
     ('cemento', 'Cemento', 'cemento_calc_bultos', 'cemento_util_bultos', 'bultos'),
     ('arena', 'Arena', 'arena_calc_m3', 'arena_util_m3', 'm³'),
     ('grava', 'Grava', 'grava_calc_m3', 'grava_util_m3', 'm³'),
 ]
+
+#: Alias retro-compatible (código/tests previos referencian MATERIALES_VACIADO).
+MATERIALES_VACIADO = MATERIALES_OC
+
+#: #141 (rebote) — la FUENTE REAL de datos del cliente es ``ObraCivilTorreDetalle``
+#: (tabla construccion_oc_detalle), que es el modelo que el FORMULARIO de captura
+#: (ObraCivilDetalleSeccionView) persiste. Los modelos SoladoDetalle/VaciadoDetalle
+#: (bloque secuencial #53) NO tienen formulario de captura → siempre están vacíos
+#: en prod, y por eso el dashboard salía vacío aunque el cliente sí cargaba datos.
+#: Este mapa apunta a las columnas ``sol_*`` / ``vac_*`` calc/real de ese modelo.
+#: (agua/arena/grava en m³, cemento en kg en este modelo — la unidad la lleva el
+#: label de cada etapa abajo).
+MATERIALES_OC_DETALLE = {
+    'solado': [
+        ('agua', 'Agua', 'sol_agua_calc', 'sol_agua_real', 'm³'),
+        ('cemento', 'Cemento', 'sol_cemento_calc', 'sol_cemento_real', 'kg'),
+        ('arena', 'Arena', 'sol_arena_calc', 'sol_arena_real', 'm³'),
+        ('grava', 'Grava', 'sol_grava_calc', 'sol_grava_real', 'm³'),
+    ],
+    'vaciado': [
+        ('agua', 'Agua', 'vac_agua_calc', 'vac_agua_real', 'm³'),
+        ('cemento', 'Cemento', 'vac_cemento_calc', 'vac_cemento_real', 'kg'),
+        ('arena', 'Arena', 'vac_arena_calc', 'vac_arena_real', 'm³'),
+        ('grava', 'Grava', 'vac_grava_calc', 'vac_grava_real', 'm³'),
+    ],
+}
 
 #: Umbral de desviación por defecto para el semáforo rojo de G3 (en %).
 UMBRAL_DESVIACION_DEFAULT = 10.0
@@ -276,39 +306,84 @@ def avance_por_etapa_oc(proyecto) -> list:
     return resultado
 
 
-def desviacion_materiales_vaciado(proyecto, umbral: float = UMBRAL_DESVIACION_DEFAULT) -> list:
-    """G3 — desviación calc vs real de los 4 materiales de vaciado.
+def _sumar_materiales(detalles, mapa_campos, acumulador):
+    """Suma calc/real de cada material de una lista de detalles en ``acumulador``.
 
-    Suma sobre TODAS las ``VaciadoDetalle`` del proyecto (patas con vaciado
-    registrado) el calculado y el utilizado de cada material, y calcula la
-    desviación % agregada + el semáforo según ``umbral``.
+    ``mapa_campos`` = lista (material, label, campo_calc, campo_real, unidad).
+    ``acumulador`` = dict {material: {'calc': float, 'real': float}}.
+    Mantiene el primer label/unidad visto por material (se inicializa en el caller).
+    """
+    for material, _label, campo_calc, campo_real, _unidad in mapa_campos:
+        for d in detalles:
+            acumulador[material]['calc'] += float(getattr(d, campo_calc, None) or 0.0)
+            acumulador[material]['real'] += float(getattr(d, campo_real, None) or 0.0)
 
-    Retorna lista (orden de ``MATERIALES_VACIADO``) de dicts::
+
+def desviacion_materiales_por_etapa(etapa, proyecto,
+                                    umbral: float = UMBRAL_DESVIACION_DEFAULT) -> list:
+    """G3 (genérico) — desviación calc vs real de los 4 materiales de UNA etapa.
+
+    Constructor genérico reusado por Solado y Vaciado (#141). ``etapa`` es
+    'solado' o 'vaciado'.
+
+    Lee de DOS fuentes y las suma (unión):
+      1. ``ObraCivilTorreDetalle`` (tabla construccion_oc_detalle) — el modelo
+         que el FORMULARIO de captura realmente persiste (columnas sol_*/vac_*).
+         Esta es la fuente con los datos del cliente en prod.
+      2. ``SoladoDetalle`` / ``VaciadoDetalle`` (bloque secuencial #53) — modelos
+         sin formulario de captura; en prod están vacíos pero se incluyen por
+         compatibilidad y por si una migración futura los puebla.
+
+    Antes el dashboard leía SOLO (2) → salía siempre vacío aunque el cliente
+    cargara datos en el formulario, porque esos datos van a (1). Ese era el
+    motivo real del "dashboard en blanco" (#141, rebote).
+
+    Retorna lista (orden de ``MATERIALES_OC``) de dicts::
 
         {'material': 'cemento', 'label': 'Cemento', 'unidad': 'bultos',
          'calc': 41.0, 'real': 42.0, 'desv_pct': 2.44, 'semaforo': 'verde'}
 
-    Edge: proyecto sin vaciado (ninguna pata con VaciadoDetalle) → cada
-    material con calc=real=0, desv_pct=None, semaforo='sin_datos' (la gráfica
-    muestra "sin datos de vaciado", no rompe — R4 del plan).
+    Edge: proyecto sin datos de la etapa → cada material con calc=real=0,
+    desv_pct=None, semaforo='sin_datos' (la gráfica muestra "sin datos", no
+    rompe — R4 del plan).
     """
-    # Traer todos los VaciadoDetalle del proyecto en una query
-    # (pata -> torre -> proyecto).
+    etapa = (etapa or '').lower()
+    mapa_detalle = MATERIALES_OC_DETALLE.get(etapa, [])
+
+    # Inicializar acumulador con el orden/label/unidad canónico de la etapa.
+    orden = mapa_detalle or MATERIALES_OC
+    acumulador = {m[0]: {'calc': 0.0, 'real': 0.0} for m in orden}
+
+    # Fuente 1: ObraCivilTorreDetalle (formulario de captura real).
     try:
-        from .models import VaciadoDetalle
-        vaciados = list(
-            VaciadoDetalle.objects.filter(pata__torre__proyecto=proyecto)
+        from .models_b3_oc_detalle import ObraCivilTorreDetalle
+        oc_detalles = list(
+            ObraCivilTorreDetalle.objects.filter(proyecto=proyecto)
         )
+        if mapa_detalle:
+            _sumar_materiales(oc_detalles, mapa_detalle, acumulador)
     except Exception:
-        vaciados = []
+        pass
+
+    # Fuente 2: modelo de detalle secuencial (legacy, sin form de captura).
+    detalle_model = {
+        'solado': 'SoladoDetalle', 'vaciado': 'VaciadoDetalle',
+    }.get(etapa)
+    if detalle_model:
+        try:
+            from . import models as _m
+            model_cls = getattr(_m, detalle_model)
+            seq_detalles = list(
+                model_cls.objects.filter(pata__torre__proyecto=proyecto)
+            )
+            _sumar_materiales(seq_detalles, MATERIALES_OC, acumulador)
+        except Exception:
+            pass
 
     resultado = []
-    for material, label, campo_calc, campo_real, unidad in MATERIALES_VACIADO:
-        sum_calc = 0.0
-        sum_real = 0.0
-        for v in vaciados:
-            sum_calc += float(getattr(v, campo_calc, None) or 0.0)
-            sum_real += float(getattr(v, campo_real, None) or 0.0)
+    for material, label, _cc, _cr, unidad in orden:
+        sum_calc = acumulador[material]['calc']
+        sum_real = acumulador[material]['real']
         desv = desviacion_material_pct(sum_calc, sum_real)
         resultado.append({
             'material': material,
@@ -320,6 +395,20 @@ def desviacion_materiales_vaciado(proyecto, umbral: float = UMBRAL_DESVIACION_DE
             'semaforo': semaforo_desviacion(desv, umbral),
         })
     return resultado
+
+
+def desviacion_materiales_vaciado(proyecto, umbral: float = UMBRAL_DESVIACION_DEFAULT) -> list:
+    """G3 — desviación calc vs real de los 4 materiales de VACIADO."""
+    return desviacion_materiales_por_etapa('vaciado', proyecto, umbral)
+
+
+def desviacion_materiales_solado(proyecto, umbral: float = UMBRAL_DESVIACION_DEFAULT) -> list:
+    """G3 — desviación calc vs real de los 4 materiales de SOLADO.
+
+    El cliente necesita ver la desviación de Solado y Vaciado por separado
+    para saber en qué etapa hay sobreconsumo (#141).
+    """
+    return desviacion_materiales_por_etapa('solado', proyecto, umbral)
 
 
 def curva_s_consolidada(proyecto) -> dict:

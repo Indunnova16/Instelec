@@ -394,6 +394,140 @@ def test_141_desviacion_materiales_proyecto_sin_vaciado(proyecto_indicadores):
     assert all(m['desv_pct'] is None and m['semaforo'] == 'sin_datos' for m in mats)
 
 
+# ---- #141 reproceso: G3 por etapa (Solado + Vaciado separados) ----
+
+@pytest.mark.django_db
+def test_141_desviacion_materiales_solado_calc_real_y_semaforo(proyecto_indicadores):
+    """G3 Solado: el agregador desviacion_materiales_solado() lee SoladoDetalle
+    (no Vaciado) y calcula calc/real/desv/semaforo por material."""
+    from apps.construccion.models import SoladoDetalle
+    from apps.construccion.calculators import desviacion_materiales_solado
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', solado_ok=True)
+    SoladoDetalle.objects.create(
+        pata=patas[0],
+        cemento_calc_bultos=900.0, cemento_util_bultos=906.0,  # +0.67% → verde
+        agua_calc_m3=10.0, agua_util_m3=14.0,                  # +40%   → rojo
+        arena_calc_m3=5.0, arena_util_m3=5.4,                  # +8%    → amarillo
+        grava_calc_m3=8.0, grava_util_m3=8.0,                  # 0%     → verde
+    )
+    mats = {m['material']: m for m in desviacion_materiales_solado(proyecto_indicadores, umbral=10.0)}
+    assert [m for m in mats] == ['agua', 'cemento', 'arena', 'grava']
+    assert mats['cemento']['calc'] == 900.0 and mats['cemento']['real'] == 906.0
+    assert mats['cemento']['semaforo'] == 'verde'
+    assert mats['agua']['semaforo'] == 'rojo'
+    assert mats['arena']['semaforo'] == 'amarillo'
+    assert mats['grava']['semaforo'] == 'verde'
+
+
+@pytest.mark.django_db
+def test_141_desviacion_materiales_solado_sin_datos(proyecto_indicadores):
+    """Edge: proyecto con torres pero SIN SoladoDetalle → materiales en 0,
+    desv_pct None, semáforo 'sin_datos' (no rompe)."""
+    from apps.construccion.calculators import desviacion_materiales_solado
+    _torre_con_patas(proyecto_indicadores, 'T1', solado_ok=False)
+    mats = desviacion_materiales_solado(proyecto_indicadores)
+    assert [m['material'] for m in mats] == ['agua', 'cemento', 'arena', 'grava']
+    assert all(m['calc'] == 0 and m['real'] == 0 for m in mats)
+    assert all(m['desv_pct'] is None and m['semaforo'] == 'sin_datos' for m in mats)
+
+
+@pytest.mark.django_db
+def test_141_solado_y_vaciado_se_calculan_independientes(proyecto_indicadores):
+    """REPROCESO core: con datos DISTINTOS en Solado y Vaciado, cada agregador
+    devuelve SOLO los suyos — Solado no contamina Vaciado ni viceversa."""
+    from apps.construccion.models import SoladoDetalle, VaciadoDetalle
+    from apps.construccion.calculators import (
+        desviacion_materiales_solado, desviacion_materiales_vaciado)
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', solado_ok=True, vaciado_ok=True)
+    SoladoDetalle.objects.create(
+        pata=patas[0], cemento_calc_bultos=900.0, cemento_util_bultos=906.0)
+    VaciadoDetalle.objects.create(
+        pata=patas[0], cemento_calc_bultos=40.0, cemento_util_bultos=60.0)
+
+    sol = {m['material']: m for m in desviacion_materiales_solado(proyecto_indicadores, umbral=10.0)}
+    vac = {m['material']: m for m in desviacion_materiales_vaciado(proyecto_indicadores, umbral=10.0)}
+    # Solado: 900/906 (verde); Vaciado: 40/60 = +50% (rojo). No se mezclan.
+    assert sol['cemento']['calc'] == 900.0 and sol['cemento']['real'] == 906.0
+    assert sol['cemento']['semaforo'] == 'verde'
+    assert vac['cemento']['calc'] == 40.0 and vac['cemento']['real'] == 60.0
+    assert vac['cemento']['semaforo'] == 'rojo'
+
+
+@pytest.mark.django_db
+def test_141_proyecto_solo_solado_muestra_solado_y_vaciado_sin_datos(proyecto_indicadores):
+    """Test contra el escenario del cliente: un proyecto con SOLO datos de
+    Solado (att_03) muestra Solado con datos y Vaciado 'sin datos'. Cubre el
+    rebote: antes el dashboard solo leía Vaciado, así que la data de Solado del
+    cliente no aparecía en ningún lado."""
+    from apps.construccion.models import SoladoDetalle
+    from apps.construccion.calculators import (
+        desviacion_materiales_solado, desviacion_materiales_vaciado)
+    _, patas = _torre_con_patas(proyecto_indicadores, 'T1', solado_ok=True)
+    SoladoDetalle.objects.create(
+        pata=patas[0], cemento_calc_bultos=905.25, cemento_util_bultos=906.0,
+        agua_calc_m3=0.40, agua_util_m3=0.40)
+    sol = desviacion_materiales_solado(proyecto_indicadores, umbral=10.0)
+    vac = desviacion_materiales_vaciado(proyecto_indicadores, umbral=10.0)
+    # Solado: tiene datos (cemento calc>0).
+    cem_sol = next(m for m in sol if m['material'] == 'cemento')
+    assert cem_sol['calc'] == 905.25 and cem_sol['real'] == 906.0
+    assert cem_sol['semaforo'] != 'sin_datos'
+    # Vaciado: sin datos (no hay VaciadoDetalle).
+    assert all(m['semaforo'] == 'sin_datos' for m in vac)
+
+
+# ---- #141 rebote (commit 3): el dashboard lee el modelo que el FORM persiste ----
+
+@pytest.mark.django_db
+def test_141_g3_lee_obracivil_torre_detalle_no_solo_detalle_secuencial(proyecto_indicadores):
+    """ROOT CAUSE del rebote: el FORMULARIO de captura escribe en
+    ``ObraCivilTorreDetalle`` (sol_*/vac_*), pero el dashboard G3 leía SOLO
+    ``SoladoDetalle``/``VaciadoDetalle`` (que NO tienen formulario → siempre
+    vacíos en prod). Resultado: dashboard en blanco aunque el cliente cargaba
+    datos. Este test crea un ObraCivilTorreDetalle (como lo haría el form) y
+    verifica que G3 ahora SÍ lo agrega."""
+    from apps.construccion.models import TorreConstruccion
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+    from apps.construccion.calculators import (
+        desviacion_materiales_solado, desviacion_materiales_vaciado)
+    torre = TorreConstruccion.objects.create(
+        proyecto=proyecto_indicadores, numero='T1', tipo='D6')
+    # Datos como el formulario de captura del cliente (att_03): Solado.
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_indicadores, torre=torre, pata='A',
+        sol_cemento_calc=Decimal('905.25'), sol_cemento_real=Decimal('906.00'),
+        sol_agua_calc=Decimal('0.40'), sol_agua_real=Decimal('0.40'),
+        vac_cemento_calc=Decimal('40.00'), vac_cemento_real=Decimal('60.00'),  # +50% → rojo
+    )
+    sol = {m['material']: m for m in desviacion_materiales_solado(proyecto_indicadores, umbral=10.0)}
+    vac = {m['material']: m for m in desviacion_materiales_vaciado(proyecto_indicadores, umbral=10.0)}
+    # Solado: cemento 905.25/906 → con datos (no 'sin_datos').
+    assert sol['cemento']['calc'] == 905.25 and sol['cemento']['real'] == 906.0
+    assert sol['cemento']['semaforo'] != 'sin_datos'
+    # Vaciado: cemento 40/60 = +50% → rojo. Cada etapa independiente.
+    assert vac['cemento']['calc'] == 40.0 and vac['cemento']['real'] == 60.0
+    assert vac['cemento']['semaforo'] == 'rojo'
+
+
+@pytest.mark.django_db
+def test_141_g3_une_oc_detalle_y_detalle_secuencial(proyecto_indicadores):
+    """Robustez: si hay datos en AMBAS fuentes (ObraCivilTorreDetalle y el
+    detalle secuencial), G3 los suma (unión), no descarta ninguna."""
+    from apps.construccion.models import TorreConstruccion, PataObra, SoladoDetalle
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+    from apps.construccion.calculators import desviacion_materiales_solado
+    torre = TorreConstruccion.objects.create(
+        proyecto=proyecto_indicadores, numero='T1', tipo='D6')
+    ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_indicadores, torre=torre, pata='A',
+        sol_agua_calc=Decimal('10.00'), sol_agua_real=Decimal('10.00'))
+    pata = PataObra.objects.create(torre=torre, pata='B', solado_ok=True)
+    SoladoDetalle.objects.create(pata=pata, agua_calc_m3=5.0, agua_util_m3=5.0)
+    sol = {m['material']: m for m in desviacion_materiales_solado(proyecto_indicadores)}
+    # agua: 10 (oc_detalle) + 5 (secuencial) = 15 calc y 15 real.
+    assert sol['agua']['calc'] == 15.0 and sol['agua']['real'] == 15.0
+
+
 @pytest.mark.django_db
 def test_141_vaciado_detalle_desviacion_pct_property(proyecto_indicadores):
     """La property VaciadoDetalle.desviacion_pct devuelve dict por material."""
@@ -468,7 +602,10 @@ def test_141_endpoint_datos_graficas_shape(authenticated_client, proyecto_indica
     assert 'curva_s' in data
     assert 'consolidada' in data['curva_s']
     assert len(data['avance_etapas']) == 5
-    assert [m['material'] for m in data['desviacion_materiales']] == [
+    # #141 — G3 por etapa: el endpoint expone Solado y Vaciado por separado.
+    assert [m['material'] for m in data['desviacion_vaciado']] == [
+        'agua', 'cemento', 'arena', 'grava']
+    assert [m['material'] for m in data['desviacion_solado']] == [
         'agua', 'cemento', 'arena', 'grava']
     assert data['umbral'] == 10.0
 
@@ -485,11 +622,11 @@ def test_141_endpoint_umbral_param_filtra_semaforo(authenticated_client, proyect
     url = reverse('construccion:dashboard_graficas_data',
                   kwargs={'proyecto_id': proyecto_indicadores.id})
     d10 = authenticated_client.get(url + '?umbral=10').json()
-    cem10 = next(m for m in d10['desviacion_materiales'] if m['material'] == 'cemento')
+    cem10 = next(m for m in d10['desviacion_vaciado'] if m['material'] == 'cemento')
     assert cem10['semaforo'] == 'rojo'
 
     d40 = authenticated_client.get(url + '?umbral=40').json()
-    cem40 = next(m for m in d40['desviacion_materiales'] if m['material'] == 'cemento')
+    cem40 = next(m for m in d40['desviacion_vaciado'] if m['material'] == 'cemento')
     assert cem40['semaforo'] == 'verde'
 
 
@@ -513,7 +650,8 @@ def test_141_endpoint_proyecto_sin_torres_arreglos_vacios(authenticated_client, 
     assert resp.status_code == 200
     data = resp.json()
     assert all(e['totales'] == 0 for e in data['avance_etapas'])
-    assert all(m['semaforo'] == 'sin_datos' for m in data['desviacion_materiales'])
+    assert all(m['semaforo'] == 'sin_datos' for m in data['desviacion_vaciado'])
+    assert all(m['semaforo'] == 'sin_datos' for m in data['desviacion_solado'])
     assert data['curva_s']['consolidada']['labels'] == []
 
 
@@ -544,8 +682,9 @@ def test_141_dashboard_oc_renderiza_tres_canvas_y_ready_flag(
     assert resp.status_code == 200
     body = resp.content.decode()
 
-    # 3 canvas
-    for cid in ('curva-s-chart', 'avance-etapas-chart', 'desviacion-materiales-chart'):
+    # canvas: curva S + avance etapas + G3 por etapa (Solado y Vaciado, #141)
+    for cid in ('curva-s-chart', 'avance-etapas-chart',
+                'desviacion-solado-chart', 'desviacion-vaciado-chart'):
         assert f'id="{cid}"' in body, f'canvas {cid} faltante'
     # 5 etapas como texto visible (assert_contains del journey)
     for etapa in ('Excavación', 'Solado', 'Acero', 'Vaciado', 'Compactación'):

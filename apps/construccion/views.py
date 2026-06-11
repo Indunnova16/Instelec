@@ -2303,6 +2303,7 @@ class DashboardObraCivilView(_DashboardCurvaSBase):
         from .calculators import (
             avance_por_etapa_oc,
             curva_s_consolidada,
+            desviacion_materiales_solado,
             desviacion_materiales_vaciado,
             UMBRAL_DESVIACION_DEFAULT,
         )
@@ -2317,7 +2318,10 @@ class DashboardObraCivilView(_DashboardCurvaSBase):
             umbral = UMBRAL_DESVIACION_DEFAULT
 
         avance_etapas = avance_por_etapa_oc(proyecto)
-        desviacion_materiales = desviacion_materiales_vaciado(proyecto, umbral)
+        # #141 — G3 por etapa: el cliente necesita ver Solado y Vaciado por
+        # separado para saber en cuál hay sobreconsumo de materiales.
+        desviacion_solado = desviacion_materiales_solado(proyecto, umbral)
+        desviacion_vaciado = desviacion_materiales_vaciado(proyecto, umbral)
         consolidada = curva_s_consolidada(proyecto)
 
         # Para los assert_contains del journey y las leyendas visibles, también
@@ -2327,13 +2331,16 @@ class DashboardObraCivilView(_DashboardCurvaSBase):
             'mostrar_graficas_141': True,
             'umbral_desviacion': umbral,
             'avance_etapas': avance_etapas,
-            'desviacion_materiales': desviacion_materiales,
+            'desviacion_solado': desviacion_solado,
+            'desviacion_vaciado': desviacion_vaciado,
             'tiene_alerta_desviacion': any(
-                m['semaforo'] == 'rojo' for m in desviacion_materiales
+                m['semaforo'] == 'rojo'
+                for m in (desviacion_solado + desviacion_vaciado)
             ),
             'graficas_json': json.dumps({
                 'avance_etapas': avance_etapas,
-                'desviacion_materiales': desviacion_materiales,
+                'desviacion_solado': desviacion_solado,
+                'desviacion_vaciado': desviacion_vaciado,
                 'curva_consolidada': consolidada,
             }),
         })
@@ -2468,6 +2475,7 @@ class DashboardGraficasDataView(LoginRequiredMixin, RoleRequiredMixin, View):
         from .calculators import (
             avance_por_etapa_oc,
             curva_s_consolidada,
+            desviacion_materiales_solado,
             desviacion_materiales_vaciado,
             UMBRAL_DESVIACION_DEFAULT,
         )
@@ -2494,7 +2502,9 @@ class DashboardGraficasDataView(LoginRequiredMixin, RoleRequiredMixin, View):
                 'consolidada': consolidada,
             },
             'avance_etapas': avance_por_etapa_oc(proyecto),
-            'desviacion_materiales': desviacion_materiales_vaciado(proyecto, umbral),
+            # #141 — G3 por etapa: Solado y Vaciado separados.
+            'desviacion_solado': desviacion_materiales_solado(proyecto, umbral),
+            'desviacion_vaciado': desviacion_materiales_vaciado(proyecto, umbral),
             'umbral': umbral,
         })
 

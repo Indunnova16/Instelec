@@ -170,24 +170,18 @@
     </div>
     {% endif %}
 
-    <!-- G3 · Desviación de materiales en vaciado -->
+    <!-- G3 · Desviación de materiales por etapa (#141: Solado + Vaciado) -->
+    {# Solado #}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
         <div class="flex items-center justify-between mb-1">
-            <h2 class="font-semibold">Desviación de materiales — Vaciado</h2>
-            {% if tiene_alerta_desviacion %}
-            <span data-semaforo="rojo"
-                  class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold">
-                ⚠️ Alerta: desviación supera el umbral ({{ umbral_desviacion }}%)
-            </span>
-            {% endif %}
+            <h2 class="font-semibold">Desviación de materiales — Solado</h2>
         </div>
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Material calculado vs. utilizado (agregado del proyecto). Una desviación
-            mayor al umbral ({{ umbral_desviacion }}%) marca alerta roja — debe
-            justificarse (ej. "+1 bulto de cemento de 42.5&nbsp;kg por sobreconsumo puntual").
+            Material calculado vs. utilizado en Solado (agregado del proyecto). Una
+            desviación mayor al umbral ({{ umbral_desviacion }}%) marca alerta roja.
         </p>
         <div class="relative" style="height: 300px;">
-            <canvas id="desviacion-materiales-chart" height="300"></canvas>
+            <canvas id="desviacion-solado-chart" height="300"></canvas>
         </div>
         <!-- Tabla calc vs real con semáforo por material -->
         <div class="overflow-x-auto mt-3">
@@ -201,8 +195,62 @@
                         <th class="px-3 py-2 text-center font-semibold">Estado</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                    {% for m in desviacion_materiales %}
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700" data-etapa="solado">
+                    {% for m in desviacion_solado %}
+                    <tr data-semaforo="{{ m.semaforo }}" data-material="{{ m.material }}"
+                        class="{% if m.semaforo == 'rojo' %}bg-red-50 dark:bg-red-900/20{% endif %}">
+                        <td class="px-3 py-2 font-medium">{{ m.label }} <span class="text-xs text-gray-400">({{ m.unidad }})</span></td>
+                        <td class="px-3 py-2 text-right">{{ m.calc }}</td>
+                        <td class="px-3 py-2 text-right">{{ m.real }}</td>
+                        <td class="px-3 py-2 text-right">{% if m.desv_pct is None %}—{% else %}{{ m.desv_pct }}%{% endif %}</td>
+                        <td class="px-3 py-2 text-center">
+                            {% if m.semaforo == 'rojo' %}<span class="text-red-600 font-bold">● Rojo</span>
+                            {% elif m.semaforo == 'amarillo' %}<span class="text-amber-500 font-bold">● Amarillo</span>
+                            {% elif m.semaforo == 'verde' %}<span class="text-green-600 font-bold">● Verde</span>
+                            {% else %}<span class="text-gray-400">sin datos</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="px-3 py-6 text-center text-gray-500">Sin datos de solado registrados.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Vaciado #}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Desviación de materiales — Vaciado</h2>
+            {% if tiene_alerta_desviacion %}
+            <span data-semaforo="rojo"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold">
+                ⚠️ Alerta: desviación supera el umbral ({{ umbral_desviacion }}%)
+            </span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Material calculado vs. utilizado en Vaciado (agregado del proyecto). Una
+            desviación mayor al umbral ({{ umbral_desviacion }}%) marca alerta roja — debe
+            justificarse (ej. "+1 bulto de cemento de 42.5&nbsp;kg por sobreconsumo puntual").
+        </p>
+        <div class="relative" style="height: 300px;">
+            <canvas id="desviacion-vaciado-chart" height="300"></canvas>
+        </div>
+        <!-- Tabla calc vs real con semáforo por material -->
+        <div class="overflow-x-auto mt-3">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-semibold">Material</th>
+                        <th class="px-3 py-2 text-right font-semibold">Calculado</th>
+                        <th class="px-3 py-2 text-right font-semibold">Real</th>
+                        <th class="px-3 py-2 text-right font-semibold">Desviación</th>
+                        <th class="px-3 py-2 text-center font-semibold">Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700" data-etapa="vaciado">
+                    {% for m in desviacion_vaciado %}
                     <tr data-semaforo="{{ m.semaforo }}" data-material="{{ m.material }}"
                         class="{% if m.semaforo == 'rojo' %}bg-red-50 dark:bg-red-900/20{% endif %}">
                         <td class="px-3 py-2 font-medium">{{ m.label }} <span class="text-xs text-gray-400">({{ m.unidad }})</span></td>
@@ -321,7 +369,7 @@ function dashboardCurvaS(cfg) {
         curvaVista: cfg.faseActiva || 'OOCC',
         chart: null,
         chartEtapas: null,
-        chartDesviacion: null,
+        chartDesviacion: { solado: null, vaciado: null },
         chartsReady: false,
         form: { semana: '', prog: 0, cons: 0, torres_prog: '', pendientes: '' },
         mensaje: '', mensajeTipo: '',
@@ -345,7 +393,9 @@ function dashboardCurvaS(cfg) {
                     ? this.graficas141.avance_etapas_oc6
                     : (this.graficas141.avance_etapas || []);
                 this.renderEtapas(etapasG2);
-                this.renderDesviacion(this.graficas141.desviacion_materiales || []);
+                // #141 — G3 por etapa: 2 canvas separados (Solado / Vaciado).
+                this.renderDesviacion('desviacion-solado-chart', this.graficas141.desviacion_solado || [], 'solado');
+                this.renderDesviacion('desviacion-vaciado-chart', this.graficas141.desviacion_vaciado || [], 'vaciado');
             }
             // Marcar listo solo tras instanciar lo que corresponde (probe E2E
             // anti falso-verde). Si no aplican las 3 gráficas (dashboard Montaje),
@@ -386,15 +436,15 @@ function dashboardCurvaS(cfg) {
                 });
             } catch (e) { console.warn('Chart etapas falló:', e && e.message); }
         },
-        renderDesviacion(materiales) {
+        renderDesviacion(canvasId, materiales, chartKey) {
             try {
                 if (typeof Chart === 'undefined') return;
-                const canvas = document.getElementById('desviacion-materiales-chart');
+                const canvas = document.getElementById(canvasId);
                 if (!canvas || !canvas.getContext) return;
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return;
-                if (this.chartDesviacion) { try { this.chartDesviacion.destroy(); } catch (e) {} this.chartDesviacion = null; }
-                this.chartDesviacion = new Chart(ctx, {
+                if (this.chartDesviacion[chartKey]) { try { this.chartDesviacion[chartKey].destroy(); } catch (e) {} this.chartDesviacion[chartKey] = null; }
+                this.chartDesviacion[chartKey] = new Chart(ctx, {
                     type: 'bar',
                     data: {
                         labels: materiales.map(m => m.label),
@@ -416,7 +466,7 @@ function dashboardCurvaS(cfg) {
                         },
                     },
                 });
-            } catch (e) { console.warn('Chart desviación falló:', e && e.message); }
+            } catch (e) { console.warn('Chart desviación (' + chartKey + ') falló:', e && e.message); }
         },
         async cambiarVistaCurva() {
             const r = await fetch(this.urlChart + '?fase=' + this.curvaVista);
