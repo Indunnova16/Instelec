@@ -19,7 +19,7 @@ def modulo_context(request):
             estado='ACTIVO',
         ).order_by('codigo'),
         'proyectos_construccion': ProyectoConstruccion.objects.filter(
-            estado__in=['PLANIFICACION', 'EJECUCION', 'CIERRE'],
+            estado__in=['PLANIFICACION', 'EJECUCION', 'CIERRE', 'FINALIZADO'],
         ).select_related('contrato').order_by('contrato__codigo'),
         'unidad_negocio_actual': get_unidad_negocio(request),
     }
