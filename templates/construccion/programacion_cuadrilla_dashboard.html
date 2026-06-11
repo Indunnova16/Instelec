@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% comment %}
+  Dashboard de rendimiento por cuadrilla (B4, #155).
+
+  Muestra cumplimiento cuadrilla x semana: torres programadas vs ejecutadas y
+  rendimiento (%). Anchor de contrato: #dashboard-rendimiento (texto
+  "Rendimiento"), asumido por el journey E2E b4_dashboard_render_200.
+
+  La TABLA es la fuente de verdad (los datos deben verse aunque la gráfica no
+  pinte). La gráfica es un plus y sigue las reglas instelec #139/#141:
+    - Chart.defaults.animation = false (evita canvas en blanco por getContext-null).
+    - Datos vía {{ chart_data|json_script }} + JSON.parse(textContent)
+      (sin json.dumps en la vista, sin float/JSON crudo en JS inline).
+{% endcomment %}
+
+{% block title %}Rendimiento por Cuadrilla{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6" id="dashboard-rendimiento">
+    <div class="mb-6">
+        <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">
+            Rendimiento por Cuadrilla
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-2">
+            Cumplimiento semanal: torres programadas vs. ejecutadas por cuadrilla.
+        </p>
+    </div>
+
+    {# ---- Filtros por rango de semanas / año ---- #}
+    <form method="get" class="mb-6 flex flex-wrap gap-3 items-end">
+        <div>
+            <label for="filtro-anio" class="block text-sm text-gray-600 dark:text-gray-400">Año</label>
+            <input type="number" id="filtro-anio" name="anio" value="{{ anio }}"
+                   class="mt-1 w-28 rounded border-gray-300 dark:bg-gray-700 dark:text-white">
+        </div>
+        <div>
+            <label for="filtro-desde" class="block text-sm text-gray-600 dark:text-gray-400">Semana desde</label>
+            <input type="number" min="1" max="53" id="filtro-desde" name="semana_desde"
+                   value="{{ semana_desde|default_if_none:'' }}"
+                   class="mt-1 w-28 rounded border-gray-300 dark:bg-gray-700 dark:text-white">
+        </div>
+        <div>
+            <label for="filtro-hasta" class="block text-sm text-gray-600 dark:text-gray-400">Semana hasta</label>
+            <input type="number" min="1" max="53" id="filtro-hasta" name="semana_hasta"
+                   value="{{ semana_hasta|default_if_none:'' }}"
+                   class="mt-1 w-28 rounded border-gray-300 dark:bg-gray-700 dark:text-white">
+        </div>
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">
+            Filtrar
+        </button>
+    </form>
+
+    {# ---- Tarjetas resumen del periodo ---- #}
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Cuadrillas</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_cuadrillas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Torres programadas</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_programadas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Torres ejecutadas</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_ejecutadas }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Rendimiento global</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ rendimiento_global|floatformat:1 }}%</p>
+        </div>
+    </div>
+
+    {# ---- Gráfica resumen por cuadrilla (plus; la tabla es la fuente de verdad) ---- #}
+    {% if resumen %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            Rendimiento agregado por cuadrilla
+        </h2>
+        <div class="relative" style="height: 320px;">
+            <canvas id="rendimiento-chart" height="320"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ---- Tabla detalle cuadrilla x semana (fuente de verdad) ---- #}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                Detalle por cuadrilla y semana
+            </h2>
+        </div>
+        {% if filas %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cuadrilla</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Periodo</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Programadas</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ejecutadas</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Rendimiento</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in filas %}
+                    <tr data-cuadrilla="{{ fila.cuadrilla_id }}" data-periodo="{{ fila.periodo }}">
+                        <td class="px-6 py-3 text-sm text-gray-900 dark:text-white">{{ fila.cuadrilla }}</td>
+                        <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ fila.periodo }}</td>
+                        <td class="px-6 py-3 text-sm text-right text-gray-900 dark:text-white">{{ fila.torres_programadas }}</td>
+                        <td class="px-6 py-3 text-sm text-right text-gray-900 dark:text-white">{{ fila.torres_ejecutadas }}</td>
+                        <td class="px-6 py-3 text-sm text-right font-medium
+                            {% if fila.rendimiento_pct >= 90 %}text-green-600 dark:text-green-400
+                            {% elif fila.rendimiento_pct >= 60 %}text-yellow-600 dark:text-yellow-400
+                            {% else %}text-red-600 dark:text-red-400{% endif %}">
+                            {{ fila.rendimiento_pct|floatformat:1 }}%
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="px-6 py-10 text-center text-gray-500 dark:text-gray-400">
+            No hay programaciones registradas para el filtro seleccionado.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{# Datos de la gráfica pre-serializados (sin doble-encoding, #139). #}
+{{ chart_data|json_script:"rendimiento-chart-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{# #139: sin animación → evita getContext-null que deja el canvas en blanco. #}
+<script>try { if (window.Chart) { Chart.defaults.animation = false; } } catch (e) {}</script>
+<script>
+(function () {
+    function readJSON(id) {
+        var el = document.getElementById(id);
+        if (!el) { return null; }
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    function renderRendimiento() {
+        var el = document.getElementById('rendimiento-chart');
+        if (!el || typeof Chart === 'undefined') { return; }
+        var data = readJSON('rendimiento-chart-data');
+        if (!data || !data.labels || !data.labels.length) { return; }
+        new Chart(el.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Rendimiento (%)',
+                    data: data.rendimiento,
+                    backgroundColor: '#3b82f6'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: { y: { beginAtZero: true, max: 100 } }
+            }
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderRendimiento);
+    } else {
+        renderRendimiento();
+    }
+})();
+</script>
+{% endblock %}
