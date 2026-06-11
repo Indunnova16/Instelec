@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% comment %}
+  Programación de Cuadrillas — detalle (B2, #155).
+
+  Contrato de selectores (BLUEPRINT.evidence.template_evidence):
+    #ejecucion-inline, input[name=torres_ejecutadas], button[data-action=guardar-ejecucion]
+
+  B2 entrega el contenedor #ejecucion-inline. El input[name=torres_ejecutadas] y
+  button[data-action=guardar-ejecucion] los aporta B3 dentro del partial
+  construccion/_ejecucion_inline.html que se incluye más abajo.
+
+  - OJO (hallazgo verificado contra el Django 5.1.15 de este repo): el tag
+    `include` de este build NO acepta `ignore missing` (su do_include solo
+    conoce `with`/`only`) → usar `{% include ... ignore missing %}` rompe el
+    PARSE de la plantilla y deja la página en HTTP 500. Por eso el include es
+    INCONDICIONAL: el partial de B3 existe tras el merge F4 (S1 lo declara como
+    contrato del parent template), de modo que en prod siempre está presente.
+  - El anchor #dashboard-cumplimiento queda como placeholder para B4.
+  - Sin Alpine inline con JSON/float crudo (sin x-data) → sin riesgo de romper
+    el bundle. rendimiento_pct se imprime como número plano del modelo.
+{% endcomment %}
+
+{% block title %}Programación {{ programacion }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 max-w-4xl space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">
+                Programación semanal
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ programacion.cuadrilla }} · {{ programacion.anio }}-S{{ programacion.semana|stringformat:"02d" }}
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{% url 'construccion:programacion_cuadrilla_editar' pk=programacion.pk %}"
+               class="text-sm text-blue-600 hover:underline">Editar</a>
+            <a href="{% url 'construccion:programacion_cuadrillas_index' %}"
+               class="text-sm text-gray-600 dark:text-gray-400 hover:underline">← Volver a lista</a>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div class="px-4 py-2 rounded
+                    {% if message.tags == 'error' %}bg-red-100 text-red-800
+                    {% else %}bg-green-100 text-green-800{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    {# ---- Datos de la programación ---- #}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Programado</h2>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div>
+                <dt class="text-gray-500 dark:text-gray-400">Cuadrilla</dt>
+                <dd class="text-gray-900 dark:text-white font-medium">{{ programacion.cuadrilla }}</dd>
+            </div>
+            <div>
+                <dt class="text-gray-500 dark:text-gray-400">Proyecto</dt>
+                <dd class="text-gray-900 dark:text-white font-medium">
+                    {{ programacion.proyecto.nombre|default:"— Sin proyecto —" }}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-gray-500 dark:text-gray-400">Semana ISO</dt>
+                <dd class="text-gray-900 dark:text-white font-medium">
+                    {{ programacion.anio }} · semana {{ programacion.semana }}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-gray-500 dark:text-gray-400">Torres programadas</dt>
+                <dd class="text-gray-900 dark:text-white font-medium" data-torres-programadas>
+                    {{ programacion.torres_programadas }}
+                </dd>
+            </div>
+            {% if programacion.actividades_programadas %}
+            <div class="sm:col-span-2">
+                <dt class="text-gray-500 dark:text-gray-400">Actividades programadas</dt>
+                <dd class="text-gray-900 dark:text-white whitespace-pre-line">{{ programacion.actividades_programadas }}</dd>
+            </div>
+            {% endif %}
+            {% if programacion.observaciones %}
+            <div class="sm:col-span-2">
+                <dt class="text-gray-500 dark:text-gray-400">Observaciones</dt>
+                <dd class="text-gray-900 dark:text-white whitespace-pre-line">{{ programacion.observaciones }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+
+    {# ---- Ejecución (inline) — B3 rellena el partial ---- #}
+    <div id="ejecucion-inline"
+         class="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
+         data-programacion-id="{{ programacion.pk }}">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Ejecución</h2>
+        {% if rendimiento_pct is not None %}
+        <p class="mb-4 text-sm text-gray-600 dark:text-gray-300">
+            Rendimiento actual:
+            <span class="font-semibold text-gray-900 dark:text-white" data-rendimiento-pct>
+                {{ rendimiento_pct|floatformat:1 }}%
+            </span>
+        </p>
+        {% endif %}
+        {% comment %}
+          B3 aporta construccion/_ejecucion_inline.html con:
+          input[name=torres_ejecutadas] + button[data-action=guardar-ejecucion].
+          Include INCONDICIONAL (sin `ignore missing`, no soportado por el
+          include de este Django build — ver nota de cabecera). El partial existe
+          tras el merge F4 (contrato del parent template declarado en S1).
+        {% endcomment %}
+        {% include "construccion/_ejecucion_inline.html" with programacion=programacion ejecucion=ejecucion rendimiento_pct=rendimiento_pct %}
+    </div>
+
+    {# ---- Placeholder dashboard de cumplimiento — B4 ---- #}
+    <div id="dashboard-cumplimiento" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Cumplimiento</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+            El dashboard de cumplimiento por cuadrilla se mostrará aquí.
+        </p>
+    </div>
+</div>
+{% endblock %}
