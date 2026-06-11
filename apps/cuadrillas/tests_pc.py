@@ -70,8 +70,9 @@ def _crear_programacion(cuadrilla=None, anio=2026, semana=18, torres=10):
 
 
 def _login(client, usuario):
-    """Login por email (USERNAME_FIELD='email')."""
-    ok = client.login(email=usuario.email, password='ClaudeQA2026!')
+    """Login vía CedulaOrEmailBackend (espera kwarg ``username``, que el
+    backend resuelve a email o cédula); USERNAME_FIELD='email'."""
+    ok = client.login(username=usuario.email, password='ClaudeQA2026!')
     assert ok, 'login del usuario admin falló (revisar credenciales/backend)'
 
 

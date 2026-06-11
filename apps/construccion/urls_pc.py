@@ -21,6 +21,13 @@ para no romper el import en la rama base.
 from django.urls import path
 
 from apps.cuadrillas.views_pc_index import ProgramacionCuadrillaIndexView
+from apps.cuadrillas.views_pc_programacion import (
+    ProgramacionCuadrillaCreateView,
+    ProgramacionCuadrillaDetailView,
+    ProgramacionCuadrillaUpdateView,
+)
+from apps.cuadrillas.views_pc_ejecucion import EjecucionSemanalUpdateView
+from apps.cuadrillas.views_pc_dashboard import ProgramacionCuadrillaDashboardView
 
 
 urlpatterns = [
@@ -30,6 +37,34 @@ urlpatterns = [
         ProgramacionCuadrillaIndexView.as_view(),
         name='programacion_cuadrillas_index',
     ),
-    # B2/B3/B4 agregan sus rutas aquí (crear/, <uuid:pk>/, editar/,
-    # ejecucion/ POST, dashboard/). No importar sus vistas hasta que existan.
+    # --- B4: dashboard (path estático ANTES del <uuid:pk> para no ser capturado) ---
+    path(
+        'programacion-cuadrillas/dashboard/',
+        ProgramacionCuadrillaDashboardView.as_view(),
+        name='programacion_cuadrillas_dashboard',
+    ),
+    # --- B2: crear (path estático ANTES del <uuid:pk>) ---
+    path(
+        'programacion-cuadrillas/crear/',
+        ProgramacionCuadrillaCreateView.as_view(),
+        name='programacion_cuadrilla_crear',
+    ),
+    # --- B2: detalle ---
+    path(
+        'programacion-cuadrillas/<uuid:pk>/',
+        ProgramacionCuadrillaDetailView.as_view(),
+        name='programacion_cuadrilla_detalle',
+    ),
+    # --- B2: editar ---
+    path(
+        'programacion-cuadrillas/<uuid:pk>/editar/',
+        ProgramacionCuadrillaUpdateView.as_view(),
+        name='programacion_cuadrilla_editar',
+    ),
+    # --- B3: ejecución (POST AJAX inline-save) ---
+    path(
+        'programacion-cuadrillas/<uuid:pk>/ejecucion/',
+        EjecucionSemanalUpdateView.as_view(),
+        name='programacion_cuadrilla_ejecucion_save',
+    ),
 ]
