@@ -1,0 +1,27 @@
+{% comment %}
+  B1 — Ítem de navegación "Programación de Cuadrillas" (#155).
+
+  Partial autocontenido pensado para incluirse dentro de la sección de
+  Construcción del sidebar (`templates/components/sidebar.html`), junto a los
+  demás enlaces administrativos (Proyectos, Ingeniería, Actividades Preliminares),
+  con:
+
+      {% include "construccion/_nav_admin_programacion.html" %}
+
+  Es un enlace NO atado a proyecto (la subsección administrativa lista todas las
+  programaciones), así que usa {% url %} directo y no `catUrl()`. Se muestra solo
+  cuando el módulo activo es Construcción (patrón Alpine `modulo === 'construccion'`
+  del sidebar). Si el partial llegara a renderizarse fuera del contexto Alpine,
+  el `x-show` simplemente no lo oculta; sigue siendo un <li> válido.
+{% endcomment %}
+<li role="none" x-show="modulo === 'construccion'">
+    <a href="{% url 'construccion:programacion_cuadrillas_index' %}"
+       role="menuitem"
+       class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+        </svg>
+        Programación de Cuadrillas
+    </a>
+</li>
