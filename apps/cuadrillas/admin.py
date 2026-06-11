@@ -98,3 +98,12 @@ class PersonalCuadrillaAdmin(BaseModelAdmin):
     list_display = ('nombre', 'documento', 'rol_cuadrilla', 'activo')
     list_filter = ('rol_cuadrilla', 'activo')
     search_fields = ('nombre', 'documento')
+
+
+# programacion_cuadrillas (S1, #155) — registros admin de los modelos
+# Programación/Ejecución semanal. admin_pc.py lo crea B5; import protegido para
+# no romper hasta entonces.
+try:
+    from .admin_pc import *  # noqa: F401, F403
+except Exception:
+    pass

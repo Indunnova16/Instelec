@@ -281,3 +281,13 @@ for _i, _p in enumerate(urlpatterns):
             _DASHBOARD_MENU_OVERRIDES[_name].as_view(),
             name=_name,
         )
+
+# === /modulo programacion_cuadrillas (#155) — subsección admin de Construcción ===
+# F2 scaffolding (S1): bloque importer add-only. B1 crea `urls_pc.py` con los 6
+# paths bajo el namespace `construccion:`. Import protegido para que el repo siga
+# importable en la rama base ANTES de que B1 escriba urls_pc.py.
+try:
+    from . import urls_pc  # noqa: E402
+    urlpatterns += urls_pc.urlpatterns
+except Exception:
+    pass
