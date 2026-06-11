@@ -736,6 +736,10 @@ class ObraCivilTorre(BaseModel):
         'Aplica Obras de Protección', default=True,
         help_text='Si False, la torre no aparece en el módulo de Obras de Protección (#149).',
     )
+    aplica_pintura_aeronautica = models.BooleanField(
+        'Aplica Pintura Aeronáutica', default=True,
+        help_text='Si False, la torre no aparece en el módulo SPT/Pintura Aeronáutica (#153).',
+    )
 
     # Metadatos
     cuadrilla = models.CharField('Cuadrilla / Encargado', max_length=100, blank=True)

@@ -1,12 +1,15 @@
 """Tests para SPT y Pintura (issue #78)."""
 
+import re
 from decimal import Decimal
 
 import pytest
+from django.db import connection
 from django.urls import reverse
 
 from apps.contratos.models import Contrato
 from apps.construccion.models import (
+    ObraCivilTorre,
     PinturaAeronauticaTorre,
     PinturaFranja,
     PinturaPatasTorre,
@@ -14,6 +17,22 @@ from apps.construccion.models import (
     SPTTorre,
     TorreConstruccion,
 )
+
+
+@pytest.fixture
+def sqlite_regexp_replace():
+    """Shim de regexp_replace para sqlite (dev_lite); nativa en Postgres."""
+    if connection.vendor != 'sqlite':
+        yield
+        return
+
+    def _regexp_replace(value, pattern, replacement, *flags):
+        if value is None:
+            return None
+        return re.sub(pattern, replacement, str(value))
+
+    connection.connection.create_function('regexp_replace', -1, _regexp_replace)
+    yield
 
 
 @pytest.fixture
@@ -213,3 +232,59 @@ class TestSPTPinturaUpdateView:
             "porcentaje_base": "120",
         })
         assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestAplicaPinturaAeronautica:
+    """#153 — gating de torres por aplica_pintura_aeronautica."""
+
+    def test_default_true(self, proyecto, torres):
+        oc = ObraCivilTorre.objects.create(proyecto=proyecto, torre=torres[0])
+        assert oc.aplica_pintura_aeronautica is True
+
+    def test_index_excluye_torre_no_aplica(self, admin_client, proyecto, torres,
+                                            sqlite_regexp_replace):
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_pintura_aeronautica=True)
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[1], aplica_pintura_aeronautica=False)
+        url = reverse("construccion:spt_pintura", kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        ids = {f["torre"].id for f in resp.context["filas"]}
+        assert torres[0].id in ids
+        assert torres[1].id not in ids
+
+    def test_detalle_torre_no_aplica_redirige(self, admin_client, proyecto, torres,
+                                              sqlite_regexp_replace):
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_pintura_aeronautica=False)
+        url = reverse("construccion:spt_pintura_torre",
+                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 302
+        assert reverse("construccion:spt_pintura",
+                       kwargs={"proyecto_id": proyecto.id}) in resp.url
+        # No debe crear estructuras para una torre que no aplica.
+        assert not SPTTorre.objects.filter(torre=torres[0]).exists()
+
+    def test_detalle_torre_aplica_ok(self, admin_client, proyecto, torres,
+                                     sqlite_regexp_replace):
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_pintura_aeronautica=True)
+        url = reverse("construccion:spt_pintura_torre",
+                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        assert SPTTorre.objects.filter(torre=torres[0]).exists()
+
+    def test_aplica_update_endpoint_pintura(self, admin_client, proyecto, torres):
+        oc = ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_pintura_aeronautica=True)
+        url = reverse("construccion:obra_civil_aplica_update",
+                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
+        resp = admin_client.post(url, {
+            "campo": "aplica_pintura_aeronautica", "aplica": "0"})
+        assert resp.status_code == 200
+        oc.refresh_from_db()
+        assert oc.aplica_pintura_aeronautica is False

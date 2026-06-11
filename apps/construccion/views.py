@@ -1682,6 +1682,8 @@ class SPTPinturaIndexView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        # #153: solo torres que aplican a Pintura Aeronáutica.
+        torres_qs = torres_qs.filter(obra_civil__aplica_pintura_aeronautica=True)
         torres_qs = ordenar_torres_construccion(torres_qs.select_related().prefetch_related(
             'spt', 'pintura_patas', 'pintura_aeronautica__franjas',
         ))
@@ -1722,6 +1724,21 @@ class SPTPinturaTorreView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Detalle SPT + Pintura Patas + Pintura Aeronáutica (7 franjas) para una torre."""
     template_name = 'construccion/spt_pintura_torre.html'
     allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get(self, request, *args, **kwargs):
+        # #153: si la torre no aplica a Pintura Aeronáutica, redirigir al índice
+        # con un aviso (no crear estructuras get_or_create para torres que no aplican).
+        from django.contrib import messages
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        torre = get_object_or_404(
+            TorreConstruccion, id=self.kwargs['torre_id'], proyecto=proyecto)
+        oc = ObraCivilTorre.objects.filter(proyecto=proyecto, torre=torre).first()
+        if oc is not None and not oc.aplica_pintura_aeronautica:
+            messages.warning(
+                request,
+                f'La torre {torre.numero_display} no aplica a Pintura Aeronáutica.')
+            return redirect('construccion:spt_pintura', proyecto_id=proyecto.id)
+        return super().get(request, *args, **kwargs)
 
     def _get_or_create_estructuras(self, proyecto, torre):
         spt, _ = SPTTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
