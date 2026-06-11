@@ -18,3 +18,11 @@ try:
     from .models_b3 import *  # noqa: F401, F403
 except ImportError:
     pass
+
+# programacion_cuadrillas (S1, #155) — Programación/Ejecución semanal por
+# cuadrilla. Import protegido para que el repo siga importable aunque el módulo
+# aún no exista en una rama dada.
+try:
+    from .models_pc import *  # noqa: F401, F403
+except Exception:
+    pass

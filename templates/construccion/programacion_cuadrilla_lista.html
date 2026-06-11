@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% comment %}
+  Programación de Cuadrillas — listado (scaffolding S1, #155).
+
+  Template base placeholder. La sub-feature B1 (ProgramacionCuadrillaIndexView)
+  rellena la tabla de programaciones y el filtro por cuadrilla/semana. Los anchors
+  #programaciones-lista y select[name=semana] son el contrato futuro que los
+  journeys E2E (b1_index_render_200, b1_filtro_semana) asumen presentes.
+{% endcomment %}
+
+{% block title %}Programación de Cuadrillas{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="mb-6">
+        <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">
+            Programación de Cuadrillas
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-2">
+            Programación y ejecución semanal de cuadrillas.
+        </p>
+    </div>
+
+    {% block programacion_filtros %}
+    <form method="get" class="mb-4 flex flex-wrap gap-3 items-end">
+        <div>
+            <label for="filtro-semana" class="block text-sm text-gray-600 dark:text-gray-400">Semana</label>
+            <select id="filtro-semana" name="semana"
+                    class="mt-1 rounded border-gray-300 dark:bg-gray-700 dark:text-white">
+                <option value="">Todas</option>
+                {% for s in semanas %}
+                    <option value="{{ s }}" {% if s|stringformat:"s" == semana_actual|stringformat:"s" %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+    {% endblock %}
+
+    {% block programacion_contenido %}
+    <div id="programaciones-lista" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        {% block programaciones_tabla %}
+        <p class="text-gray-600 dark:text-gray-400">
+            No hay programaciones para mostrar.
+        </p>
+        {% endblock %}
+    </div>
+    {% endblock %}
+</div>
+{% endblock %}
