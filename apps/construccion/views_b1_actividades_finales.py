@@ -21,6 +21,7 @@ from django.views.decorators.http import require_POST
 from apps.core.mixins import RoleRequiredMixin
 
 from .models import ProyectoConstruccion, TorreConstruccion
+from .views import ordenar_torres_construccion
 from .models_b1_actividades_finales import (
     ACTIVIDAD_CAMPOS,
     SECCIONES_ACTIVIDADES,
@@ -45,7 +46,7 @@ def _filas_proyecto(proyecto: ProyectoConstruccion, filtros: dict | None = None)
     Aplica filtros (estructura/estado) si vienen del querystring.
     """
     filtros = filtros or {}
-    torres_qs = (
+    torres_qs = ordenar_torres_construccion(
         proyecto.torres
         .all()
         .prefetch_related(
@@ -54,7 +55,6 @@ def _filas_proyecto(proyecto: ProyectoConstruccion, filtros: dict | None = None)
                 queryset=ActividadFinalTorre.objects.all(),
             )
         )
-        .order_by('numero')
     )
 
     estructura_filtro = (filtros.get('estructura') or '').strip()
