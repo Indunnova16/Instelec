@@ -26,7 +26,7 @@ def ordenar_torres_construccion(qs):
     ).order_by(F('_num_ord').asc(nulls_last=True), 'numero')
 from .forms import (
     ContratoForm, PataObraForm, FaseTorreMontajeForm, FaseTorreTendidoForm,
-    SocialPredialForm, AmbientalTorreForm,
+    SocialPredialForm, AmbientalTorreForm, ObraCivilFechasForm,
 )
 from django.http import HttpResponseRedirect
 from .models import (
@@ -1459,6 +1459,29 @@ class ObraCivilPesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
             setattr(proyecto, campo, valor)
         proyecto.save(update_fields=list(valores.keys()))
         return JsonResponse({'ok': True, 'suma': sum(valores.values())})
+
+
+class ObraCivilFechasUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX para actualizar las 3 fechas de seguimiento de una torre (#156).
+
+    Espeja ObraCivilPesosUpdateView: valida con ObraCivilFechasForm
+    (DateInput format='%Y-%m-%d') y devuelve JsonResponse.
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from django.http import JsonResponse
+        oc = get_object_or_404(
+            ObraCivilTorre, proyecto_id=proyecto_id, torre_id=torre_id)
+        form = ObraCivilFechasForm(request.POST, instance=oc)
+        if not form.is_valid():
+            return JsonResponse({'error': 'Fechas inválidas.',
+                                 'detail': form.errors}, status=400)
+        form.save()
+        return JsonResponse({
+            'ok': True,
+            'alerta_retraso': oc.alerta_retraso,
+        })
 
 
 class ObraCivilAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):

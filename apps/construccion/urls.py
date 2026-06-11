@@ -130,6 +130,8 @@ urlpatterns = [
          views.ObraCivilPesosUpdateView.as_view(), name='obra_civil_pesos_update'),
     path('<uuid:proyecto_id>/obra-civil/torres/<uuid:torre_id>/avance/',
          views.ObraCivilAvanceUpdateView.as_view(), name='obra_civil_avance_update'),
+    path('<uuid:proyecto_id>/obra-civil/torres/<uuid:torre_id>/fechas/',
+         views.ObraCivilFechasUpdateView.as_view(), name='obra_civil_fechas_update'),
     # Detalle pata×actividad (vista legacy granular)
     path('<uuid:proyecto_id>/obra-civil/<uuid:torre_id>/patas/',
          views.ObraCivilTorreView.as_view(), name='obra_civil_torre_patas'),

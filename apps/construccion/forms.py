@@ -1,7 +1,7 @@
 """Forms for construction projects."""
 from django import forms
 from apps.contratos.models import Contrato
-from .models import PataObra, FaseTorre, SocialPredial, AmbientalTorre
+from .models import PataObra, FaseTorre, SocialPredial, AmbientalTorre, ObraCivilTorre
 
 
 INPUT_CLS = ('mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 '
@@ -336,6 +336,31 @@ class AmbientalTorreForm(forms.ModelForm):
             elif isinstance(field.widget, forms.NumberInput):
                 field.widget.attrs.setdefault('class', INPUT_CLS)
                 field.widget.attrs.setdefault('step', 'any')
+            field.required = False
+
+
+class ObraCivilFechasForm(forms.ModelForm):
+    """Fechas de seguimiento por torre en la matriz Obra Civil (#156).
+
+    Llenado manual; las 3 fechas son opcionales. Widgets DateInput con
+    format='%Y-%m-%d' obligatorio para no caer en el bug es-CO (#130): sin
+    él, el locale renderiza dd/mm/yyyy y el <input type=date> deja el campo
+    vacío al recargar (parece que 'no guarda la fecha').
+    """
+
+    class Meta:
+        model = ObraCivilTorre
+        fields = ['fecha_inicio', 'fecha_esperada', 'fecha_final']
+        widgets = {
+            'fecha_inicio': forms.DateInput(format='%Y-%m-%d', attrs=DATE_ATTRS),
+            'fecha_esperada': forms.DateInput(format='%Y-%m-%d', attrs=DATE_ATTRS),
+            'fecha_final': forms.DateInput(format='%Y-%m-%d', attrs=DATE_ATTRS),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            field.input_formats = ['%Y-%m-%d']
             field.required = False
 
 

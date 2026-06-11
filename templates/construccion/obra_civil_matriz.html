@@ -116,6 +116,7 @@
                         </th>
                         {% endfor %}
                         <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Avance</th>
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Fechas</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -141,6 +142,7 @@
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=vaciado" data-celda="vaciado" data-torre="{{ torre.id }}">{{ oc.avance_vaciado|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=compactacion" data-celda="compactacion" data-torre="{{ torre.id }}">{{ oc.avance_compactacion|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center font-semibold {% if oc.avance_ponderado >= 0.75 %}text-green-600 dark:text-green-400{% elif oc.avance_ponderado >= 0.5 %}text-amber-600 dark:text-amber-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ fila.avance_ponderado_pct }}%</td>
+                            <td class="px-3 py-1 text-center text-gray-400 dark:text-gray-500 text-xs">—</td>
                         </tr>
                         {% endwith %}
                     {% else %}
@@ -160,12 +162,44 @@
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=vaciado" data-celda="vaciado" data-torre="{{ torre.id }}">{{ oc.avance_vaciado|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=compactacion" data-celda="compactacion" data-torre="{{ torre.id }}">{{ oc.avance_compactacion|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center font-semibold {% if oc.avance_ponderado >= 0.75 %}text-green-600 dark:text-green-400{% elif oc.avance_ponderado >= 0.5 %}text-amber-600 dark:text-amber-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ oc.avance_ponderado_pct }}%</td>
+                            <td class="px-3 py-1 align-top" x-data='fechasTorre({
+                                    url: "{% url "construccion:obra_civil_fechas_update" proyecto_id=proyecto.id torre_id=torre.id %}",
+                                    csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+                                    inicio: "{{ oc.fecha_inicio|date:'Y-m-d' }}",
+                                    esperada: "{{ oc.fecha_esperada|date:'Y-m-d' }}",
+                                    final: "{{ oc.fecha_final|date:'Y-m-d' }}"
+                                })'>
+                                <div class="flex flex-col gap-1 min-w-[150px]">
+                                    <label class="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">Inicio
+                                        <input type="date" x-model="inicio" data-fecha="inicio" data-torre="{{ torre.id }}"
+                                               class="flex-1 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></label>
+                                    <label class="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">Esperada
+                                        <input type="date" x-model="esperada" data-fecha="esperada" data-torre="{{ torre.id }}"
+                                               class="flex-1 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></label>
+                                    <label class="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">Final
+                                        <input type="date" x-model="final" data-fecha="final" data-torre="{{ torre.id }}"
+                                               class="flex-1 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"></label>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        <button type="button" @click="guardarFechas()" :disabled="guardando"
+                                                data-action="guardar-fechas" data-torre="{{ torre.id }}"
+                                                class="px-2 py-0.5 text-[11px] rounded bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:text-gray-500">
+                                            <span x-text="guardando ? '…' : 'Guardar'"></span>
+                                        </button>
+                                        {% if oc.alerta_retraso %}
+                                        <span data-alerta-retraso data-torre="{{ torre.id }}"
+                                              class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Atrasado</span>
+                                        {% endif %}
+                                        <span x-show="mensaje" x-text="mensaje"
+                                              :class="mensajeTipo === 'error' ? 'text-red-600 text-[10px]' : 'text-green-600 text-[10px]'"></span>
+                                    </div>
+                                </div>
+                            </td>
                         </tr>
                         {% endwith %}
                     {% endif %}
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="9" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                             No hay torres en este proyecto.
                             <a href="{% url 'construccion:torres_lista' proyecto_id=proyecto.id %}"
                                class="text-blue-600 dark:text-blue-400 hover:underline">Crear torres →</a>
@@ -184,6 +218,7 @@
                         <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.vaciado|default:"0" }}%</td>
                         <td class="px-3 py-2 text-center text-gray-700 dark:text-gray-200">{{ totales.compactacion|default:"0" }}%</td>
                         <td class="px-3 py-2 text-center text-blue-700 dark:text-blue-300">{{ avance_general }}%</td>
+                        <td class="px-3 py-2"></td>
                     </tr>
                 </tfoot>
                 {% endif %}
@@ -262,6 +297,47 @@ function obraCivilResumen(cfg) {
             }
             this.guardandoPesos = false;
             setTimeout(() => { this.mensajePesos = ''; }, 4000);
+        },
+    };
+}
+
+function fechasTorre(cfg) {
+    return {
+        url: cfg.url,
+        csrfToken: cfg.csrfToken,
+        inicio: cfg.inicio || '',
+        esperada: cfg.esperada || '',
+        final: cfg.final || '',
+        guardando: false,
+        mensaje: '',
+        mensajeTipo: '',
+        async guardarFechas() {
+            this.guardando = true;
+            this.mensaje = '';
+            try {
+                const fd = new FormData();
+                fd.append('fecha_inicio', this.inicio || '');
+                fd.append('fecha_esperada', this.esperada || '');
+                fd.append('fecha_final', this.final || '');
+                const r = await fetch(this.url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                const data = await r.json();
+                if (r.ok) {
+                    this.mensaje = 'Guardado.';
+                    this.mensajeTipo = 'ok';
+                } else {
+                    this.mensaje = data.error || 'Error.';
+                    this.mensajeTipo = 'error';
+                }
+            } catch (e) {
+                this.mensaje = 'Error de red.';
+                this.mensajeTipo = 'error';
+            }
+            this.guardando = false;
+            setTimeout(() => { this.mensaje = ''; }, 4000);
         },
     };
 }

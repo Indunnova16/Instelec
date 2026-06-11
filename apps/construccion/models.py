@@ -725,6 +725,11 @@ class ObraCivilTorre(BaseModel):
         'Avance Compactación', max_digits=5, decimal_places=4, default=0,
     )
 
+    # Fechas de seguimiento por torre (#156) — llenado manual en la matriz.
+    fecha_inicio = models.DateField('Fecha inicio', null=True, blank=True)
+    fecha_esperada = models.DateField('Fecha esperada', null=True, blank=True)
+    fecha_final = models.DateField('Fecha final', null=True, blank=True)
+
     # Metadatos
     cuadrilla = models.CharField('Cuadrilla / Encargado', max_length=100, blank=True)
     observaciones = models.TextField('Observaciones', blank=True)
@@ -785,6 +790,17 @@ class ObraCivilTorre(BaseModel):
     def avance_ponderado_pct(self):
         """avance_ponderado expresado como float 0–100 con 1 decimal."""
         return round(float(self.avance_ponderado) * 100, 1)
+
+    @property
+    def alerta_retraso(self):
+        """True si la torre está atrasada (#156): hay fecha esperada, todavía
+        no se cerró (fecha_final IS NULL) y la fecha esperada ya pasó."""
+        from datetime import date
+        return bool(
+            self.fecha_esperada
+            and self.fecha_final is None
+            and date.today() > self.fecha_esperada
+        )
 
 
 def _pesos_obra_civil_validos(proyecto):
