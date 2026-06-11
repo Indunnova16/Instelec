@@ -1,0 +1,168 @@
+{% load l10n %}
+{% comment %}
+  B3 (#155) — Partial de EJECUCIÓN semanal inline.
+
+  Este partial se INCLUYE en `templates/construccion/programacion_cuadrilla_detalle.html`
+  (propiedad de B2/F4 — NO somos dueños de ese template). El include lo agrega
+  B2 en la sección de ejecución del detalle:
+
+      {% include "construccion/_ejecucion_inline.html" %}
+
+  Contexto que espera del detalle (lo provee la view de B2,
+  ProgramacionCuadrillaDetailView.get_context_data):
+    - `programacion`  : instancia ProgramacionSemanalCuadrilla (usa .id,
+                        .torres_programadas y la relación inversa .ejecucion).
+
+  La relación inversa `programacion.ejecucion` (OneToOne) puede NO existir
+  todavía (primera vez) → se accede con el filtro `default_if_none`/guardas.
+
+  Guarda inline vía Alpine fetch() POST a
+  `construccion:programacion_cuadrilla_ejecucion_save` (view de B3), con
+  X-CSRFToken. NO se interpola JSON/float crudo en x-data (rompe Alpine y, con
+  locale es-CO, la coma decimal aborta el <script>): los valores numéricos van
+  por data-attributes string y se parsean en JS.
+{% endcomment %}
+
+{% localize off %}
+{% with ejecucion=programacion.ejecucion %}
+<div id="ejecucion-inline"
+     class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4"
+     data-url-post="{% url 'construccion:programacion_cuadrilla_ejecucion_save' pk=programacion.id %}"
+     data-torres-programadas="{{ programacion.torres_programadas|default:0 }}"
+     data-torres-ejecutadas="{% if ejecucion %}{{ ejecucion.torres_ejecutadas|default:0 }}{% else %}0{% endif %}"
+     data-rendimiento="{% if ejecucion %}{{ ejecucion.rendimiento_pct|floatformat:'1u' }}{% else %}0{% endif %}"
+     x-data="ejecucionInline($el)">
+
+  <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+      Ejecución de la semana
+    </h2>
+    {% comment %}Indicador de rendimiento en vivo.{% endcomment %}
+    <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg px-4 py-2 text-center">
+      <p class="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">
+        Rendimiento
+      </p>
+      <p class="text-2xl font-bold text-blue-700 dark:text-blue-300"
+         data-rendimiento-pct
+         x-text="rendimientoPct.toFixed(1) + '%'"></p>
+    </div>
+  </div>
+
+  <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+    Torres programadas:
+    <span class="font-medium text-gray-900 dark:text-white"
+          x-text="torresProgramadas"></span>
+  </p>
+
+  {% comment %}Toast de estado (success / error).{% endcomment %}
+  <div x-show="toast.visible"
+       x-transition.opacity
+       :class="toast.tipo === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300'"
+       class="rounded border px-4 py-2 text-sm mb-3"
+       style="display:none"
+       x-text="toast.mensaje"></div>
+
+  {% comment %}Aviso de sobre-ejecución (ejecutado > programado).{% endcomment %}
+  <div x-show="sobreEjecucion"
+       class="rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-4 py-2 text-sm mb-3"
+       style="display:none">
+    Las torres ejecutadas superan las programadas (rendimiento &gt; 100%).
+    Verificá la programación si no es lo esperado.
+  </div>
+
+  <form @submit.prevent="guardar()" class="space-y-3">
+    {% csrf_token %}
+    <div>
+      <label for="id_torres_ejecutadas"
+             class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Torres ejecutadas
+      </label>
+      <input type="number"
+             min="0"
+             step="1"
+             id="id_torres_ejecutadas"
+             name="torres_ejecutadas"
+             x-model.number="torresEjecutadas"
+             :disabled="enviando"
+             class="w-full md:w-48 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500">
+    </div>
+
+    <div>
+      <label for="id_observaciones_ejecucion"
+             class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Observaciones
+      </label>
+      <textarea id="id_observaciones_ejecucion"
+                name="observaciones"
+                rows="2"
+                :disabled="enviando"
+                class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500">{% if ejecucion %}{{ ejecucion.observaciones }}{% endif %}</textarea>
+    </div>
+
+    <button type="submit"
+            data-action="guardar-ejecucion"
+            :disabled="enviando"
+            class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+      <svg x-show="enviando" style="display:none" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span x-text="enviando ? 'Guardando…' : 'Guardar ejecución'"></span>
+    </button>
+  </form>
+</div>
+
+<script>
+function ejecucionInline(el) {
+  // Los numéricos llegan por data-attributes (string) — se parsean acá, NUNCA
+  // interpolados crudos en x-data (la coma decimal es-CO rompe el <script>).
+  return {
+    urlPost: el.dataset.urlPost,
+    csrfToken: document.cookie.split('csrftoken=')[1]?.split(';')[0] || '',
+    torresProgramadas: parseInt(el.dataset.torresProgramadas || '0', 10),
+    torresEjecutadas: parseInt(el.dataset.torresEjecutadas || '0', 10),
+    rendimientoPct: parseFloat(el.dataset.rendimiento || '0') || 0,
+    sobreEjecucion: false,
+    enviando: false,
+    toast: { visible: false, mensaje: '', tipo: 'ok' },
+    showToast(mensaje, tipo) {
+      this.toast = { visible: true, mensaje: mensaje, tipo: tipo };
+      setTimeout(() => { this.toast.visible = false; }, 3500);
+    },
+    async guardar() {
+      if (this.enviando) return;
+      // Fallback CSRF: si la cookie no estaba, leer del input oculto del form.
+      if (!this.csrfToken) {
+        const inp = el.querySelector('input[name=csrfmiddlewaretoken]');
+        if (inp) this.csrfToken = inp.value;
+      }
+      this.enviando = true;
+      try {
+        const fd = new FormData();
+        fd.append('torres_ejecutadas', this.torresEjecutadas);
+        const obs = el.querySelector('textarea[name=observaciones]');
+        fd.append('observaciones', obs ? obs.value : '');
+        const r = await fetch(this.urlPost, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          this.rendimientoPct = data.rendimiento_pct;
+          this.sobreEjecucion = !!data.sobre_ejecucion;
+          this.showToast('Ejecución guardada.', 'ok');
+        } else {
+          this.showToast(data.error || 'No se pudo guardar la ejecución.', 'error');
+        }
+      } catch (e) {
+        this.showToast('Error de red. Reintentá.', 'error');
+      } finally {
+        this.enviando = false;
+      }
+    },
+  };
+}
+</script>
+{% endwith %}
+{% endlocalize %}
