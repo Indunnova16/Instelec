@@ -87,14 +87,14 @@
                            class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                 </label>
                 <label class="flex flex-col">
-                    <span class="text-gray-500 dark:text-gray-400 mb-1">Pólvora teórica (cajas)</span>
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Pólvora teórica (gramos)</span>
                     <input type="number" step="0.01" name="polvora_teorica_cajas"
                            x-model="spt.polvora_teorica_cajas"
                            value="{{ spt.polvora_teorica_cajas|default_if_none:'' }}"
                            class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                 </label>
                 <label class="flex flex-col">
-                    <span class="text-gray-500 dark:text-gray-400 mb-1">Pólvora real (kg)</span>
+                    <span class="text-gray-500 dark:text-gray-400 mb-1">Pólvora real (gramos)</span>
                     <input type="number" step="0.01" name="polvora_real_kg"
                            x-model="spt.polvora_real_kg"
                            value="{{ spt.polvora_real_kg|default_if_none:'' }}"
@@ -192,12 +192,12 @@
                                class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                     </label>
                     <label class="flex flex-col">
-                        <span class="text-xs text-gray-500">Base proyectado (L)</span>
+                        <span class="text-xs text-gray-500">Base proyectado (gal)</span>
                         <input type="number" step="0.01" name="cantidad_base_proyectada" value="{{ franja.cantidad_base_proyectada|default_if_none:'' }}"
                                class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                     </label>
                     <label class="flex flex-col">
-                        <span class="text-xs text-gray-500">Base consumido (L)</span>
+                        <span class="text-xs text-gray-500">Base consumido (gal)</span>
                         <input type="number" step="0.01" name="cantidad_base_consumida" value="{{ franja.cantidad_base_consumida|default_if_none:'' }}"
                                class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                     </label>
@@ -214,12 +214,12 @@
                                class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                     </label>
                     <label class="flex flex-col">
-                        <span class="text-xs text-gray-500">Color proyectado (L)</span>
+                        <span class="text-xs text-gray-500">Color proyectado (gal)</span>
                         <input type="number" step="0.01" name="cantidad_color_proyectada" value="{{ franja.cantidad_color_proyectada|default_if_none:'' }}"
                                class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                     </label>
                     <label class="flex flex-col">
-                        <span class="text-xs text-gray-500">Color consumido (L)</span>
+                        <span class="text-xs text-gray-500">Color consumido (gal)</span>
                         <input type="number" step="0.01" name="cantidad_color_consumida" value="{{ franja.cantidad_color_consumida|default_if_none:'' }}"
                                class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                     </label>

@@ -931,9 +931,9 @@ class SPTTorre(BaseModel):
     # Pólvora
     cantidad_tiros = models.PositiveSmallIntegerField('Cantidad de tiros',
         null=True, blank=True)
-    polvora_teorica_cajas = models.DecimalField('Pólvora teórica (cajas)',
+    polvora_teorica_cajas = models.DecimalField('Pólvora teórica (gramos)',
         max_digits=8, decimal_places=2, null=True, blank=True)
-    polvora_real_kg = models.DecimalField('Pólvora real (kg)',
+    polvora_real_kg = models.DecimalField('Pólvora real (gramos)',
         max_digits=8, decimal_places=2, null=True, blank=True)
     observaciones_polvora = models.TextField('Observaciones pólvora', blank=True)
     # Control y avance
@@ -1031,16 +1031,16 @@ class PinturaFranja(BaseModel):
     color = models.CharField('Color', max_length=10, choices=Color.choices)
     # Base gris
     porcentaje_base = models.PositiveSmallIntegerField('Avance base gris (%)', default=0)
-    cantidad_base_proyectada = models.DecimalField('Base proyectada (L)',
+    cantidad_base_proyectada = models.DecimalField('Base proyectada (gal)',
         max_digits=8, decimal_places=2, null=True, blank=True)
-    cantidad_base_consumida = models.DecimalField('Base consumida (L)',
+    cantidad_base_consumida = models.DecimalField('Base consumida (gal)',
         max_digits=8, decimal_places=2, null=True, blank=True)
     observaciones_base = models.TextField('Observaciones base', blank=True)
     # Color
     porcentaje_color = models.PositiveSmallIntegerField('Avance color (%)', default=0)
-    cantidad_color_proyectada = models.DecimalField('Color proyectado (L)',
+    cantidad_color_proyectada = models.DecimalField('Color proyectado (gal)',
         max_digits=8, decimal_places=2, null=True, blank=True)
-    cantidad_color_consumida = models.DecimalField('Color consumido (L)',
+    cantidad_color_consumida = models.DecimalField('Color consumido (gal)',
         max_digits=8, decimal_places=2, null=True, blank=True)
     observaciones_color = models.TextField('Observaciones color', blank=True)
 
