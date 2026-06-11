@@ -87,7 +87,8 @@ class OCSeccionExcavacionForm(forms.ModelForm):
         model = ObraCivilTorreDetalle
         fields = [
             'exc_cuadrilla',
-            'exc_ft022_ok', 'exc_ft929_ok', 'exc_ft923_ok', 'exc_ft924_ok',
+            'exc_ft022_ok', 'exc_ft023_ok', 'exc_ft058_ok', 'exc_ft922_ok',
+            'exc_ft929_ok', 'exc_ft923_ok', 'exc_ft924_ok',
             'exc_ft925_ok', 'exc_ft926_ok', 'exc_ft927_ok', 'exc_ft928_ok',
             'exc_tipo',
             'exc_clase_cimentacion',

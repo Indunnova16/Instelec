@@ -558,3 +558,56 @@ def test_data_migration_helicoidal_forward_reverse_idempotente(
     ObraCivilTorreDetalle.objects.all().delete()
     mig.mover_helicoidal_a_clase_cimentacion(django_apps, None)  # no raise
     mig.restaurar_helicoidal_a_exc_tipo(django_apps, None)  # no raise
+
+
+# ===========================================================================
+# #146 — FT-023 / FT-058 / FT-922 faltantes en Excavación (paridad Excel)
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_oc_detalle_excavacion_ft_023_058_922_persisten(proyecto_oc, torre_oc):
+    """#146: los 3 FT nuevos de Excavación existen en el modelo, default=False
+    y persisten cuando se marcan True."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    det = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+    )
+    # Defaults False
+    assert det.exc_ft023_ok is False
+    assert det.exc_ft058_ok is False
+    assert det.exc_ft922_ok is False
+
+    det.exc_ft023_ok = True
+    det.exc_ft058_ok = True
+    det.exc_ft922_ok = True
+    det.save()
+    det.refresh_from_db()
+    assert det.exc_ft023_ok is True
+    assert det.exc_ft058_ok is True
+    assert det.exc_ft922_ok is True
+
+
+@pytest.mark.django_db
+def test_oc_seccion_excavacion_form_expone_ft_023_058_922(proyecto_oc, torre_oc):
+    """#146: el form de la sección Excavación expone los 3 FT nuevos y los
+    guarda vía POST simulado (paridad UI CANT OOCC)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+    from apps.construccion.forms_b3_oc_detalle import OCSeccionExcavacionForm
+
+    det = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='B',
+    )
+    for f in ('exc_ft023_ok', 'exc_ft058_ok', 'exc_ft922_ok'):
+        assert f in OCSeccionExcavacionForm.Meta.fields
+
+    form = OCSeccionExcavacionForm(
+        data={'exc_ft023_ok': 'on', 'exc_ft922_ok': 'on', 'exc_ejecutada_pct': '0'},
+        instance=det,
+    )
+    assert form.is_valid(), form.errors
+    saved = form.save()
+    saved.refresh_from_db()
+    assert saved.exc_ft023_ok is True
+    assert saved.exc_ft058_ok is False  # no marcado en el POST
+    assert saved.exc_ft922_ok is True

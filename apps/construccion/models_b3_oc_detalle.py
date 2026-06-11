@@ -126,8 +126,11 @@ class ObraCivilTorreDetalle(BaseModel):
     exc_cuadrilla = models.CharField(
         'Excavación — cuadrilla', max_length=100, blank=True,
     )
-    # 8 FT (Formatos Técnicos) booleans del Excel CANT OOCC
+    # 11 FT (Formatos Técnicos) booleans del Excel CANT OOCC
     exc_ft022_ok = models.BooleanField('FT-022 OK', default=False)
+    exc_ft023_ok = models.BooleanField('FT-023 OK', default=False)
+    exc_ft058_ok = models.BooleanField('FT-058 OK', default=False)
+    exc_ft922_ok = models.BooleanField('FT-922 OK', default=False)
     exc_ft929_ok = models.BooleanField('FT-929 OK', default=False)
     exc_ft923_ok = models.BooleanField('FT-923 OK', default=False)
     exc_ft924_ok = models.BooleanField('FT-924 OK', default=False)
