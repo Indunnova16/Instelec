@@ -20,32 +20,44 @@
     <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">
       Materiales (calculado vs real)
     </legend>
-    <div class="grid grid-cols-4 gap-3 mt-2 text-sm">
+    {# #140 — columna '% Desviación' con alerta roja si |%| supera el umbral (espejo de Vaciado) #}
+    {% localize off %}
+    <div class="grid grid-cols-5 gap-3 mt-2 text-sm">
       <span class="font-medium text-gray-500"></span>
       <span class="font-medium text-gray-500">Calculado</span>
       <span class="font-medium text-gray-500">Real</span>
+      <span class="font-medium text-gray-500">% Desviación</span>
       <span class="font-medium text-gray-500">Observaciones</span>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Agua (m³)</span>
       <div>{{ form.sol_agua_calc }}{% if form.sol_agua_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_agua_real }}{% if form.sol_agua_real.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.sol_agua_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="agua" data-supera-umbral="{% if detalle.sol_agua_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.sol_agua_desv_pct is not None %}{{ detalle.sol_agua_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.sol_agua_obs }}{% if form.sol_agua_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_agua_obs.errors|join:", " }}</span>{% endif %}</div>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Arena (m³)</span>
       <div>{{ form.sol_arena_calc }}{% if form.sol_arena_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_arena_real }}{% if form.sol_arena_real.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.sol_arena_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="arena" data-supera-umbral="{% if detalle.sol_arena_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.sol_arena_desv_pct is not None %}{{ detalle.sol_arena_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.sol_arena_obs }}{% if form.sol_arena_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_arena_obs.errors|join:", " }}</span>{% endif %}</div>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Grava (m³)</span>
       <div>{{ form.sol_grava_calc }}{% if form.sol_grava_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_grava_real }}{% if form.sol_grava_real.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.sol_grava_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="grava" data-supera-umbral="{% if detalle.sol_grava_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.sol_grava_desv_pct is not None %}{{ detalle.sol_grava_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.sol_grava_obs }}{% if form.sol_grava_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_grava_obs.errors|join:", " }}</span>{% endif %}</div>
 
       <span class="font-medium text-gray-700 dark:text-gray-200 self-center">Cemento (kg)</span>
       <div>{{ form.sol_cemento_calc }}{% if form.sol_cemento_calc.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_calc.errors|join:", " }}</span>{% endif %}</div>
       <div>{{ form.sol_cemento_real }}{% if form.sol_cemento_real.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_real.errors|join:", " }}</span>{% endif %}</div>
+      <div class="self-center {% if detalle.sol_cemento_supera_umbral %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+           data-desv-pct="cemento" data-supera-umbral="{% if detalle.sol_cemento_supera_umbral %}true{% else %}false{% endif %}">{% if detalle.sol_cemento_desv_pct is not None %}{{ detalle.sol_cemento_desv_pct }}%{% else %}—{% endif %}</div>
       <div>{{ form.sol_cemento_obs }}{% if form.sol_cemento_obs.errors %}<span class="text-xs text-red-600">{{ form.sol_cemento_obs.errors|join:", " }}</span>{% endif %}</div>
     </div>
+    {% endlocalize %}
 
     {% if detalle %}
     <div class="grid grid-cols-5 gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">

@@ -440,6 +440,70 @@ def test_vac_umbral_constante_modulo():
     assert m.UMBRAL_DESVIACION_VACIADO_PCT == Decimal('5')
 
 
+# ---- #140 (rebote): % Desviación + alerta de umbral también en SOLADO ----
+# Espejo de los tests de Vaciado: el cliente prueba la sección Solado y espera
+# la misma columna '% Desviación' + alerta roja.
+
+@pytest.mark.django_db
+def test_sol_desv_pct_happy(proyecto_oc, torre_oc):
+    """% desviación Solado = (real - calc)/calc*100, 1 decimal + alerta."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        sol_agua_calc=Decimal('0.02'), sol_agua_real=Decimal('0.08'),
+    )
+    # (0.08 - 0.02)/0.02*100 = +300.0% (escenario legacy E1/A del cliente)
+    assert d.sol_agua_desv_pct == Decimal('300.0')
+    assert d.sol_agua_supera_umbral is True
+
+
+@pytest.mark.django_db
+def test_sol_desv_pct_none_cuando_falta_dato(proyecto_oc, torre_oc):
+    """None si falta real o calc; supera_umbral False (no alerta)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        sol_arena_calc=Decimal('1.00'),  # real ausente
+    )
+    assert d.sol_arena_desv_pct is None
+    assert d.sol_arena_supera_umbral is False
+
+
+@pytest.mark.django_db
+def test_sol_desv_pct_calc_cero_es_none(proyecto_oc, torre_oc):
+    """calc=0 → división indefinida → None (no ZeroDivisionError)."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        sol_grava_calc=Decimal('0'), sol_grava_real=Decimal('5'),
+    )
+    assert d.sol_grava_desv_pct is None
+    assert d.sol_grava_supera_umbral is False
+
+
+@pytest.mark.django_db
+def test_sol_supera_umbral_borde_exacto_5pct_no_alerta(proyecto_oc, torre_oc):
+    """|%| == 5 NO supera (umbral estricto > 5); 5.4% sí. Espejo de Vaciado."""
+    from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+    d = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='A',
+        sol_cemento_calc=Decimal('100'), sol_cemento_real=Decimal('105'),
+    )
+    assert d.sol_cemento_desv_pct == Decimal('5.0')
+    assert d.sol_cemento_supera_umbral is False
+
+    d2 = ObraCivilTorreDetalle.objects.create(
+        proyecto=proyecto_oc, torre=torre_oc, pata='B',
+        sol_cemento_calc=Decimal('786.25'), sol_cemento_real=Decimal('828.75'),
+    )
+    assert d2.sol_cemento_desv_pct == Decimal('5.4')
+    assert d2.sol_cemento_supera_umbral is True
+
+
 # ===========================================================================
 # 11. (#135 / absorbe #134) Clase de cimentación + data-migration HELICOIDAL
 # ===========================================================================

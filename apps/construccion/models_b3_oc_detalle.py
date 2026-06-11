@@ -495,6 +495,42 @@ class ObraCivilTorreDetalle(BaseModel):
     def sol_cemento_desv(self):
         return self._desv(self.sol_cemento_real, self.sol_cemento_calc)
 
+    # ----- % Desviación + alerta de umbral Solado (#140) -----
+    # Espejo exacto de Vaciado: el cliente espera la columna '% Desviación' +
+    # alerta roja también en Solado (mismo patrón de materiales calc/real).
+
+    @property
+    def sol_agua_desv_pct(self):
+        return self._desv_pct(self.sol_agua_real, self.sol_agua_calc)
+
+    @property
+    def sol_arena_desv_pct(self):
+        return self._desv_pct(self.sol_arena_real, self.sol_arena_calc)
+
+    @property
+    def sol_grava_desv_pct(self):
+        return self._desv_pct(self.sol_grava_real, self.sol_grava_calc)
+
+    @property
+    def sol_cemento_desv_pct(self):
+        return self._desv_pct(self.sol_cemento_real, self.sol_cemento_calc)
+
+    @property
+    def sol_agua_supera_umbral(self):
+        return self._supera_umbral_desv(self.sol_agua_desv_pct)
+
+    @property
+    def sol_arena_supera_umbral(self):
+        return self._supera_umbral_desv(self.sol_arena_desv_pct)
+
+    @property
+    def sol_grava_supera_umbral(self):
+        return self._supera_umbral_desv(self.sol_grava_desv_pct)
+
+    @property
+    def sol_cemento_supera_umbral(self):
+        return self._supera_umbral_desv(self.sol_cemento_desv_pct)
+
     # ----- Desviaciones sub-bloques Vaciado (calc vs real) -----
 
     @property
