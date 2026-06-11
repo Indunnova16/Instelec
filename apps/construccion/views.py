@@ -1349,6 +1349,19 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         ctx['bloqueada'] = not fase.puede_iniciar_tendido
         return ctx
 
+    def form_valid(self, form):
+        # #147: si el Circuito 2 "No aplica", limpiar sus 6 campos para que no
+        # contaminen el avance ni queden datos inconsistentes.
+        if form.cleaned_data.get('circuito_2_aplica') is False:
+            fase = form.instance
+            fase.tendido_conductor_c2_a_ok = False
+            fase.tendido_conductor_c2_b_ok = False
+            fase.tendido_conductor_c2_c_ok = False
+            fase.tendido_conductor_c2_a_fecha = None
+            fase.tendido_conductor_c2_b_fecha = None
+            fase.tendido_conductor_c2_c_fecha = None
+        return super().form_valid(form)
+
     def get_success_url(self):
         return reverse_lazy('construccion:tendido_torre',
                             kwargs={'proyecto_id': self.kwargs['proyecto_id'],

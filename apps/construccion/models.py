@@ -1546,6 +1546,8 @@ class FaseTorre(BaseModel):
     tendido_opgw_der_fecha = models.DateField(null=True, blank=True)
 
     # Circuito 2 — 3 fases adicionales (#58: 2 circuitos × 3 fases)
+    # #147: marca "No aplica" para torres de un solo circuito.
+    circuito_2_aplica = models.BooleanField('Circuito 2 aplica', default=True)
     tendido_conductor_c2_a_ok = models.BooleanField(
         'Tendido conductor Circuito 2 Fase A', default=False)
     tendido_conductor_c2_a_fecha = models.DateField(null=True, blank=True)

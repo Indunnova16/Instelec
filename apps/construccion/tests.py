@@ -226,6 +226,73 @@ def test_tendido_torre_guarda_3_fases_circuito_1(
     assert fase.pct_tendido == 40
 
 
+@pytest.mark.django_db
+def test_tendido_torre_circuito_2_no_aplica_limpia_campos(
+    authenticated_client, proyecto_construccion, torre_completa
+):
+    """#147: marcar 'Circuito 2 NO aplica' (checkbox ausente del POST) limpia
+    los 6 campos de C2 en el guardado, aunque venían con datos previos."""
+    fase = torre_completa.fase
+    fase.entrega_carga_ok = True
+    # Estado previo con C2 poblado (simula torre editada antes del cambio)
+    fase.circuito_2_aplica = True
+    fase.tendido_conductor_c2_a_ok = True
+    fase.tendido_conductor_c2_b_ok = True
+    fase.tendido_conductor_c2_c_ok = True
+    fase.tendido_conductor_c2_a_fecha = '2026-05-22'
+    fase.save()
+
+    url = reverse('construccion:tendido_torre',
+                  kwargs={'proyecto_id': proyecto_construccion.id,
+                          'torre_id': torre_completa.id})
+    # circuito_2_aplica AUSENTE del POST => checkbox desmarcado => False
+    data = {
+        'tendido_conductor_a_ok': 'on',
+        'tendido_conductor_c2_a_ok': 'on',  # aún viene marcado, debe limpiarse
+        'pct_tendido': '40',
+        'pct_facturacion': '0',
+    }
+    resp = authenticated_client.post(url, data)
+    assert resp.status_code == 302
+    fase.refresh_from_db()
+    assert fase.circuito_2_aplica is False
+    # Los 6 campos C2 quedaron limpios pese a que c2_a venía 'on'
+    assert fase.tendido_conductor_c2_a_ok is False
+    assert fase.tendido_conductor_c2_b_ok is False
+    assert fase.tendido_conductor_c2_c_ok is False
+    assert fase.tendido_conductor_c2_a_fecha is None
+    assert fase.tendido_conductor_c2_b_fecha is None
+    assert fase.tendido_conductor_c2_c_fecha is None
+    # C1 intacto
+    assert fase.tendido_conductor_a_ok is True
+
+
+@pytest.mark.django_db
+def test_tendido_torre_circuito_2_aplica_conserva_campos(
+    authenticated_client, proyecto_construccion, torre_completa
+):
+    """#147: con 'Circuito 2 aplica' marcado, los campos C2 se guardan normal."""
+    fase = torre_completa.fase
+    fase.entrega_carga_ok = True
+    fase.save()
+
+    url = reverse('construccion:tendido_torre',
+                  kwargs={'proyecto_id': proyecto_construccion.id,
+                          'torre_id': torre_completa.id})
+    data = {
+        'circuito_2_aplica': 'on',
+        'tendido_conductor_c2_a_ok': 'on',
+        'tendido_conductor_c2_a_fecha': '2026-05-23',
+        'pct_tendido': '40',
+        'pct_facturacion': '0',
+    }
+    resp = authenticated_client.post(url, data)
+    assert resp.status_code == 302
+    fase.refresh_from_db()
+    assert fase.circuito_2_aplica is True
+    assert fase.tendido_conductor_c2_a_ok is True
+
+
 # ====== Sociopredial (#51) ======
 
 from apps.construccion.models import SocialPredial, AmbientalTorre

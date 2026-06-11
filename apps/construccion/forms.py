@@ -206,6 +206,7 @@ class FaseTorreTendidoForm(forms.ModelForm):
             'tendido_opgw_izq_ok', 'tendido_opgw_izq_fecha',
             'tendido_opgw_der_ok', 'tendido_opgw_der_fecha',
             # Circuito 2
+            'circuito_2_aplica',
             'tendido_conductor_c2_a_ok', 'tendido_conductor_c2_a_fecha',
             'tendido_conductor_c2_b_ok', 'tendido_conductor_c2_b_fecha',
             'tendido_conductor_c2_c_ok', 'tendido_conductor_c2_c_fecha',
