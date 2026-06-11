@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% comment %}
+  Programación de Cuadrillas — crear / editar (B2, #155).
+
+  Contrato de selectores (BLUEPRINT.evidence.template_evidence):
+    select[name=cuadrilla], input[name=torres_programadas], button[type=submit]
+
+  Render del form: cada widget ya trae sus clases Tailwind desde
+  forms_pc.ProgramacionSemanalCuadrillaForm. No se inyecta JSON/float en x-data
+  (sin Alpine) → no aplica el bug "algo rompe Alpine inline". Campos numéricos
+  son enteros (NumberInput) → sin coma decimal es-CO.
+{% endcomment %}
+
+{% block title %}{{ titulo|default:"Programación semanal" }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 max-w-3xl">
+    <div class="mb-6 flex items-center justify-between">
+        <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">
+            {{ titulo|default:"Programación semanal" }}
+        </h1>
+        <a href="{% url 'construccion:programacion_cuadrillas_index' %}"
+           class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div class="mb-4 px-4 py-2 rounded
+                    {% if message.tags == 'error' %}bg-red-100 text-red-800
+                    {% else %}bg-green-100 text-green-800{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    {% if form.non_field_errors %}
+    <div class="mb-4 px-4 py-2 rounded bg-red-100 text-red-800">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <form method="post" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-5">
+        {% csrf_token %}
+
+        <div>
+            <label for="{{ form.cuadrilla.id_for_label }}"
+                   class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ form.cuadrilla.label }} <span class="text-red-500">*</span>
+            </label>
+            {{ form.cuadrilla }}
+            {% if form.cuadrilla.errors %}
+            <p class="mt-1 text-sm text-red-600">{{ form.cuadrilla.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
+        <div>
+            <label for="{{ form.proyecto.id_for_label }}"
+                   class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ form.proyecto.label }}
+            </label>
+            {{ form.proyecto }}
+            {% if form.proyecto.help_text %}
+            <p class="mt-1 text-xs text-gray-500">{{ form.proyecto.help_text }}</p>
+            {% endif %}
+            {% if form.proyecto.errors %}
+            <p class="mt-1 text-sm text-red-600">{{ form.proyecto.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+                <label for="{{ form.anio.id_for_label }}"
+                       class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ form.anio.label }} <span class="text-red-500">*</span>
+                </label>
+                {{ form.anio }}
+                {% if form.anio.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.anio.errors|striptags }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <label for="{{ form.semana.id_for_label }}"
+                       class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ form.semana.label }} <span class="text-red-500">*</span>
+                </label>
+                {{ form.semana }}
+                {% if form.semana.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.semana.errors|striptags }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <label for="{{ form.torres_programadas.id_for_label }}"
+                       class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ form.torres_programadas.label }}
+                </label>
+                {{ form.torres_programadas }}
+                {% if form.torres_programadas.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.torres_programadas.errors|striptags }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div>
+            <label for="{{ form.actividades_programadas.id_for_label }}"
+                   class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ form.actividades_programadas.label }}
+            </label>
+            {{ form.actividades_programadas }}
+            {% if form.actividades_programadas.errors %}
+            <p class="mt-1 text-sm text-red-600">{{ form.actividades_programadas.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
+        <div>
+            <label for="{{ form.observaciones.id_for_label }}"
+                   class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ form.observaciones.label }}
+            </label>
+            {{ form.observaciones }}
+            {% if form.observaciones.errors %}
+            <p class="mt-1 text-sm text-red-600">{{ form.observaciones.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+            <button type="submit"
+                    class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {% if es_edicion %}Guardar cambios{% else %}Crear programación{% endif %}
+            </button>
+            <a href="{% url 'construccion:programacion_cuadrillas_index' %}"
+               class="text-sm text-gray-600 dark:text-gray-400 hover:underline">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
