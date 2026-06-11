@@ -96,6 +96,13 @@ class ActividadFinalTorre(BaseModel):
         verbose_name='Torre',
     )
 
+    # Aplicabilidad por torre (#150). default=True = comportamiento histórico.
+    # Si False, la torre se marca como "No aplica" y se excluye del avance.
+    aplica = models.BooleanField(
+        'Aplica esta torre', default=True,
+        help_text='Si False, la torre no cuenta para el avance (estado "No aplica").',
+    )
+
     # SECCIÓN 2: EMPALMES F.O.
     empalmes_subestacion = models.BooleanField(
         'B. Empalme F.O. subestaciones', default=False,
@@ -198,6 +205,10 @@ class ActividadFinalTorre(BaseModel):
 
     def clean(self):
         super().clean()
+        # #150: si la torre no aplica, no validar progresión lógica (la matriz
+        # queda inactiva y los flags no se cuentan).
+        if not self.aplica:
+            return
         self._validar_progresion()
 
     def save(self, *args, **kwargs):
@@ -220,19 +231,29 @@ class ActividadFinalTorre(BaseModel):
 
     @property
     def pct_avance(self):
-        """Porcentaje 0..100 de actividades completadas."""
+        """Porcentaje 0..100 de actividades completadas.
+
+        Si la torre no aplica (#150), devuelve 100.0 para que NO figure como
+        pendiente en los agregados de avance (queda fuera del cómputo de
+        actividades por hacer).
+        """
+        if not self.aplica:
+            return 100.0
         if not self.total_actividades:
             return 0.0
         return (self.actividades_completas / self.total_actividades) * 100.0
 
     @property
     def estado_semaforo(self):
-        """4 estados color del issue #96:
+        """5 estados color (4 del #96 + NO_APLICA del #150):
+        - NO_APLICA (gris): la torre no aplica al módulo
         - NO_INICIADO (rojo): 0 actividades
         - EN_PROCESO (amarillo): >0 y <100% y sin bloqueos
         - BLOQUEADO (naranja): hay actividad marcada pero falta una previa lógica
         - COMPLETADO (verde): dossier=True (todo en 1)
         """
+        if not self.aplica:
+            return 'NO_APLICA'
         if self.dossier:
             return 'COMPLETADO'
         if self.actividades_completas == 0:
@@ -255,6 +276,7 @@ class ActividadFinalTorre(BaseModel):
     def estado_semaforo_color(self):
         """Clase CSS Tailwind para el badge del estado."""
         return {
+            'NO_APLICA': 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
             'NO_INICIADO': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
             'EN_PROCESO': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
             'BLOQUEADO': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
@@ -264,6 +286,7 @@ class ActividadFinalTorre(BaseModel):
     @property
     def estado_semaforo_label(self):
         return {
+            'NO_APLICA': 'No aplica',
             'NO_INICIADO': 'No iniciado',
             'EN_PROCESO': 'En proceso',
             'BLOQUEADO': 'Bloqueado',

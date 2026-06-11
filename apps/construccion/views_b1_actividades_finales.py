@@ -93,20 +93,25 @@ def _resumen(filas) -> dict:
             'no_iniciadas': 0,
             'en_proceso': 0,
             'bloqueadas': 0,
+            'no_aplica': 0,
         }
     total = len(filas)
-    suma_pct = sum(f['af'].pct_avance for f in filas)
+    # #150: las torres "No aplica" se excluyen del cómputo de avance global.
+    aplicables = [f for f in filas if f['af'].aplica]
+    suma_pct = sum(f['af'].pct_avance for f in aplicables)
     completadas = sum(1 for f in filas if f['af'].estado_semaforo == 'COMPLETADO')
     no_iniciadas = sum(1 for f in filas if f['af'].estado_semaforo == 'NO_INICIADO')
     en_proceso = sum(1 for f in filas if f['af'].estado_semaforo == 'EN_PROCESO')
     bloqueadas = sum(1 for f in filas if f['af'].estado_semaforo == 'BLOQUEADO')
+    no_aplica = sum(1 for f in filas if f['af'].estado_semaforo == 'NO_APLICA')
     return {
         'total_torres': total,
-        'pct_global': suma_pct / total if total else 0.0,
+        'pct_global': (suma_pct / len(aplicables)) if aplicables else 0.0,
         'completadas': completadas,
         'no_iniciadas': no_iniciadas,
         'en_proceso': en_proceso,
         'bloqueadas': bloqueadas,
+        'no_aplica': no_aplica,
     }
 
 
@@ -138,6 +143,7 @@ class ActividadesFinalesMatrizView(LoginRequiredMixin, RoleRequiredMixin, View):
                 ('EN_PROCESO', 'En proceso'),
                 ('BLOQUEADO', 'Bloqueado'),
                 ('COMPLETADO', 'Completado'),
+                ('NO_APLICA', 'No aplica'),
             ],
         }
         return render(request, self.template_name, context)
@@ -164,7 +170,9 @@ class ActividadFinalToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
         af = _ensure_actividades(torre)
 
         campo = request.POST.get('campo', '').strip()
-        if campo not in ACTIVIDAD_CAMPOS:
+        # #150: 'aplica' es un flag de torre (no una de las 13 actividades);
+        # se acepta como caso especial fuera de ACTIVIDAD_CAMPOS.
+        if campo not in ACTIVIDAD_CAMPOS and campo != 'aplica':
             return HttpResponseBadRequest(f"Campo desconocido: {campo}")
 
         # Si `valor` no viene → toggle. Si viene → set explícito.

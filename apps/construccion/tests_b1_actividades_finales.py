@@ -254,3 +254,76 @@ class TestB1ActividadesFinalesMatrizRenderYToggle:
         # Solo debería listarse la torre que tiene 1 actividad (torre_legacy)
         html = resp.content.decode()
         assert 'E1-LEGACY' in html
+
+
+# ----------------------------------------------------------------------
+# Tests #150 — aplicabilidad por torre ("No aplica")
+# ----------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestActividadFinalAplica:
+
+    def test_default_aplica_true(self, torre_con_actividades):
+        _, af = torre_con_actividades
+        assert af.aplica is True
+
+    def test_no_aplica_estado_y_pct(self, torre_con_actividades):
+        _, af = torre_con_actividades
+        af.aplica = False
+        af.save()
+        af.refresh_from_db()
+        assert af.estado_semaforo == 'NO_APLICA'
+        assert af.estado_semaforo_label == 'No aplica'
+        # Excluida del cómputo de pendientes → pct_avance 100.
+        assert af.pct_avance == 100.0
+
+    def test_no_aplica_salta_validacion_progresion(self, torre_con_actividades):
+        """Con aplica=False, marcar certificado sin visita NO debe fallar
+        (la matriz queda inactiva, no se valida progresión)."""
+        _, af = torre_con_actividades
+        af.aplica = False
+        af.certificado_retie = True  # normalmente requiere visita_retie
+        af.save()  # no debe lanzar ValidationError
+        af.refresh_from_db()
+        assert af.certificado_retie is True
+
+    def test_aplica_true_sigue_validando(self, torre_con_actividades):
+        _, af = torre_con_actividades
+        af.certificado_retie = True  # sin visita -> debe fallar
+        with pytest.raises(ValidationError):
+            af.save()
+
+    def test_toggle_aplica_via_view(self, authenticated_client,
+                                    proyecto_construccion, torre_con_actividades):
+        torre, af = torre_con_actividades
+        assert af.aplica is True
+        url = reverse(
+            'construccion:actividades_finales_toggle',
+            kwargs={'proyecto_id': proyecto_construccion.id, 'torre_id': torre.id},
+        )
+        resp = authenticated_client.post(url, {'campo': 'aplica'})
+        assert resp.status_code == 200
+        af.refresh_from_db()
+        assert af.aplica is False
+        assert b'No aplica' in resp.content
+        # Toggle de vuelta a True
+        resp = authenticated_client.post(url, {'campo': 'aplica'})
+        assert resp.status_code == 200
+        af.refresh_from_db()
+        assert af.aplica is True
+
+    def test_resumen_excluye_no_aplica(self, proyecto_construccion):
+        from apps.construccion.views_b1_actividades_finales import _resumen
+        t1 = TorreConstruccion.objects.create(proyecto=proyecto_construccion, numero='R1')
+        t2 = TorreConstruccion.objects.create(proyecto=proyecto_construccion, numero='R2')
+        af1 = ActividadFinalTorre.objects.create(torre=t1)  # aplica, 0%
+        af2 = ActividadFinalTorre.objects.create(torre=t2, aplica=False)
+        filas = [
+            {'torre': t1, 'af': af1, 'celdas': []},
+            {'torre': t2, 'af': af2, 'celdas': []},
+        ]
+        res = _resumen(filas)
+        # pct_global solo cuenta las aplicables (t1 con 0%) -> 0.0, NO inflado por t2=100.
+        assert res['pct_global'] == 0.0
+        assert res['no_aplica'] == 1
+        assert res['total_torres'] == 2
