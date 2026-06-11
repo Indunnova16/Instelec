@@ -82,9 +82,51 @@ def _crear_linea(codigo, nombre=None):
 # Fila helper: [#, ACTIVIDAD, LINEA, TRAMO, INICIO, FIN, PERSONAL, CEDULA,
 #               CELULAR, CARGO, ROL, PLACA, AVISOS, ORDEN, PT SAP, Comentarios]
 def _act(numero, actividad, linea, inicio, fin, personal, cedula, cargo,
-         rol=None, placa=None):
+         rol=None, placa=None, avisos='', orden='', comentarios=''):
     return [numero, actividad, linea, '', inicio, fin, personal, cedula,
-            '', cargo, rol, placa, '', '', '', '']
+            '', cargo, rol, placa, avisos, orden, '', comentarios]
+
+
+# Layout S22 real del cliente (issue #105): columna extra ATENCION en C corre
+# todo a la derecha (LINEA=D, PERSONAL=H, ROL=L, PLACA=M, AVISOS=N, ORDEN=O).
+S22_HEADERS = [
+    '#', 'ACTIVIDAD', 'ATENCION', 'LINEA', 'TRAMO', 'INICIO', 'FIN', 'PERSONAL',
+    'CEDULA', 'CELULAR', 'CARGO', 'ROL', 'PLACA', 'AVISOS', 'ORDEN',
+    'PT SAP', 'Comentarios',
+]
+
+FIXTURE_S22 = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    'fixtures', 'instelec', 'Programacion_S22_qa.xlsx',
+)
+
+
+def _build_s22_excel(filas, sheet_name='22'):
+    """Excel layout S22 (con columna ATENCION en C): banner + headers + datos."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    ws.append(['INSTELEC SAS - NIT 890911324'])
+    ws.append(S22_HEADERS)
+    for f in filas:
+        ws.append(f)
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return out
+
+
+# Fila S22: [#, ACTIVIDAD, ATENCION, LINEA, TRAMO, INICIO, FIN, PERSONAL,
+#            CEDULA, CELULAR, CARGO, ROL, PLACA, AVISOS, ORDEN, PT SAP, Coment]
+def _act_s22(numero, actividad, linea, inicio, fin, personal, cedula, cargo,
+             rol=None, placa=None, avisos='', orden=''):
+    return [numero, actividad, '7:50 - 8:05', linea, '', inicio, fin, personal,
+            cedula, '', cargo, rol, placa, avisos, orden, '', '']
+
+
+def _miembro_s22(personal, cedula, cargo, rol=None, placa=None):
+    return [None, None, None, None, None, None, None, personal, cedula, '',
+            cargo, rol, placa, '', '', '', '']
 
 
 def _miembro(personal, cedula, cargo, rol=None, placa=None):
@@ -305,3 +347,114 @@ class TestImportS18:
         patron = re.compile(r'^\d{2}-\d{4}-\d{4}-[A-Z]{1,3}$')
         for codigo in Cuadrilla.objects.values_list('codigo', flat=True):
             assert patron.match(codigo), codigo
+
+
+# ---------------------------------------------------------------------------
+# Issue #105 — AVISOS/ORDEN del formato real S22 (columna ATENCION + N/O)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestAvisosOrdenS22:
+    """El formato real S22 trae AVISOS (col N) y ORDEN (col O) en la fila de
+    encabezado de la actividad. El modelo Cuadrilla no tiene campos para ellas,
+    así que deben quedar antepuestas a ``observaciones``."""
+
+    def test_avisos_y_orden_van_a_observaciones(self):
+        _crear_linea('LN806', 'LN806 SABANALARGA')
+        _crear_usuario('1042438483', 'ALFONSO LOPEZ')
+        _crear_usuario('1090434209', 'ABRAHAM PAYARES')
+        _crear_usuario('1083020533', 'ADOLFO CASTRO')
+
+        excel = _build_s22_excel([
+            _act_s22(1, 'Servidumbre Completa', '806', date(2026, 5, 25),
+                     date(2026, 5, 30), 'ALFONSO LOPEZ', '1042438483',
+                     'LINIERO I', 'JT/CTA', placa='KNZ-217',
+                     avisos='5720754', orden='35123993'),
+            _miembro_s22('ABRAHAM PAYARES', '1090434209', 'LINIERO I'),
+            _miembro_s22('ADOLFO CASTRO', '1083020533', 'AYUDANTE'),
+        ])
+
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+        assert res['exito'] is True, res.get('error')
+        assert res['formato'] == 'S18'
+        assert res['cuadrillas_creadas'] == 1
+        assert res['miembros_agregados'] == 3
+        assert res['encargados_asignados'] == 1
+
+        cuad = Cuadrilla.objects.get()
+        assert cuad.codigo == '22-2026-0001-SER'
+        # avisos/orden preservados en observaciones (sin campo de modelo).
+        assert '5720754' in cuad.observaciones
+        assert '35123993' in cuad.observaciones
+        assert 'Avisos:' in cuad.observaciones
+        assert 'Orden:' in cuad.observaciones
+
+    def test_avisos_orden_multilinea_se_unen_con_coma(self):
+        _crear_linea('LN806')
+        _crear_usuario('1042438483', 'ALFONSO LOPEZ')
+        excel = _build_s22_excel([
+            _act_s22(1, 'Hurto', '806', date(2026, 5, 25), date(2026, 5, 30),
+                     'ALFONSO LOPEZ', '1042438483', 'LINIERO I', 'JT/CTA',
+                     avisos='5720754\n5720792', orden='1\n2'),
+        ])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+        assert res['exito'] is True, res.get('error')
+        cuad = Cuadrilla.objects.get()
+        assert 'Avisos: 5720754, 5720792' in cuad.observaciones
+        assert 'Orden: 1, 2' in cuad.observaciones
+
+    def test_avisos_orden_preserva_comentarios_existentes(self):
+        _crear_linea('LN806')
+        _crear_usuario('1042438483', 'ALFONSO LOPEZ')
+        fila = _act_s22(1, 'Hurto', '806', date(2026, 5, 25), date(2026, 5, 30),
+                        'ALFONSO LOPEZ', '1042438483', 'LINIERO I', 'JT/CTA',
+                        avisos='5720754', orden='35123993')
+        fila[-1] = 'Nota original del coordinador'  # columna Comentarios
+        excel = _build_s22_excel([fila])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+        assert res['exito'] is True, res.get('error')
+        obs = Cuadrilla.objects.get().observaciones
+        assert 'Avisos: 5720754' in obs
+        assert 'Orden: 35123993' in obs
+        assert 'Nota original del coordinador' in obs
+
+    def test_sin_avisos_orden_no_agrega_prefijo(self):
+        # Las hojas S18 sin avisos/orden no deben ensuciar observaciones.
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        excel = _build_s18_excel([
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+        ])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+        assert res['exito'] is True
+        obs = Cuadrilla.objects.get().observaciones
+        assert 'Avisos:' not in obs
+        assert 'Orden:' not in obs
+
+    @pytest.mark.skipif(not os.path.exists(FIXTURE_S22), reason='fixture S22 ausente')
+    def test_fixture_s22_qa_legacy(self):
+        """Test contra el fixture E2E real (Programacion_S22_qa.xlsx).
+
+        Es el mismo archivo que usa el journey en prod: 3 miembros con cédulas
+        que existen, 1 JT/CTA, avisos=5720754 / orden=35123993.
+        """
+        assert detectar_formato_cuadrillas(FIXTURE_S22) == 'S18'
+        _crear_linea('LN806')
+        _crear_usuario('1042438483', 'ALFONSO LOPEZ SARMIENTO')
+        _crear_usuario('1090434209', 'ABRAHAM PAYARES JIMENEZ')
+        _crear_usuario('1083020533', 'ADOLFO JUNIOR CASTRO PINTO')
+
+        with open(FIXTURE_S22, 'rb') as f:
+            res = ProgramacionS18CuadrillaImporter().importar(f)
+
+        assert res['exito'] is True, res.get('error')
+        assert res['cuadrillas_creadas'] == 1
+        assert res['miembros_agregados'] == 3
+        assert res['encargados_asignados'] == 1
+
+        cuad = Cuadrilla.objects.get()
+        assert cuad.codigo == '22-2026-0001-QAE'
+        assert cuad.nombre.startswith('QA_E2E_M1')
+        assert '5720754' in cuad.observaciones
+        assert '35123993' in cuad.observaciones

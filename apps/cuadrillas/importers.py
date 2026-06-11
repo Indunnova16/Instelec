@@ -568,6 +568,11 @@ class ProgramacionS18CuadrillaImporter:
         'cargo':        ['cargo'],
         'rol':          ['rol'],
         'placa':        ['placa', 'vehiculo', 'vehículo'],
+        # Issue #105: el formato real "Programación - S22" trae AVISOS (col N)
+        # y ORDEN (col O) en la fila de encabezado de la actividad. El modelo
+        # Cuadrilla no tiene campos para ellas → se anteponen a observaciones.
+        'avisos':       ['avisos', 'aviso'],
+        'orden':        ['orden', 'ordenes', 'órdenes'],
         'observaciones': ['comentarios', 'observaciones', 'obs', 'notas'],
     }
 
@@ -724,6 +729,11 @@ class ProgramacionS18CuadrillaImporter:
                 'fecha_inicio': fecha_inicio,
                 'fecha_fin': fecha_fin,
                 'observaciones': self._str(self._get_cell(row, 'observaciones')),
+                # Issue #105: avisos/orden vienen en la fila de encabezado de la
+                # actividad y pueden ser multilínea ("5720754\n5720792") → se
+                # normalizan con _split_multi y se unen con ", ".
+                'avisos': self._join_multi(self._get_cell(row, 'avisos')),
+                'orden': self._join_multi(self._get_cell(row, 'orden')),
                 'row_num': row_idx,
                 'miembros': [],
             }
@@ -782,6 +792,7 @@ class ProgramacionS18CuadrillaImporter:
                 )
 
         nombre = self._nombre_cuadrilla(bloque)
+        observaciones = self._construir_observaciones(bloque)
 
         existente = Cuadrilla.objects.filter(codigo=codigo).first()
         if existente is None:
@@ -792,7 +803,7 @@ class ProgramacionS18CuadrillaImporter:
                 vehiculo=vehiculo,
                 fecha=bloque['fecha_inicio'],
                 activa=True,
-                observaciones=bloque['observaciones'],
+                observaciones=observaciones,
             )
             self.cuadrillas_creadas += 1
         elif actualizar:
@@ -800,8 +811,8 @@ class ProgramacionS18CuadrillaImporter:
             existente.linea_asignada = linea
             existente.vehiculo = vehiculo
             existente.fecha = bloque['fecha_inicio']
-            if bloque['observaciones']:
-                existente.observaciones = bloque['observaciones']
+            if observaciones:
+                existente.observaciones = observaciones
             existente.save()
             cuadrilla = existente
             self.cuadrillas_actualizadas += 1
@@ -927,6 +938,24 @@ class ProgramacionS18CuadrillaImporter:
         base = f'{actividad} - {linea}{fechas}' if linea else f'{actividad}{fechas}'
         return base[:100]
 
+    @staticmethod
+    def _construir_observaciones(bloque):
+        """Antepone AVISOS/ORDEN a las observaciones (issue #105).
+
+        El modelo Cuadrilla no tiene campos para avisos/orden, así que se
+        preservan como prefijo legible en ``observaciones`` (text NOT NULL):
+        ``"Avisos: 5720754, 5720792 | Orden: 1, 2 | <obs original>"``.
+        """
+        partes = []
+        if bloque.get('avisos'):
+            partes.append(f'Avisos: {bloque["avisos"]}')
+        if bloque.get('orden'):
+            partes.append(f'Orden: {bloque["orden"]}')
+        obs = bloque.get('observaciones') or ''
+        if obs:
+            partes.append(obs)
+        return ' | '.join(partes)
+
     def _detectar_columnas(self, header_row):
         self.column_indices = {}
         for col_idx, value in enumerate(header_row):
@@ -965,6 +994,11 @@ class ProgramacionS18CuadrillaImporter:
             return []
         import re
         return [p.strip() for p in re.split(r'[\n/;,]+', texto) if p.strip()]
+
+    @classmethod
+    def _join_multi(cls, value):
+        """Normaliza un valor multilínea (avisos/orden) a "a, b, c" (issue #105)."""
+        return ', '.join(cls._split_multi(value))
 
     @staticmethod
     def _es_jt(rol_value):
