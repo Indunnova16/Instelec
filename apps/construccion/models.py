@@ -730,6 +730,13 @@ class ObraCivilTorre(BaseModel):
     fecha_esperada = models.DateField('Fecha esperada', null=True, blank=True)
     fecha_final = models.DateField('Fecha final', null=True, blank=True)
 
+    # Aplicabilidad por torre — el cliente marca qué módulos aplican a cada torre.
+    # default=True preserva el comportamiento histórico (todas las torres aplican).
+    aplica_obras_proteccion = models.BooleanField(
+        'Aplica Obras de Protección', default=True,
+        help_text='Si False, la torre no aparece en el módulo de Obras de Protección (#149).',
+    )
+
     # Metadatos
     cuadrilla = models.CharField('Cuadrilla / Encargado', max_length=100, blank=True)
     observaciones = models.TextField('Observaciones', blank=True)

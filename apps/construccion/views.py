@@ -1497,6 +1497,32 @@ class ObraCivilFechasUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
         })
 
 
+class ObraCivilAplicaUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX genérico — actualiza un flag de aplicabilidad de una torre.
+
+    Espeja ObraCivilFechasUpdateView (View.post(proyecto_id, torre_id) ->
+    get_object_or_404(ObraCivilTorre) -> save -> JsonResponse). Acepta un
+    campo whitelisteado y su valor booleano. Sirve a #149
+    (aplica_obras_proteccion) y #153 (aplica_pintura_aeronautica) con un solo
+    endpoint para no duplicar mecanismos de guardado.
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+    CAMPOS_PERMITIDOS = {'aplica_obras_proteccion', 'aplica_pintura_aeronautica'}
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from django.http import JsonResponse
+        campo = request.POST.get('campo', '').strip()
+        if campo not in self.CAMPOS_PERMITIDOS:
+            return JsonResponse(
+                {'error': f'Campo no permitido: {campo!r}'}, status=400)
+        oc = get_object_or_404(
+            ObraCivilTorre, proyecto_id=proyecto_id, torre_id=torre_id)
+        valor = request.POST.get('aplica', '').strip().lower() in ('1', 'true', 'on')
+        setattr(oc, campo, valor)
+        oc.save(update_fields=[campo, 'updated_at'])
+        return JsonResponse({'ok': True, 'campo': campo, 'valor': valor})
+
+
 class ObraCivilAvanceUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
     """410 Gone — endpoint reemplazado por edición detallada por sección.
 
@@ -2061,6 +2087,8 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        # #149: solo ofrecer torres que aplican a Obras de Protección.
+        torres_qs = torres_qs.filter(obra_civil__aplica_obras_proteccion=True)
 
         obras = list(TrinchoCuneta.objects.filter(proyecto=proyecto)
                      .select_related('torre').order_by('torre__numero'))
@@ -2100,6 +2128,12 @@ class TrinchosCunetasUpsertView(LoginRequiredMixin, RoleRequiredMixin, View):
         if not torre_id:
             return JsonResponse({'error': 'torre_id requerido'}, status=400)
         torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+
+        # #149: bloquear si la torre no aplica a Obras de Protección.
+        oc = ObraCivilTorre.objects.filter(proyecto=proyecto, torre=torre).first()
+        if oc is not None and not oc.aplica_obras_proteccion:
+            return JsonResponse(
+                {'error': 'La torre no aplica a Obras de Protección.'}, status=400)
 
         tipo = request.POST.get('medida_manejo', '').strip()
         if tipo not in dict(TrinchoCuneta.TipoObra.choices):

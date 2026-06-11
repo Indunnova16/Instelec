@@ -1,13 +1,35 @@
 """Tests Trinchos y Cunetas (issue #80)."""
 
+import re
 from decimal import Decimal
 
 import pytest
+from django.db import connection
 from django.urls import reverse
+
+
+@pytest.fixture
+def sqlite_regexp_replace():
+    """Shim de regexp_replace para sqlite (dev_lite); en Postgres es nativa.
+
+    ordenar_torres_construccion usa la función Postgres regexp_replace que el
+    backend sqlite local no trae. Permite ejercer el render del listado.
+    """
+    if connection.vendor != 'sqlite':
+        yield
+        return
+
+    def _regexp_replace(value, pattern, replacement, *flags):
+        if value is None:
+            return None
+        return re.sub(pattern, replacement, str(value))
+
+    connection.connection.create_function('regexp_replace', -1, _regexp_replace)
+    yield
 
 from apps.contratos.models import Contrato
 from apps.construccion.models import (
-    ProyectoConstruccion, TorreConstruccion, TrinchoCuneta,
+    ObraCivilTorre, ProyectoConstruccion, TorreConstruccion, TrinchoCuneta,
 )
 
 
@@ -185,3 +207,73 @@ class TestTrinchosDelete:
         resp = admin_client.post(url)
         assert resp.status_code == 200
         assert not TrinchoCuneta.objects.filter(id=obra.id).exists()
+
+
+@pytest.mark.django_db
+class TestAplicaObrasProteccion:
+    """#149 — gating de torres por aplica_obras_proteccion."""
+
+    def test_default_true(self, proyecto, torres):
+        oc = ObraCivilTorre.objects.create(proyecto=proyecto, torre=torres[0])
+        assert oc.aplica_obras_proteccion is True
+
+    def test_listado_excluye_torre_no_aplica(self, admin_client, proyecto, torres,
+                                              sqlite_regexp_replace):
+        # torres[0] aplica, torres[1] NO aplica
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=True)
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[1], aplica_obras_proteccion=False)
+        url = reverse("construccion:trinchos_cunetas",
+                      kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        ids = {t.id for t in resp.context["torres_disponibles"]}
+        assert torres[0].id in ids
+        assert torres[1].id not in ids
+
+    def test_upsert_bloquea_torre_no_aplica(self, admin_client, proyecto, torres):
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=False)
+        url = reverse("construccion:trinchos_cunetas_upsert",
+                      kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.post(url, {
+            "torre_id": str(torres[0].id),
+            "medida_manejo": "CUNETA",
+            "metros_cunetas": "15.0",
+        })
+        assert resp.status_code == 400
+        assert "no aplica" in resp.json()["error"].lower()
+        assert not TrinchoCuneta.objects.filter(torre=torres[0]).exists()
+
+    def test_upsert_permite_torre_aplica(self, admin_client, proyecto, torres):
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=True)
+        url = reverse("construccion:trinchos_cunetas_upsert",
+                      kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.post(url, {
+            "torre_id": str(torres[0].id),
+            "medida_manejo": "CUNETA",
+            "metros_cunetas": "15.0",
+        })
+        assert resp.status_code == 200
+        assert TrinchoCuneta.objects.filter(torre=torres[0]).exists()
+
+    def test_aplica_update_endpoint(self, admin_client, proyecto, torres):
+        oc = ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=True)
+        url = reverse("construccion:obra_civil_aplica_update",
+                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
+        resp = admin_client.post(url, {
+            "campo": "aplica_obras_proteccion", "aplica": "0"})
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        oc.refresh_from_db()
+        assert oc.aplica_obras_proteccion is False
+
+    def test_aplica_update_campo_no_permitido(self, admin_client, proyecto, torres):
+        ObraCivilTorre.objects.create(proyecto=proyecto, torre=torres[0])
+        url = reverse("construccion:obra_civil_aplica_update",
+                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
+        resp = admin_client.post(url, {"campo": "observaciones", "aplica": "1"})
+        assert resp.status_code == 400
