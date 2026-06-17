@@ -24,6 +24,7 @@ from .models import ProyectoConstruccion, TorreConstruccion
 from .views import ordenar_torres_construccion
 from .models_b1_actividades_finales import (
     ACTIVIDAD_CAMPOS,
+    ACTIVIDAD_NO_APLICA_CAMPOS,
     SECCIONES_ACTIVIDADES,
     ActividadFinalTorre,
 )
@@ -68,6 +69,7 @@ def _filas_proyecto(proyecto: ProyectoConstruccion, filtros: dict | None = None)
             {
                 'campo': campo,
                 'valor': getattr(af, campo),
+                'no_aplica': getattr(af, f'{campo}_no_aplica', False),  # #150
                 'letra': letra,
                 'label': label,
             }
@@ -170,9 +172,11 @@ class ActividadFinalToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
         af = _ensure_actividades(torre)
 
         campo = request.POST.get('campo', '').strip()
-        # #150: 'aplica' es un flag de torre (no una de las 13 actividades);
-        # se acepta como caso especial fuera de ACTIVIDAD_CAMPOS.
-        if campo not in ACTIVIDAD_CAMPOS and campo != 'aplica':
+        # #150: 'aplica' = flag de torre (fila); '<campo>_no_aplica' = flag por
+        # casilla; el resto son las 13 actividades booleanas.
+        if (campo not in ACTIVIDAD_CAMPOS
+                and campo not in ACTIVIDAD_NO_APLICA_CAMPOS
+                and campo != 'aplica'):
             return HttpResponseBadRequest(f"Campo desconocido: {campo}")
 
         # Si `valor` no viene → toggle. Si viene → set explícito.
@@ -205,6 +209,7 @@ class ActividadFinalToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
             {
                 'campo': c,
                 'valor': getattr(af, c),
+                'no_aplica': getattr(af, f'{c}_no_aplica', False),  # #150
                 'letra': letra,
                 'label': label,
             }

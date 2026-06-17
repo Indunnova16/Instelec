@@ -49,6 +49,10 @@ ACTIVIDAD_CAMPOS = [
     'dossier',
 ]
 
+# #150: además del "no aplica" por FILA (campo `aplica`), el cliente pidió poder
+# marcar "no aplica" por CASILLA. Por cada actividad hay un campo `<campo>_no_aplica`.
+ACTIVIDAD_NO_APLICA_CAMPOS = [f'{c}_no_aplica' for c in ACTIVIDAD_CAMPOS]
+
 
 # Agrupación por sección del Excel (para headers colspan en la matriz).
 # Cada tupla: (slug_seccion, label, [(slug_campo, label_corto, letra), ...])
@@ -156,6 +160,22 @@ class ActividadFinalTorre(BaseModel):
         'N. Dossier final compilado', default=False,
     )
 
+    # #150: "no aplica" por CASILLA (una por actividad). Si True, esa actividad
+    # no cuenta para el avance de la torre (excluida del total y de completas).
+    empalmes_subestacion_no_aplica = models.BooleanField(default=False)
+    empalmes_intermedios_no_aplica = models.BooleanField(default=False)
+    pruebas_comunicacion_no_aplica = models.BooleanField(default=False)
+    pruebas_electricas_no_aplica = models.BooleanField(default=False)
+    visita_retie_no_aplica = models.BooleanField(default=False)
+    certificado_retie_no_aplica = models.BooleanField(default=False)
+    mediciones_paso_contacto_no_aplica = models.BooleanField(default=False)
+    reuniones_cierre_no_aplica = models.BooleanField(default=False)
+    cierre_actas_no_aplica = models.BooleanField(default=False)
+    paz_salvo_propietarios_no_aplica = models.BooleanField(default=False)
+    paz_salvo_proveedores_no_aplica = models.BooleanField(default=False)
+    informe_socioambiental_no_aplica = models.BooleanField(default=False)
+    dossier_no_aplica = models.BooleanField(default=False)
+
     observaciones = models.TextField('Observaciones', blank=True)
 
     class Meta:
@@ -193,6 +213,7 @@ class ActividadFinalTorre(BaseModel):
             faltantes = [
                 campo for campo in ACTIVIDAD_CAMPOS
                 if campo != 'dossier' and not getattr(self, campo)
+                and not getattr(self, f'{campo}_no_aplica', False)  # #150: ignorar casillas no aplica
             ]
             if faltantes:
                 errors['dossier'] = (
@@ -223,11 +244,19 @@ class ActividadFinalTorre(BaseModel):
 
     @property
     def total_actividades(self):
-        return len(ACTIVIDAD_CAMPOS)
+        # #150: las casillas marcadas "no aplica" no cuentan en el total.
+        return sum(
+            1 for campo in ACTIVIDAD_CAMPOS
+            if not getattr(self, f'{campo}_no_aplica', False)
+        )
 
     @property
     def actividades_completas(self):
-        return sum(1 for campo in ACTIVIDAD_CAMPOS if getattr(self, campo))
+        # #150: completada y que aplique (no marcada "no aplica" por casilla).
+        return sum(
+            1 for campo in ACTIVIDAD_CAMPOS
+            if getattr(self, campo) and not getattr(self, f'{campo}_no_aplica', False)
+        )
 
     @property
     def pct_avance(self):
@@ -240,7 +269,8 @@ class ActividadFinalTorre(BaseModel):
         if not self.aplica:
             return 100.0
         if not self.total_actividades:
-            return 0.0
+            # #150: todas las casillas marcadas "no aplica" → nada pendiente.
+            return 100.0
         return (self.actividades_completas / self.total_actividades) * 100.0
 
     @property

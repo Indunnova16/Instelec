@@ -242,8 +242,10 @@ class TestAplicaPinturaAeronautica:
         oc = ObraCivilTorre.objects.create(proyecto=proyecto, torre=torres[0])
         assert oc.aplica_pintura_aeronautica is True
 
-    def test_index_excluye_torre_no_aplica(self, admin_client, proyecto, torres,
-                                            sqlite_regexp_replace):
+    def test_index_incluye_todas_las_torres(self, admin_client, proyecto, torres,
+                                             sqlite_regexp_replace):
+        # #153 (rebote): SPT y Pintura de Patas son OBLIGATORIOS para todas las
+        # torres → el índice las muestra TODAS, aplique o no Pintura Aeronáutica.
         ObraCivilTorre.objects.create(
             proyecto=proyecto, torre=torres[0], aplica_pintura_aeronautica=True)
         ObraCivilTorre.objects.create(
@@ -253,20 +255,22 @@ class TestAplicaPinturaAeronautica:
         assert resp.status_code == 200
         ids = {f["torre"].id for f in resp.context["filas"]}
         assert torres[0].id in ids
-        assert torres[1].id not in ids
+        assert torres[1].id in ids  # la que NO aplica aero también aparece
 
-    def test_detalle_torre_no_aplica_redirige(self, admin_client, proyecto, torres,
-                                              sqlite_regexp_replace):
+    def test_detalle_torre_no_aplica_muestra_spt_oculta_aero(
+            self, admin_client, proyecto, torres, sqlite_regexp_replace):
+        # #153 (rebote): una torre que NO aplica Pintura Aeronáutica igual entra
+        # al detalle (200) con SPT + Pintura de Patas; solo se oculta la aero.
         ObraCivilTorre.objects.create(
             proyecto=proyecto, torre=torres[0], aplica_pintura_aeronautica=False)
         url = reverse("construccion:spt_pintura_torre",
                       kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
         resp = admin_client.get(url)
-        assert resp.status_code == 302
-        assert reverse("construccion:spt_pintura",
-                       kwargs={"proyecto_id": proyecto.id}) in resp.url
-        # No debe crear estructuras para una torre que no aplica.
-        assert not SPTTorre.objects.filter(torre=torres[0]).exists()
+        assert resp.status_code == 200
+        assert resp.context["aplica_aero"] is False
+        # SPT obligatorio SÍ se crea; la aero NO.
+        assert SPTTorre.objects.filter(torre=torres[0]).exists()
+        assert not PinturaAeronauticaTorre.objects.filter(torre=torres[0]).exists()
 
     def test_detalle_torre_aplica_ok(self, admin_client, proyecto, torres,
                                      sqlite_regexp_replace):

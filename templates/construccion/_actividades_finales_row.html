@@ -12,28 +12,45 @@ Reemplazado por HTMX tras un toggle. Refresca celdas + % avance + badge.
         {% if fila.torre.tipo %}<span class="ml-1 text-xs text-gray-500">{{ fila.torre.tipo }}</span>{% endif %}
     </th>
 
-    {# 13 celdas booleanas — atenuadas/deshabilitadas si la torre no aplica (#150) #}
+    {# 13 celdas booleanas — atenuadas si la torre no aplica (fila) o la casilla no aplica (#150) #}
     {% for celda in fila.celdas %}
-    <td class="px-2 py-1 text-center {% if not fila.af.aplica %}opacity-40{% endif %}" title="{{ celda.letra }} — {{ celda.label }}">
-        <button type="button"
-                {% if fila.af.aplica %}
-                hx-post="{% url 'construccion:actividades_finales_toggle' proyecto_id=proyecto.id torre_id=fila.torre.id %}"
-                hx-vals='{"campo": "{{ celda.campo }}"}'
-                hx-target="#fila-torre-{{ fila.torre.id }}"
-                hx-swap="outerHTML"
-                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                hx-on::after-request="if(event.detail.failed){ var det=event.detail.xhr.responseText; var t=document.getElementById('actividades-finales-toast'); if(t){t.innerHTML=det; t.classList.remove('hidden');} }"
-                {% else %}disabled{% endif %}
-                aria-label="Toggle {{ celda.label }} de T{{ fila.torre.numero_display }}"
-                class="w-9 h-7 rounded text-xs font-bold transition-colors
-                       {% if not fila.af.aplica %}cursor-not-allowed {% endif %}
-                       {% if celda.valor %}
-                         bg-green-500 hover:bg-green-600 text-white
-                       {% else %}
-                         bg-gray-100 hover:bg-gray-200 text-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-500
-                       {% endif %}">
-            {% if celda.valor %}✓{% else %}–{% endif %}
-        </button>
+    <td class="px-2 py-1 text-center {% if not fila.af.aplica or celda.no_aplica %}opacity-40{% endif %}" title="{{ celda.letra }} — {{ celda.label }}">
+        <div class="flex flex-col items-center gap-0.5">
+            <button type="button"
+                    {% if fila.af.aplica and not celda.no_aplica %}
+                    hx-post="{% url 'construccion:actividades_finales_toggle' proyecto_id=proyecto.id torre_id=fila.torre.id %}"
+                    hx-vals='{"campo": "{{ celda.campo }}"}'
+                    hx-target="#fila-torre-{{ fila.torre.id }}"
+                    hx-swap="outerHTML"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    hx-on::after-request="if(event.detail.failed){ var det=event.detail.xhr.responseText; var t=document.getElementById('actividades-finales-toast'); if(t){t.innerHTML=det; t.classList.remove('hidden');} }"
+                    {% else %}disabled{% endif %}
+                    aria-label="Toggle {{ celda.label }} de T{{ fila.torre.numero_display }}"
+                    class="w-9 h-7 rounded text-xs font-bold transition-colors
+                           {% if not fila.af.aplica or celda.no_aplica %}cursor-not-allowed {% endif %}
+                           {% if celda.no_aplica %}
+                             bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400
+                           {% elif celda.valor %}
+                             bg-green-500 hover:bg-green-600 text-white
+                           {% else %}
+                             bg-gray-100 hover:bg-gray-200 text-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-500
+                           {% endif %}">
+                {% if celda.no_aplica %}N/A{% elif celda.valor %}✓{% else %}–{% endif %}
+            </button>
+            {# #150: mini-toggle "no aplica" por casilla (solo si la fila aplica) #}
+            {% if fila.af.aplica %}
+            <button type="button"
+                    hx-post="{% url 'construccion:actividades_finales_toggle' proyecto_id=proyecto.id torre_id=fila.torre.id %}"
+                    hx-vals='{"campo": "{{ celda.campo }}_no_aplica"}'
+                    hx-target="#fila-torre-{{ fila.torre.id }}"
+                    hx-swap="outerHTML"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    title="{% if celda.no_aplica %}Marcar que SÍ aplica{% else %}Marcar 'no aplica' esta casilla{% endif %}"
+                    class="text-[10px] leading-none px-1 {% if celda.no_aplica %}text-amber-600 font-semibold{% else %}text-gray-400 hover:text-amber-600{% endif %}">
+                {% if celda.no_aplica %}↩ aplica{% else %}n/a{% endif %}
+            </button>
+            {% endif %}
+        </div>
     </td>
     {% endfor %}
 

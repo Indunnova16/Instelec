@@ -1682,8 +1682,10 @@ class SPTPinturaIndexView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        # #153: solo torres que aplican a Pintura Aeronáutica.
-        torres_qs = torres_qs.filter(obra_civil__aplica_pintura_aeronautica=True)
+        # #153: SPT y Pintura de Patas son OBLIGATORIOS para TODAS las torres;
+        # solo la subsección "Pintura Aeronáutica" es opcional (se gatea por
+        # obra_civil.aplica_pintura_aeronautica en el detalle/template). Por eso
+        # el índice muestra todas las torres (no filtramos acá).
         torres_qs = ordenar_torres_construccion(torres_qs.select_related().prefetch_related(
             'spt', 'pintura_patas', 'pintura_aeronautica__franjas',
         ))
@@ -1725,32 +1727,26 @@ class SPTPinturaTorreView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     template_name = 'construccion/spt_pintura_torre.html'
     allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
 
-    def get(self, request, *args, **kwargs):
-        # #153: si la torre no aplica a Pintura Aeronáutica, redirigir al índice
-        # con un aviso (no crear estructuras get_or_create para torres que no aplican).
-        from django.contrib import messages
-        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
-        torre = get_object_or_404(
-            TorreConstruccion, id=self.kwargs['torre_id'], proyecto=proyecto)
-        oc = ObraCivilTorre.objects.filter(proyecto=proyecto, torre=torre).first()
-        if oc is not None and not oc.aplica_pintura_aeronautica:
-            messages.warning(
-                request,
-                f'La torre {torre.numero_display} no aplica a Pintura Aeronáutica.')
-            return redirect('construccion:spt_pintura', proyecto_id=proyecto.id)
-        return super().get(request, *args, **kwargs)
+    # #153: ya NO se redirige cuando la torre no aplica a Pintura Aeronáutica —
+    # SPT y Pintura de Patas son obligatorios para todas las torres; solo la
+    # subsección Pintura Aeronáutica se oculta en el template si no aplica.
 
     def _get_or_create_estructuras(self, proyecto, torre):
         spt, _ = SPTTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
         patas, _ = PinturaPatasTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
-        aero, _ = PinturaAeronauticaTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
-        # Signal post_save crea las 7 franjas si la aero es nueva; defensivo si fallaron.
-        for n in range(1, 8):
-            color = PinturaFranja.Color.NARANJA if n % 2 == 1 else PinturaFranja.Color.BLANCO
-            PinturaFranja.objects.get_or_create(
-                pintura_aeronautica=aero, numero_franja=n,
-                defaults={'color': color},
-            )
+        # Crear la estructura de Pintura Aeronáutica SOLO si la torre la aplica.
+        oc = ObraCivilTorre.objects.filter(proyecto=proyecto, torre=torre).first()
+        aplica_aero = oc.aplica_pintura_aeronautica if oc is not None else True
+        aero = None
+        if aplica_aero:
+            aero, _ = PinturaAeronauticaTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
+            # Signal post_save crea las 7 franjas si la aero es nueva; defensivo si fallaron.
+            for n in range(1, 8):
+                color = PinturaFranja.Color.NARANJA if n % 2 == 1 else PinturaFranja.Color.BLANCO
+                PinturaFranja.objects.get_or_create(
+                    pintura_aeronautica=aero, numero_franja=n,
+                    defaults={'color': color},
+                )
         return spt, patas, aero
 
     def get_context_data(self, **kwargs):
@@ -1758,7 +1754,9 @@ class SPTPinturaTorreView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torre = get_object_or_404(TorreConstruccion, id=self.kwargs['torre_id'], proyecto=proyecto)
         spt, patas, aero = self._get_or_create_estructuras(proyecto, torre)
-        franjas = list(aero.franjas.order_by('numero_franja'))
+        # aero es None si la torre no aplica Pintura Aeronáutica (#153).
+        franjas = list(aero.franjas.order_by('numero_franja')) if aero else []
+        aplica_aero = aero is not None
 
         # Navegación prev/next (por orden alfabético de numero)
         torres = list(ordenar_torres_construccion(TorreConstruccion.objects.filter(proyecto=proyecto)))
@@ -1772,6 +1770,7 @@ class SPTPinturaTorreView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'spt': spt,
             'patas': patas,
             'aero': aero,
+            'aplica_aero': aplica_aero,
             'franjas': franjas,
             'prev_torre': prev_t,
             'next_torre': next_t,
@@ -2104,7 +2103,19 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        # #149: solo ofrecer torres que aplican a Obras de Protección.
+        # #149: el filtro `obra_civil__aplica_obras_proteccion=True` es un INNER JOIN
+        # que excluía las torres SIN fila ObraCivilTorre (solo aparecía la única que
+        # tenía fila, p.ej. T-1). Aseguramos una fila por torre (idempotente, default
+        # aplica=True = opt-out) ANTES de filtrar, igual que ObraCivilMatrizView.
+        _existentes = set(
+            ObraCivilTorre.objects.filter(proyecto=proyecto).values_list('torre_id', flat=True))
+        _faltantes = [
+            ObraCivilTorre(proyecto=proyecto, torre=t)
+            for t in torres_qs if t.id not in _existentes
+        ]
+        if _faltantes:
+            ObraCivilTorre.objects.bulk_create(_faltantes, ignore_conflicts=True)
+        # Ahora sí: solo las torres que aplican a Obras de Protección (desmarcar para excluir).
         torres_qs = torres_qs.filter(obra_civil__aplica_obras_proteccion=True)
 
         obras = list(TrinchoCuneta.objects.filter(proyecto=proyecto)

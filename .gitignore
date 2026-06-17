@@ -177,3 +177,4 @@ google-credentials.json
 firebase-adminsdk*.json
 gcp-*.json
 ACCESO_PRODUCCION.txt
+.venv/

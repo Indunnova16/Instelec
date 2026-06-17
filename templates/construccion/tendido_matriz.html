@@ -117,6 +117,7 @@
                         <th colspan="5" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Fibra OPGW</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-purple-50 dark:bg-purple-900/30">% Fibra</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (F)</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Detalle</th>
                     </tr>
                     <tr>
                         {% for slug, label in columnas_conductor %}
@@ -176,9 +177,16 @@
                                    @change="actualizarRealizo('fibra', $event.target.value)"
                                    class="w-24 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         </td>
+                        {# #147: link al detalle por torre (circuitos/fases/tandas) — antes la matriz no permitía entrar #}
+                        <td class="px-2 py-1 text-center border-l border-gray-200 dark:border-gray-700">
+                            <a href="{% url 'construccion:tendido_torre' proyecto.id fila.torre.id %}"
+                               class="text-blue-600 hover:underline text-xs font-medium whitespace-nowrap">
+                                <i class="bi bi-pencil-square"></i> Editar
+                            </a>
+                        </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="20" class="px-3 py-8 text-center text-gray-500">No hay torres en este proyecto.</td></tr>
+                    <tr><td colspan="21" class="px-3 py-8 text-center text-gray-500">No hay torres en este proyecto.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

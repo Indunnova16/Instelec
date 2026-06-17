@@ -277,3 +277,37 @@ class TestAplicaObrasProteccion:
                       kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
         resp = admin_client.post(url, {"campo": "observaciones", "aplica": "1"})
         assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestObrasProteccionFiltro149:
+    """#149 (rebote): el listado de Obras de Protección solo mostraba la torre 1
+    porque el filtro INNER JOIN excluía torres sin fila ObraCivilTorre."""
+
+    def test_listado_crea_oc_y_muestra_todas(self, admin_client, proyecto, torres,
+                                             sqlite_regexp_replace):
+        # NINGUNA torre tiene ObraCivilTorre al entrar (caso del cliente).
+        assert ObraCivilTorre.objects.count() == 0
+        url = reverse("construccion:trinchos_cunetas",
+                      kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        # Se crea una fila por torre (idempotente, default aplica=True = opt-out).
+        assert ObraCivilTorre.objects.filter(proyecto=proyecto).count() == len(torres)
+        # Y todas las torres quedan disponibles (antes solo aparecía 1).
+        ids = {t.id for t in resp.context["torres_disponibles"]}
+        for t in torres:
+            assert t.id in ids
+
+    def test_listado_excluye_torre_desmarcada(self, admin_client, proyecto, torres,
+                                              sqlite_regexp_replace):
+        # Marcar una torre como NO aplica → no aparece; las demás sí (opt-out).
+        ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=False)
+        url = reverse("construccion:trinchos_cunetas",
+                      kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        ids = {t.id for t in resp.context["torres_disponibles"]}
+        assert torres[0].id not in ids
+        assert torres[1].id in ids
