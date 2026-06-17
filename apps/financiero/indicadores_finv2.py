@@ -445,3 +445,47 @@ def _obtener_ans(linea=None, anio=None, mes=None):
         return serie_componentes_ans(linea=linea, anio=anio, mes=mes)
     except Exception:
         return None
+
+
+def contexto_indicadores_finv2(anio, mes=0, contrato=None, linea=None):
+    """#122: contexto reutilizable de los 6 KPIs técnico-financieros + ANS.
+
+    Permite mostrar las MISMAS tablas en el Dashboard Financiero (/financiero/)
+    y en el Dashboard de Indicadores (/indicadores/) — que es el que el cliente
+    usa. Si no se pasa ``contrato``, agrega el presupuesto de TODOS los contratos
+    del año (vista de proyecto). ``mes==0`` => todo el año.
+
+    Devuelve dict con: indicadores_tecnico_financieros, resumen_ans, indicadores_ans.
+    """
+    # Import diferido: financiero.views importa este módulo (evita circular).
+    from .views import (
+        _extract_presupuesto_summary, _build_empty_datos, PresupuestoDetallado,
+    )
+    mes_indices = list(range(12)) if not mes else [mes - 1]
+    _KEYS = ('ingreso', 'total_variables', 'total_fijos', 'total_gastos', 'resultado')
+
+    def _resumen(tipo):
+        qs = PresupuestoDetallado.objects.filter(anio=anio, tipo=tipo)
+        if contrato is not None:
+            qs = qs.filter(contrato=contrato)
+        total = {k: 0 for k in _KEYS}
+        hubo = False
+        for obj in qs:
+            r = _extract_presupuesto_summary(obj.datos or {}, mes_indices)
+            for k in _KEYS:
+                total[k] += r.get(k, 0)
+            hubo = True
+        if not hubo:
+            return _extract_presupuesto_summary(_build_empty_datos(), mes_indices)
+        total['utilidad_pct'] = ((total['ingreso'] - total['total_gastos'])
+                                 / total['ingreso'] * 100) if total['ingreso'] else 0
+        return total
+
+    rp = _resumen('PLANEADO')
+    rr = _resumen('REAL')
+    resumen_ans = calcular_resumen_ans(linea=linea, anio=anio, mes=(mes or None))
+    return {
+        'indicadores_tecnico_financieros': calcular_indicadores_tecnico_financieros(rp, rr),
+        'resumen_ans': resumen_ans,
+        'indicadores_ans': resumen_ans.get('filas', []),
+    }

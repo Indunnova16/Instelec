@@ -174,6 +174,24 @@ class DashboardView(LoginRequiredMixin, HTMXMixin, TemplateView):
             for m in mediciones
         ]
 
+        # #122 (rebote): los 6 KPIs técnico-financieros + ANS deben verse en ESTE
+        # dashboard (el que usa el cliente), no solo en /financiero/. Reutilizamos
+        # el cálculo del módulo financiero (misma fuente de verdad) filtrando por
+        # la línea seleccionada (o todas) y el período (anio/mes) del dashboard.
+        try:
+            from apps.financiero.indicadores_finv2 import contexto_indicadores_finv2
+            linea_sel = None
+            linea_id = self.request.GET.get('linea')
+            if linea_id:
+                linea_sel = Linea.objects.filter(id=linea_id).first()
+            context.update(contexto_indicadores_finv2(
+                anio=anio, mes=mes, contrato=None, linea=linea_sel))
+        except Exception:
+            # Nunca romper el dashboard de indicadores si el cálculo financiero falla.
+            context.setdefault('indicadores_tecnico_financieros', [])
+            context.setdefault('indicadores_ans', [])
+            context.setdefault('resumen_ans', None)
+
         return context
 
 

@@ -137,6 +137,11 @@
             </article>
         </section>
 
+        {# #122: Indicadores técnico-financieros (6 KPIs) + ANS — reutilizan los
+           partials y el cálculo del módulo financiero (misma fuente de verdad). #}
+        {% include "financiero/_indicadores_tecnico_financieros.html" %}
+        {% include "financiero/_indicadores_ans.html" %}
+
         <!-- Charts Row -->
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6" aria-labelledby="charts-section-title">
             <h2 id="charts-section-title" class="sr-only">Graficos de desempeno</h2>
