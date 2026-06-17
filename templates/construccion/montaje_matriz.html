@@ -116,7 +116,7 @@ Los avances de las 4 etapas son READ-ONLY: vienen del cache
               <a href="{% url 'construccion:montaje_detalle' proyecto_id=proyecto.id torre_id=fila.torre.id %}?seccion=montaje"
                  class="inline-block min-w-14 px-2 py-0.5 rounded text-gray-700 hover:bg-blue-50 hover:text-blue-700"
                  title="Editar en el detalle">
-                {% with val=fila.avances_dict|stringformat:"s" %}{{ val }}{% endwith %}
+                {# #158: se eliminó el repr del dict de avances que se imprimía crudo en cada celda. #}
                 <span class="font-mono">
                   {% if slug == 'estructura_sitio' %}{{ fila.avance_estructura_sitio|floatformat:0 }}{% endif %}
                   {% if slug == 'prearamada' %}{{ fila.avance_prearamada|floatformat:0 }}{% endif %}

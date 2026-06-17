@@ -332,6 +332,11 @@ class TorreConstruccion(BaseModel):
         related_name='torres',
     )
     numero = models.CharField('Número de torre', max_length=20)
+    # #160: una torre marcada "No aplica" (ej. saldos 24→26) queda fuera del
+    # proyecto: no aparece en etapas/módulos ni cuenta en el % de avance.
+    aplica = models.BooleanField(
+        'Aplica al proyecto', default=True,
+        help_text='Si está desmarcada, la torre se excluye de todos los módulos y del % de avance.')
     tipo = models.CharField('Tipo de estructura', max_length=20, blank=True, help_text='e.g., D6, B4, C5')
     tipo_cimentacion = models.CharField(
         'Tipo de cimentación',

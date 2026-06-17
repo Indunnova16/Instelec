@@ -13,9 +13,17 @@ from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
 from apps.contratos.models import Contrato
 
 
-def ordenar_torres_construccion(qs):
+def ordenar_torres_construccion(qs, incluir_no_aplica=False):
     """Orden numérico ascendente por la parte numérica de ``numero`` (#100:
-    evita T-1, T-10, T-2). Formatos sin número quedan al final."""
+    evita T-1, T-10, T-2). Formatos sin número quedan al final.
+
+    #160: por defecto EXCLUYE las torres marcadas "No aplica" (``aplica=False``)
+    para que no aparezcan en módulos/dashboards ni cuenten en el avance. La matriz
+    de Obra Civil (donde se gestiona el flag) pasa ``incluir_no_aplica=True`` para
+    poder ver y re-activar esas torres.
+    """
+    if not incluir_no_aplica:
+        qs = qs.filter(aplica=True)
     return qs.annotate(
         _solo_digitos=Func(
             F('numero'), Value(r'[^0-9]'), Value(''), Value('g'),
@@ -1390,7 +1398,9 @@ class ObraCivilMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                                      id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = ordenar_torres_construccion(torres_qs.select_related())
+        # #160: la matriz de Obra Civil muestra TODAS las torres (incl. "No aplica")
+        # para poder marcarlas/re-activarlas; el resto de módulos las excluye.
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related(), incluir_no_aplica=True)
 
         # Asegurar OC para cada torre (crear si no existe — idempotente).
         existentes = {oc.torre_id: oc for oc in ObraCivilTorre.objects.filter(proyecto=proyecto)}
@@ -1512,12 +1522,20 @@ class ObraCivilAplicaUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
     def post(self, request, proyecto_id, torre_id, *args, **kwargs):
         from django.http import JsonResponse
         campo = request.POST.get('campo', '').strip()
+        valor = request.POST.get('aplica', '').strip().lower() in ('1', 'true', 'on')
+        # #160: flag GLOBAL "torre aplica al proyecto" vive en TorreConstruccion
+        # (no en ObraCivilTorre) para excluirla de todo sin el bug INNER JOIN.
+        if campo == 'aplica':
+            torre = get_object_or_404(
+                TorreConstruccion, proyecto_id=proyecto_id, id=torre_id)
+            torre.aplica = valor
+            torre.save(update_fields=['aplica'])
+            return JsonResponse({'ok': True, 'campo': campo, 'valor': valor})
         if campo not in self.CAMPOS_PERMITIDOS:
             return JsonResponse(
                 {'error': f'Campo no permitido: {campo!r}'}, status=400)
         oc = get_object_or_404(
             ObraCivilTorre, proyecto_id=proyecto_id, torre_id=torre_id)
-        valor = request.POST.get('aplica', '').strip().lower() in ('1', 'true', 'on')
         setattr(oc, campo, valor)
         oc.save(update_fields=[campo, 'updated_at'])
         return JsonResponse({'ok': True, 'campo': campo, 'valor': valor})

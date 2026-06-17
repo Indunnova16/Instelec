@@ -204,7 +204,7 @@ def _detalles_oc_por_torre(proyecto):
     from .models_b3_oc_detalle import ObraCivilTorreDetalle
     by_torre = defaultdict(list)
     qs = (ObraCivilTorreDetalle.objects
-          .filter(proyecto=proyecto)
+          .filter(proyecto=proyecto, torre__aplica=True)  # #160: excluir torres no-aplica
           .select_related('torre', 'proyecto'))
     for det in qs:
         by_torre[det.torre_id].append(det)
@@ -215,7 +215,7 @@ def _detalles_montaje(proyecto):
     """QuerySet de MontajeEstructuraTorreDetalle del proyecto (uno por torre)."""
     from .models_b3_mont_detalle import MontajeEstructuraTorreDetalle
     return (MontajeEstructuraTorreDetalle.objects
-            .filter(proyecto=proyecto)
+            .filter(proyecto=proyecto, torre__aplica=True)  # #160
             .select_related('torre', 'proyecto'))
 
 
@@ -223,7 +223,7 @@ def _tendido_torres(proyecto):
     """QuerySet de TendidoTorre del proyecto (uno por torre)."""
     from .models import TendidoTorre
     return (TendidoTorre.objects
-            .filter(proyecto=proyecto)
+            .filter(proyecto=proyecto, torre__aplica=True)  # #160
             .select_related('torre', 'proyecto'))
 
 
@@ -268,7 +268,7 @@ def serie_curva_s_real(proyecto, fase) -> dict:
     Para TENDIDO el avance por torre = promedio(avance_conductor, avance_fibra).
     """
     fase = (fase or '').upper()
-    n_torres = proyecto.torres.count() or 0
+    n_torres = proyecto.torres.filter(aplica=True).count() or 0
     pares = []
 
     if fase == FASE_OOCC:
@@ -456,7 +456,7 @@ def vista_por_torre(proyecto, fase) -> list:
         # Necesitamos numero por torre.
         from .models import TorreConstruccion
         numeros = {t.id: t.numero for t in
-                   TorreConstruccion.objects.filter(proyecto=proyecto)}
+                   TorreConstruccion.objects.filter(proyecto=proyecto, aplica=True)}
         for torre_id, patas in by_torre.items():
             pct = round(_avance_oc_torre(patas) * 100, 2)
             pendientes = []
@@ -504,7 +504,19 @@ def vista_por_torre(proyecto, fase) -> list:
                 'pendientes': pendientes,
             })
 
-    resultado.sort(key=lambda r: (str(r['numero'])))
+    # #161: una torre al 100% no tiene nada pendiente — limpiar la lista para que
+    # el dashboard no muestre etapas "pendientes" en torres completas.
+    for r in resultado:
+        if r['completa']:
+            r['pendientes'] = []
+    # #159: orden NUMÉRICO natural de torres (E1, E2, …, E10, E11), no lexicográfico
+    # de string (que daba E1, E10, E11, E2). Clave: trozos texto/número alternados.
+    import re as _re
+
+    def _natkey(numero):
+        return [int(ch) if ch.isdigit() else ch.lower()
+                for ch in _re.split(r'(\d+)', str(numero or ''))]
+    resultado.sort(key=lambda r: _natkey(r['numero']))
     return resultado
 
 
@@ -536,7 +548,7 @@ def _pct_obra_civil(proyecto):
     # S real, NO del porcentaje_avance_civil_ponderado legacy (que cuelga de
     # torre.pata_obra y sale en 0% cuando el avance real está en oc_detalle).
     by_torre = _detalles_oc_por_torre(proyecto)
-    n = proyecto.torres.count() or 0
+    n = proyecto.torres.filter(aplica=True).count() or 0
     if n == 0 or not by_torre:
         return 0.0
     suma = sum(_avance_oc_torre(patas) for patas in by_torre.values())
@@ -545,7 +557,7 @@ def _pct_obra_civil(proyecto):
 
 def _pct_montaje(proyecto):
     detalles = list(_detalles_montaje(proyecto))
-    n = proyecto.torres.count() or 0
+    n = proyecto.torres.filter(aplica=True).count() or 0
     if n == 0 or not detalles:
         return 0.0
     suma = sum(_to_float(d.avance_ponderado) for d in detalles)
@@ -554,7 +566,7 @@ def _pct_montaje(proyecto):
 
 def _pct_tendido(proyecto):
     torres = list(_tendido_torres(proyecto))
-    n = proyecto.torres.count() or 0
+    n = proyecto.torres.filter(aplica=True).count() or 0
     if n == 0 or not torres:
         return 0.0
     suma = sum((_to_float(t.avance_conductor) + _to_float(t.avance_fibra)) / 2.0 for t in torres)
@@ -563,7 +575,7 @@ def _pct_tendido(proyecto):
 
 def _pct_spt_pintura(proyecto):
     from .models import SPTTorre
-    qs = SPTTorre.objects.filter(proyecto=proyecto)
+    qs = SPTTorre.objects.filter(proyecto=proyecto, torre__aplica=True)  # #160
     vals = [int(s.porcentaje_avance or 0) for s in qs]
     return round(sum(vals) / len(vals), 2) if vals else 0.0
 
@@ -571,7 +583,7 @@ def _pct_spt_pintura(proyecto):
 def _pct_detalles_finales(proyecto):
     # ActividadFinalTorre se relaciona por torre (no tiene FK proyecto directa).
     from .models_b1_actividades_finales import ActividadFinalTorre
-    qs = ActividadFinalTorre.objects.filter(torre__proyecto=proyecto)
+    qs = ActividadFinalTorre.objects.filter(torre__proyecto=proyecto, torre__aplica=True)  # #160
     vals = [float(a.pct_avance) for a in qs]
     return round(sum(vals) / len(vals), 2) if vals else 0.0
 
