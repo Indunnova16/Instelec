@@ -1366,27 +1366,7 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
-        # #147: si el Circuito 2 "No aplica", limpiar sus 6 campos para que no
-        # contaminen el avance ni queden datos inconsistentes.
-        if form.cleaned_data.get('circuito_2_aplica') is False:
-            fase = form.instance
-            fase.tendido_conductor_c2_a_ok = False
-            fase.tendido_conductor_c2_b_ok = False
-            fase.tendido_conductor_c2_c_ok = False
-            fase.tendido_conductor_c2_a_fecha = None
-            fase.tendido_conductor_c2_b_fecha = None
-            fase.tendido_conductor_c2_c_fecha = None
-            # #147 item 11: si C2 no aplica, limpiar también su regulación/flechado.
-            fase.regulacion_flechado_c2_ok = False
-            fase.regulacion_flechado_c2_fecha = None
-
-        # #147 item 9: "No aplica" gana sobre "instaladas" (mutuamente excluyentes).
-        if form.cleaned_data.get('protecciones_no_aplica') is True:
-            fase = form.instance
-            fase.protecciones_ok = False
-            fase.protecciones_fecha = None
-
-        # #147 item 10: validar y guardar el formset de tiros de riega de manila.
+        # #147 item 10: validar el formset de tiros ANTES de guardar nada.
         tiros_formset = RiegaManilaTiroFormSet(
             self.request.POST, instance=form.instance)
         if not tiros_formset.is_valid():
@@ -1394,6 +1374,38 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
                 self.get_context_data(form=form, tiros_formset=tiros_formset))
 
         response = super().form_valid(form)
+
+        # #147: las limpiezas se aplican DESPUÉS de super().form_valid() (que llama
+        # form.save() y re-aplica cleaned_data). Como los campos C2/protecciones SÍ
+        # están en el form, hacerlas antes las sobrescribía form.save() → regresión
+        # (Circuito 2 "No aplica" no limpiaba sus 6 campos). Se guardan con
+        # update_fields para que la limpieza gane.
+        cambios = []
+        if form.cleaned_data.get('circuito_2_aplica') is False:
+            self.object.tendido_conductor_c2_a_ok = False
+            self.object.tendido_conductor_c2_b_ok = False
+            self.object.tendido_conductor_c2_c_ok = False
+            self.object.tendido_conductor_c2_a_fecha = None
+            self.object.tendido_conductor_c2_b_fecha = None
+            self.object.tendido_conductor_c2_c_fecha = None
+            # #147 item 11: si C2 no aplica, limpiar también su regulación/flechado.
+            self.object.regulacion_flechado_c2_ok = False
+            self.object.regulacion_flechado_c2_fecha = None
+            cambios += [
+                'tendido_conductor_c2_a_ok', 'tendido_conductor_c2_b_ok',
+                'tendido_conductor_c2_c_ok', 'tendido_conductor_c2_a_fecha',
+                'tendido_conductor_c2_b_fecha', 'tendido_conductor_c2_c_fecha',
+                'regulacion_flechado_c2_ok', 'regulacion_flechado_c2_fecha',
+            ]
+
+        # #147 item 9: "No aplica" gana sobre "instaladas" (mutuamente excluyentes).
+        if form.cleaned_data.get('protecciones_no_aplica') is True:
+            self.object.protecciones_ok = False
+            self.object.protecciones_fecha = None
+            cambios += ['protecciones_ok', 'protecciones_fecha']
+
+        if cambios:
+            self.object.save(update_fields=cambios)
 
         # numero_tiro autoasignado (max+1) para filas nuevas que lo dejaron vacío.
         tiros_formset.instance = self.object
