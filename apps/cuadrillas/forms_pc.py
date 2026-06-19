@@ -35,12 +35,13 @@ class ProgramacionSemanalCuadrillaForm(forms.ModelForm):
     class Meta:
         model = ProgramacionSemanalCuadrilla
         fields = [
-            'cuadrilla', 'proyecto', 'anio', 'semana',
+            'cuadrilla', 'proyecto', 'bloque', 'anio', 'semana',
             'torres_programadas', 'actividades_programadas', 'observaciones',
         ]
         widgets = {
             'cuadrilla': forms.Select(attrs={'class': INPUT_CLS}),
             'proyecto': forms.Select(attrs={'class': INPUT_CLS}),
+            'bloque': forms.Select(attrs={'class': INPUT_CLS}),
             'anio': forms.NumberInput(attrs={
                 'class': INPUT_CLS, 'min': 2000, 'max': 2100, 'step': 1,
                 'placeholder': 'Ej: 2026',
