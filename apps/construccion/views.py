@@ -2136,7 +2136,12 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         # Ahora sí: solo las torres que aplican a Obras de Protección (desmarcar para excluir).
         torres_qs = torres_qs.filter(obra_civil__aplica_obras_proteccion=True)
 
-        obras = list(TrinchoCuneta.objects.filter(proyecto=proyecto)
+        # #149: las obras existentes también deben regirse SOLO por
+        # aplica_obras_proteccion: una torre con oc=False que tenga una fila
+        # TrinchoCuneta preexistente (de antes de desmarcarla) NO debe aparecer.
+        obras = list(TrinchoCuneta.objects
+                     .filter(proyecto=proyecto,
+                             torre__obra_civil__aplica_obras_proteccion=True)
                      .select_related('torre').order_by('torre__numero'))
         # Totales y resumen por cuadrilla
         total_metros = sum(o.total_metros_obra for o in obras)
@@ -2148,7 +2153,13 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         ctx.update({
             'proyecto': proyecto,
             'obras': obras,
-            'torres_disponibles': ordenar_torres_construccion(torres_qs),
+            # #149: el módulo Obras de Protección se rige SOLO por
+            # aplica_obras_proteccion (torres_qs ya está filtrado por ese flag).
+            # NO aplicar el segundo filtro global torre.aplica (#160) del orden:
+            # incluir_no_aplica=True desacopla el selector del flag global, así
+            # una torre marcada oc=True aparece aunque su flag global sea False.
+            'torres_disponibles': ordenar_torres_construccion(
+                torres_qs, incluir_no_aplica=True),
             'total_metros': total_metros,
             'completadas': completadas,
             'por_cuadrilla': por_cuadrilla,
