@@ -74,6 +74,13 @@ class ProgramacionCuadrillaIndexView(LoginRequiredMixin, RoleRequiredMixin, List
         if semana is not None and 1 <= semana <= 53:
             qs = qs.filter(semana=semana)
 
+        # --- Filtro por bloque (#155, item 12) ---
+        # Validar contra los choices del modelo: un `?bloque=basura` se ignora
+        # silenciosamente (no rompe el listado), mismo patrón que los otros filtros.
+        bloque = (self.request.GET.get('bloque') or '').strip()
+        if bloque and bloque in dict(ProgramacionSemanalCuadrilla.BLOQUE_CHOICES):
+            qs = qs.filter(bloque=bloque)
+
         return qs
 
     @staticmethod
@@ -114,11 +121,15 @@ class ProgramacionCuadrillaIndexView(LoginRequiredMixin, RoleRequiredMixin, List
         )
         context['anios'] = sorted({a for a in anios}, reverse=True)
 
+        # Bloques disponibles para el selector de filtro (#155, item 12).
+        context['bloques'] = ProgramacionSemanalCuadrilla.BLOQUE_CHOICES
+
         # Eco de los filtros activos para que el template marque el selected y
         # arme los enlaces de paginación sin perder el filtro.
         context['cuadrilla_actual'] = (self.request.GET.get('cuadrilla') or '').strip()
         context['proyecto_actual'] = (self.request.GET.get('proyecto') or '').strip()
         context['anio_actual'] = self._parse_int(self.request.GET.get('anio'))
         context['semana_actual'] = self._parse_int(self.request.GET.get('semana'))
+        context['bloque_actual'] = (self.request.GET.get('bloque') or '').strip()
 
         return context

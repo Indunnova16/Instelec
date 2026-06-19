@@ -68,6 +68,20 @@
             {% endif %}
         </div>
 
+        <div>
+            <label for="{{ form.bloque.id_for_label }}"
+                   class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ form.bloque.label }}
+            </label>
+            {{ form.bloque }}
+            {% if form.bloque.help_text %}
+            <p class="mt-1 text-xs text-gray-500">{{ form.bloque.help_text }}</p>
+            {% endif %}
+            {% if form.bloque.errors %}
+            <p class="mt-1 text-sm text-red-600">{{ form.bloque.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
                 <label for="{{ form.anio.id_for_label }}"

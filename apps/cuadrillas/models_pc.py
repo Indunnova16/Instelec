@@ -24,6 +24,19 @@ class ProgramacionSemanalCuadrilla(BaseModel):
     una semana ISO (año + número de semana).
     """
 
+    # Macro-bloques del proyecto (#155, item 12). El cumplimiento de cuadrilla
+    # debe servir para los 3 bloques. OJO: NO confundir con `BLOQUES_ORDEN`
+    # (apps/construccion/models.py), que son las sub-fases internas de Obra Civil
+    # (#53). Estos son los 3 macro-bloques de la obra completa.
+    BLOQUE_OBRA_CIVIL = 'obra_civil'
+    BLOQUE_MONTAJE = 'montaje'
+    BLOQUE_TENDIDO = 'tendido'
+    BLOQUE_CHOICES = [
+        (BLOQUE_OBRA_CIVIL, 'Obra civil'),
+        (BLOQUE_MONTAJE, 'Montaje'),
+        (BLOQUE_TENDIDO, 'Tendido'),
+    ]
+
     cuadrilla = models.ForeignKey(
         'cuadrillas.Cuadrilla',
         on_delete=models.CASCADE,
@@ -45,6 +58,15 @@ class ProgramacionSemanalCuadrilla(BaseModel):
     semana = models.PositiveSmallIntegerField(
         'Semana ISO',
         help_text='Número de semana ISO (1-53)',
+    )
+    bloque = models.CharField(
+        'Bloque',
+        max_length=20,
+        choices=BLOQUE_CHOICES,
+        null=True,
+        blank=True,
+        help_text='Macro-bloque del proyecto (obra civil / montaje / tendido). '
+                  'Opcional: las programaciones sin bloque quedan "sin asignar".',
     )
     torres_programadas = models.PositiveIntegerField(
         'Torres programadas',

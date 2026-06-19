@@ -73,6 +73,18 @@
                 </dd>
             </div>
             <div>
+                <dt class="text-gray-500 dark:text-gray-400">Bloque</dt>
+                <dd class="font-medium" data-bloque>
+                    {% if programacion.bloque %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+                        {{ programacion.get_bloque_display }}
+                    </span>
+                    {% else %}
+                    <span class="text-gray-400">— Sin asignar —</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
                 <dt class="text-gray-500 dark:text-gray-400">Torres programadas</dt>
                 <dd class="text-gray-900 dark:text-white font-medium" data-torres-programadas>
                     {{ programacion.torres_programadas }}
