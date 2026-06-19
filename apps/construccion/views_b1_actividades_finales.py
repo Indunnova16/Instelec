@@ -187,8 +187,15 @@ class ActividadFinalToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
             nuevo = raw in ('1', 'true', 'True', 'on', 'yes')
 
         setattr(af, campo, nuevo)
+        # #150: el toggle de una casilla administrativa ('aplica' o
+        # '<campo>_no_aplica') NUNCA debe fallar con 400 por la progresión —
+        # el cliente edita la matriz en cualquier orden. Solo el toggle de las
+        # 13 actividades reales valida la progresión lógica (G-F, K-J, dossier).
+        es_toggle_administrativo = (
+            campo == 'aplica' or campo in ACTIVIDAD_NO_APLICA_CAMPOS
+        )
         try:
-            af.save()
+            af.save(skip_progresion=es_toggle_administrativo)
         except ValidationError as e:
             # Mensaje legible para HTMX response
             mensaje = ' / '.join(

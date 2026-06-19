@@ -196,15 +196,22 @@ class ActividadFinalTorre(BaseModel):
         - G (certificado_retie) requiere F (visita_retie)
         - K (paz_salvo_propietarios) requiere J (cierre_actas)
         - N (dossier) requiere TODOS los anteriores
+
+        #150: las casillas `*_no_aplica` satisfacen su regla — una actividad
+        previa marcada "no aplica" cuenta como cubierta (no es un faltante).
         """
         errors = {}
 
-        if self.certificado_retie and not self.visita_retie:
+        # #150: G requiere F, salvo que F esté marcada "no aplica".
+        if (self.certificado_retie and not self.visita_retie
+                and not self.visita_retie_no_aplica):
             errors['certificado_retie'] = (
                 'No puede emitirse el Certificado RETIE sin la Visita de certificación previa (F).'
             )
 
-        if self.paz_salvo_propietarios and not self.cierre_actas:
+        # #150: K requiere J, salvo que J esté marcada "no aplica".
+        if (self.paz_salvo_propietarios and not self.cierre_actas
+                and not self.cierre_actas_no_aplica):
             errors['paz_salvo_propietarios'] = (
                 'No puede firmarse Paz y Salvo con propietarios sin cerrar las actas de vecindad primero (J).'
             )
@@ -224,19 +231,38 @@ class ActividadFinalTorre(BaseModel):
         if errors:
             raise ValidationError(errors)
 
+    # #150: bandera transitoria — cuando el toggle es de una casilla
+    # administrativa (`*_no_aplica` o `aplica`) la validación de progresión NO
+    # debe bloquear el guardado con un 400. El usuario debe poder marcar/
+    # desmarcar "no aplica" en cualquier orden sin que una regla intermedia lo
+    # tumbe. Se setea por-instancia desde la vista y se respeta en clean().
+    _skip_progresion = False
+
     def clean(self):
         super().clean()
         # #150: si la torre no aplica, no validar progresión lógica (la matriz
         # queda inactiva y los flags no se cuentan).
         if not self.aplica:
             return
+        # #150: el toggle de una casilla "no aplica" / "aplica" no debe fallar
+        # con 400 por progresión (se edita la matriz en cualquier orden).
+        if self._skip_progresion:
+            return
         self._validar_progresion()
 
     def save(self, *args, **kwargs):
-        # full_clean para garantizar la validación incluso desde toggles HTMX
-        # que no usan ModelForm.
-        self.full_clean()
-        super().save(*args, **kwargs)
+        # #150: skip_progresion=True omite la validación de progresión para este
+        # save (toggles administrativos de `*_no_aplica`/`aplica`).
+        skip = kwargs.pop('skip_progresion', False)
+        if skip:
+            self._skip_progresion = True
+        try:
+            # full_clean para garantizar la validación incluso desde toggles HTMX
+            # que no usan ModelForm.
+            self.full_clean()
+            super().save(*args, **kwargs)
+        finally:
+            self._skip_progresion = False
 
     # ==================================================================
     # Métricas / estado
