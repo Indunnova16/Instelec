@@ -106,6 +106,7 @@
                 <thead class="bg-gray-50 dark:bg-gray-900">
                     <tr>
                         <th rowspan="2" class="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">Torre</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold" title="Torre aplica al proyecto (#150/#160)">Aplica</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold">Func.</th>
                         <th rowspan="2" class="px-1 py-2 text-center font-semibold" title="Vestida conductor">Vest.</th>
                         <th colspan="6" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30">Conductor</th>
@@ -148,8 +149,11 @@
                             grapado_amarre_fibra: {% if fila.grapado_amarre_fibra %}true{% else %}false{% endif %},
                             empalmes_opgw: {% if fila.empalmes_opgw %}true{% else %}false{% endif %}
                         })'
-                        class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10">{{ fila.torre.numero_display }}</td>
+                        class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not fila.torre.aplica %} opacity-50{% endif %}">
+                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">{{ fila.torre.numero_display }}</td>
+                        <td class="px-2 py-1 text-center align-middle">
+                            {% include "construccion/_toggle_aplica_torre.html" %}
+                        </td>
                         <td class="px-2 py-1 text-center text-gray-600 dark:text-gray-400">{{ fila.funcion|slice:":3" }}</td>
                         <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.vestida_conductor" @change="toggle('vestida_conductor', $event.target.checked)"></td>
                         {% for slug, _ in columnas_conductor %}
@@ -186,7 +190,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="21" class="px-3 py-8 text-center text-gray-500">No hay torres en este proyecto.</td></tr>
+                    <tr><td colspan="22" class="px-3 py-8 text-center text-gray-500">No hay torres en este proyecto.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -309,5 +313,6 @@ function filaTendido(torreId, campos) {
     };
 }
 </script>
+{% include "construccion/_toggle_aplica_torre_script.html" %}
 {% endlocalize %}
 {% endblock %}

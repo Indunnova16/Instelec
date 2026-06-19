@@ -1,0 +1,38 @@
+<script>
+// #150/#160 — componente Alpine mínimo para el toggle "Torre aplica/No aplica".
+// POST al endpoint global obra_civil_aplica_update (campo `aplica`).
+function aplicaTorreToggle(cfg) {
+  return {
+    url: cfg.url,
+    csrfToken: cfg.csrfToken,
+    aplica: cfg.aplica,
+    mensajeAplica: '',
+    mensajeAplicaTipo: '',
+    async guardar(campo, valor) {
+      this.mensajeAplica = '';
+      try {
+        const fd = new FormData();
+        fd.append('campo', campo);
+        fd.append('aplica', valor ? '1' : '0');
+        const r = await fetch(this.url, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok) {
+          this.mensajeAplica = 'Guardado.';
+          this.mensajeAplicaTipo = 'ok';
+        } else {
+          this.mensajeAplica = data.error || 'Error.';
+          this.mensajeAplicaTipo = 'error';
+        }
+      } catch (e) {
+        this.mensajeAplica = 'Error de red.';
+        this.mensajeAplicaTipo = 'error';
+      }
+      setTimeout(() => { this.mensajeAplica = ''; }, 4000);
+    },
+  };
+}
+</script>

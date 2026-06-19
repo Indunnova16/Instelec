@@ -1630,7 +1630,9 @@ class MontajeMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                                      id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = ordenar_torres_construccion(torres_qs.select_related())
+        # #150/#160: listar TODAS las torres (incl. "No aplica") para poder
+        # verlas/marcarlas desde Montaje; el avance abajo solo cuenta las activas.
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related(), incluir_no_aplica=True)
 
         existentes = {m.torre_id: m for m in
                       MontajeEstructuraTorre.objects.filter(proyecto=proyecto)}
@@ -1649,15 +1651,19 @@ class MontajeMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         }
         suma_pesos = sum(pesos.values())
 
-        if filas:
+        # #150: el promedio cuenta SOLO las torres que aplican (display=todas,
+        # conteo=solo aplica=True) para que una torre "No aplica" no baje el %.
+        filas_activas = [f for f in filas if f.torre.aplica]
+        if filas_activas:
             totales = {
                 k: round(
-                    sum(float(getattr(m, f'avance_{k}')) for m in filas)
-                    / len(filas) * 100, 1)
+                    sum(float(getattr(m, f'avance_{k}')) for m in filas_activas)
+                    / len(filas_activas) * 100, 1)
                 for k in pesos
             }
             avance_general = round(
-                sum(float(m.avance_ponderado) for m in filas) / len(filas) * 100, 1
+                sum(float(m.avance_ponderado) for m in filas_activas)
+                / len(filas_activas) * 100, 1
             )
         else:
             totales = {k: 0 for k in pesos}
@@ -2011,7 +2017,9 @@ class TendidoMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        torres_qs = ordenar_torres_construccion(torres_qs.select_related())
+        # #150/#160: listar TODAS las torres (incl. "No aplica") para poder
+        # verlas/marcarlas desde Tendido; el avance abajo solo cuenta las activas.
+        torres_qs = ordenar_torres_construccion(torres_qs.select_related(), incluir_no_aplica=True)
 
         existentes = {t.torre_id: t for t in TendidoTorre.objects.filter(proyecto=proyecto)}
         filas = []
@@ -2039,11 +2047,14 @@ class TendidoMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         suma_c = sum(pesos_conductor.values())
         suma_f = sum(pesos_fibra.values())
 
-        if filas:
+        # #150: el promedio cuenta SOLO las torres que aplican (display=todas,
+        # conteo=solo aplica=True) para que una torre "No aplica" no baje el %.
+        filas_activas = [f for f in filas if f.torre.aplica]
+        if filas_activas:
             avance_general_conductor = round(
-                sum(t.avance_conductor for t in filas) / len(filas) * 100, 1)
+                sum(t.avance_conductor for t in filas_activas) / len(filas_activas) * 100, 1)
             avance_general_fibra = round(
-                sum(t.avance_fibra for t in filas) / len(filas) * 100, 1)
+                sum(t.avance_fibra for t in filas_activas) / len(filas_activas) * 100, 1)
         else:
             avance_general_conductor = avance_general_fibra = 0
 

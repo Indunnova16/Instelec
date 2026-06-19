@@ -1,0 +1,23 @@
+{% load l10n %}
+{% comment %}
+#150/#160 — Toggle "Torre aplica / Torre NO aplica" por torre, reusable en las
+matrices de Obra Civil, Montaje y Tendido. Persiste vía POST al endpoint GLOBAL
+`construccion:obra_civil_aplica_update` (campo `aplica` → TorreConstruccion.aplica),
+así el flag sirve a los 3 bloques. Requiere `proyecto` y `fila.torre` en el contexto.
+{% endcomment %}
+<div class="flex flex-col gap-0.5"
+     x-data='aplicaTorreToggle({
+         url: "{% url "construccion:obra_civil_aplica_update" proyecto_id=proyecto.id torre_id=fila.torre.id %}",
+         csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+         aplica: {% if fila.torre.aplica %}true{% else %}false{% endif %}
+     })'>
+    <label class="text-[10px] font-semibold flex items-center gap-1 justify-center"
+           :class="aplica ? 'text-gray-700' : 'text-red-600'">
+        <input type="checkbox" x-model="aplica" @change="guardar('aplica', aplica)"
+               data-toggle-aplica="aplica" data-torre="{{ fila.torre.id }}"
+               class="rounded border-gray-300">
+        <span x-text="aplica ? 'Aplica' : 'NO aplica'"></span>
+    </label>
+    <span x-show="mensajeAplica" x-text="mensajeAplica"
+          :class="mensajeAplicaTipo === 'error' ? 'text-red-600 text-[10px]' : 'text-green-600 text-[10px]'"></span>
+</div>
