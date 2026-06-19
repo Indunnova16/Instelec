@@ -1,7 +1,10 @@
 """Forms for construction projects."""
 from django import forms
 from apps.contratos.models import Contrato
-from .models import PataObra, FaseTorre, SocialPredial, AmbientalTorre, ObraCivilTorre
+from .models import (
+    PataObra, FaseTorre, SocialPredial, AmbientalTorre, ObraCivilTorre,
+    RiegaManilaTiro,
+)
 
 
 INPUT_CLS = ('mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 '
@@ -194,8 +197,16 @@ class FaseTorreTendidoForm(forms.ModelForm):
             'vestida_torres_ok', 'vestida_torres_fecha',
             # Sub-flujo conductor
             'riega_manila_ok', 'riega_guaya_ok',
+            # #147 item 10: fecha cabecera de la riega de manila
+            'fecha_riega_manila',
             'ft046_ok', 'ft047_ok', 'ft932_ok',
             'regulacion_flechado_ok', 'ft918_ok',
+            # #147 item 11: regulación/flechado por circuito + cable de guarda
+            'regulacion_flechado_c1_ok', 'regulacion_flechado_c1_fecha',
+            'regulacion_flechado_c2_ok', 'regulacion_flechado_c2_fecha',
+            'regulacion_flechado_guarda_ok', 'regulacion_flechado_guarda_fecha',
+            # #147 item 9: protecciones por torre con "No aplica"
+            'protecciones_ok', 'protecciones_no_aplica', 'protecciones_fecha',
             'grapado_ok', 'accesorios_ok', 'placas_senalizacion_ok',
             'distancia_vano_adelante_m',
             # Circuito 1
@@ -234,6 +245,42 @@ class FaseTorreTendidoForm(forms.ModelForm):
                 field.widget.attrs.setdefault('class', INPUT_CLS)
                 field.widget.attrs.setdefault('step', 'any')
             field.required = False
+
+
+# ====== Riega de manila por tiros + F.T (#147 item 10) ======
+
+class RiegaManilaTiroForm(forms.ModelForm):
+    """Una fila 'tiro' de riega de manila (número, fecha, F.T, observaciones).
+
+    numero_tiro se autoasigna a max+1 si viene vacío (anti-colisión con el
+    unique_together(fase, numero_tiro)).
+    """
+
+    class Meta:
+        model = RiegaManilaTiro
+        fields = ['numero_tiro', 'fecha', 'flecha_tendido_m', 'observaciones']
+        widgets = {
+            'observaciones': forms.TextInput(attrs={'class': INPUT_CLS}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.DateInput):
+                field.widget = forms.DateInput(format='%Y-%m-%d', attrs=DATE_ATTRS)
+                field.input_formats = ['%Y-%m-%d']
+            elif isinstance(field.widget, forms.NumberInput):
+                field.widget.attrs.setdefault('class', INPUT_CLS)
+                field.widget.attrs.setdefault('step', 'any')
+            field.required = False
+
+
+RiegaManilaTiroFormSet = forms.inlineformset_factory(
+    FaseTorre, RiegaManilaTiro,
+    form=RiegaManilaTiroForm,
+    extra=1,
+    can_delete=True,
+)
 
 
 # ====== Sociopredial — liberación por torre (#51) ======

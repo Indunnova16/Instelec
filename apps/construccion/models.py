@@ -1529,12 +1529,34 @@ class FaseTorre(BaseModel):
 
     # Sub-flujo conductor (#58)
     riega_manila_ok = models.BooleanField('Riega de manila', default=False)
+    # #147 item 10: fecha cabecera de la riega de manila (la F.T por tiros vive
+    # en el modelo hijo RiegaManilaTiro, related_name='tiros_manila').
+    fecha_riega_manila = models.DateField('Fecha riega de manila',
+                                          null=True, blank=True)
     riega_guaya_ok = models.BooleanField('Riega de guaya', default=False)
     ft046_ok = models.BooleanField('FT-046 Control riega y tendido', default=False)
     ft047_ok = models.BooleanField('FT-047 Control empalmes y terminales', default=False)
     ft932_ok = models.BooleanField('FT-932 Control regulación conductor', default=False)
-    regulacion_flechado_ok = models.BooleanField('Regulación y flechado conductor',
+    regulacion_flechado_ok = models.BooleanField('Regulación y flechado (general)',
                                                  default=False)
+    # #147 item 11: regulación/flechado desglosado por circuito + cable de guarda.
+    # regulacion_flechado_ok (arriba) se conserva como rollup/legacy (no borrar).
+    regulacion_flechado_c1_ok = models.BooleanField(
+        'Regulación/flechado Circuito 1', default=False)
+    regulacion_flechado_c1_fecha = models.DateField(null=True, blank=True)
+    regulacion_flechado_c2_ok = models.BooleanField(
+        'Regulación/flechado Circuito 2', default=False)
+    regulacion_flechado_c2_fecha = models.DateField(null=True, blank=True)
+    regulacion_flechado_guarda_ok = models.BooleanField(
+        'Regulación/flechado cable de guarda', default=False)
+    regulacion_flechado_guarda_fecha = models.DateField(null=True, blank=True)
+
+    # #147 item 9: protecciones por torre con "No aplica" (patrón circuito_2_aplica).
+    # protecciones_no_aplica gana sobre protecciones_ok en form_valid.
+    protecciones_ok = models.BooleanField('Protecciones instaladas', default=False)
+    protecciones_no_aplica = models.BooleanField('Protecciones — No aplica',
+                                                 default=False)
+    protecciones_fecha = models.DateField(null=True, blank=True)
     ft918_ok = models.BooleanField('FT-918 Tabla cruces post-tendido', default=False)
     grapado_ok = models.BooleanField('Grapado / amarre final', default=False)
     accesorios_ok = models.BooleanField('Accesorios instalados (puentes, palizas)',
@@ -1666,6 +1688,35 @@ class FaseTorre(BaseModel):
         se va a ejecutar las últimas torres no hay pólvora')."""
         diff = self.spt_polvora_diferencia_cajas
         return diff is not None and diff > 0
+
+
+class RiegaManilaTiro(BaseModel):
+    """#147 item 10 — Riega de manila "por tiros" + F.T (flecha de tendido).
+
+    Cada "tiro" es un halado/sección del tendido; la flecha de tendido (F.T) se
+    mide por tiro. Relación 1-a-N respecto de la FaseTorre.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    fase = models.ForeignKey(
+        FaseTorre,
+        on_delete=models.CASCADE,
+        related_name='tiros_manila',
+    )
+    numero_tiro = models.PositiveSmallIntegerField('Número de tiro')
+    fecha = models.DateField('Fecha del tiro', null=True, blank=True)
+    flecha_tendido_m = models.FloatField('F.T — Flecha de tendido (m)',
+                                         null=True, blank=True)
+    observaciones = models.CharField('Observaciones', max_length=255, blank=True)
+
+    class Meta:
+        db_table = 'construccion_riega_manila_tiro'
+        verbose_name = 'Riega de manila — Tiro'
+        verbose_name_plural = 'Riega de manila — Tiros'
+        unique_together = [['fase', 'numero_tiro']]
+        ordering = ['numero_tiro']
+
+    def __str__(self):
+        return f"Tiro {self.numero_tiro} ({self.fase.torre.numero_display})"
 
 
 class SocialPredial(BaseModel):
