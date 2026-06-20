@@ -212,3 +212,40 @@ def test_render_incluye_campos_nuevos(authenticated_client, proyecto_i147,
     # textos que el journey espera
     assert 'riega de manila' in body.lower()
     assert 'F.T' in body
+
+
+@pytest.mark.django_db
+def test_render_incluye_boton_agregar_tiro(authenticated_client, proyecto_i147,
+                                           torre_i147):
+    """#147 UI: el detalle de tendido renderiza el botón dinámico
+    [data-add-tiro] + la plantilla empty_form (placeholder __prefix__) para
+    que el cliente pueda agregar tiros (síntoma original: solo 'Quitar')."""
+    url = _tendido_url(proyecto_i147, torre_i147)
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+    # botón con selector contractual del E2E
+    assert 'data-add-tiro' in body, "falta el botón '+ Agregar tiro'"
+    assert 'Agregar tiro' in body
+    # plantilla oculta con el empty_form (placeholder __prefix__)
+    assert '__prefix__' in body, "falta la plantilla empty_form clonable"
+    assert 'name="tiros_manila-__prefix__-flecha_tendido_m"' in body
+    # componente Alpine registrado + management_form presente
+    assert "Alpine.data('tirosManila'" in body
+    assert 'id_tiros_manila-TOTAL_FORMS' in body
+
+
+@pytest.mark.django_db
+def test_render_total_forms_cuenta_la_fila_extra(authenticated_client,
+                                                 proyecto_i147, torre_i147):
+    """Con 0 tiros guardados, el formset (extra=1) rinde 1 fila editable y
+    TOTAL_FORMS=1 → tras 1 click de 'Agregar tiro' el JS añade el índice 1
+    (tiros_manila-1-*) y deja TOTAL_FORMS=2, como espera el journey."""
+    url = _tendido_url(proyecto_i147, torre_i147)
+    resp = authenticated_client.get(url)
+    body = resp.content.decode()
+    # management_form TOTAL_FORMS = INITIAL(0) + extra(1) = 1
+    assert 'name="tiros_manila-TOTAL_FORMS" value="1"' in body, \
+        "TOTAL_FORMS inicial debe contar la fila extra editable"
+    # la fila extra (índice 0) es editable de entrada
+    assert 'name="tiros_manila-0-flecha_tendido_m"' in body
