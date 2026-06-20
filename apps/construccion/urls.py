@@ -3,6 +3,7 @@ URL patterns for the construccion (construction) app.
 """
 from django.urls import path
 from django.contrib.auth.decorators import login_required
+from django.views.generic import RedirectView
 from . import views
 from .planillas import descargar_planilla_torre
 
@@ -203,13 +204,28 @@ urlpatterns = [
          views.SPTPinturaTorreView.as_view(), name='spt_pintura_torre'),
     path('<uuid:proyecto_id>/spt-pintura/<uuid:torre_id>/update/',
          views.SPTPinturaTorreUpdateView.as_view(), name='spt_pintura_update'),
-    # Trinchos y Cunetas (#80)
-    path('<uuid:proyecto_id>/trinchos-cunetas/',
+    # Obras de Protección (Trinchos y Cunetas) (#80, #149)
+    # #149: el PATH se renombró trinchos-cunetas/ → obras-proteccion/ (lo que el
+    # cliente espera ver en la URL). Los `name=` se MANTIENEN intactos
+    # (trinchos_cunetas*) para no romper ningún {% url %} / reverse() existente.
+    path('<uuid:proyecto_id>/obras-proteccion/',
          views.TrinchosCunetasListView.as_view(), name='trinchos_cunetas'),
-    path('<uuid:proyecto_id>/trinchos-cunetas/upsert/',
+    path('<uuid:proyecto_id>/obras-proteccion/upsert/',
          views.TrinchosCunetasUpsertView.as_view(), name='trinchos_cunetas_upsert'),
-    path('<uuid:proyecto_id>/trinchos-cunetas/<uuid:pk>/delete/',
+    path('<uuid:proyecto_id>/obras-proteccion/<uuid:pk>/delete/',
          views.TrinchosCunetasDeleteView.as_view(), name='trinchos_cunetas_delete'),
+    # #149: redirects 301 de los paths viejos /trinchos-cunetas/* → nuevos, para
+    # no romper backlinks/bookmarks que el cliente tenga guardados. RedirectView
+    # con pattern_name reenvía los kwargs capturados (proyecto_id, pk).
+    path('<uuid:proyecto_id>/trinchos-cunetas/',
+         RedirectView.as_view(pattern_name='construccion:trinchos_cunetas',
+                              permanent=True)),
+    path('<uuid:proyecto_id>/trinchos-cunetas/upsert/',
+         RedirectView.as_view(pattern_name='construccion:trinchos_cunetas_upsert',
+                              permanent=True)),
+    path('<uuid:proyecto_id>/trinchos-cunetas/<uuid:pk>/delete/',
+         RedirectView.as_view(pattern_name='construccion:trinchos_cunetas_delete',
+                              permanent=True)),
 ]
 
 # === /modulo indicadores_construccion_sub_run_a — split de archivo magnet ===

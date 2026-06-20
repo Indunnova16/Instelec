@@ -2202,34 +2202,56 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         # Ahora sí: solo las torres que aplican a Obras de Protección (desmarcar para excluir).
         torres_qs = torres_qs.filter(obra_civil__aplica_obras_proteccion=True)
 
-        # #149: las obras existentes también deben regirse SOLO por
-        # aplica_obras_proteccion: una torre con oc=False que tenga una fila
-        # TrinchoCuneta preexistente (de antes de desmarcarla) NO debe aparecer.
+        # #149 (causa raíz del reproceso, bounce=3): el LISTADO debe mostrar UNA
+        # FILA POR TORRE QUE APLICA, no una fila por obra TrinchoCuneta capturada.
+        # Los 3 bounces previos arreglaron el DROPDOWN (torres_disponibles), pero
+        # el cliente reclama sobre la TABLA: una torre con aplica_obras_proteccion
+        # =True y 0 obras capturadas (E10/E19/E34/E52/E53) era invisible aquí.
+        # Ahora: torre-driven con LEFT JOIN — cada torre que aplica aparece, con
+        # su obra capturada (estado real) o como fila placeholder "Pendiente".
+        torres_ordenadas = list(
+            ordenar_torres_construccion(torres_qs, incluir_no_aplica=True))
+        # Las obras existentes siguen rigiéndose SOLO por aplica_obras_proteccion:
+        # una torre con oc=False que tenga una fila TrinchoCuneta preexistente NO
+        # aparece (porque su torre no está en torres_qs).
         obras = list(TrinchoCuneta.objects
                      .filter(proyecto=proyecto,
                              torre__obra_civil__aplica_obras_proteccion=True)
                      .select_related('torre').order_by('torre__numero'))
-        # Totales y resumen por cuadrilla
+        obras_por_torre = {o.torre_id: o for o in obras}
+        # `filas`: una entrada por torre que aplica. `obra` es la TrinchoCuneta
+        # capturada o None (pendiente de captura). El template itera `filas`.
+        filas = [
+            {'torre': t, 'obra': obras_por_torre.get(t.id)}
+            for t in torres_ordenadas
+        ]
+
+        # Totales y resumen por cuadrilla — calculados sobre las obras CAPTURADAS.
         total_metros = sum(o.total_metros_obra for o in obras)
         completadas = sum(1 for o in obras if o.completado)
+        pendientes = sum(1 for f in filas if f['obra'] is None)
         por_cuadrilla = {}
         for o in obras:
             por_cuadrilla.setdefault(o.cuadrilla or '—', []).append(o)
 
         ctx.update({
             'proyecto': proyecto,
+            # #149: `filas` (torre-driven) es la fuente del listado; `obras`
+            # (capturadas) se mantiene para métricas/compatibilidad.
+            'filas': filas,
             'obras': obras,
+            'total_torres': len(filas),
+            'pendientes': pendientes,
             # #149: el módulo Obras de Protección se rige SOLO por
             # aplica_obras_proteccion (torres_qs ya está filtrado por ese flag).
             # NO aplicar el segundo filtro global torre.aplica (#160) del orden:
             # incluir_no_aplica=True desacopla el selector del flag global, así
             # una torre marcada oc=True aparece aunque su flag global sea False.
-            'torres_disponibles': ordenar_torres_construccion(
-                torres_qs, incluir_no_aplica=True),
+            'torres_disponibles': torres_ordenadas,
             'total_metros': total_metros,
             'completadas': completadas,
             'por_cuadrilla': por_cuadrilla,
-            'active_tab': 'trinchos-cunetas',
+            'active_tab': 'obras-proteccion',
             'tipo_choices': TrinchoCuneta.TipoObra.choices,
         })
         return ctx
