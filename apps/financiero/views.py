@@ -1607,6 +1607,9 @@ class PresupuestoDetalladoBaseView(LoginRequiredMixin, RoleRequiredMixin, Templa
         return redirect(redirect_url)
 
 
+# deprecada por #120: la URL financiero:presupuesto_planeado ahora redirige a la
+# v2 (financiero:cargar_bd_contable). Esta vista queda como código muerto; no se
+# enruta más. No borrar en este sprint.
 class PresupuestoPlaneadoView(PresupuestoDetalladoBaseView):
     """View for the planned budget tab."""
     tipo_presupuesto = 'PLANEADO'

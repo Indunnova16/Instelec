@@ -2,6 +2,7 @@
 Financiero URL patterns.
 """
 from django.urls import path
+from django.views.generic import RedirectView
 from . import views
 
 app_name = 'financiero'
@@ -20,7 +21,17 @@ path('checklist-facturacion/', views.ChecklistFacturacionView.as_view(), name='c
     path('checklist-facturacion/archivo/<uuid:pk>/eliminar/', views.ChecklistEliminarArchivoView.as_view(), name='checklist_eliminar_archivo'),
     path('checklist-facturacion/periodo/archivos/subir/', views.PeriodoSubirArchivoView.as_view(), name='periodo_subir_archivo'),
     path('checklist-facturacion/periodo/archivo/<uuid:pk>/eliminar/', views.PeriodoEliminarArchivoView.as_view(), name='periodo_eliminar_archivo'),
-    path('presupuesto-planeado/', views.PresupuestoPlaneadoView.as_view(), name='presupuesto_planeado'),
+    # #120: la pantalla vieja (filtros Unidad de Negocio/Contrato) ahora redirige
+    # a la v2 de carga BD contable; query_string=True preserva params si los hay.
+    path(
+        'presupuesto-planeado/',
+        RedirectView.as_view(
+            pattern_name='financiero:cargar_bd_contable',
+            permanent=False,
+            query_string=True,
+        ),
+        name='presupuesto_planeado',
+    ),
     path('presupuesto-real/', views.PresupuestoRealView.as_view(), name='presupuesto_real'),
     path('plantilla-excel/', views.DescargarPlantillaExcelView.as_view(), name='plantilla_excel'),
     path('cargar-costos-cuadrilla/', views.CargarCostosCuadrillaView.as_view(), name='cargar_costos_cuadrilla'),
