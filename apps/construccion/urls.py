@@ -214,6 +214,10 @@ urlpatterns = [
          views.TrinchosCunetasUpsertView.as_view(), name='trinchos_cunetas_upsert'),
     path('<uuid:proyecto_id>/obras-proteccion/<uuid:pk>/delete/',
          views.TrinchosCunetasDeleteView.as_view(), name='trinchos_cunetas_delete'),
+    # Resumen de Materiales (#154) — consolidado de solo lectura (total + por torre).
+    # Slug DEBE ser 'resumen-materiales/' (el sidebar arma catUrl('resumen-materiales')).
+    path('<uuid:proyecto_id>/resumen-materiales/',
+         views.ResumenMaterialesView.as_view(), name='resumen_materiales'),
     # #149: redirects 301 de los paths viejos /trinchos-cunetas/* → nuevos, para
     # no romper backlinks/bookmarks que el cliente tenga guardados. RedirectView
     # con pattern_name reenvía los kwargs capturados (proyecto_id, pk).

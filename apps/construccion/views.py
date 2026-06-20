@@ -2294,6 +2294,63 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         return ctx
 
 
+class ResumenMaterialesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Resumen consolidado de materiales del proyecto (#154).
+
+    Vista de solo lectura: agrega los materiales de obra de todas las torres
+    (vía ``ProyectoConstruccion.resumen_materiales()``) y los presenta con un
+    total del proyecto + desglose por torre, en tabla + gráfico.
+    """
+    template_name = 'construccion/resumen_materiales.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        import json
+
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        resumen = proyecto.resumen_materiales()
+
+        # Aplanar a filas de valores ALINEADAS con el orden de `columnas`, para
+        # que el template itere sin necesidad de indexar un dict por clave
+        # variable (Django templates no lo permiten sin un filtro custom). Cada
+        # fila: {'torre': label, 'valores': [Decimal, ...]} en el orden de columnas.
+        col_keys = [c['key'] for c in resumen['columnas']]
+        filas_tabla = [
+            {'torre': f['torre'], 'valores': [f[k] for k in col_keys]}
+            for f in resumen['torres']
+        ]
+        total_valores = [resumen['total'][k] for k in col_keys]
+
+        # Serie para Chart.js: labels = torres, datasets = materiales (con datos).
+        # Se pasa CRUDO (json.dumps) y se entrega al template vía json_script en el
+        # template (no aquí) — acá solo construimos el objeto Python. El template
+        # lo emite con {{ resumen_chart|json_script:"..." }} (memoria portafolio
+        # #139: objeto crudo, NO doble-encode). Solo materiales con algún dato > 0
+        # entran como serie, para que el gráfico no se llene de barras en cero.
+        labels = [f['torre'] for f in resumen['torres']]
+        series = []
+        for col in resumen['columnas']:
+            key = col['key']
+            data = [float(f[key]) for f in resumen['torres']]
+            if any(v > 0 for v in data):
+                series.append({
+                    'label': f"{col['label']} ({col['unidad']})",
+                    'data': data,
+                })
+        resumen_chart = {'labels': labels, 'series': series}
+
+        ctx.update({
+            'proyecto': proyecto,
+            'resumen': resumen,
+            'filas_tabla': filas_tabla,
+            'total_valores': total_valores,
+            'resumen_chart': resumen_chart,
+            'active_tab': 'resumen-materiales',
+        })
+        return ctx
+
+
 class TrinchosCunetasUpsertView(LoginRequiredMixin, RoleRequiredMixin, View):
     """POST AJAX — crea o actualiza una obra de protección.
 
