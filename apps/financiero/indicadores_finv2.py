@@ -44,6 +44,12 @@ META_DESVIACION_PRESUPUESTAL = Decimal("5")  # +-5 % aceptable
 META_EJECUCION_PRESUPUESTAL = Decimal("95")  # >= 95 %
 META_PRODUCCION_CUADRILLAS = Decimal("95")   # >= 95 %
 
+# Fuente de datos comun de los 6 KPIs tecnico-financieros (#122 punto 2): los
+# seis derivan del Presupuesto Detallado (planeado vs real) del modulo Financiero.
+FUENTE_TECNICO_FINANCIERA = (
+    "módulo Financiero → Presupuesto Detallado del período/contrato seleccionado."
+)
+
 # Umbrales de coloreo (issue #122: verde cumple, amarillo 80-99 %, rojo < 80 %).
 UMBRAL_AMARILLO = Decimal("80")
 
@@ -144,9 +150,9 @@ def calcular_indicadores_tecnico_financieros(resumen_planeado, resumen_real, ext
               si no vienen, se cae al proxy facturacion (mismo que indicador 1).
 
     Returns:
-        list[dict] con keys: tipo, nombre, formula, meta, valor (str display),
-        valor_num (Decimal), estado (verde/amarillo/rojo), progreso (0..100 int),
-        unidad.
+        list[dict] con keys: tipo, nombre, formula, fuente (origen del dato),
+        meta, valor (str display), valor_num (Decimal),
+        estado (verde/amarillo/rojo), progreso (0..100 int), unidad.
     """
     extras = extras or {}
     rp = resumen_planeado or {}
@@ -169,6 +175,7 @@ def calcular_indicadores_tecnico_financieros(resumen_planeado, resumen_real, ext
         "tipo": "TECNICO",
         "nombre": "Meta de facturación general",
         "formula": "(Facturación Real / Meta de Facturación) × 100",
+        "fuente": FUENTE_TECNICO_FINANCIERA,
         "meta": "≥ 100%",
         "valor": f"{_q2(meta_fact_pct)}%",
         "valor_num": _q2(meta_fact_pct),
@@ -183,6 +190,7 @@ def calcular_indicadores_tecnico_financieros(resumen_planeado, resumen_real, ext
         "tipo": "FINANCIERO",
         "nombre": "Margen Operativo del Proyecto",
         "formula": "((Ingresos Ejecutados − (Costos Directos + Gastos)) / Ingresos Ejecutados) × 100",
+        "fuente": FUENTE_TECNICO_FINANCIERA,
         "meta": f"{_q2(META_MARGEN_OPERATIVO)}%",
         "valor": f"{_q2(margen)}%",
         "valor_num": _q2(margen),
@@ -198,6 +206,7 @@ def calcular_indicadores_tecnico_financieros(resumen_planeado, resumen_real, ext
         "tipo": "FINANCIERO",
         "nombre": "Desviación Presupuestal",
         "formula": "((Costo Real − Costo Presupuestado) / Costo Presupuestado) × 100",
+        "fuente": FUENTE_TECNICO_FINANCIERA,
         "meta": f"±{_q2(META_DESVIACION_PRESUPUESTAL)}%",
         "valor": f"{'+' if _q2(desviacion) >= 0 else ''}{_q2(desviacion)}%",
         "valor_num": _q2(desviacion),
@@ -218,6 +227,7 @@ def calcular_indicadores_tecnico_financieros(resumen_planeado, resumen_real, ext
         "tipo": "TECNICO",
         "nombre": "Ejecución presupuestal",
         "formula": "(% Presupuesto Ejecutado / % Presupuesto Planeado) × 100",
+        "fuente": FUENTE_TECNICO_FINANCIERA,
         "meta": "≥ 95%",
         "valor": f"{_q2(ejecucion)}%",
         "valor_num": _q2(ejecucion),
@@ -238,6 +248,7 @@ def calcular_indicadores_tecnico_financieros(resumen_planeado, resumen_real, ext
         "tipo": "TECNICO",
         "nombre": "Producción cuadrillas costo fijo",
         "formula": "(Facturación Real / Meta de Facturación) × 100",
+        "fuente": FUENTE_TECNICO_FINANCIERA,
         "meta": "≥ 95% (diario/período)",
         "valor": f"{_q2(produccion)}%",
         "valor_num": _q2(produccion),
@@ -256,6 +267,7 @@ def calcular_indicadores_tecnico_financieros(resumen_planeado, resumen_real, ext
         "tipo": "TECNICO",
         "nombre": "Rentabilidad costo fijo",
         "formula": "(Margen de Utilidad / Costo de la Cuadrilla) × 100",
+        "fuente": FUENTE_TECNICO_FINANCIERA,
         "meta": f"{_q2(META_RENTABILIDAD_COSTO_FIJO)}%",
         "valor": f"{_q2(rentabilidad)}%",
         "valor_num": _q2(rentabilidad),

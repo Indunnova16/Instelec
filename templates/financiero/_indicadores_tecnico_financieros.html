@@ -46,7 +46,7 @@ Tooltip (title) con la formula. Barra de progreso por fila.
                         </span>
                     </td>
                     <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                        <span class="cursor-help border-b border-dotted border-gray-400" title="{{ ind.formula }}">{{ ind.nombre }}</span>
+                        <span class="cursor-help border-b border-dotted border-gray-400" title="Fórmula: {{ ind.formula }}{% if ind.fuente %} · Fuente: {{ ind.fuente }}{% endif %}">{{ ind.nombre }}</span>
                     </td>
                     <td class="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                         <code class="font-mono">{{ ind.formula }}</code>
