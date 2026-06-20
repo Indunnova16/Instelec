@@ -31,7 +31,7 @@
                         Actividad
                     </label>
                     <select name="nombre" id="nombre" required
-                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                            class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         <option value="">Seleccionar actividad...</option>
                         <option value="Servidumbre Completa">Servidumbre Completa</option>
                         <option value="Servidumbre Vanos Criticos">Servidumbre Vanos Criticos</option>
@@ -56,7 +56,7 @@
                         Supervisor
                     </label>
                     <select name="supervisor" id="supervisor"
-                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                            class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         <option value="">Seleccionar...</option>
                         {% for sup in supervisores %}
                         <option value="{{ sup.id }}">{{ sup.get_full_name }}</option>
@@ -69,7 +69,7 @@
                         Linea Asignada
                     </label>
                     <select name="linea_asignada" id="linea_asignada"
-                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                            class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                         <option value="">Sin asignar</option>
                         {% for linea in lineas %}
                         <option value="{{ linea.id }}">{{ linea.codigo }} - {{ linea.nombre }}</option>
