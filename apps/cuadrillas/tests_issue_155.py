@@ -182,3 +182,147 @@ class Issue155FiltroBloqueTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Obra civil')
+
+
+# ===========================================================================
+# Sprint UI #155 (RUN_2026-06-20) — 5 mejoras UI + mapa por proyecto (lat/lng).
+# Tests de los sub-items con deploy: prefill semana ISO (sub1), dashboard de
+# cumplimiento inline en el detalle (sub2) y coordenadas de proyecto para el
+# mapa (sub5). TomSelect (sub1/3/4) es JS de cliente → cubierto por el journey
+# E2E; aquí se valida que el contexto/servidor entrega los datos correctos.
+# ===========================================================================
+from datetime import date
+
+from apps.cuadrillas.views import CuadrillaListView
+from apps.cuadrillas.views_pc_programacion import (
+    ProgramacionCuadrillaCreateView,
+)
+
+
+class Issue155PrefillSemanaTests(TestCase):
+    """sub1 — el CreateView prefilla anio/semana con la semana ISO actual."""
+
+    def test_get_initial_prefilla_anio_y_semana_iso(self):
+        view = ProgramacionCuadrillaCreateView()
+        view.request = None
+        initial = view.get_initial()
+        iso = date.today().isocalendar()
+        # AÑO ISO (no date.today().year) por coherencia en bordes de año.
+        self.assertEqual(initial['anio'], iso[0])
+        self.assertEqual(initial['semana'], iso[1])
+
+    def test_get_initial_no_pisa_valores_existentes(self):
+        """Si ya viene un initial, respetarlo (editable)."""
+        view = ProgramacionCuadrillaCreateView()
+        view.request = None
+        view.initial = {'anio': 2020, 'semana': 1}
+        initial = view.get_initial()
+        self.assertEqual(initial['anio'], 2020)
+        self.assertEqual(initial['semana'], 1)
+
+
+class Issue155DashboardCumplimientoInlineTests(TestCase):
+    """sub2 — el DetailView pasa datos de cumplimiento (no el placeholder)."""
+
+    def setUp(self):
+        self.user = _make_admin(email='qa155dash@test.local')
+        self.client.force_login(self.user)
+        self.cuadrilla = Cuadrilla.objects.create(
+            codigo='C155DASH', nombre='Cuadrilla dash', activa=True,
+        )
+        # Dos programaciones de la misma cuadrilla/año → filas de cumplimiento.
+        self.p1 = ProgramacionSemanalCuadrilla.objects.create(
+            cuadrilla=self.cuadrilla, anio=2026, semana=10,
+            torres_programadas=5,
+        )
+        self.p2 = ProgramacionSemanalCuadrilla.objects.create(
+            cuadrilla=self.cuadrilla, anio=2026, semana=11,
+            torres_programadas=4,
+        )
+        self.url = reverse(
+            'construccion:programacion_cuadrilla_detalle',
+            kwargs={'pk': self.p1.pk},
+        )
+
+    def test_detalle_pasa_datos_cumplimiento_al_contexto(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        ctx = resp.context
+        # El contexto trae las filas/chart_data del inline (no solo rendimiento_pct).
+        self.assertIn('cumplimiento_filas', ctx)
+        self.assertIn('cumplimiento_chart_data', ctx)
+        # Ambas programaciones de la cuadrilla aparecen como filas.
+        periodos = {f['periodo'] for f in ctx['cumplimiento_filas']}
+        self.assertEqual(periodos, {'2026-S10', '2026-S11'})
+        self.assertEqual(ctx['cumplimiento_total_programadas'], 9)
+
+    def test_detalle_ya_no_muestra_el_placeholder(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'se mostrará aquí')
+        # El payload del chart va por json_script (objeto crudo, sin doble-encoding).
+        self.assertContains(resp, 'cumplimiento-chart-data')
+
+
+class Issue155MapaPorProyectoTests(TestCase):
+    """sub5 — el modelo proyecto acepta lat/lng y el mapa serializa los puntos."""
+
+    @staticmethod
+    def _make_proyecto(lat, lng, codigo='CT-155'):
+        from apps.contratos.models import Contrato
+        from apps.construccion.models import ProyectoConstruccion
+
+        contrato = Contrato.objects.create(
+            unidad_negocio=Contrato.UnidadNegocio.CONSTRUCCION,
+            codigo=codigo,
+            nombre=f'Contrato {codigo}',
+        )
+        return ProyectoConstruccion.objects.create(
+            contrato=contrato,
+            nombre=f'Proyecto {codigo}',
+            latitud=lat,
+            longitud=lng,
+        )
+
+    def test_modelo_proyecto_acepta_lat_lng(self):
+        from decimal import Decimal
+        from apps.construccion.models import ProyectoConstruccion
+
+        proyecto = self._make_proyecto(Decimal('7.1193'), Decimal('-73.1227'))
+        proyecto.refresh_from_db()
+        self.assertEqual(proyecto.latitud, Decimal('7.1193000'))
+        self.assertEqual(proyecto.longitud, Decimal('-73.1227000'))
+        # lat/lng son opcionales (un proyecto sin coords es válido).
+        sin_coords = self._make_proyecto(None, None, codigo='CT-155B')
+        sin_coords.refresh_from_db()
+        self.assertIsNone(sin_coords.latitud)
+
+    def test_mapa_serializa_punto_del_proyecto_asignado(self):
+        from decimal import Decimal
+
+        proyecto = self._make_proyecto(Decimal('7.1193'), Decimal('-73.1227'))
+        cuadrilla = Cuadrilla.objects.create(
+            codigo='C155MAP', nombre='Cuadrilla map', activa=True,
+        )
+        ProgramacionSemanalCuadrilla.objects.create(
+            cuadrilla=cuadrilla, anio=2026, semana=12,
+            torres_programadas=3, proyecto=proyecto,
+        )
+        puntos = CuadrillaListView._build_ubicaciones_proyecto([cuadrilla])
+        self.assertEqual(len(puntos), 1)
+        self.assertAlmostEqual(puntos[0]['lat'], 7.1193, places=4)
+        self.assertAlmostEqual(puntos[0]['lng'], -73.1227, places=4)
+        self.assertEqual(puntos[0]['cuadrilla_codigo'], 'C155MAP')
+        self.assertEqual(puntos[0]['proyecto_nombre'], proyecto.nombre)
+
+    def test_mapa_robusto_a_cuadrilla_sin_proyecto_geo(self):
+        """Sin proyecto/coords → la cuadrilla se omite (no rompe el mapa)."""
+        cuadrilla = Cuadrilla.objects.create(
+            codigo='C155NOGEO', nombre='Sin geo', activa=True,
+        )
+        # Programación sin proyecto.
+        ProgramacionSemanalCuadrilla.objects.create(
+            cuadrilla=cuadrilla, anio=2026, semana=13, torres_programadas=1,
+        )
+        puntos = CuadrillaListView._build_ubicaciones_proyecto([cuadrilla])
+        self.assertEqual(puntos, [])

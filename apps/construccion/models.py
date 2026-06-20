@@ -39,6 +39,20 @@ class ProyectoConstruccion(BaseModel):
     )
     observaciones = models.TextField('Observaciones', blank=True)
 
+    # Ubicación del proyecto para el mapa de cuadrillas (#155).
+    # Coordenada editable por proyecto: el mapa de /cuadrillas/ pinta un marcador
+    # por la ubicación del proyecto asignado a cada cuadrilla. Opcional: sin
+    # coordenada el proyecto simplemente no aporta marcador (mapa robusto a 0
+    # puntos, sin pageerror).
+    latitud = models.DecimalField(
+        'Latitud', max_digits=10, decimal_places=7, null=True, blank=True,
+        help_text='Latitud del proyecto (ej: 7.1193). Para el mapa de cuadrillas.',
+    )
+    longitud = models.DecimalField(
+        'Longitud', max_digits=10, decimal_places=7, null=True, blank=True,
+        help_text='Longitud del proyecto (ej: -73.1227). Para el mapa de cuadrillas.',
+    )
+
     # Pesos editables por actividad — para % avance ponderado (#61)
     # Defaults según Gabriel Acevedo (Reunión 7, 00:11:36):
     # excavación 30%, vaciado 40%, relleno 20% — ajustables.

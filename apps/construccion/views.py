@@ -523,6 +523,43 @@ class ContratoView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         context['active_tab'] = 'contrato'
         return context
 
+    def form_valid(self, form):
+        """Además del contrato, persistir lat/lng del proyecto (#155 sub-5).
+
+        Permite que el cliente cargue la ubicación del proyecto desde esta misma
+        pantalla; el mapa de /cuadrillas/ la usa. Coordenadas vacías → se borran
+        (null) sin romper. Valores no numéricos se ignoran (no 500).
+        """
+        from decimal import Decimal, InvalidOperation
+
+        response = super().form_valid(form)
+        proyecto = get_object_or_404(
+            ProyectoConstruccion, id=self.kwargs['proyecto_id']
+        )
+
+        def _parse_coord(raw):
+            raw = (raw or '').strip()
+            if raw == '':
+                return None, True  # vacío → null válido
+            try:
+                return Decimal(raw), True
+            except (InvalidOperation, ValueError):
+                return None, False  # inválido → no tocar
+
+        lat, lat_ok = _parse_coord(self.request.POST.get('proyecto_latitud'))
+        lng, lng_ok = _parse_coord(self.request.POST.get('proyecto_longitud'))
+
+        changed = False
+        if lat_ok and 'proyecto_latitud' in self.request.POST:
+            proyecto.latitud = lat
+            changed = True
+        if lng_ok and 'proyecto_longitud' in self.request.POST:
+            proyecto.longitud = lng
+            changed = True
+        if changed:
+            proyecto.save(update_fields=['latitud', 'longitud', 'updated_at'])
+        return response
+
     def get_success_url(self):
         return reverse_lazy('construccion:contrato', kwargs={'proyecto_id': self.kwargs['proyecto_id']})
 

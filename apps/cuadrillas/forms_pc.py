@@ -39,8 +39,9 @@ class ProgramacionSemanalCuadrillaForm(forms.ModelForm):
             'torres_programadas', 'actividades_programadas', 'observaciones',
         ]
         widgets = {
-            'cuadrilla': forms.Select(attrs={'class': INPUT_CLS}),
-            'proyecto': forms.Select(attrs={'class': INPUT_CLS}),
+            # #155: clase js-tomselect → buscador (init global único en base.html).
+            'cuadrilla': forms.Select(attrs={'class': INPUT_CLS + ' js-tomselect'}),
+            'proyecto': forms.Select(attrs={'class': INPUT_CLS + ' js-tomselect'}),
             'bloque': forms.Select(attrs={'class': INPUT_CLS}),
             'anio': forms.NumberInput(attrs={
                 'class': INPUT_CLS, 'min': 2000, 'max': 2100, 'step': 1,

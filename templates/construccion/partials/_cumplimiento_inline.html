@@ -1,0 +1,111 @@
+{% comment %}
+  Inline de cumplimiento por cuadrilla (#155, sub-2).
+
+  Reemplaza el placeholder "se mostrará aquí" del detalle de programación.
+  Reusa los datos calculados en ProgramacionCuadrillaDetailView.get_context_data
+  (vía calculators_pc, la MISMA lógica del dashboard B4 — no duplicada).
+
+  La TABLA es la fuente de verdad (debe verse aunque la gráfica no pinte).
+  La gráfica sigue las reglas instelec #139/#141:
+    - Chart.defaults.animation = false (evita canvas en blanco por getContext-null).
+    - Datos vía {{ ...|json_script }} + JSON.parse(textContent) (objeto crudo en la
+      vista, sin json.dumps + interpolar → sin doble-encoding).
+  Contexto esperado:
+    cumplimiento_filas, cumplimiento_chart_data, cumplimiento_total_programadas,
+    cumplimiento_total_ejecutadas, cumplimiento_rendimiento_global.
+{% endcomment %}
+
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4" data-cumplimiento-resumen>
+    <div class="rounded-lg bg-gray-50 dark:bg-gray-900 p-3">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Torres programadas (año)</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white">{{ cumplimiento_total_programadas }}</p>
+    </div>
+    <div class="rounded-lg bg-gray-50 dark:bg-gray-900 p-3">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Torres ejecutadas (año)</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white">{{ cumplimiento_total_ejecutadas }}</p>
+    </div>
+    <div class="rounded-lg bg-gray-50 dark:bg-gray-900 p-3">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Rendimiento global</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white">{{ cumplimiento_rendimiento_global|floatformat:1 }}%</p>
+    </div>
+</div>
+
+{% if cumplimiento_filas %}
+<div class="relative mb-4" style="height: 260px;">
+    <canvas id="cumplimiento-chart" height="260"></canvas>
+</div>
+
+<div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+            <tr>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Periodo</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Programadas</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ejecutadas</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Rendimiento</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for fila in cumplimiento_filas %}
+            <tr data-periodo="{{ fila.periodo }}">
+                <td class="px-4 py-2 text-gray-600 dark:text-gray-300">{{ fila.periodo }}</td>
+                <td class="px-4 py-2 text-right text-gray-900 dark:text-white">{{ fila.torres_programadas }}</td>
+                <td class="px-4 py-2 text-right text-gray-900 dark:text-white">{{ fila.torres_ejecutadas }}</td>
+                <td class="px-4 py-2 text-right font-medium
+                    {% if fila.rendimiento_pct >= 90 %}text-green-600 dark:text-green-400
+                    {% elif fila.rendimiento_pct >= 60 %}text-yellow-600 dark:text-yellow-400
+                    {% else %}text-red-600 dark:text-red-400{% endif %}">
+                    {{ fila.rendimiento_pct|floatformat:1 }}%
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-sm text-gray-500 dark:text-gray-400">
+    Aún no hay programaciones registradas para esta cuadrilla en {{ programacion.anio }}.
+</p>
+{% endif %}
+
+{# Datos de la gráfica pre-serializados (sin doble-encoding, #139). #}
+{{ cumplimiento_chart_data|json_script:"cumplimiento-chart-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{# #139: sin animación → evita getContext-null que deja el canvas en blanco. #}
+<script>try { if (window.Chart) { Chart.defaults.animation = false; } } catch (e) {}</script>
+<script>
+(function () {
+    function readJSON(id) {
+        var el = document.getElementById(id);
+        if (!el) { return null; }
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    function renderCumplimiento() {
+        var el = document.getElementById('cumplimiento-chart');
+        if (!el || typeof Chart === 'undefined') { return; }
+        var data = readJSON('cumplimiento-chart-data');
+        if (!data || !data.labels || !data.labels.length) { return; }
+        new Chart(el.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [
+                    { label: 'Programadas', data: data.programadas, backgroundColor: '#93c5fd' },
+                    { label: 'Ejecutadas', data: data.ejecutadas, backgroundColor: '#2563eb' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderCumplimiento);
+    } else {
+        renderCumplimiento();
+    }
+})();
+</script>

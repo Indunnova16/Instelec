@@ -99,23 +99,52 @@ class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVi
         context['total_cuadrillas'] = all_active.count()
         context['cuadrillas_activas'] = all_active.count()
 
-        # Get latest location for each active crew for the mini-map
-        ubicaciones = []
-        for cuadrilla in context['cuadrillas']:
-            ultima = TrackingUbicacion.objects.filter(
-                cuadrilla=cuadrilla
-            ).order_by('-created_at').first()
-
-            if ultima:
-                ubicaciones.append({
-                    'cuadrilla_id': str(cuadrilla.id),
-                    'cuadrilla_codigo': cuadrilla.codigo,
-                    'lat': float(ultima.latitud),
-                    'lng': float(ultima.longitud),
-                })
-
+        # Mapa de cuadrillas por UBICACIÓN DEL PROYECTO asignado (#155 sub-5).
+        # El cliente pide ubicar cada cuadrilla por su proyecto asignado (no por
+        # GPS). La relación es Cuadrilla → ProgramacionSemanalCuadrilla.proyecto →
+        # ProyectoConstruccion(latitud, longitud). Tomamos la programación más
+        # reciente con proyecto geolocalizado. Robusto a 0 puntos: una cuadrilla
+        # sin proyecto/coords simplemente no aporta marcador (mapa inicializa
+        # vacío sin pageerror — el JS de lista.html ya tolera lista vacía).
+        ubicaciones = self._build_ubicaciones_proyecto(context['cuadrillas'])
         context['cuadrillas_ubicaciones_json'] = json.dumps(ubicaciones)
         return context
+
+    @staticmethod
+    def _build_ubicaciones_proyecto(cuadrillas):
+        """Construye los marcadores del mapa desde la ubicación del proyecto.
+
+        Por cada cuadrilla, busca su programación más reciente cuyo proyecto
+        tenga latitud y longitud cargadas, y emite un punto. Sin proyecto o sin
+        coordenadas → la cuadrilla se omite (no rompe el mapa).
+        """
+        from .models_pc import ProgramacionSemanalCuadrilla
+
+        ubicaciones = []
+        for cuadrilla in cuadrillas:
+            prog = (
+                ProgramacionSemanalCuadrilla.objects
+                .filter(
+                    cuadrilla=cuadrilla,
+                    proyecto__isnull=False,
+                    proyecto__latitud__isnull=False,
+                    proyecto__longitud__isnull=False,
+                )
+                .select_related('proyecto')
+                .order_by('-anio', '-semana')
+                .first()
+            )
+            if not prog or not prog.proyecto:
+                continue
+            proyecto = prog.proyecto
+            ubicaciones.append({
+                'cuadrilla_id': str(cuadrilla.id),
+                'cuadrilla_codigo': cuadrilla.codigo,
+                'proyecto_nombre': proyecto.nombre,
+                'lat': float(proyecto.latitud),
+                'lng': float(proyecto.longitud),
+            })
+        return ubicaciones
 
 
 class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):

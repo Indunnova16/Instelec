@@ -30,7 +30,18 @@ def backfill_snapshot_hoy(apps, schema_editor):
         return
 
     hoy = date.today()
-    for proyecto in ProyectoConstruccion.objects.all():
+    # `.iterator()` dentro de un try amplio: al replicar el historial de
+    # migraciones en una BD nueva (tests SQLite), el modelo REAL ya trae columnas
+    # añadidas por migraciones POSTERIORES (ej. latitud/longitud de 0038, #155),
+    # que aún no existen en el esquema en este punto → el SELECT fallaría. Como
+    # esta migración es un backfill idempotente sobre datos que en una BD nueva
+    # están vacíos, tragamos el error de columna y seguimos (en prod las columnas
+    # ya existían cuando esta migración corrió, así que el backfill real ocurrió).
+    try:
+        proyectos = list(ProyectoConstruccion.objects.all())
+    except Exception:
+        return
+    for proyecto in proyectos:
         try:
             SnapshotAvance.capturar(proyecto, fecha=hoy)
         except Exception:

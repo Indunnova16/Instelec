@@ -27,6 +27,8 @@ toco yo, dueño = B1). Contrato del BLUEPRINT, namespace `construccion:`:
 (import: `from apps.cuadrillas import views_pc_programacion`)
 ============================================================================
 """
+from datetime import date
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
@@ -34,6 +36,7 @@ from django.views.generic import CreateView, DetailView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
 
+from . import calculators_pc
 from .forms_pc import ProgramacionSemanalCuadrillaForm
 from .models_pc import ProgramacionSemanalCuadrilla
 
@@ -51,6 +54,20 @@ class ProgramacionCuadrillaCreateView(LoginRequiredMixin, RoleRequiredMixin, Cre
     form_class = ProgramacionSemanalCuadrillaForm
     template_name = 'construccion/programacion_cuadrilla_form.html'
     allowed_roles = PROGRAMACION_ROLES
+
+    def get_initial(self):
+        """Prefill Año y Semana con el año/semana ISO actuales (#155, editable).
+
+        Usamos `date.today().isocalendar()` para que el AÑO sea el ISO (no
+        `date.today().year`): en los bordes de año la semana ISO 1/52/53 puede
+        caer en un año distinto al calendario, y la programación se indexa por
+        semana ISO. Ambos quedan como `initial` → editables por el usuario.
+        """
+        initial = super().get_initial()
+        iso = date.today().isocalendar()
+        initial.setdefault('anio', iso[0])
+        initial.setdefault('semana', iso[1])
+        return initial
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -137,4 +154,39 @@ class ProgramacionCuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, Det
         context['rendimiento_pct'] = (
             ejecucion.rendimiento_pct if ejecucion is not None else None
         )
+
+        # #155 sub-2: dashboard de cumplimiento inline (reemplaza el placeholder).
+        # Reusa la MISMA lógica que ProgramacionCuadrillaDashboardView vía
+        # calculators_pc (NO se duplica). Alcance: las programaciones de ESTA
+        # cuadrilla en el mismo año, para contextualizar el cumplimiento semanal.
+        qs = (
+            ProgramacionSemanalCuadrilla.objects
+            .filter(cuadrilla=programacion.cuadrilla, anio=programacion.anio)
+            .select_related('cuadrilla', 'ejecucion')
+        )
+        filas = calculators_pc.rendimiento_por_cuadrilla(qs)
+        resumen = calculators_pc.resumen_por_cuadrilla(filas)
+
+        total_prog = sum(f['torres_programadas'] for f in filas)
+        total_ejec = sum(f['torres_ejecutadas'] for f in filas)
+        rendimiento_global = (
+            round(total_ejec / total_prog * 100, 1) if total_prog > 0 else 0.0
+        )
+
+        # Payload para la gráfica: OBJETO Python crudo (el template lo serializa
+        # con json_script → evita doble-encoding, memoria instelec #139).
+        chart_data = {
+            'labels': [f['periodo'] for f in filas],
+            'programadas': [f['torres_programadas'] for f in filas],
+            'ejecutadas': [f['torres_ejecutadas'] for f in filas],
+        }
+
+        context.update({
+            'cumplimiento_filas': filas,
+            'cumplimiento_resumen': resumen,
+            'cumplimiento_chart_data': chart_data,
+            'cumplimiento_total_programadas': total_prog,
+            'cumplimiento_total_ejecutadas': total_ejec,
+            'cumplimiento_rendimiento_global': rendimiento_global,
+        })
         return context

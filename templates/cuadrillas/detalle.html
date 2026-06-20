@@ -220,7 +220,7 @@
             <div>
                 <label for="usuario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Personal</label>
                 <select name="usuario" id="usuario" required onchange="autoCargarDatos()"
-                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                        class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
                     <option value="">Seleccionar...</option>
                     {% for user in usuarios_disponibles %}
                     <option value="{{ user.id }}"
