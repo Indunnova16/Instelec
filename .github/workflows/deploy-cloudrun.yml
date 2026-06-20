@@ -7,6 +7,11 @@ concurrency:
 on:
 
   workflow_dispatch:
+    inputs:
+      no_traffic:
+        description: "Canary: deploy SIN promover trafico (el orquestador promueve tras E2E verde con --promote-on-green)"
+        type: boolean
+        default: false
 
 env:
   PROJECT_ID: appsindunnova
@@ -110,6 +115,14 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
+          # Canary opt-in (Fase 2): si no_traffic=true, la revision nace a 0%
+          # trafico con tag 'candidate'; el orquestador la valida (E2E contra el
+          # tag) y promueve con run_e2e_or_die --promote-on-green. Default: legacy.
+          TRAFFIC_FLAGS=""
+          if [ "${{ github.event.inputs.no_traffic }}" = "true" ]; then
+            TRAFFIC_FLAGS="--no-traffic --tag candidate"
+            echo "Canary: deploy SIN promover trafico (tag=candidate)"
+          fi
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --region ${{ env.REGION }} \
@@ -124,13 +137,15 @@ jobs:
             --port 8080 \
             --min-instances 0 \
             --max-instances 2 \
-            --quiet
+            --quiet \
+            $TRAFFIC_FLAGS
 
 
       # Red idempotente anti-reproceso (P2, 2026-06-07): 100% del trafico a la
       # revision recien deployada. NO-OP si ya sigue a LATEST; promueve si quedo
       # clavado a una revision por un --to-revision manual previo.
       - name: Ensure traffic on latest revision
+        if: github.event.inputs.no_traffic != 'true'
         run: |
           gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
             --region ${{ env.REGION }} --to-latest --quiet
