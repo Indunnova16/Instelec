@@ -18,7 +18,9 @@
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🌿 Obras de Protección</h1>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
-                · Obras: <span class="font-medium">{{ obras|length }}</span>
+                · Torres que aplican: <span class="font-medium">{{ total_torres }}</span>
+                · Obras capturadas: <span class="font-medium">{{ obras|length }}</span>
+                · Pendientes: <span class="font-medium text-amber-600 dark:text-amber-400">{{ pendientes }}</span>
                 · Total metros: <span class="font-medium">{{ total_metros }} m</span>
                 · Completadas: <span class="font-medium text-green-600 dark:text-green-400">{{ completadas }}/{{ obras|length }}</span>
             </p>
@@ -120,9 +122,13 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                    {% for o in obras %}
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td class="px-3 py-2 font-medium">{{ o.torre.numero_display }}</td>
+                    {# #149: una fila por torre que aplica. Con obra capturada → datos + Editar;
+                       sin obra → fila "Pendiente" + botón Capturar (torre preseleccionada). #}
+                    {% for f in filas %}
+                    {% with o=f.obra t=f.torre %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not o %} bg-amber-50/40 dark:bg-amber-900/10{% endif %}">
+                        <td class="px-3 py-2 font-medium">{{ t.numero_display }}</td>
+                        {% if o %}
                         <td class="px-3 py-2 text-center">{{ o.get_medida_manejo_display }}</td>
                         <td class="px-3 py-2 text-right">{{ o.metros_trinchos|default:"—" }}</td>
                         <td class="px-3 py-2 text-right">{{ o.metros_cunetas|default:"—" }}</td>
@@ -134,7 +140,7 @@
                         <td class="px-3 py-2 text-center">
                             <button @click="editar({
                                 id: '{{ o.id }}',
-                                torre_id: '{{ o.torre.id }}',
+                                torre_id: '{{ t.id }}',
                                 medida_manejo: '{{ o.medida_manejo }}',
                                 metros_trinchos: '{{ o.metros_trinchos|default_if_none:""|unlocalize }}',
                                 metros_cunetas: '{{ o.metros_cunetas|default_if_none:""|unlocalize }}',
@@ -150,9 +156,22 @@
                                 completado: {% if o.completado %}true{% else %}false{% endif %}
                             })" class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Editar</button>
                         </td>
+                        {% else %}
+                        <td class="px-3 py-2 text-center text-gray-400">—</td>
+                        <td class="px-3 py-2 text-right text-gray-400">—</td>
+                        <td class="px-3 py-2 text-right text-gray-400">—</td>
+                        <td class="px-3 py-2 text-gray-400">—</td>
+                        <td class="px-3 py-2 text-gray-400">—</td>
+                        <td class="px-3 py-2 text-center"><span class="text-amber-600 dark:text-amber-400">Pendiente · Capturar</span></td>
+                        <td class="px-3 py-2 text-center">
+                            <button @click="capturar('{{ t.id }}')"
+                                    class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Capturar</button>
+                        </td>
+                        {% endif %}
                     </tr>
+                    {% endwith %}
                     {% empty %}
-                    <tr><td colspan="8" class="px-3 py-8 text-center text-gray-500">No hay obras de protección registradas todavía.</td></tr>
+                    <tr><td colspan="8" class="px-3 py-8 text-center text-gray-500">No hay torres que apliquen a Obras de Protección todavía.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -202,6 +221,13 @@ function trinchosCunetas(cfg) {
         editar(data) {
             this.form = { ...this.formVacio(), ...data };
             this.editando = true;
+            this.formAbierto = true;
+            this.error = ''; this.okMsg = '';
+        },
+        // #149: abrir el form de captura con la torre pendiente preseleccionada.
+        capturar(torreId) {
+            this.form = { ...this.formVacio(), torre_id: torreId };
+            this.editando = false;
             this.formAbierto = true;
             this.error = ''; this.okMsg = '';
         },
