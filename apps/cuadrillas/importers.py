@@ -13,7 +13,7 @@ de encabezados + transacción atómica + resumen detallado de creación/error.
 import logging
 from datetime import date
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from openpyxl import load_workbook
 
 logger = logging.getLogger(__name__)
@@ -583,6 +583,9 @@ class ProgramacionS18CuadrillaImporter:
         self.advertencias = []
         self.cuadrillas_creadas = 0
         self.cuadrillas_actualizadas = 0
+        # Issue #124: códigos de cuadrillas que YA existían y se OMITIERON
+        # (no se crean ni se actualizan). Estrategia SALTAR + RESUMEN.
+        self.cuadrillas_omitidas = []
         self.miembros_agregados = 0
         self.encargados_asignados = 0
         self.usuarios_creados = 0
@@ -642,6 +645,8 @@ class ProgramacionS18CuadrillaImporter:
                 'formato': 'S18',
                 'cuadrillas_creadas': 0,
                 'cuadrillas_actualizadas': 0,
+                'cuadrillas_omitidas': self.cuadrillas_omitidas,
+                'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
                 'miembros_agregados': 0,
                 'encargados_asignados': 0,
                 'usuarios_creados': 0,
@@ -649,15 +654,25 @@ class ProgramacionS18CuadrillaImporter:
                 'errores': self.errores,
                 'sheets_procesadas': self.sheets_procesadas,
             }
-        except Exception as e:
+        except Exception:
+            # Issue #124: NUNCA fugar el str crudo de la excepción (p.ej. el
+            # "duplicate key value violates unique constraint ..." de psycopg2)
+            # a la UI. Las colisiones de código ya se manejan vía savepoint en
+            # _guardar_bloque; lo que llegue aquí es inesperado y se reporta con
+            # un mensaje genérico amigable. El detalle queda en el log.
             logger.exception('ProgramacionS18CuadrillaImporter: error inesperado')
-            return self._resultado_error(f'Error inesperado: {e}')
+            return self._resultado_error(
+                'Ocurrió un error inesperado al procesar el archivo. '
+                'Revisa el formato e inténtalo de nuevo; si persiste, contacta a soporte.'
+            )
 
         return {
             'exito': True,
             'formato': 'S18',
             'cuadrillas_creadas': self.cuadrillas_creadas,
             'cuadrillas_actualizadas': self.cuadrillas_actualizadas,
+            'cuadrillas_omitidas': self.cuadrillas_omitidas,
+            'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
             'miembros_agregados': self.miembros_agregados,
             'encargados_asignados': self.encargados_asignados,
             'usuarios_creados': self.usuarios_creados,
@@ -796,15 +811,33 @@ class ProgramacionS18CuadrillaImporter:
 
         existente = Cuadrilla.objects.filter(codigo=codigo).first()
         if existente is None:
-            cuadrilla = Cuadrilla.objects.create(
-                codigo=codigo,
-                nombre=nombre,
-                linea_asignada=linea,
-                vehiculo=vehiculo,
-                fecha=bloque['fecha_inicio'],
-                activa=True,
-                observaciones=observaciones,
-            )
+            # Issue #124 — estrategia SALTAR + RESUMEN. El pre-check de arriba es
+            # no-atómico: entre el filter() y el create() otra fila del mismo lote
+            # (o una carrera) puede insertar el código. Sin aislamiento, ese
+            # IntegrityError envenena la transacción atómica externa y aborta TODO
+            # el lote, fugando el error crudo de Postgres a la UI. Envolvemos el
+            # create en un savepoint anidado: si choca con la UNIQUE
+            # (cuadrillas_codigo_key), revertimos SOLO este savepoint, registramos
+            # el código como omitido y seguimos con el resto del lote.
+            try:
+                with transaction.atomic():
+                    cuadrilla = Cuadrilla.objects.create(
+                        codigo=codigo,
+                        nombre=nombre,
+                        linea_asignada=linea,
+                        vehiculo=vehiculo,
+                        fecha=bloque['fecha_inicio'],
+                        activa=True,
+                        observaciones=observaciones,
+                    )
+            except IntegrityError:
+                # El código ya existía (lo creó otra fila del lote o una carrera).
+                # Lo omitimos sin abortar el batch y sin fugar el error técnico.
+                self.cuadrillas_omitidas.append(codigo)
+                self.advertencias.append(
+                    f'Cuadrilla {codigo} ya existe; omitida (marca "actualizar" para sobrescribir)'
+                )
+                return
             self.cuadrillas_creadas += 1
         elif actualizar:
             existente.nombre = nombre
@@ -817,6 +850,8 @@ class ProgramacionS18CuadrillaImporter:
             cuadrilla = existente
             self.cuadrillas_actualizadas += 1
         else:
+            # Issue #124 — existe y NO se pidió actualizar → SALTAR.
+            self.cuadrillas_omitidas.append(codigo)
             self.advertencias.append(
                 f'Cuadrilla {codigo} ya existe; omitida (marca "actualizar" para sobrescribir)'
             )
@@ -894,17 +929,22 @@ class ProgramacionS18CuadrillaImporter:
         last = ' '.join(partes[1:]) if len(partes) > 1 else ''
         email = f'{cedula}@instelec-import.local'
         try:
-            usuario = Usuario.objects.create(
-                email=email,
-                first_name=first[:150],
-                last_name=last[:150],
-                documento=cedula,
-                telefono=miembro['celular'][:20],
-                rol='operario_general',
-                is_active=True,
-            )
-            usuario.set_unusable_password()
-            usuario.save(update_fields=['password'])
+            # Issue #124: savepoint anidado para que una colisión UNIQUE
+            # (email/documento ya existente por carrera) NO envenene la txn del
+            # lote — sin él, el except de abajo atraparía la excepción pero la
+            # transacción externa quedaría rota igual.
+            with transaction.atomic():
+                usuario = Usuario.objects.create(
+                    email=email,
+                    first_name=first[:150],
+                    last_name=last[:150],
+                    documento=cedula,
+                    telefono=miembro['celular'][:20],
+                    rol='operario_general',
+                    is_active=True,
+                )
+                usuario.set_unusable_password()
+                usuario.save(update_fields=['password'])
             self.usuarios_creados += 1
             self.advertencias.append(
                 f'Fila {miembro["row_num"]}: usuario {nombre} (cédula {cedula}) '
@@ -1072,6 +1112,8 @@ class ProgramacionS18CuadrillaImporter:
             'formato': 'S18',
             'cuadrillas_creadas': 0,
             'cuadrillas_actualizadas': 0,
+            'cuadrillas_omitidas': self.cuadrillas_omitidas,
+            'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
             'miembros_agregados': 0,
             'encargados_asignados': 0,
             'usuarios_creados': 0,

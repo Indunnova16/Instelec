@@ -51,6 +51,19 @@
         </div>
         {% endif %}
 
+        {% if resultado.cuadrillas_omitidas %}
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <h3 class="font-bold text-amber-900 dark:text-amber-100 mb-2">⏭️ Cuadrillas omitidas porque ya existían ({{ resultado.cuadrillas_omitidas_count }})</h3>
+            <p class="text-xs text-amber-800 dark:text-amber-200 mb-2">
+                Estas cuadrillas no se modificaron. Para sobrescribirlas, vuelve a cargar el archivo
+                marcando <strong>"Actualizar cuadrillas existentes"</strong>.
+            </p>
+            <p class="text-xs text-amber-800 dark:text-amber-200 break-words">
+                {{ resultado.cuadrillas_omitidas|join:", " }}
+            </p>
+        </div>
+        {% endif %}
+
         {% if resultado.advertencias %}
         <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
             <h3 class="font-bold text-yellow-900 dark:text-yellow-100 mb-2">⚠️ Advertencias ({{ resultado.advertencias|length }})</h3>
