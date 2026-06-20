@@ -86,6 +86,31 @@
             </div>
         </div>
 
+        <!-- Ubicación del proyecto (#155) — alimenta el mapa de /cuadrillas/ -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Ubicación del Proyecto</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Coordenadas geográficas del proyecto. Se usan para ubicar las cuadrillas
+                asignadas en el mapa de Cuadrillas. Dejar en blanco si no aplica.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="proyecto_latitud" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Latitud</label>
+                    <input type="text" inputmode="decimal" name="proyecto_latitud" id="proyecto_latitud"
+                           value="{{ proyecto.latitud|default_if_none:'' }}"
+                           placeholder="Ej: 7.1193"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+                <div>
+                    <label for="proyecto_longitud" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Longitud</label>
+                    <input type="text" inputmode="decimal" name="proyecto_longitud" id="proyecto_longitud"
+                           value="{{ proyecto.longitud|default_if_none:'' }}"
+                           placeholder="Ej: -73.1227"
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </div>
+            </div>
+        </div>
+
         <!-- Objeto del Contrato -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Objeto del Contrato</h2>

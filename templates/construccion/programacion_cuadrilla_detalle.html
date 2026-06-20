@@ -128,12 +128,14 @@
         {% include "construccion/_ejecucion_inline.html" with programacion=programacion ejecucion=ejecucion rendimiento_pct=rendimiento_pct %}
     </div>
 
-    {# ---- Placeholder dashboard de cumplimiento — B4 ---- #}
+    {# ---- Dashboard de cumplimiento (inline, #155 sub-2) ---- #}
+    {# Reemplaza el placeholder: la vista pasa los datos vía calculators_pc
+       (misma lógica del dashboard B4, no duplicada). Include INCONDICIONAL
+       (sin `ignore missing`, no soportado por el include de este Django build —
+       ver nota de cabecera). El partial existe en el repo. #}
     <div id="dashboard-cumplimiento" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Cumplimiento</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-            El dashboard de cumplimiento por cuadrilla se mostrará aquí.
-        </p>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Cumplimiento</h2>
+        {% include "construccion/partials/_cumplimiento_inline.html" %}
     </div>
 </div>
 {% endblock %}

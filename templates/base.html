@@ -33,6 +33,13 @@
     <script src="https://unpkg.com/htmx.org@2.0.0"></script>
     <script src="https://unpkg.com/htmx.org@2.0.0/dist/ext/loading-states.js"></script>
 
+    <!-- TomSelect (vanilla, sin jQuery — consistente con el stack Tailwind+HTMX+Alpine).
+         #155: buscador en los <select> marcados con la clase `js-tomselect`. UN SOLO
+         init global aquí (NO inits por template: un 2do init conflictúa y deja el
+         widget sin control — memoria contexto_select2_base_html_jsselect2). -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
     <!-- Alpine.js with Collapse plugin -->
     <script defer src="https://unpkg.com/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -194,6 +201,47 @@
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
         }
+    </script>
+
+    <!-- #155: init global ÚNICO de TomSelect por clase `js-tomselect`.
+         - Init en DOMContentLoaded para los selects del render inicial.
+         - Re-init en htmx:afterSwap para selects que llegan en partials/modales HTMX
+           (ej. el modal "Nueva cuadrilla" en form_cuadrilla.html).
+         - Idempotente: salta los selects ya inicializados (data-ts-init / .tomselected).
+         - TomSelect mantiene el <select> nativo sincronizado (selectedIndex + dispara
+           el evento 'change'), por lo que los onchange existentes (autoCargarDatos,
+           actualizarCostoDia) siguen funcionando sin cambios. -->
+    <script>
+    (function () {
+        function initTomSelect(root) {
+            if (typeof TomSelect === 'undefined') { return; }
+            var scope = root && root.querySelectorAll ? root : document;
+            var nodes = scope.querySelectorAll('select.js-tomselect');
+            nodes.forEach(function (el) {
+                // Saltar los ya inicializados (evita el 2do init que rompe el widget).
+                if (el.dataset.tsInit === '1' || el.classList.contains('tomselected') || el.tomselect) {
+                    return;
+                }
+                try {
+                    new TomSelect(el, {
+                        allowEmptyOption: true,
+                        // Mantener el orden de las <option> tal como las renderiza Django.
+                        sortField: null,
+                    });
+                    el.dataset.tsInit = '1';
+                } catch (e) { /* no romper la página si un select es atípico */ }
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () { initTomSelect(document); });
+        } else {
+            initTomSelect(document);
+        }
+        // Selects que entran por HTMX (partials/modales).
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            initTomSelect(evt.target || document);
+        });
+    })();
     </script>
 
     {% block extra_js %}{% endblock %}

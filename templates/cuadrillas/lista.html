@@ -265,7 +265,7 @@
         <!-- Real-time Map -->
         <section class="bg-white dark:bg-gray-800 rounded-lg shadow sticky top-6" aria-labelledby="map-title">
             <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
-                <h2 id="map-title" class="font-medium text-gray-900 dark:text-white">Ubicacion en Tiempo Real</h2>
+                <h2 id="map-title" class="font-medium text-gray-900 dark:text-white">Ubicacion por Proyecto</h2>
                 <div class="flex items-center gap-2 text-sm text-gray-500"
                      hx-get="{% url 'cuadrillas:ubicaciones_json' %}"
                      hx-trigger="every 30s"
@@ -368,6 +368,7 @@ function addOrUpdateMarker(data) {
         markers[data.cuadrilla_id].bindPopup(`
             <div class="p-2" role="dialog" aria-label="Informacion de cuadrilla ${data.cuadrilla_codigo}">
                 <h3 class="font-bold">${data.cuadrilla_codigo}</h3>
+                ${data.proyecto_nombre ? `<p class="text-xs text-gray-600">${data.proyecto_nombre}</p>` : ''}
             </div>
         `);
     }
