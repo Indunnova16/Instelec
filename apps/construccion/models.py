@@ -177,6 +177,134 @@ class ProyectoConstruccion(BaseModel):
             pct_por_torre.append((peso_acumulado / total_pesos) * 100)
         return round(sum(pct_por_torre) / len(pct_por_torre), 2)
 
+    # Definición declarativa de las columnas del Resumen de Materiales (#154).
+    # Cada entrada: (key, label, unidad, fuente). El template y el método de
+    # agregación leen de aquí para no duplicar el listado. Mapeo wireframe→dato
+    # real resuelto en PLAN_2026-06-20_resumen_materiales_154.md (decisión b):
+    # se muestran SOLO los materiales con respaldo real, con su unidad real;
+    # Agua y Madera NO existen en el modelo → N/D (no se inventan).
+    COLUMNAS_RESUMEN_MATERIALES = [
+        # key,                   label,                  unidad,    fuente
+        ('cemento_kg',           'Cemento',              'kg',      'trincho'),
+        ('arena',                'Arena',                'cuñetes', 'trincho'),
+        ('grava',                'Grava',                'cuñetes', 'trincho'),
+        ('alambre_galvanizado',  'Alambre galvanizado',  'kg',      'trincho'),
+        ('geotextil',            'Geotextil',            'm',       'trincho'),
+        ('tubo_metalico',        'Tubo metálico',        'un',      'trincho'),
+        ('malla_eslabonada',     'Malla eslabonada',     'un',      'trincho'),
+        ('solado_m3',            'Solado',               'm³',      'pata'),
+        ('concreto_m3',          'Concreto',             'm³',      'pata'),
+        ('relleno_m3',           'Relleno',              'm³',      'pata'),
+    ]
+
+    # Materiales que el wireframe pedía pero el sistema NO captura hoy → N/D.
+    # Se documentan al pie de la tabla (honestidad de datos, no se inventan).
+    MATERIALES_NO_DISPONIBLES_RESUMEN = ['Agua', 'Madera']
+
+    def resumen_materiales(self):
+        """Consolida los materiales de obra del proyecto (#154).
+
+        Agrega por torre (solo torres ``aplica=True``) y entrega un total del
+        proyecto. Dos fuentes reales:
+
+        - ``TrinchoCuneta`` (única fuente granular poblada): cemento (bultos de
+          50K → se normaliza a **kg** multiplicando por 50), arena/grava
+          (cuñetes — NO m³), alambre_galvanizado (kg), geotextil (m),
+          tubo_metalico (un), malla_eslabonada (un).
+        - ``PataObra`` (agregados m³, hoy típicamente vacíos pero presentes):
+          solado_m3, concreto (concreto_instalado_m3 ∥ concreto_m3),
+          relleno_m3 — sumados por torre.
+
+        Agua y Madera NO existen en el modelo → se omiten (ver
+        ``MATERIALES_NO_DISPONIBLES_RESUMEN``); NO se inventan valores.
+
+        Returns:
+            dict con:
+              - ``columnas``: lista de dicts {key, label, unidad} (orden de tabla)
+              - ``torres``: lista de dicts por torre (ordenadas por orden_numerico),
+                cada una con ``torre`` (label), ``torre_id`` y una clave por material
+              - ``total``: dict con la Σ del proyecto por material
+              - ``materiales_nd``: lista de materiales N/D (para la nota al pie)
+              - ``hay_datos``: bool — True si algún material > 0 en algún torre
+        """
+        from collections import defaultdict
+
+        material_keys = [c[0] for c in self.COLUMNAS_RESUMEN_MATERIALES]
+
+        # Torres del proyecto que aplican, en orden numérico ascendente.
+        torres = sorted(
+            self.torres.filter(aplica=True),
+            key=lambda t: (t.orden_numerico, t.numero or ''),
+        )
+
+        # Acumuladores por torre (default 0.0 por material).
+        por_torre = {
+            t.id: {k: Decimal('0') for k in material_keys} for t in torres
+        }
+        torres_validas = {t.id for t in torres}
+
+        # --- Fuente 1: TrinchoCuneta (materiales granulares) ---
+        for tc in self.trinchos_cunetas.filter(torre__aplica=True).select_related('torre'):
+            if tc.torre_id not in torres_validas:
+                continue
+            acc = por_torre[tc.torre_id]
+            # cemento en bultos de 50K → kg (×50)
+            acc['cemento_kg'] += (tc.cemento or Decimal('0')) * Decimal('50')
+            acc['arena'] += tc.arena or Decimal('0')
+            acc['grava'] += tc.grava or Decimal('0')
+            acc['alambre_galvanizado'] += tc.alambre_galvanizado or Decimal('0')
+            acc['geotextil'] += tc.geotextil or Decimal('0')
+            acc['tubo_metalico'] += tc.tubo_metalico or Decimal('0')
+            acc['malla_eslabonada'] += tc.malla_eslabonada or Decimal('0')
+
+        # --- Fuente 2: PataObra (agregados m³ por torre) ---
+        # solado_m3 / relleno_m3 directos; concreto = instalado ∥ planeado.
+        # FloatField → se suman como Decimal vía str para no arrastrar ruido binario.
+        patas = PataObra.objects.filter(
+            torre__proyecto=self, torre__aplica=True,
+        ).select_related('torre')
+        for pata in patas:
+            if pata.torre_id not in torres_validas:
+                continue
+            acc = por_torre[pata.torre_id]
+            if pata.solado_m3:
+                acc['solado_m3'] += Decimal(str(pata.solado_m3))
+            concreto = pata.concreto_instalado_m3
+            if concreto in (None, 0):
+                concreto = pata.concreto_m3
+            if concreto:
+                acc['concreto_m3'] += Decimal(str(concreto))
+            if pata.relleno_m3:
+                acc['relleno_m3'] += Decimal(str(pata.relleno_m3))
+
+        # --- Construir filas + total ---
+        filas = []
+        total = defaultdict(lambda: Decimal('0'))
+        hay_datos = False
+        for t in torres:
+            acc = por_torre[t.id]
+            fila = {'torre': t.numero_display, 'torre_id': str(t.id)}
+            for k in material_keys:
+                valor = acc[k]
+                fila[k] = valor
+                total[k] += valor
+                if valor and valor > 0:
+                    hay_datos = True
+            filas.append(fila)
+
+        columnas = [
+            {'key': k, 'label': label, 'unidad': unidad}
+            for (k, label, unidad, _fuente) in self.COLUMNAS_RESUMEN_MATERIALES
+        ]
+
+        return {
+            'columnas': columnas,
+            'torres': filas,
+            'total': {k: total[k] for k in material_keys},
+            'materiales_nd': list(self.MATERIALES_NO_DISPONIBLES_RESUMEN),
+            'hay_datos': hay_datos,
+        }
+
     def curva_s_data(self):
         """Datos para Chart.js curva S: lista de tuplas (mes, planeado_acum, real_acum)
         agrupados a nivel proyecto. Lee de ProgramacionFase + valores reales."""

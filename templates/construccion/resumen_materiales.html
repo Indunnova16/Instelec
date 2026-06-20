@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% load l10n %}
+
+{% block title %}Resumen de Materiales — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+
+{% comment %}
+  Resumen de Materiales del proyecto (#154) — vista de solo lectura.
+  Agrega los materiales de obra de TODAS las torres (total + por torre).
+  El dataset del gráfico viaja PRE-SERIALIZADO vía json_script (objeto crudo,
+  memoria portafolio #139) y se lee con JSON.parse en el script de abajo.
+{% endcomment %}
+{{ resumen_chart|json_script:"resumen-materiales-data" }}
+
+<div class="space-y-6 resumen-materiales"
+     data-charts-ready="false">
+
+    {% comment %} === Header === {% endcomment %}
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                Resumen de Materiales
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ proyecto.nombre }} — consolidado de materiales por torre y total del proyecto.
+            </p>
+        </div>
+    </div>
+
+    {% if not resumen.hay_datos %}
+    {% comment %} Estado vacío amable — sin materiales capturados todavía. {% endcomment %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-200"
+         data-estado="sin-materiales">
+        Aún no hay materiales registrados en las torres de este proyecto. La tabla
+        y el gráfico se llenarán a medida que se capturen materiales en Obras de
+        Protección (trinchos/cunetas) y en la obra civil por pata.
+    </div>
+    {% endif %}
+
+    {% comment %} === Tabla: filas = torres + fila Total === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-x-auto">
+        <table class="min-w-full text-sm" data-tabla-materiales>
+            <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
+                <tr>
+                    <th class="px-4 py-3 text-left font-semibold sticky left-0 bg-gray-50 dark:bg-gray-700/50">
+                        Torre
+                    </th>
+                    {% for col in resumen.columnas %}
+                    <th class="px-4 py-3 text-right font-semibold whitespace-nowrap">
+                        {{ col.label }}
+                        <span class="block text-[11px] font-normal text-gray-400 dark:text-gray-500">
+                            ({{ col.unidad }})
+                        </span>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                {% for fila in filas_tabla %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40" data-torre-row>
+                    <td class="px-4 py-2 font-medium text-gray-700 dark:text-gray-200 sticky left-0 bg-white dark:bg-gray-800">
+                        {{ fila.torre }}
+                    </td>
+                    {% for v in fila.valores %}
+                    <td class="px-4 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                        {{ v|floatformat:"2g" }}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="{{ resumen.columnas|length|add:1 }}"
+                        class="px-4 py-6 text-center text-gray-400">
+                        No hay torres que apliquen en este proyecto.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% if filas_tabla %}
+            <tfoot class="bg-gray-50 dark:bg-gray-700/50 font-bold text-gray-800 dark:text-gray-100 border-t-2 border-gray-300 dark:border-gray-600">
+                <tr data-fila-total>
+                    <td class="px-4 py-3 sticky left-0 bg-gray-50 dark:bg-gray-700/50">Total</td>
+                    {% for v in total_valores %}
+                    <td class="px-4 py-3 text-right tabular-nums">
+                        {{ v|floatformat:"2g" }}
+                    </td>
+                    {% endfor %}
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+
+    {% comment %} === Nota al pie: mapeo de columnas + materiales N/D === {% endcomment %}
+    <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+        <p class="font-semibold text-gray-600 dark:text-gray-300">Notas sobre los datos</p>
+        <p>
+            <strong>Cemento</strong> se muestra en kilogramos (el dato se captura en
+            bultos de 50&nbsp;kg y se multiplica por 50). <strong>Arena</strong> y
+            <strong>Grava</strong> se reportan en <strong>cuñetes</strong> (unidad real
+            de captura, no m³). <strong>Solado</strong>, <strong>Concreto</strong> y
+            <strong>Relleno</strong> se agregan en m³ desde la obra civil por pata.
+        </p>
+        {% if resumen.materiales_nd %}
+        <p>
+            <strong>No disponible (N/D):</strong>
+            {% for m in resumen.materiales_nd %}{{ m }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            — el sistema no captura hoy estos materiales, por lo que no se muestran
+            (no se estiman valores).
+        </p>
+        {% endif %}
+    </div>
+
+    {% comment %} === Gráfico Chart.js: barras de materiales por torre === {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Materiales por torre</h2>
+            <span class="text-xs text-gray-500 dark:text-gray-400">Cantidad de cada material consumido por torre</span>
+        </div>
+        {% if resumen.hay_datos %}
+        <div class="relative" style="height: 420px;">
+            <canvas id="chart-materiales" height="420"></canvas>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400 py-8 text-center" data-estado="sin-grafico">
+            Sin materiales aún para construir el gráfico.
+        </p>
+        {% endif %}
+    </div>
+
+</div>
+
+{% endlocalize %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{# #139: sin animación — evita getContext-null que deja el canvas en blanco #}
+<script>try { if (window.Chart) { Chart.defaults.animation = false; } } catch (e) {}</script>
+<script>
+(function () {
+    function readJSON(id) {
+        var el = document.getElementById(id);
+        if (!el) { return null; }
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    // Paleta colorblind-safe (≤ algunos colores, se cicla si hay más series).
+    var PALETA = ['#1B4F72', '#2563eb', '#0e7490', '#b45309', '#6d28d9',
+                  '#15803d', '#be185d', '#92400e', '#0f766e', '#7c2d12'];
+    function render() {
+        var root = document.querySelector('.resumen-materiales');
+        if (!root) { return; }
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js todavía no cargado');
+            return;
+        }
+        var data = readJSON('resumen-materiales-data') || {};
+        var labels = data.labels || [];
+        var series = data.series || [];
+
+        var el = document.getElementById('chart-materiales');
+        if (el && labels.length && series.length) {
+            new Chart(el.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: series.map(function (s, i) {
+                        return {
+                            label: s.label,
+                            data: s.data,
+                            backgroundColor: PALETA[i % PALETA.length]
+                        };
+                    })
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: false },
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+        root.setAttribute('data-charts-ready', 'true');
+    }
+    if (document.readyState === 'complete') {
+        render();
+    } else {
+        window.addEventListener('load', render);
+    }
+})();
+</script>
+{% endblock %}

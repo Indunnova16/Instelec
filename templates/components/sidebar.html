@@ -408,6 +408,15 @@
                         </a>
                     </li>
 
+                    {# 7b. Resumen de Materiales (#154) #}
+                    <li role="none">
+                        <a :href="catUrl('resumen-materiales')" @click="catClick($event)" role="menuitem"
+                           :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                            Resumen de Materiales
+                        </a>
+                    </li>
+
                     {# 8. Actividades Finales (placeholder) #}
                     <li role="none">
                         <a :href="catUrl('actividades-finales')" @click="catClick($event)" role="menuitem"
