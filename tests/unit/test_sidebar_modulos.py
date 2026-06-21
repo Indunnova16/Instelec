@@ -61,7 +61,7 @@ class TestPlaceholdersResponden200:
     PLACEHOLDERS = [
         # dashboard_obra_civil (#75) y dashboard_montaje (#77) ahora son vistas reales (Fase 3).
         # spt_pintura (#78 Fase 2C) y trinchos_cunetas (#80 Fase 2E) ahora son vistas reales.
-        "construccion:actividades_finales",
+        # actividades_finales pasó a ser vista real (B1) — ya no es placeholder; tiene su propio test.
         "construccion:indicadores_financieros",
     ]
 
