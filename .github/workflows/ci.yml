@@ -47,7 +47,13 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements/base.txt
+          # El binding pip de GDAL debe matchear el libgdal del sistema: apt
+          # (Ubuntu) trae 3.8.4 pero requirements/base.txt pinea 3.8.5 → el build
+          # del wheel falla ("require at least libgdal 3.8.5, but 3.8.4 found").
+          # Instalar GDAL a la version del sistema y excluir su pin de base.txt.
+          pip install "GDAL==$(gdal-config --version)"
+          grep -ivE '^GDAL([=<>! ]|$)' requirements/base.txt > /tmp/req_no_gdal.txt
+          pip install -r /tmp/req_no_gdal.txt
           pip install factory-boy pytest pytest-django pytest-timeout
 
       - name: Django system check
