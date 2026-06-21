@@ -202,7 +202,7 @@ class PagoPortalView(LoginRequiredMixin, TemplateView):
         # Generate WOMPI integrity signature (unique per month)
         if plan and suscripcion:
             now = timezone.now()
-            reference = f"FUNDMED-{suscripcion.id}-{plan.id}-{now:%Y%m}-{meses_adeudados}M"
+            reference = f"{settings.WOMPI_REFERENCE_PREFIX}-{suscripcion.id}-{plan.id}-{now:%Y%m}-{meses_adeudados}M"
             amount_cents = int(plan.precio * 100 * meses_adeudados)
             currency = 'COP'
             integrity_key = settings.WOMPI_INTEGRITY_KEY
@@ -210,7 +210,7 @@ class PagoPortalView(LoginRequiredMixin, TemplateView):
             context['wompi_signature'] = hashlib.sha256(concat.encode()).hexdigest()
             context['wompi_reference'] = reference
         else:
-            context['payment_reference'] = f"FUNDMED-{uuid.uuid4().hex[:12].upper()}"
+            context['payment_reference'] = f"{settings.WOMPI_REFERENCE_PREFIX}-{uuid.uuid4().hex[:12].upper()}"
         return context
 
 
