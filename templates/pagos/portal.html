@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% load humanize l10n %}
+
+{% block title %}Portal de Pagos - Instelec{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0"><i class="bi bi-credit-card me-2"></i>Portal de Pagos</h2>
+        <button type="button" id="btnTourPagos" class="btn btn-outline-primary">
+            <i class="bi bi-question-circle me-1"></i> Ver tutorial
+        </button>
+    </div>
+
+    {% if recordatorio_pago and recordatorio_pago.meses_adeudados > 1 %}
+    <div id="tourAlertaMeses" class="alert alert-warning d-flex align-items-center">
+        <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+        <div>
+            Tiene <strong>{{ recordatorio_pago.meses_adeudados }} meses pendientes</strong>
+            ({% for p in recordatorio_pago.periodos %}{{ p }}{% if not forloop.last %}, {% endif %}{% endfor %}).
+            El cobro se realiza en una sola transaccion por
+            <strong>${{ recordatorio_pago.monto_total|floatformat:0|intcomma }} COP</strong>.
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Plan actual -->
+        <div class="col-lg-6">
+            <div id="tourPlan" class="card border-dark h-100">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-box me-2"></i>{{ plan.nombre|default:"Plan de Servicio" }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <div class="text-muted text-decoration-line-through mb-1" style="font-size: 1.2rem;">$150,000 COP / mes</div>
+                        <span class="display-4 fw-bold text-success">${{ plan.precio|floatformat:0|intcomma }}</span>
+                        <span class="text-muted"> COP / mes</span>
+                        <div class="mt-2">
+                            <span class="badge bg-warning text-dark px-3 py-2">50% DESCUENTO - PRIMEROS 6 MESES</span>
+                        </div>
+                    </div>
+                    <p class="text-muted">{{ plan.descripcion|linebreaksbr }}</p>
+
+                    {% if suscripcion %}
+                    <div class="mt-3">
+                        <span class="fw-bold">Estado:</span>
+                        {% if suscripcion.estado == 'ACTIVA' %}
+                            <span class="badge bg-success">Activa</span>
+                        {% elif suscripcion.estado == 'PENDIENTE' %}
+                            <span class="badge bg-warning text-dark">Pendiente de Pago</span>
+                        {% elif suscripcion.estado == 'SUSPENDIDA' %}
+                            <span class="badge bg-danger">Suspendida</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ suscripcion.get_estado_display }}</span>
+                        {% endif %}
+                    </div>
+                    {% if suscripcion.fecha_proximo_pago %}
+                    <div class="mt-2">
+                        <span class="fw-bold">Proximo pago:</span> {{ suscripcion.fecha_proximo_pago }}
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Widget de pago WOMPI -->
+        <div class="col-lg-6">
+            <div id="tourWompi" class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-lock me-2"></i>Realizar Pago</h5>
+                </div>
+                <div class="card-body text-center">
+                    {% if plan %}
+                        {% if suscripcion and suscripcion.estado == 'ACTIVA' %}
+                        <div class="alert alert-success mt-3">
+                            <i class="bi bi-patch-check-fill me-2"></i> Suscripcion activa
+                        </div>
+                        {% endif %}
+
+                        {% if datos_facturacion %}
+                        <!-- Billing data summary -->
+                        <div id="tourDatosFact" class="alert alert-info text-start mb-3">
+                            <h6 class="alert-heading"><i class="bi bi-receipt me-1"></i> Datos de Facturacion</h6>
+                            <p class="mb-1"><strong>{{ datos_facturacion.razon_social }}</strong></p>
+                            <p class="mb-1">{{ datos_facturacion.get_tipo_identificacion_display }}: {{ datos_facturacion.numero_identificacion }}{% if datos_facturacion.dv %}-{{ datos_facturacion.dv }}{% endif %}</p>
+                            <p class="mb-1">{{ datos_facturacion.email }} | {{ datos_facturacion.telefono }}</p>
+                            <p class="mb-0">{{ datos_facturacion.direccion }}, {{ datos_facturacion.ciudad }} - {{ datos_facturacion.departamento }}</p>
+                            <hr>
+                            <a href="{% url 'pagos:facturacion' %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> Editar datos
+                            </a>
+                        </div>
+
+                        <!-- WOMPI payment button with integrity signature -->
+                        <p class="text-muted mb-3">Pago seguro procesado por WOMPI</p>
+                        <form id="tourBotonPagar">
+                            <script
+                                src="https://checkout.wompi.co/widget.js"
+                                data-render="button"
+                                data-public-key="{{ wompi_public_key }}"
+                                data-currency="COP"
+                                data-amount-in-cents="{{ monto_centavos|unlocalize }}"
+                                data-reference="{{ wompi_reference }}"
+                                data-signature:integrity="{{ wompi_signature }}"
+                                data-redirect-url="{{ request.scheme }}://{{ request.get_host }}/pagos/">
+                            </script>
+                        </form>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="bi bi-shield-check me-1"></i>
+                                Transaccion segura con cifrado SSL. Se generara factura electronica automaticamente.
+                            </small>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Referencia: {{ wompi_reference }}</small>
+                        </div>
+                        {% else %}
+                        <!-- No billing data yet - show button to fill form -->
+                        <p class="text-muted mb-3">
+                            Antes de pagar, necesitamos sus datos de facturacion para generar la factura electronica DIAN.
+                        </p>
+                        <a href="{% url 'pagos:facturacion' %}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-receipt me-1"></i> Completar Datos de Facturacion
+                        </a>
+                        {% endif %}
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        No hay un plan de servicio configurado aun. Contacte al administrador.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagos recientes -->
+    {% if pagos_recientes %}
+    <div id="tourHistorial" class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Pagos Recientes</h5>
+            <a href="{% url 'pagos:historial' %}" class="btn btn-sm btn-outline-dark">Ver todos</a>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Monto</th>
+                            <th>Estado</th>
+                            <th>Referencia</th>
+                            <th>Factura</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pago in pagos_recientes %}
+                        <tr>
+                            <td>{{ pago.fecha_pago|date:"d/m/Y H:i" }}</td>
+                            <td class="fw-bold">${{ pago.monto|floatformat:0|intcomma }} COP</td>
+                            <td>
+                                {% if pago.estado == 'APROBADO' %}
+                                    <span class="badge bg-success">Aprobado</span>
+                                {% elif pago.estado == 'PENDIENTE' %}
+                                    <span class="badge bg-warning text-dark">Pendiente</span>
+                                {% elif pago.estado == 'RECHAZADO' %}
+                                    <span class="badge bg-danger">Rechazado</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ pago.get_estado_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td><small class="text-muted">{{ pago.wompi_reference|default:"-" }}</small></td>
+                            <td><small class="text-muted">{{ pago.alegra_invoice_id|default:"-" }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
+<script>
+(function() {
+  function lanzarTour() {
+    if (!window.driver || !window.driver.js || !window.driver.js.driver) return;
+    var driver = window.driver.js.driver;
+    var pasos = [];
+    if (document.getElementById('tourAlertaMeses')) {
+      pasos.push({
+        element: '#tourAlertaMeses',
+        popover: {
+          title: 'Meses pendientes',
+          description: 'Aqui ve los periodos que debe pagar. Si tiene varios meses atrasados, el sistema los cobra en una sola transaccion.'
+        }
+      });
+    }
+    if (document.getElementById('tourPlan')) {
+      pasos.push({
+        element: '#tourPlan',
+        popover: {
+          title: 'Su plan de servicio',
+          description: 'Detalle del plan contratado, precio mensual y estado de la suscripcion.'
+        }
+      });
+    }
+    if (document.getElementById('tourDatosFact')) {
+      pasos.push({
+        element: '#tourDatosFact',
+        popover: {
+          title: 'Datos de facturacion',
+          description: 'Con estos datos se emite la factura electronica DIAN automaticamente al aprobar el pago.'
+        }
+      });
+    }
+    if (document.getElementById('tourBotonPagar')) {
+      pasos.push({
+        element: '#tourBotonPagar',
+        popover: {
+          title: 'Realizar pago',
+          description: 'Pulse el boton WOMPI para pagar con tarjeta, PSE o Nequi. El monto ya incluye todos los meses pendientes.'
+        }
+      });
+    }
+    if (document.getElementById('tourHistorial')) {
+      pasos.push({
+        element: '#tourHistorial',
+        popover: {
+          title: 'Historial de pagos',
+          description: 'Consulte aqui los pagos realizados, su estado y la factura Alegra asociada.'
+        }
+      });
+    }
+    if (!pasos.length) return;
+    var instancia = driver({
+      showProgress: true,
+      nextBtnText: 'Siguiente',
+      prevBtnText: 'Anterior',
+      doneBtnText: 'Finalizar',
+      steps: pasos
+    });
+    instancia.drive();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('btnTourPagos');
+    if (btn) btn.addEventListener('click', lanzarTour);
+
+    var params = new URLSearchParams(window.location.search);
+    var yaVisto = localStorage.getItem('fm_tour_pagos_visto');
+    if (params.get('tour') === '1' || !yaVisto) {
+      setTimeout(lanzarTour, 600);
+      localStorage.setItem('fm_tour_pagos_visto', '1');
+    }
+  });
+})();
+</script>
+{% endblock %}

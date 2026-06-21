@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Datos de Facturacion - Instelec{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <h2 class="mb-4"><i class="bi bi-receipt"></i> Datos de Facturacion</h2>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Informacion para factura electronica DIAN
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-4">
+                    Complete los datos de facturacion para generar su factura electronica automaticamente al realizar el pago.
+                </p>
+
+                <form method="post" id="facturacionForm">
+                    {% csrf_token %}
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="tipo_persona" class="form-label">Tipo de persona <span class="text-danger">*</span></label>
+                            <select name="tipo_persona" id="tipo_persona" class="form-select" required>
+                                <option value="">-- Seleccione --</option>
+                                <option value="JURIDICA" {% if d.tipo_persona == 'JURIDICA' %}selected{% endif %}>Persona Juridica</option>
+                                <option value="NATURAL" {% if d.tipo_persona == 'NATURAL' %}selected{% endif %}>Persona Natural</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="regimen" class="form-label">Regimen <span class="text-danger">*</span></label>
+                            <select name="regimen" id="regimen" class="form-select" required>
+                                <option value="COMMON_REGIME" {% if d.regimen == 'COMMON_REGIME' %}selected{% endif %}>Regimen Comun</option>
+                                <option value="SIMPLIFIED_REGIME" {% if d.regimen == 'SIMPLIFIED_REGIME' %}selected{% endif %}>Regimen Simplificado</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="razon_social" class="form-label">Razon Social / Nombre Completo <span class="text-danger">*</span></label>
+                        <input type="text" name="razon_social" id="razon_social" class="form-control"
+                               value="{{ d.razon_social }}" required maxlength="200"
+                               placeholder="Ej: Instelec SAS / Juan Perez Lopez">
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="tipo_identificacion" class="form-label">Tipo ID <span class="text-danger">*</span></label>
+                            <select name="tipo_identificacion" id="tipo_identificacion" class="form-select" required>
+                                <option value="NIT" {% if d.tipo_identificacion == 'NIT' %}selected{% endif %}>NIT</option>
+                                <option value="CC" {% if d.tipo_identificacion == 'CC' %}selected{% endif %}>Cedula de Ciudadania</option>
+                                <option value="CE" {% if d.tipo_identificacion == 'CE' %}selected{% endif %}>Cedula de Extranjeria</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label for="numero_identificacion" class="form-label">Numero <span class="text-danger">*</span></label>
+                            <input type="text" name="numero_identificacion" id="numero_identificacion" class="form-control"
+                                   value="{{ d.numero_identificacion }}" required maxlength="20"
+                                   placeholder="Ej: 901234567">
+                        </div>
+                        <div class="col-md-3" id="dv_group">
+                            <label for="dv" class="form-label">DV</label>
+                            <input type="text" name="dv" id="dv" class="form-control"
+                                   value="{{ d.dv }}" maxlength="1"
+                                   placeholder="Ej: 8">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">Email de Facturacion <span class="text-danger">*</span></label>
+                            <input type="email" name="email" id="email" class="form-control"
+                                   value="{{ d.email }}" required
+                                   placeholder="contabilidad@empresa.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="telefono" class="form-label">Telefono <span class="text-danger">*</span></label>
+                            <input type="text" name="telefono" id="telefono" class="form-control"
+                                   value="{{ d.telefono }}" required maxlength="20"
+                                   placeholder="3001234567">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="direccion" class="form-label">Direccion <span class="text-danger">*</span></label>
+                        <input type="text" name="direccion" id="direccion" class="form-control"
+                               value="{{ d.direccion }}" required maxlength="200"
+                               placeholder="Calle 10 #5-30">
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="departamento" class="form-label">Departamento <span class="text-danger">*</span></label>
+                            <select name="departamento" id="departamento" class="form-select" required>
+                                <option value="">Cargando...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="ciudad" class="form-label">Ciudad <span class="text-danger">*</span></label>
+                            <select name="ciudad" id="ciudad" class="form-select" required>
+                                <option value="">-- Seleccione departamento --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'pagos:portal' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Volver
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Guardar y Continuar al Pago
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const tipoPersona = document.getElementById('tipo_persona');
+    const tipoId = document.getElementById('tipo_identificacion');
+    const dvGroup = document.getElementById('dv_group');
+
+    // Persona Juridica → forzar NIT
+    function syncTipoId() {
+        if (tipoPersona.value === 'JURIDICA') {
+            tipoId.value = 'NIT';
+            tipoId.disabled = true;
+        } else {
+            tipoId.disabled = false;
+        }
+        dvGroup.style.display = tipoId.value === 'NIT' ? 'block' : 'none';
+    }
+    tipoPersona.addEventListener('change', syncTipoId);
+    tipoId.addEventListener('change', function() {
+        dvGroup.style.display = this.value === 'NIT' ? 'block' : 'none';
+    });
+    syncTipoId();
+
+    // Re-enable disabled select before submit so value is sent
+    document.getElementById('facturacionForm').addEventListener('submit', function() {
+        tipoId.disabled = false;
+    });
+
+    // Departamentos y Municipios de Colombia (api-colombia.com)
+    const API_BASE = 'https://api-colombia.com/api/v1';
+    const deptoSelect = document.getElementById('departamento');
+    const ciudadSelect = document.getElementById('ciudad');
+    const savedDepto = '{{ d.departamento|escapejs }}';
+    const savedCiudad = '{{ d.ciudad|escapejs }}';
+    let deptosMap = {};
+
+    async function cargarDepartamentos() {
+        try {
+            const resp = await fetch(API_BASE + '/Department');
+            const data = await resp.json();
+            data.sort((a, b) => a.name.localeCompare(b.name));
+            deptoSelect.innerHTML = '<option value="">-- Seleccione --</option>';
+            data.forEach(function(item) {
+                deptosMap[item.name] = item.id;
+                const opt = document.createElement('option');
+                opt.value = item.name;
+                opt.textContent = item.name;
+                if (item.name === savedDepto) opt.selected = true;
+                deptoSelect.appendChild(opt);
+            });
+            if (savedDepto && deptosMap[savedDepto]) cargarCiudades(deptosMap[savedDepto]);
+        } catch (e) {
+            deptoSelect.innerHTML = '<option value="">Error cargando</option>';
+            const input = document.createElement('input');
+            input.type = 'text'; input.name = 'departamento'; input.id = 'departamento';
+            input.className = 'form-control'; input.required = true;
+            input.value = savedDepto;
+            deptoSelect.replaceWith(input);
+        }
+    }
+
+    async function cargarCiudades(deptoId) {
+        ciudadSelect.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const resp = await fetch(API_BASE + '/Department/' + deptoId + '/cities');
+            const data = await resp.json();
+            data.sort((a, b) => a.name.localeCompare(b.name));
+            ciudadSelect.innerHTML = '<option value="">-- Seleccione --</option>';
+            data.forEach(function(item) {
+                const opt = document.createElement('option');
+                opt.value = item.name;
+                opt.textContent = item.name;
+                if (item.name === savedCiudad) opt.selected = true;
+                ciudadSelect.appendChild(opt);
+            });
+        } catch (e) {
+            ciudadSelect.innerHTML = '<option value="">Error cargando</option>';
+            const input = document.createElement('input');
+            input.type = 'text'; input.name = 'ciudad'; input.id = 'ciudad';
+            input.className = 'form-control'; input.required = true;
+            input.value = savedCiudad;
+            ciudadSelect.replaceWith(input);
+        }
+    }
+
+    deptoSelect.addEventListener('change', function() {
+        if (this.value && deptosMap[this.value]) {
+            cargarCiudades(deptosMap[this.value]);
+        } else {
+            ciudadSelect.innerHTML = '<option value="">-- Seleccione departamento --</option>';
+        }
+    });
+
+    cargarDepartamentos();
+</script>
+{% endblock %}

@@ -7,6 +7,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
+    path('pagos/', include('apps.pagos.urls', namespace='pagos')),
     # Admin
     path('admin/', admin.site.urls),
 

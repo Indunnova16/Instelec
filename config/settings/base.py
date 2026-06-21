@@ -52,6 +52,7 @@ LOCAL_APPS = [
     'apps.construccion',
     'apps.ingenieria',
     'apps.preliminares',
+    'apps.pagos',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -83,6 +84,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'apps.core.context_processors.modulo_context',
+                'apps.pagos.context_processors.recordatorio_pago',
             ],
         },
     },
@@ -283,3 +285,16 @@ RATELIMIT_CONFIG = {
         'key': 'user',
     },
 }
+
+# === Pagos: WOMPI (pasarela) + Alegra (facturacion electronica) — #143 ===
+WOMPI_PUBLIC_KEY = config('WOMPI_PUBLIC_KEY', default='')
+WOMPI_PRIVATE_KEY = config('WOMPI_PRIVATE_KEY', default='')
+WOMPI_EVENTS_KEY = config('WOMPI_EVENTS_KEY', default='')
+WOMPI_INTEGRITY_KEY = config('WOMPI_INTEGRITY_KEY', default='')
+WOMPI_SANDBOX = config('WOMPI_SANDBOX', default=False, cast=bool)
+ALEGRA_EMAIL = config('ALEGRA_EMAIL', default='')
+ALEGRA_API_TOKEN = config('ALEGRA_API_TOKEN', default='')
+ALEGRA_API_URL = config('ALEGRA_API_URL', default='https://api.alegra.com/api/v1')
+ALEGRA_ITEM_ID = config('ALEGRA_ITEM_ID', default=158, cast=int)
+ALEGRA_BANK_ACCOUNT_ID = config('ALEGRA_BANK_ACCOUNT_ID', default=12, cast=int)
+ALEGRA_NUMBER_TEMPLATE_ID = config('ALEGRA_NUMBER_TEMPLATE_ID', default=24, cast=int)
