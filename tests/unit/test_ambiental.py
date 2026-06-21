@@ -134,7 +134,7 @@ class TestPermisoServidumbreModel:
         )
         str_repr = str(permiso)
         assert "Juan Pérez" in str_repr
-        assert "T-001" in str_repr
+        assert "T-1" in str_repr  # __str__ normaliza T-001→T-1 (#100)
 
     def test_permiso_vigente_true(self):
         """Test valid permission detection."""

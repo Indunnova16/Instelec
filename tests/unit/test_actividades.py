@@ -142,7 +142,7 @@ class TestActividadModel:
         actividad = ActividadFactory()
         str_repr = str(actividad)
         assert actividad.tipo_actividad.nombre in str_repr
-        assert actividad.torre.numero in str_repr
+        assert str(actividad.torre) in str_repr  # __str__ normaliza T-001→T-1 (#100)
 
     def test_fecha_efectiva_sin_reprogramacion(self):
         """Test effective date without rescheduling."""
