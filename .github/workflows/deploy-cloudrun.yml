@@ -95,6 +95,12 @@ jobs:
           DB_PASSWORD: "${{ secrets.DB_PASSWORD }}"
           GS_BUCKET_NAME: "instelec-media"
           SECRET_KEY: "${{ secrets.DJANGO_SECRET_KEY }}"
+          WOMPI_PUBLIC_KEY: "${{ secrets.WOMPI_PUBLIC_KEY }}"
+          WOMPI_PRIVATE_KEY: "${{ secrets.WOMPI_PRIVATE_KEY }}"
+          WOMPI_EVENTS_KEY: "${{ secrets.WOMPI_EVENTS_KEY }}"
+          WOMPI_INTEGRITY_KEY: "${{ secrets.WOMPI_INTEGRITY_KEY }}"
+          ALEGRA_EMAIL: "${{ secrets.ALEGRA_EMAIL }}"
+          ALEGRA_API_TOKEN: "${{ secrets.ALEGRA_API_TOKEN }}"
           EOF
 
       - name: Run Migrations
