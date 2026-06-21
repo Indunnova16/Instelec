@@ -20,7 +20,7 @@ class TestUsuarioModel:
         )
         assert user.email == "test@example.com"
         assert user.check_password("testpass123")
-        assert user.rol == "liniero"  # Default role
+        assert user.rol == "operario_general"  # Default role (Rol.OPERARIO_GENERAL)
         assert user.is_active
         assert not user.is_staff
         assert not user.is_superuser

@@ -197,9 +197,10 @@ class TestRoleBasedAccessControl:
         assert response.status_code == 403
 
     def test_wrong_role_denied_importar(self, client, user_password):
-        """Test that ingeniero residente gets 403 for importar view."""
-        ingeniero = IngenieroResidenteFactory()
-        client.login(username=ingeniero.email, password=user_password)
+        """Test que un rol no-admin (liniero) recibe 403 en importar.
+        (ing_residente pasó a admin-level en RBAC v2 #44; se usa liniero, NIVEL_OPERARIO.)"""
+        liniero = LinieroFactory()
+        client.login(username=liniero.email, password=user_password)
 
         url = reverse('actividades:importar')
         response = client.get(url)

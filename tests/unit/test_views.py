@@ -436,9 +436,10 @@ class TestActividadesViews:
         assert 'actividades/programacion.html' in [t.name for t in response.templates]
         assert 'programaciones' in response.context
 
-    def test_importar_programacion_requires_role(self, client, ingeniero_user, user_password):
-        """Test import view requires admin/director/coordinador role."""
-        client.login(username=ingeniero_user.email, password=user_password)
+    def test_importar_programacion_requires_role(self, client, liniero_user, user_password):
+        """Test import view requires admin/director/coordinador role (liniero=NIVEL_OPERARIO denegado).
+        ing_residente pasó a admin-level en RBAC v2 #44, por eso se usa liniero."""
+        client.login(username=liniero_user.email, password=user_password)
         url = reverse('actividades:importar')
 
         response = client.get(url)

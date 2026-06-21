@@ -1,0 +1,78 @@
+name: CI
+
+# Blindaje Fase 0 — gate de tests en main. instelec es app GIS (django.contrib.gis
+# + PostGIS): los tests necesitan geometría real (srid) y funciones Postgres
+# (regexp_replace) que sqlite/dev_lite no emula (rompe ~140 tests con _MockGeometry).
+# Por eso CI corre contra un service container PostGIS real. DEV-25.
+# tests/e2e quedan EXCLUIDOS (browser/Playwright, no son unit). El --timeout es
+# backstop: ningún test puede colgar el runner (placeholder #actividades_finales).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit+Integration (PostGIS)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: instelec_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SECRET_KEY: ci-secret-not-for-prod
+      DEBUG: "False"
+      DB_NAME: instelec_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DJANGO_SETTINGS_MODULE: config.settings.ci_postgis
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps (GDAL/GEOS/PROJ para GeoDjango)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev binutils libproj-dev libgeos-dev postgresql-client
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # El binding pip de GDAL debe matchear el libgdal del sistema (apt trae
+          # 3.8.x; base.txt pinea otra). Instalar la versión del sistema y excluir el pin.
+          pip install "GDAL==$(gdal-config --version)"
+          grep -ivE '^GDAL([=<>! ]|$)' requirements/base.txt > /tmp/req_no_gdal.txt
+          pip install -r /tmp/req_no_gdal.txt
+          pip install factory-boy pytest pytest-django pytest-timeout
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Run unit + integration tests (PostGIS)
+        run: >-
+          pytest tests/unit tests/integration
+          --ds=config.settings.ci_postgis
+          --create-db --timeout=60 --timeout_method=signal
+          -p no:cacheprovider -q -ra
