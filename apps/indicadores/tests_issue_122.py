@@ -72,3 +72,81 @@ def test_comentario_122_no_se_fuga_como_texto(dashboard_html):
 def test_dashboard_sigue_renderizando_indicadores_tecnico_financieros(dashboard_html):
     """El partial técnico-financiero sigue incluido y renderiza su encabezado."""
     assert "Indicadores Técnico-Financieros" in dashboard_html
+
+
+# ---------------------------------------------------------------------------
+# #122 (rebote/FIX_INCOMPLETO): el filtro del dashboard 500eaba porque
+# DashboardView.partial_template_name apuntaba a
+# 'indicadores/partials/dashboard_content.html', un archivo que NO existía.
+# En full-page (sin HX-Request) se usa dashboard.html y todo carga (por eso
+# pasó los smokes previos), pero al cambiar CUALQUIER filtro htmx hace la
+# petición con header HX-Request -> HTMXMixin devuelve ese partial inexistente
+# -> TemplateDoesNotExist -> HTTP 500. El fix crea el partial faltante (el
+# cuerpo de #dashboard-content). Estos tests reproducen el gesto real del
+# cliente (cambio de filtro = petición HTMX) y asertan 200, no 500.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestDashboardFiltroHTMXNo500:
+    """El cambio de filtro (petición HTMX) responde 200 con los KPIs, no 500."""
+
+    @pytest.fixture
+    def usuario_logueado(self, client, django_user_model):
+        # USERNAME_FIELD = 'email' (apps.usuarios.Usuario)
+        user = django_user_model.objects.create_user(
+            email="qa_issue122@instelec.test",
+            password="x",
+            first_name="QA",
+            last_name="Issue122",
+            is_staff=True,
+            is_superuser=True,
+        )
+        client.force_login(user)
+        return user
+
+    def _url(self):
+        from django.urls import reverse
+        return reverse("indicadores:dashboard")
+
+    def test_partial_template_existe(self):
+        """El partial declarado en partial_template_name debe poder cargarse."""
+        from django.template.loader import get_template
+        # Si el archivo no existe, get_template lanza TemplateDoesNotExist (= el 500).
+        get_template("indicadores/partials/dashboard_content.html")
+
+    def test_filtro_periodo_htmx_responde_200(self, client, usuario_logueado):
+        """Cambiar el período vía HTMX (el gesto que 500eaba) ahora da 200."""
+        resp = client.get(
+            self._url(),
+            {"periodo": "trimestre", "linea": ""},
+            HTTP_HX_REQUEST="true",
+        )
+        assert resp.status_code == 200, (
+            f"esperaba 200, obtuve {resp.status_code} "
+            "(el partial dashboard_content.html no carga -> TemplateDoesNotExist)"
+        )
+        html = resp.content.decode()
+        # El partial renderiza el bloque de KPIs (no el header/filtros, que quedan fuera).
+        assert "Cumplimiento" in html
+        assert "Actividades Completadas" in html
+        # NO debe re-renderizar el header con los <select> de filtros (eso vive fuera del swap).
+        assert 'id="periodo-filter"' not in html
+
+    def test_filtro_linea_htmx_responde_200(self, client, usuario_logueado):
+        """Cambiar la línea vía HTMX (mismo hx-target) también da 200, no 500."""
+        resp = client.get(
+            self._url(),
+            {"periodo": "mes", "linea": ""},
+            HTTP_HX_REQUEST="true",
+        )
+        assert resp.status_code == 200
+        assert "Cumplimiento" in resp.content.decode()
+
+    def test_fullpage_sigue_200(self, client, usuario_logueado):
+        """El render full-page (sin HX-Request) sigue sirviendo el dashboard completo."""
+        resp = client.get(self._url(), {"periodo": "trimestre"})
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        # En full-page SÍ aparece el header con los filtros + el cuerpo (vía include).
+        assert 'id="periodo-filter"' in html
+        assert "Cumplimiento" in html
