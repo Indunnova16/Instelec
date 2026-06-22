@@ -14,15 +14,68 @@
             <h1 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard de Indicadores</h1>
             <p class="text-gray-600 dark:text-gray-400">Metricas de desempeno del contrato</p>
         </div>
-        <div class="flex gap-2" role="search" aria-label="Filtros de indicadores">
+        {% comment %} #167: filtros Año/Mes/Contrato (paridad con /financiero/) +
+           periodo + línea. Todos cablean hx-get a indicadores:dashboard con
+           hx-include='#dashboard-filters select' para que cualquier cambio mande
+           el set completo de filtros y los 6 KPIs técnico-financieros re-ventaneen.
+           El mes hardcodeado a 0 en la vista era el bug de #167 ("no pasa nada
+           cuando hago los filtros"). {% endcomment %}
+        <div id="dashboard-filters" class="flex flex-wrap gap-2 items-center" role="search" aria-label="Filtros de indicadores">
+            <!-- Año -->
+            <div class="flex items-center gap-1">
+                <label for="anio-filter" class="text-sm text-gray-600 dark:text-gray-400 font-medium">Año:</label>
+                <select id="anio-filter" name="anio"
+                        hx-get="{% url 'indicadores:dashboard' %}"
+                        hx-target="#dashboard-content"
+                        hx-trigger="change"
+                        hx-include="#dashboard-filters select"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm"
+                        aria-label="Seleccionar año">
+                    {% for a in anios_disponibles %}
+                    <option value="{{ a }}" {% if a == anio %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Mes -->
+            <div class="flex items-center gap-1">
+                <label for="mes-filter" class="text-sm text-gray-600 dark:text-gray-400 font-medium">Mes:</label>
+                <select id="mes-filter" name="mes"
+                        hx-get="{% url 'indicadores:dashboard' %}"
+                        hx-target="#dashboard-content"
+                        hx-trigger="change"
+                        hx-include="#dashboard-filters select"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm"
+                        aria-label="Seleccionar mes">
+                    {% for m in meses_opciones %}
+                    <option value="{{ m.value }}" {% if m.value == mes_kpi %}selected{% endif %}>{{ m.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Contrato -->
+            <div class="flex items-center gap-1">
+                <label for="contrato-filter" class="text-sm text-gray-600 dark:text-gray-400 font-medium">Contrato:</label>
+                <select id="contrato-filter" name="contrato"
+                        hx-get="{% url 'indicadores:dashboard' %}"
+                        hx-target="#dashboard-content"
+                        hx-trigger="change"
+                        hx-include="#dashboard-filters select"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm min-w-[160px]"
+                        aria-label="Seleccionar contrato">
+                    <option value="">Todos los contratos</option>
+                    {% for c in contratos_disponibles %}
+                    <option value="{{ c.pk }}" {% if contrato_seleccionado and contrato_seleccionado.pk == c.pk %}selected{% endif %}>{{ c.codigo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Periodo -->
             <label for="periodo-filter" class="sr-only">Filtrar por periodo</label>
             <select id="periodo-filter"
                     hx-get="{% url 'indicadores:dashboard' %}"
                     hx-target="#dashboard-content"
                     hx-trigger="change"
-                    hx-include="[name='linea']"
+                    hx-include="#dashboard-filters select"
                     name="periodo"
-                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm"
                     aria-label="Seleccionar periodo de tiempo">
                 {% for p in periodos %}
                 <option value="{{ p.value }}" {% if p.value == periodo_actual %}selected{% endif %}>
@@ -30,17 +83,18 @@
                 </option>
                 {% endfor %}
             </select>
+            <!-- Línea -->
             <label for="linea-filter" class="sr-only">Filtrar por linea</label>
             <select name="linea" id="linea-filter"
                     hx-get="{% url 'indicadores:dashboard' %}"
                     hx-target="#dashboard-content"
                     hx-trigger="change"
-                    hx-include="[name='periodo']"
-                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                    hx-include="#dashboard-filters select"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm"
                     aria-label="Seleccionar linea de transmision">
                 <option value="">Todas las lineas</option>
                 {% for linea in lineas %}
-                <option value="{{ linea.id }}">{{ linea.codigo }}</option>
+                <option value="{{ linea.id }}" {% if linea.id|stringformat:'s' == request.GET.linea %}selected{% endif %}>{{ linea.codigo }}</option>
                 {% endfor %}
             </select>
         </div>
