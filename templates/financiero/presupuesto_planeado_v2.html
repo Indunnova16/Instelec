@@ -67,7 +67,10 @@ Servida por PresupuestoPlaneadoViewV2 (financiero:cargar_bd_contable).
             </button>
         </div>
         {% else %}
-        <!-- Tabla de rubros -->
+        <!-- A2 (#120): vista bi-modal (Matriz 12 meses | Filtro Mes) -->
+        {% include "financiero/_presupuesto_bimodal_tabla.html" %}
+
+        <!-- Tabla de rubros (vista plana / detalle expandible por cuenta) -->
         <section class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
             <div class="px-4 py-3 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">

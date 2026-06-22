@@ -18,7 +18,14 @@ from django.views import View
 from apps.core.mixins import RoleRequiredMixin
 
 from .forms_finv2 import CargarBDContableForm, MapeoCtaRubroForm
-from .importers_finv2 import ContableCompleteImporter, build_rubro_display_rows
+from .importers_finv2 import (
+    MESES_FISCALES,
+    MESES_FISCALES_KEYS,
+    ContableCompleteImporter,
+    build_mes_filter_rows,
+    build_rubro_display_rows,
+    build_rubro_matrix_rows,
+)
 from .models_finv2_mapeo import MapeoCtaRubro
 from .views import PresupuestoDetalladoBaseView
 
@@ -51,7 +58,56 @@ class PresupuestoPlaneadoViewV2(PresupuestoDetalladoBaseView):
         context['mapeos'] = MapeoCtaRubro.objects.all()
         context['mapeo_form'] = MapeoCtaRubroForm()
         context['active_tab'] = self.request.GET.get('tab', 'cargar')
+
+        # A2 (#120) — vista bi-modal: matriz 12 meses (julio→junio) + filtro mes.
+        context.update(self._build_bimodal_context(obj.datos))
         return context
+
+    # ------------------------------------------------------------------ #
+    # A2 (#120) — contexto bi-modal (matriz / filtro mes)
+    # ------------------------------------------------------------------ #
+    def _build_bimodal_context(self, datos):
+        """Arma el contexto compartido por el partial _presupuesto_bimodal_tabla.
+
+        Lee ``?vista=`` (matriz|mes, default matriz) y ``?mes=`` (key fiscal).
+        Devuelve un dict consumido por el partial — mismo contrato que usa
+        Construcción (A3), para no divergir.
+        """
+        vista = self.request.GET.get('vista', 'matriz')
+        if vista not in ('matriz', 'mes'):
+            vista = 'matriz'
+
+        matrix_rows, totales_columna, meses_fiscales, total_general = (
+            build_rubro_matrix_rows(datos)
+        )
+
+        # Filtro mes: validar contra las keys fiscales; default = primer mes.
+        mes_sel = self.request.GET.get('mes') or MESES_FISCALES_KEYS[0]
+        if mes_sel not in MESES_FISCALES_KEYS:
+            mes_sel = MESES_FISCALES_KEYS[0]
+        mes_rows, mes_total, mes_label = build_mes_filter_rows(datos, mes_sel)
+
+        # Querystring base (sin vista/mes) para los enlaces del toggle + hidden
+        # params del form de filtro (preserva anio/tab/contrato al navegar).
+        hidden = {
+            k: v for k, v in self.request.GET.items()
+            if k not in ('vista', 'mes') and v
+        }
+        base_qs = ''.join(f'{k}={v}&' for k, v in hidden.items())
+
+        return {
+            'vista': vista,
+            'matrix_rows': matrix_rows,
+            'totales_columna': totales_columna,
+            'meses_fiscales': meses_fiscales,
+            'matrix_total': total_general,
+            'mes_sel': mes_sel,
+            'mes_rows': mes_rows,
+            'mes_total': mes_total,
+            'mes_label': mes_label,
+            'bimodal_base_qs': base_qs,
+            'bimodal_hidden_params': hidden,
+        }
 
     # ------------------------------------------------------------------ #
     # POST — carga de BD contable

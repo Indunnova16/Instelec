@@ -1,0 +1,181 @@
+{% comment %}
+A2/A3 (#120) — Partial COMPARTIDO de la vista bi-modal del Presupuesto Planeado:
+  - Vista Matriz : tabla rubro × 12 meses fiscales (julio→junio) + columna TOTAL
+                   + fila de totales por columna.
+  - Filtro Mes   : select de mes + tabla reducida (rubro · total) del mes elegido.
+Lo incluyen tanto Mantenimiento (presupuesto_planeado_v2.html, financiero) como
+Construcción (financiero_presupuesto_planeado.html, construccion) para no divergir.
+
+Contexto requerido (ambas vistas lo proveen con el MISMO contrato):
+  tiene_datos_bd : bool          — hay datos contables cargados
+  vista          : 'matriz'|'mes'— pestaña activa (desde ?vista=)
+  matrix_rows    : [{rubro, meses[12], total, pct}]   (orden julio→junio)
+  totales_columna: [float × 12]
+  meses_fiscales : [(key, label, num) × 12]
+  matrix_total   : float
+  mes_sel        : key fiscal del mes filtrado
+  mes_rows       : [{rubro, total}]  del mes filtrado
+  mes_total      : float
+  mes_label      : etiqueta humana del mes filtrado
+  bimodal_base_qs: querystring base SIN vista/mes (p.ej. 'anio=2024&tab=planeado&')
+                   para construir los enlaces del toggle / submit del filtro.
+
+Estados UI: loading (x-show mientras navega), empty (sin datos), error (sin
+matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
+{% endcomment %}
+{% load humanize %}
+
+<div x-data="{ vista: '{{ vista|default:"matriz" }}', cargando: false }"
+     class="space-y-4">
+
+    {% if not tiene_datos_bd %}
+    {% comment %} Empty state {% endcomment %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center border border-gray-200 dark:border-gray-700">
+        <p class="text-gray-500 dark:text-gray-400">
+            Aún no hay datos contables cargados para construir la matriz mensual.
+        </p>
+        <button type="button" @click="tab = 'cargar'"
+                class="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+            Cargar Base de Datos Contable
+        </button>
+    </div>
+    {% else %}
+
+    {% comment %} Toggle Vista Matriz | Filtro Mes {% endcomment %}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden text-sm">
+            <a href="?{{ bimodal_base_qs }}vista=matriz&mes={{ mes_sel }}"
+               @click="cargando = true"
+               :class="vista === 'matriz' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'"
+               class="px-4 py-2 font-medium transition">Vista Matriz</a>
+            <a href="?{{ bimodal_base_qs }}vista=mes&mes={{ mes_sel }}"
+               @click="cargando = true"
+               :class="vista === 'mes' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'"
+               class="px-4 py-2 font-medium transition border-l border-gray-300 dark:border-gray-600">Filtro Mes</a>
+        </div>
+        <span class="text-sm text-gray-500 dark:text-gray-400">
+            Año fiscal julio → junio · Total ${{ matrix_total|floatformat:0|intcomma }}
+        </span>
+    </div>
+
+    {% comment %} Loading state (visible mientras navega el toggle/filtro) {% endcomment %}
+    <div x-show="cargando" x-cloak
+         class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"></path>
+        </svg>
+        Cargando…
+    </div>
+
+    {% comment %} ============ Vista MATRIZ (rubro × 12 meses) ============ {% endcomment %}
+    <div data-vista="matriz" x-show="vista === 'matriz'" x-cloak>
+        {% if matrix_rows %}
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-xs sm:text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                            <th class="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300 sticky left-0 bg-gray-50 dark:bg-gray-900">Rubro</th>
+                            {% for key, label, num in meses_fiscales %}
+                            <th class="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ label }}</th>
+                            {% endfor %}
+                            <th class="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">TOTAL</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for fila in matrix_rows %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                            <td class="px-3 py-2 text-gray-900 dark:text-white whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800">{{ fila.rubro }}</td>
+                            {% for valor in fila.meses %}
+                            <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">${{ valor|floatformat:0|intcomma }}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">${{ fila.total|floatformat:0|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="bg-gray-100 dark:bg-gray-800 font-semibold">
+                        <tr>
+                            <td class="px-3 py-2 text-gray-900 dark:text-white sticky left-0 bg-gray-100 dark:bg-gray-800">TOTAL</td>
+                            {% for total_col in totales_columna %}
+                            <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">${{ total_col|floatformat:0|intcomma }}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">${{ matrix_total|floatformat:0|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+        {% else %}
+        {% comment %} Error/degradado: hay datos contables pero la matriz vino vacía {% endcomment %}
+        <div class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-300">
+            No se pudo construir la matriz mensual con los datos cargados. Verifique
+            que la Base de Datos contable incluya la columna Fecha (D) o Periodo (F).
+        </div>
+        {% endif %}
+    </div>
+
+    {% comment %} ============ Filtro MES ============ {% endcomment %}
+    <div data-vista="mes" x-show="vista === 'mes'" x-cloak class="space-y-3">
+        <form method="get" class="flex flex-wrap items-end gap-2 text-sm"
+              @submit="cargando = true">
+            {% comment %} Reinyectar params base (anio/tab/contrato) como hidden {% endcomment %}
+            {% for k, v in bimodal_hidden_params.items %}
+            <input type="hidden" name="{{ k }}" value="{{ v }}">
+            {% endfor %}
+            <input type="hidden" name="vista" value="mes">
+            <label class="flex flex-col">
+                <span class="text-xs text-gray-500">Mes fiscal</span>
+                <select name="mes"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                        onchange="this.form.submit()">
+                    {% for key, label, num in meses_fiscales %}
+                    <option value="{{ key }}" {% if key == mes_sel %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit"
+                    class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Ver mes</button>
+        </form>
+
+        {% if mes_rows %}
+        <section class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+            <div class="px-4 py-3 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ mes_label }}</h3>
+                <span class="text-sm font-bold text-gray-700 dark:text-gray-200">${{ mes_total|floatformat:0|intcomma }}</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                            <th class="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-300">Rubro</th>
+                            <th class="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-300">Total {{ mes_label }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for fila in mes_rows %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                            <td class="px-4 py-2 text-gray-900 dark:text-white">{{ fila.rubro }}</td>
+                            <td class="px-4 py-2 text-right text-gray-700 dark:text-gray-300">${{ fila.total|floatformat:0|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="bg-gray-100 dark:bg-gray-800 font-semibold">
+                        <tr>
+                            <td class="px-4 py-2 text-gray-900 dark:text-white">TOTAL</td>
+                            <td class="px-4 py-2 text-right text-gray-900 dark:text-white">${{ mes_total|floatformat:0|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+        {% else %}
+        {% comment %} Empty para el mes elegido (no es error: el mes no tuvo movimientos) {% endcomment %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+            No hay movimientos contables en {{ mes_label }}.
+        </div>
+        {% endif %}
+    </div>
+
+    {% endif %}
+</div>
