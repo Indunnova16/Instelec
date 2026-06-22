@@ -122,8 +122,8 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                    {# #149: una fila por torre que aplica. Con obra capturada → datos + Editar;
-                       sin obra → fila "Pendiente" + botón Capturar (torre preseleccionada). #}
+                    {% comment %} #149: una fila por torre que aplica. Con obra capturada → datos + Editar;
+                       sin obra → fila "Pendiente" + botón Capturar (torre preseleccionada). {% endcomment %}
                     {% for f in filas %}
                     {% with o=f.obra t=f.torre %}
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not o %} bg-amber-50/40 dark:bg-amber-900/10{% endif %}">
