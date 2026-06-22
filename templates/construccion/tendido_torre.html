@@ -54,16 +54,23 @@
           {{ tiros_formset.management_form }}
           <div data-tiros-manila class="space-y-2">
             {% for tiro_form in tiros_formset %}
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end border rounded p-2" data-tiro-row>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end border rounded p-2"
+                 data-tiro-row x-data="{ marcadaQuitar: false }"
+                 :class="marcadaQuitar ? 'opacity-40' : ''">
               {% for hidden in tiro_form.hidden_fields %}{{ hidden }}{% endfor %}
               <label class="text-xs">N° tiro<br>{{ tiro_form.numero_tiro }}</label>
               <label class="text-xs">Fecha<br>{{ tiro_form.fecha }}</label>
               <label class="text-xs">F.T (m)<br>{{ tiro_form.flecha_tendido_m }}</label>
               <label class="text-xs md:col-span-1">Observaciones<br>{{ tiro_form.observaciones }}</label>
               {% if tiro_form.instance.pk %}
-              {# fila guardada: marcar DELETE del formset (can_delete=True) #}
-              <label class="text-xs flex items-center gap-1 cursor-pointer" data-tiro-delete-saved>
-                {{ tiro_form.DELETE }} <span>Quitar</span></label>
+              {# fila guardada: el checkbox DELETE del formset (can_delete=True) va
+                 OCULTO; el botón rojo lo togglea y atenúa la fila SIN sacarla del DOM
+                 (para que el inlineformset la procese como borrada al guardar). #}
+              <span class="hidden" data-tiro-delete-saved>{{ tiro_form.DELETE }}</span>
+              <button type="button" data-remove-tiro
+                      class="text-xs text-red-600 hover:text-red-800 justify-self-start"
+                      @click="marcadaQuitar = quitarFilaGuardada($event)"
+                      x-text="marcadaQuitar ? 'Deshacer' : 'Quitar'">Quitar</button>
               {% else %}
               {# fila nueva sin guardar: remover del DOM + ajustar TOTAL_FORMS #}
               <button type="button" data-remove-tiro
@@ -259,6 +266,18 @@
         if (!fila) return;
         fila.remove();
         this.reindexar();
+      },
+      quitarFilaGuardada(ev) {
+        // Fila YA guardada: en vez de sacarla del DOM, togglear el checkbox
+        // DELETE oculto del formset para que el inlineformset (can_delete=True)
+        // la procese como borrada al guardar. Devuelve el nuevo estado marcado
+        // para que Alpine atenúe la fila y cambie el texto del botón.
+        const fila = ev.target.closest('[data-tiro-row]');
+        if (!fila) return false;
+        const del = fila.querySelector('[data-tiro-delete-saved] input[type="checkbox"]');
+        if (!del) return false;
+        del.checked = !del.checked;
+        return del.checked;
       },
       reindexar() {
         // Renumera name/id de las filas SIN guardar (no tienen DELETE) para que
