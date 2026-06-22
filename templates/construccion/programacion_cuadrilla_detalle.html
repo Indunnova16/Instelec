@@ -129,10 +129,10 @@
     </div>
 
     {# ---- Dashboard de cumplimiento (inline, #155 sub-2) ---- #}
-    {# Reemplaza el placeholder: la vista pasa los datos vía calculators_pc
+    {% comment %} Reemplaza el placeholder: la vista pasa los datos vía calculators_pc
        (misma lógica del dashboard B4, no duplicada). Include INCONDICIONAL
        (sin `ignore missing`, no soportado por el include de este Django build —
-       ver nota de cabecera). El partial existe en el repo. #}
+       ver nota de cabecera). El partial existe en el repo. {% endcomment %}
     <div id="dashboard-cumplimiento" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Cumplimiento</h2>
         {% include "construccion/partials/_cumplimiento_inline.html" %}
