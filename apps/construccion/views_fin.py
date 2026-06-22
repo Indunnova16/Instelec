@@ -53,7 +53,12 @@ from .importers import (
     PresupuestoConstruccionExcelImporter,
     detect_excel_format_construccion,
 )
-from apps.financiero.importers_finv2 import build_rubro_display_rows
+from apps.financiero.importers_finv2 import (
+    MESES_FISCALES_KEYS,
+    build_mes_filter_rows,
+    build_rubro_display_rows,
+    build_rubro_matrix_rows,
+)
 
 
 # Roles administrativos con acceso al financiero (espejo de views.py::ALL_ADMIN_ROLES).
@@ -179,6 +184,47 @@ class ProyectoFinMixin(LoginRequiredMixin, RoleRequiredMixin, SubModuloRequiredM
             'utilidad_pct': utilidad_pct.quantize(Decimal('0.01')),
         }
 
+    # ----- A3 (#120): contexto bi-modal (matriz / filtro mes) ------------
+    def _bimodal_context(self, datos):
+        """Mismo contrato que el lado Mantenimiento (#120 A2).
+
+        Alimenta el partial COMPARTIDO
+        ``financiero/_presupuesto_bimodal_tabla.html`` con la matriz rubro × 12
+        meses (julio→junio) y el filtro por mes, leyendo ``?vista=`` y ``?mes=``.
+        """
+        vista = self.request.GET.get('vista', 'matriz')
+        if vista not in ('matriz', 'mes'):
+            vista = 'matriz'
+
+        matrix_rows, totales_columna, meses_fiscales, total_general = (
+            build_rubro_matrix_rows(datos)
+        )
+
+        mes_sel = self.request.GET.get('mes') or MESES_FISCALES_KEYS[0]
+        if mes_sel not in MESES_FISCALES_KEYS:
+            mes_sel = MESES_FISCALES_KEYS[0]
+        mes_rows, mes_total, mes_label = build_mes_filter_rows(datos, mes_sel)
+
+        hidden = {
+            k: v for k, v in self.request.GET.items()
+            if k not in ('vista', 'mes') and v
+        }
+        base_qs = ''.join(f'{k}={v}&' for k, v in hidden.items())
+
+        return {
+            'vista': vista,
+            'matrix_rows': matrix_rows,
+            'totales_columna': totales_columna,
+            'meses_fiscales': meses_fiscales,
+            'matrix_total': total_general,
+            'mes_sel': mes_sel,
+            'mes_rows': mes_rows,
+            'mes_total': mes_total,
+            'mes_label': mes_label,
+            'bimodal_base_qs': base_qs,
+            'bimodal_hidden_params': hidden,
+        }
+
     @staticmethod
     def _sumar_seccion(datos, keys):
         """Suma todos los valores numéricos de la primera key presente en ``datos``.
@@ -291,6 +337,9 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
         ctx['rubro_rows'] = rubro_rows
         ctx['rubro_total'] = rubro_total
         ctx['tiene_datos_bd'] = bool(rubro_rows)
+        # A3 (#120): vista bi-modal (matriz 12 meses + filtro mes), espejo de
+        # Mantenimiento, reusando el partial compartido.
+        ctx.update(self._bimodal_context(ctx['datos']))
         return ctx
 
     def post(self, request, *args, **kwargs):
