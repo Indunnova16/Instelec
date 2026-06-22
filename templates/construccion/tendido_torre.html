@@ -63,9 +63,11 @@
               <label class="text-xs">F.T (m)<br>{{ tiro_form.flecha_tendido_m }}</label>
               <label class="text-xs md:col-span-1">Observaciones<br>{{ tiro_form.observaciones }}</label>
               {% if tiro_form.instance.pk %}
-              {# fila guardada: el checkbox DELETE del formset (can_delete=True) va
-                 OCULTO; el botón rojo lo togglea y atenúa la fila SIN sacarla del DOM
-                 (para que el inlineformset la procese como borrada al guardar). #}
+              {% comment %}
+                fila guardada: el checkbox DELETE del formset (can_delete=True) va
+                OCULTO; el botón rojo lo togglea y atenúa la fila SIN sacarla del DOM
+                (para que el inlineformset la procese como borrada al guardar).
+              {% endcomment %}
               <span class="hidden" data-tiro-delete-saved>{{ tiro_form.DELETE }}</span>
               <button type="button" data-remove-tiro
                       class="text-xs text-red-600 hover:text-red-800 justify-self-start"

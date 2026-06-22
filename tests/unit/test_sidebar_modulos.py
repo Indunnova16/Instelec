@@ -38,9 +38,12 @@ SIDEBAR_NUEVOS_MODULOS = [
     ("construccion:dashboard_montaje", "Dashboard Montaje"),
     ("construccion:spt_pintura", "SPT y Pintura"),
     ("construccion:tendido_lista", "CANT Tendido"),
-    ("construccion:trinchos_cunetas", "Trinchos y Cunetas"),
+    # #149 renombró el display de "Trinchos y Cunetas" → "Obras de Protección"
+    # (validado por el cliente); el url_name `trinchos_cunetas` se conserva.
+    ("construccion:trinchos_cunetas", "Obras de Protección"),
     ("construccion:actividades_finales", "Actividades Finales"),
-    ("construccion:indicadores_financieros", "Indicadores Financieros"),
+    # El display del dashboard B3 es "Indicadores en General" (slug indicadores-financieros).
+    ("construccion:indicadores_financieros", "Indicadores en General"),
 ]
 
 
@@ -93,7 +96,6 @@ class TestPlaceholdersResponden200:
 class TestSidebarTemplateRendering:
     """Issue #73: el sidebar muestra los 9 items con sus labels visibles."""
 
-    @pytest.mark.xfail(reason="Trinchos y Cunetas (#80) no surfaceado en el sidebar; gap UI a decidir, tracking #166", strict=False)
     def test_sidebar_contiene_9_modulos_nuevos(self, admin_client, proyecto_construccion):
         # Cualquier vista que use base.html renderiza el sidebar.
         url = reverse(
