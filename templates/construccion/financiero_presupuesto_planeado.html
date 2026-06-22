@@ -64,6 +64,9 @@ Incluye: _financiero_cargar_bd.html (pestaña 1) + _financiero_presupuesto_tabla
         {% include "construccion/_financiero_cargar_bd.html" %}
     </div>
     <div x-show="tab === 'tabla'" x-cloak class="space-y-6">
+        {% comment %} A3 (#120): vista bi-modal (Matriz 12 meses | Filtro Mes),
+        espejo de Mantenimiento — partial COMPARTIDO con financiero. {% endcomment %}
+        {% include "financiero/_presupuesto_bimodal_tabla.html" %}
         {% include "construccion/_financiero_presupuesto_tabla.html" %}
     </div>
 </main>
