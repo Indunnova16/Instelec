@@ -78,8 +78,8 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }},${{ env.IMAGE_NAME }}:latest
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:cache
-          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:cache,mode=max,image-manifest=true
+          cache-from: type=local,src=/Volumes/Indunnova/buildkit-cache/${{ github.event.repository.name }}
+          cache-to: type=local,dest=/Volumes/Indunnova/buildkit-cache/${{ github.event.repository.name }},mode=max
 
       - name: Create env-vars file
         run: |
