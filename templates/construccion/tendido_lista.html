@@ -28,7 +28,7 @@
   </div>
 
   <p class="text-xs text-gray-500">
-    🔒 = "Entrega para carga" del Montaje pendiente · Las torres bloqueadas no permiten editar Tendido hasta que se libere desde Montaje.
+    🔒 = "Entrega para carga" del Montaje aún pendiente (señal informativa). El Tendido se puede registrar igualmente desde "Editar".
   </p>
 
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
@@ -67,10 +67,9 @@
           <td class="px-2 py-2 text-center">{% if f.fase.tendido_guarda_ok %}<span class="text-green-600">✓</span>{% else %}—{% endif %}</td>
           <td class="px-2 py-2 text-right font-semibold">{{ f.fase.porcentaje_tendido|floatformat:0 }}%</td>
           <td class="px-2 py-2 text-right">
-            {% if f.puede_iniciar %}
-              <a href="{% url 'construccion:tendido_torre' proyecto.id f.torre.id %}" class="text-blue-600 hover:underline">Editar</a>
-            {% else %}
-              <span title="Falta 'Entrega para carga' en Montaje">🔒</span>
+            <a href="{% url 'construccion:tendido_torre' proyecto.id f.torre.id %}" class="text-blue-600 hover:underline">Editar</a>
+            {% if not f.puede_iniciar %}
+              <span class="ml-1" title="Montaje aún sin marcar entrega para carga">🔒</span>
             {% endif %}
           </td>
         </tr>

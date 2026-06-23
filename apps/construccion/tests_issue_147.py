@@ -459,3 +459,121 @@ def test_delete_oculto_borra_fila_guardada(authenticated_client, proyecto_i147, 
     )
     assert RiegaManilaTiro.objects.filter(pk=t2.pk).exists(), "el tiro sin DELETE sobrevive"
     assert RiegaManilaTiro.objects.filter(fase=fase).count() == 1
+
+
+# ===========================================================================
+# 6. #147 (rebote x5) — Tendido editable AUNQUE Montaje no marque "entrega
+#    para carga": quitar el candado de la lista + banner no-bloqueante.
+#    Decisión Miguel: editable siempre, 🔒 sobrevive como badge INFORMATIVO.
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_lista_muestra_link_editar_torre_no_marcada(proyecto_i147, torre_i147):
+    """Lista de Tendido (tendido_lista.html): una torre con puede_iniciar=False
+    (NO marcada 'entrega para carga' en Montaje) DEBE renderizar el link 'Editar'
+    a su detalle (antes del fix solo salía el 🔒 sin link → no se podía abrir).
+    El 🔒 sobrevive como badge informativo junto al link.
+
+    Se renderiza el template directamente con un contexto de una fila bloqueada
+    para aislar el FIX del template del ordenamiento SQL Postgres-only de la
+    vista (regexp_replace) que no corre en sqlite."""
+    from django.template.loader import render_to_string
+
+    from apps.construccion.models import FaseTorre
+
+    fase = FaseTorre.objects.create(torre=torre_i147, proyecto=torre_i147.proyecto)
+    assert fase.puede_iniciar_tendido is False, "precondición: torre bloqueada por Montaje"
+
+    detalle_url = _tendido_url(proyecto_i147, torre_i147)
+    html = render_to_string(
+        "construccion/tendido_lista.html",
+        {
+            "proyecto": proyecto_i147,
+            "active_tab": "tendido",
+            "stats": {"total": 1, "habilitadas": 0, "bloqueadas": 1, "completas": 0},
+            "filas": [
+                {"torre": torre_i147, "fase": fase, "puede_iniciar": False},
+            ],
+        },
+    )
+
+    # el link 'Editar' al detalle de la torre NO-marcada debe estar presente
+    assert detalle_url in html, "la lista debe linkear al detalle aunque la torre no esté marcada"
+    assert "Editar" in html
+    # el 🔒 sobrevive como badge informativo (no reemplaza al link)
+    assert "🔒" in html
+    assert "Montaje aún sin marcar entrega para carga" in html
+
+
+@pytest.mark.django_db
+def test_detalle_torre_no_marcada_get_y_post_guarda(
+    authenticated_client, proyecto_i147, torre_i147
+):
+    """El escenario EXACTO de Gabriel: torre con entrega_carga_ok=False.
+    GET responde 200 (form editable, banner informativo no-bloqueante) y POST
+    GUARDA datos de Tendido sin candado."""
+    from apps.construccion.models import FaseTorre
+
+    fase = FaseTorre.objects.create(torre=torre_i147, proyecto=torre_i147.proyecto)
+    assert fase.puede_iniciar_tendido is False
+
+    url = _tendido_url(proyecto_i147, torre_i147)
+
+    # GET: 200 + banner informativo (no el viejo 'Edita el módulo Montaje primero')
+    resp_get = authenticated_client.get(url)
+    assert resp_get.status_code == 200, resp_get.content[:600]
+    body = resp_get.content.decode()
+    assert "podés registrar el Tendido igualmente" in body
+    assert "Edita el módulo Montaje primero" not in body, "el texto bloqueante debe desaparecer"
+    assert "disabled" not in body.lower() or "sumaConductor" not in body  # sin disabled del gate
+
+    # POST: guarda datos de tendido aunque la torre NO esté marcada en Montaje
+    data = _base_post()
+    data.update(
+        {
+            "tendido_conductor_a_ok": "on",
+            "tendido_conductor_a_fecha": "2026-06-20",
+            "fecha_riega_manila": "2026-06-19",
+        }
+    )
+    resp_post = authenticated_client.post(url, data)
+    assert resp_post.status_code in (200, 302), resp_post.content[:600]
+
+    fase.refresh_from_db()
+    assert fase.entrega_carga_ok is False, "el gate de Montaje NO cambia (sigue informativo)"
+    assert fase.tendido_conductor_a_ok is True, "el dato de Tendido se guarda sin candado"
+    assert fase.tendido_conductor_a_fecha == date(2026, 6, 20)
+    assert fase.fecha_riega_manila == date(2026, 6, 19)
+
+
+@pytest.mark.django_db
+def test_detalle_torre_legacy_no_marcada_guarda(authenticated_client, proyecto_i147, torre_i147):
+    """Dato LEGACY: torre con una FaseTorre pre-existente (entrega_carga_ok=False)
+    que YA tenía algo de tendido marcado; editar y guardar más datos funciona sin
+    candado y conserva lo previo."""
+    from apps.construccion.models import FaseTorre
+
+    fase = FaseTorre.objects.create(
+        torre=torre_i147,
+        proyecto=torre_i147.proyecto,
+        entrega_carga_ok=False,
+        tendido_conductor_a_ok=True,  # avance legacy pre-existente
+    )
+
+    url = _tendido_url(proyecto_i147, torre_i147)
+    data = _base_post()
+    data.update(
+        {
+            "tendido_conductor_a_ok": "on",  # conservar legacy
+            "tendido_conductor_b_ok": "on",  # agregar nuevo
+            "tendido_conductor_b_fecha": "2026-06-21",
+        }
+    )
+    resp = authenticated_client.post(url, data)
+    assert resp.status_code in (200, 302), resp.content[:600]
+
+    fase.refresh_from_db()
+    assert fase.entrega_carga_ok is False
+    assert fase.tendido_conductor_a_ok is True, "el avance legacy sobrevive"
+    assert fase.tendido_conductor_b_ok is True, "el nuevo avance se guarda sin candado"
