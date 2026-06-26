@@ -201,12 +201,12 @@
                                              aplica: {% if torre.aplica %}true{% else %}false{% endif %}
                                          })'>
                                         {# #160: marcar la torre como "No aplica" (la excluye de todos los módulos y del % de avance) #}
-                                        <label class="text-[10px] font-semibold flex items-center gap-1 justify-between"
+                                        <label class="text-[10px] font-semibold flex items-center gap-1"
                                                :class="aplica ? 'text-gray-700 dark:text-gray-300' : 'text-red-600'">
-                                            <span x-text="aplica ? 'Torre aplica' : 'Torre NO aplica'"></span>
                                             <input type="checkbox" x-model="aplica" @change="guardar('aplica', aplica)"
                                                    data-toggle-aplica="aplica" data-torre="{{ torre.id }}"
                                                    class="rounded border-gray-300 dark:border-gray-600">
+                                            <span x-text="aplica ? 'Torre aplica' : 'Torre NO aplica'"></span>
                                         </label>
                                         <label class="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1 justify-between">
                                             <span>Obras Protección</span>

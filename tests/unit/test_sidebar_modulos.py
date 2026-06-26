@@ -7,8 +7,8 @@ from django.urls import reverse
 @pytest.fixture
 def proyecto_construccion(db):
     """Crea un proyecto + contrato Construcción para tests de sidebar."""
-    from apps.contratos.models import Contrato
     from apps.construccion.models import ProyectoConstruccion
+    from apps.contratos.models import Contrato
 
     contrato = Contrato.objects.create(
         unidad_negocio=Contrato.UnidadNegocio.CONSTRUCCION,
@@ -38,6 +38,8 @@ SIDEBAR_NUEVOS_MODULOS = [
     ("construccion:dashboard_montaje", "Dashboard Montaje"),
     ("construccion:spt_pintura", "SPT y Pintura"),
     ("construccion:tendido_lista", "CANT Tendido"),
+    # #166: Dashboard Tendido debe aparecer en el sidebar junto a CANT Tendido
+    ("construccion:dashboard_tendido", "Dashboard Tendido"),
     # #149 renombró el display de "Trinchos y Cunetas" → "Obras de Protección"
     # (validado por el cliente); el url_name `trinchos_cunetas` se conserva.
     ("construccion:trinchos_cunetas", "Obras de Protección"),
@@ -74,7 +76,9 @@ class TestPlaceholdersResponden200:
         resp = admin_client.get(url)
         assert resp.status_code == 200
         # Mensaje del template placeholder.
-        assert b"Modulo en construcc" in resp.content or b"M\xc3\xb3dulo en construcc" in resp.content
+        assert (
+            b"Modulo en construcc" in resp.content or b"M\xc3\xb3dulo en construcc" in resp.content
+        )
 
     def test_placeholder_titulo_correcto(self, admin_client, proyecto_construccion):
         url = reverse("construccion:spt_pintura", kwargs={"proyecto_id": proyecto_construccion.id})
@@ -84,6 +88,7 @@ class TestPlaceholdersResponden200:
 
     def test_placeholder_404_si_proyecto_no_existe(self, admin_client):
         import uuid
+
         url = reverse(
             "construccion:dashboard_obra_civil",
             kwargs={"proyecto_id": uuid.uuid4()},
@@ -117,8 +122,13 @@ class TestSidebarTemplateRendering:
         )
         resp = admin_client.get(url)
         body = resp.content.decode("utf-8")
-        for legacy_slug in ["catUrl('social')", "catUrl('ambiental')",
-                            "catUrl('torres')", "catUrl('protecciones')",
-                            "catUrl('kits')", "catUrl('cilindros')",
-                            "catUrl('dashboard-financiero')"]:
+        for legacy_slug in [
+            "catUrl('social')",
+            "catUrl('ambiental')",
+            "catUrl('torres')",
+            "catUrl('protecciones')",
+            "catUrl('kits')",
+            "catUrl('cilindros')",
+            "catUrl('dashboard-financiero')",
+        ]:
             assert legacy_slug not in body, f"Sidebar aún expone item legacy: {legacy_slug}"
