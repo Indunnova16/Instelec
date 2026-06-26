@@ -40,3 +40,19 @@ def recalcular_montaje_torre(sender, instance, **kwargs):
             'avance_revisada': Decimal('1') if instance.revisada_ok else Decimal('0'),
         },
     )
+
+    # #147: el cliente marca "Entregada para carga" en el detalle de Montaje
+    # (instance.entregada_para_carga_ok), pero el gate de Tendido lee
+    # FaseTorre.entrega_carga_ok (otra tabla) → quedaba desincronizado y el
+    # letrero 🔒 persistía en Tendido. Propagamos el flag (ambos sentidos).
+    from datetime import date
+
+    from apps.construccion.models import FaseTorre
+
+    nuevo = bool(instance.entregada_para_carga_ok)
+    fase = FaseTorre.objects.filter(torre=instance.torre).first()
+    if fase is not None and fase.entrega_carga_ok != nuevo:
+        cambios = {'entrega_carga_ok': nuevo}
+        if nuevo and not fase.entrega_carga_fecha:
+            cambios['entrega_carga_fecha'] = date.today()
+        FaseTorre.objects.filter(pk=fase.pk).update(**cambios)

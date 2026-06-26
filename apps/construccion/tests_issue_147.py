@@ -577,3 +577,37 @@ def test_detalle_torre_legacy_no_marcada_guarda(authenticated_client, proyecto_i
     assert fase.entrega_carga_ok is False
     assert fase.tendido_conductor_a_ok is True, "el avance legacy sobrevive"
     assert fase.tendido_conductor_b_ok is True, "el nuevo avance se guarda sin candado"
+
+
+# ===========================================================================
+# #147 (bug 24/06) — sincronización Montaje → gate Tendido (letrero)
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_147_entrega_carga_propaga_montaje_a_tendido(proyecto_i147, torre_i147):
+    """Marcar 'Entregada para carga' en el detalle de Montaje sincroniza
+    FaseTorre.entrega_carga_ok (el gate que lee Tendido) → el letrero 🔒
+    desaparece. Antes los flags estaban desacoplados en tablas distintas."""
+    from apps.construccion.models import FaseTorre
+    from apps.construccion.models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+
+    fase, _ = FaseTorre.objects.get_or_create(
+        torre=torre_i147, defaults={"proyecto": proyecto_i147}
+    )
+    assert fase.entrega_carga_ok is False
+    assert fase.puede_iniciar_tendido is False
+
+    # El cliente marca en el detalle de Montaje → post_save dispara el signal.
+    det = MontajeEstructuraTorreDetalle.objects.create(
+        torre=torre_i147, proyecto=proyecto_i147, entregada_para_carga_ok=True
+    )
+    fase.refresh_from_db()
+    assert fase.entrega_carga_ok is True
+    assert fase.puede_iniciar_tendido is True
+
+    # Desmarcar lo revierte (sincroniza en ambos sentidos).
+    det.entregada_para_carga_ok = False
+    det.save()
+    fase.refresh_from_db()
+    assert fase.entrega_carga_ok is False
