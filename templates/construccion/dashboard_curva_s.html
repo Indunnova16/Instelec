@@ -85,6 +85,21 @@
         </div>
     </div>
 
+    {# #122 Fase 2 · Gantt de Obra Civil — una barra por torre [inicio, final]. #}
+    {% if fase_activa == 'OOCC' and gantt_oc_json is not None %}
+    {{ gantt_oc_json|json_script:"oc-gantt-data" }}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4" data-block="oc-gantt">
+        <h2 class="font-semibold mb-1">Gantt — Obra Civil por torre</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Cada barra cubre desde la fecha de inicio hasta la fecha final de la
+            obra civil de la torre. Solo se muestran torres con fecha de inicio.
+        </p>
+        <div class="relative" style="height: 520px;">
+            <canvas id="oc-gantt-chart" height="520"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
     {% if mostrar_graficas_141 %}
     <!-- G2 · Avance por etapa de Obra Civil -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
@@ -576,6 +591,96 @@ function dashboardCurvaS(cfg) {
         },
     };
 }
+</script>
+
+{# #122 Fase 2 · Render del Gantt de Obra Civil. Sin adaptador de tiempo (Chart
+   4.4.0 no lo trae): eje X = días desde la fecha mínima; barra flotante por
+   torre [inicioDias, finalDias]. Datos pre-serializados vía json_script. #}
+<script>
+(function () {
+    function readJSON(id) {
+        var el = document.getElementById(id);
+        if (!el) { return null; }
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    var DAY_MS = 86400000;
+    function toMs(iso) {
+        if (!iso) { return null; }
+        var p = String(iso).split('-');
+        if (p.length !== 3) { return null; }
+        return Date.UTC(+p[0], (+p[1]) - 1, +p[2]);
+    }
+    function fmt(ms) {
+        var d = new Date(ms);
+        var m = ('0' + (d.getUTCMonth() + 1)).slice(-2);
+        var day = ('0' + d.getUTCDate()).slice(-2);
+        return d.getUTCFullYear() + '-' + m + '-' + day;
+    }
+    function renderOcGantt() {
+        if (typeof Chart === 'undefined') { return; }
+        var el = document.getElementById('oc-gantt-chart');
+        if (!el || !el.getContext) { return; }
+        var filas = readJSON('oc-gantt-data') || [];
+        if (!filas.length) { return; }
+        // Min global = la fecha más temprana (inicio) presente.
+        var min = null;
+        filas.forEach(function (f) {
+            var a = toMs(f.inicio);
+            if (a !== null && (min === null || a < min)) { min = a; }
+        });
+        if (min === null) { return; }
+        var labels = filas.map(function (f) { return f.torre; });
+        var datos = filas.map(function (f) {
+            var ini = toMs(f.inicio);
+            // Si no hay final, la barra termina en la esperada o el propio inicio.
+            var fin = toMs(f.final);
+            if (fin === null) { fin = toMs(f.esperada); }
+            if (fin === null) { fin = ini; }
+            return [(ini - min) / DAY_MS, (fin - min) / DAY_MS];
+        });
+        new Chart(el.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Obra Civil (inicio → final)',
+                    data: datos,
+                    backgroundColor: '#10b981',
+                    borderColor: '#059669',
+                    borderWidth: 1,
+                    borderSkipped: false,
+                    _fechas: filas
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Fecha' },
+                        ticks: { callback: function (v) { return fmt(min + v * DAY_MS); } }
+                    },
+                    y: { ticks: { autoSkip: false } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: function (item) {
+                        var f = (item.dataset._fechas || [])[item.dataIndex] || {};
+                        var ini = f.inicio || '—';
+                        var fin = f.final || f.esperada || '—';
+                        return f.torre + ': ' + ini + ' → ' + fin;
+                    } } }
+                }
+            }
+        });
+    }
+    if (document.readyState === 'complete') {
+        requestAnimationFrame(renderOcGantt);
+    } else {
+        window.addEventListener('load', function () { requestAnimationFrame(renderOcGantt); }, { once: true });
+    }
+})();
 </script>
 {% endlocalize %}
 {% endblock %}

@@ -2671,6 +2671,12 @@ class DashboardChartDataView(LoginRequiredMixin, RoleRequiredMixin, View):
             return JsonResponse(curva_s_consolidada(proyecto))
         if fase not in {f for f, _ in DashboardAvanceSemanal.Fase.choices}:
             return JsonResponse({'error': 'fase inválida'}, status=400)
+        # #122 Fase 2: Obra Civil sirve el CONTEO de torres por fechas reales
+        # (mismo payload que el render inicial), para que el selector "Serie →
+        # Obra Civil" no vuelva a la serie vacía de DashboardAvanceSemanal.
+        if fase == 'OOCC':
+            from .views_dashboards import _curva_s_chart_payload
+            return JsonResponse(_curva_s_chart_payload(proyecto, 'OOCC'))
         semanas = DashboardAvanceSemanal.objects.filter(
             proyecto=proyecto, fase=fase).order_by('semana')
         return JsonResponse({

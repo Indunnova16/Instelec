@@ -126,9 +126,19 @@ def _curva_s_chart_payload(proyecto, fase=car.FASE_OOCC) -> dict:
 
     Edge (proyecto sin avance): ambas series vacías → ``{labels:[], planeado:[],
     ejecutado:[]}`` (la gráfica queda vacía, NO lanza).
+
+    #122 Fase 2: para Obra Civil las dos series salen del CONTEO de torres por
+    sus FECHAS REALES por torre (``fecha_esperada`` = Planeado, ``fecha_final``
+    = Ejecutado), no del avance ponderado anclado en ``updated_at`` (2026) ni
+    del cronograma project-level (vacío en QA). El contrato de salida es el
+    mismo ({labels, ejecutado/planeado}) → no cambia el JS del template.
     """
-    ejecutado = car.serie_curva_s_real(proyecto, fase)
-    planeado = car.serie_planeado(proyecto, fase)
+    if (fase or '').upper() == car.FASE_OOCC:
+        ejecutado = car.serie_ejecutado_oc_fechas(proyecto)
+        planeado = car.serie_planeado_oc_fechas(proyecto)
+    else:
+        ejecutado = car.serie_curva_s_real(proyecto, fase)
+        planeado = car.serie_planeado(proyecto, fase)
 
     # Eje X común = unión ordenada de fechas de ambas series.
     labels = sorted(set(ejecutado.get('labels', [])) | set(planeado.get('labels', [])))
@@ -198,13 +208,15 @@ class DashboardObraCivilRealView(_DashboardObraCivilViewLegacy):
         fase = car.FASE_OOCC
 
         # 1. Curva S REAL — reemplaza datos_chart (que colgaba del semanal vacío).
+        # #122 Fase 2: las series de OC salen del CONTEO de torres por sus fechas
+        # reales (fecha_esperada=Planeado, fecha_final=Ejecutado), en 2025.
         chart_real = _curva_s_chart_payload(proyecto, fase)
         ctx['datos_chart'] = json.dumps(chart_real)
-        # Para los assert/probe del journey: serie ejecutado real cruda + flag.
+        # Para los assert/probe del journey: series crudas por fechas + flag.
         ctx['curva_real_json'] = json.dumps({
             'fase': fase,
-            'ejecutado': car.serie_curva_s_real(proyecto, fase),
-            'planeado': car.serie_planeado(proyecto, fase),
+            'ejecutado': car.serie_ejecutado_oc_fechas(proyecto),
+            'planeado': car.serie_planeado_oc_fechas(proyecto),
         })
 
         # 2. Tarjetas derivadas del REAL (no del DashboardAvanceSemanal vacío).
@@ -240,5 +252,10 @@ class DashboardObraCivilRealView(_DashboardObraCivilViewLegacy):
         ctx['vista_torres_oc'] = vista
         ctx['torres_oc_completas'] = sum(1 for f in vista if f.get('completa'))
         ctx['torres_oc_total'] = len(vista)
+
+        # 5. Gantt de Obra Civil (#122 Fase 2) — barra por torre [inicio, final]
+        # con marcador de fecha_esperada, ordenado por torre. Pre-serializado vía
+        # json_script en el template (guard es-CO: nunca JSON crudo en JS inline).
+        ctx['gantt_oc_json'] = car.gantt_oc(proyecto)
 
         return ctx
