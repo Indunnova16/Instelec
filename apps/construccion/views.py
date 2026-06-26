@@ -1513,16 +1513,21 @@ class ObraCivilMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         }
         suma_pesos = sum(pesos.values())
 
-        # Totales por columna (promedio entre torres).
-        if filas:
+        # Totales por columna (promedio entre torres). #150: excluir las torres
+        # "No aplica" del denominador del avance por columna (la tabla las sigue
+        # mostrando para gestionarlas, pero no cuentan en el %). Montaje y Tendido
+        # ya aplican este filtro; Obra Civil quedaba dividiendo sobre todas.
+        filas_activas = [f for f in filas if f.torre.aplica]
+        if filas_activas:
             totales = {
                 k: round(
-                    sum(float(getattr(oc, f'avance_{k}')) for oc in filas)
-                    / len(filas) * 100, 1)
+                    sum(float(getattr(oc, f'avance_{k}')) for oc in filas_activas)
+                    / len(filas_activas) * 100, 1)
                 for k in pesos
             }
             avance_general = round(
-                sum(float(oc.avance_ponderado) for oc in filas) / len(filas) * 100, 1
+                sum(float(oc.avance_ponderado) for oc in filas_activas)
+                / len(filas_activas) * 100, 1
             )
         else:
             totales = {k: 0 for k in pesos}

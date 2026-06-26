@@ -179,27 +179,77 @@ class ProyectoConstruccion(BaseModel):
 
     # Definición declarativa de las columnas del Resumen de Materiales (#154).
     # Cada entrada: (key, label, unidad, fuente). El template y el método de
-    # agregación leen de aquí para no duplicar el listado. Mapeo wireframe→dato
-    # real resuelto en PLAN_2026-06-20_resumen_materiales_154.md (decisión b):
-    # se muestran SOLO los materiales con respaldo real, con su unidad real;
-    # Agua y Madera NO existen en el modelo → N/D (no se inventan).
+    # agregación leen de aquí. #154 (fix 2026-06-25): la fuente real de los
+    # materiales de Obra Civil es ObraCivilTorreDetalle (CANT OOCC #74), NO el
+    # legacy PataObra (vacío en prod). Solado/Vaciado traen calc Y real; el
+    # cemento de Obra Civil va separado del de Trinchos (unidad/fuente distinta).
     COLUMNAS_RESUMEN_MATERIALES = [
         # key,                   label,                  unidad,    fuente
-        ('cemento_kg',           'Cemento',              'kg',      'trincho'),
-        ('arena',                'Arena',                'cuñetes', 'trincho'),
-        ('grava',                'Grava',                'cuñetes', 'trincho'),
+        # --- TrinchoCuneta (obras de protección de suelo) ---
+        ('cemento_kg',           'Cemento (trinchos)',   'kg',      'trincho'),
+        ('arena',                'Arena (trinchos)',     'cuñetes', 'trincho'),
+        ('grava',                'Grava (trinchos)',     'cuñetes', 'trincho'),
         ('alambre_galvanizado',  'Alambre galvanizado',  'kg',      'trincho'),
         ('geotextil',            'Geotextil',            'm',       'trincho'),
         ('tubo_metalico',        'Tubo metálico',        'un',      'trincho'),
         ('malla_eslabonada',     'Malla eslabonada',     'un',      'trincho'),
-        ('solado_m3',            'Solado',               'm³',      'pata'),
-        ('concreto_m3',          'Concreto',             'm³',      'pata'),
-        ('relleno_m3',           'Relleno',              'm³',      'pata'),
+        # --- ObraCivilTorreDetalle (#74): Excavación / Acero ---
+        ('oc_exc_m3',            'Excavación',           'm³',      'oc_detalle'),
+        ('oc_ace_instalado_kg',  'Acero instalado',      'kg',      'oc_detalle'),
+        ('oc_ace_solicitado_kg', 'Acero solicitado',     'kg',      'oc_detalle'),
+        # --- ObraCivilTorreDetalle: Solado (calc vs real por material) ---
+        ('oc_sol_cemento_calc',  'Solado Cemento (calc)', 'kg',     'oc_detalle'),
+        ('oc_sol_cemento_real',  'Solado Cemento (real)', 'kg',     'oc_detalle'),
+        ('oc_sol_arena_calc',    'Solado Arena (calc)',   'm³',     'oc_detalle'),
+        ('oc_sol_arena_real',    'Solado Arena (real)',   'm³',     'oc_detalle'),
+        ('oc_sol_grava_calc',    'Solado Grava (calc)',   'm³',     'oc_detalle'),
+        ('oc_sol_grava_real',    'Solado Grava (real)',   'm³',     'oc_detalle'),
+        ('oc_sol_agua_calc',     'Solado Agua (calc)',    'm³',     'oc_detalle'),
+        ('oc_sol_agua_real',     'Solado Agua (real)',    'm³',     'oc_detalle'),
+        # --- ObraCivilTorreDetalle: Vaciado (calc vs real por material) ---
+        ('oc_vac_cemento_calc',  'Vaciado Cemento (calc)', 'kg',    'oc_detalle'),
+        ('oc_vac_cemento_real',  'Vaciado Cemento (real)', 'kg',    'oc_detalle'),
+        ('oc_vac_arena_calc',    'Vaciado Arena (calc)',  'm³',     'oc_detalle'),
+        ('oc_vac_arena_real',    'Vaciado Arena (real)',  'm³',     'oc_detalle'),
+        ('oc_vac_grava_calc',    'Vaciado Grava (calc)',  'm³',     'oc_detalle'),
+        ('oc_vac_grava_real',    'Vaciado Grava (real)',  'm³',     'oc_detalle'),
+        ('oc_vac_agua_calc',     'Vaciado Agua (calc)',   'm³',     'oc_detalle'),
+        ('oc_vac_agua_real',     'Vaciado Agua (real)',   'm³',     'oc_detalle'),
+        # --- ObraCivilTorreDetalle: Cerramiento / Compactación ---
+        ('oc_cerr_madera_un',    'Cerramiento Madera',   'un',      'oc_detalle'),
+        ('oc_cerr_lona_m',       'Cerramiento Lona/púa', 'm',       'oc_detalle'),
+        ('oc_com_volumen_m3',    'Compactación',         'm³',      'oc_detalle'),
     ]
 
-    # Materiales que el wireframe pedía pero el sistema NO captura hoy → N/D.
-    # Se documentan al pie de la tabla (honestidad de datos, no se inventan).
-    MATERIALES_NO_DISPONIBLES_RESUMEN = ['Agua', 'Madera']
+    # Mapa material_key → atributo en ObraCivilTorreDetalle (suma las 4 patas por
+    # torre sin repetir nombres de campo).
+    OC_DETALLE_FIELD_MAP = {
+        'oc_exc_m3': 'exc_metros_m3',
+        'oc_ace_instalado_kg': 'ace_instalado_kg',
+        'oc_ace_solicitado_kg': 'ace_solicitado_kg',
+        'oc_sol_cemento_calc': 'sol_cemento_calc',
+        'oc_sol_cemento_real': 'sol_cemento_real',
+        'oc_sol_arena_calc': 'sol_arena_calc',
+        'oc_sol_arena_real': 'sol_arena_real',
+        'oc_sol_grava_calc': 'sol_grava_calc',
+        'oc_sol_grava_real': 'sol_grava_real',
+        'oc_sol_agua_calc': 'sol_agua_calc',
+        'oc_sol_agua_real': 'sol_agua_real',
+        'oc_vac_cemento_calc': 'vac_cemento_calc',
+        'oc_vac_cemento_real': 'vac_cemento_real',
+        'oc_vac_arena_calc': 'vac_arena_calc',
+        'oc_vac_arena_real': 'vac_arena_real',
+        'oc_vac_grava_calc': 'vac_grava_calc',
+        'oc_vac_grava_real': 'vac_grava_real',
+        'oc_vac_agua_calc': 'vac_agua_calc',
+        'oc_vac_agua_real': 'vac_agua_real',
+        'oc_cerr_madera_un': 'cerr_madera_un',
+        'oc_cerr_lona_m': 'cerr_lona_m',
+        'oc_com_volumen_m3': 'com_volumen_m3',
+    }
+
+    # Tras el fix #154, Agua y Madera SÍ existen (Obra Civil) → no queda N/D.
+    MATERIALES_NO_DISPONIBLES_RESUMEN = []
 
     def resumen_materiales(self):
         """Consolida los materiales de obra del proyecto (#154).
@@ -207,16 +257,16 @@ class ProyectoConstruccion(BaseModel):
         Agrega por torre (solo torres ``aplica=True``) y entrega un total del
         proyecto. Dos fuentes reales:
 
-        - ``TrinchoCuneta`` (única fuente granular poblada): cemento (bultos de
-          50K → se normaliza a **kg** multiplicando por 50), arena/grava
-          (cuñetes — NO m³), alambre_galvanizado (kg), geotextil (m),
+        - ``TrinchoCuneta`` (materiales de obras de protección de suelo): cemento
+          (bultos de 50K → se normaliza a **kg** multiplicando por 50),
+          arena/grava (cuñetes — NO m³), alambre_galvanizado (kg), geotextil (m),
           tubo_metalico (un), malla_eslabonada (un).
-        - ``PataObra`` (agregados m³, hoy típicamente vacíos pero presentes):
-          solado_m3, concreto (concreto_instalado_m3 ∥ concreto_m3),
-          relleno_m3 — sumados por torre.
-
-        Agua y Madera NO existen en el modelo → se omiten (ver
-        ``MATERIALES_NO_DISPONIBLES_RESUMEN``); NO se inventan valores.
+        - ``ObraCivilTorreDetalle`` (CANT OOCC #74) — #154: fuente donde se
+          cargan los materiales reales por torre×pata (se suman las 4 patas).
+          Solado/Vaciado con columnas **calc Y real** (cemento/arena/grava/agua),
+          Excavación (m³), Acero (instalado/solicitado kg), Cerramiento (madera
+          un, lona/púa m), Compactación (m³). Reemplaza al legacy ``PataObra``
+          (vacío en prod). El cemento de Obra Civil va SEPARADO del de Trinchos.
 
         Returns:
             dict con:
@@ -257,25 +307,22 @@ class ProyectoConstruccion(BaseModel):
             acc['tubo_metalico'] += tc.tubo_metalico or Decimal('0')
             acc['malla_eslabonada'] += tc.malla_eslabonada or Decimal('0')
 
-        # --- Fuente 2: PataObra (agregados m³ por torre) ---
-        # solado_m3 / relleno_m3 directos; concreto = instalado ∥ planeado.
-        # FloatField → se suman como Decimal vía str para no arrastrar ruido binario.
-        patas = PataObra.objects.filter(
-            torre__proyecto=self, torre__aplica=True,
-        ).select_related('torre')
-        for pata in patas:
-            if pata.torre_id not in torres_validas:
+        # --- Fuente 2: ObraCivilTorreDetalle (CANT OOCC #74) ---
+        # #154: fuente real donde Gabriel carga los materiales por torre×pata;
+        # se suman las 4 patas por torre. Solado/Vaciado traen calc Y real; el
+        # resto (Excavación, Acero, Cerramiento, Compactación) su cantidad. Mapeo
+        # material_key→campo en OC_DETALLE_FIELD_MAP. (Reemplaza al legacy PataObra,
+        # vacío en prod → siempre 0.) related_name 'obra_civil_detalles'.
+        for det in self.obra_civil_detalles.filter(
+            torre__aplica=True,
+        ).select_related('torre'):
+            if det.torre_id not in torres_validas:
                 continue
-            acc = por_torre[pata.torre_id]
-            if pata.solado_m3:
-                acc['solado_m3'] += Decimal(str(pata.solado_m3))
-            concreto = pata.concreto_instalado_m3
-            if concreto in (None, 0):
-                concreto = pata.concreto_m3
-            if concreto:
-                acc['concreto_m3'] += Decimal(str(concreto))
-            if pata.relleno_m3:
-                acc['relleno_m3'] += Decimal(str(pata.relleno_m3))
+            acc = por_torre[det.torre_id]
+            for material_key, campo in self.OC_DETALLE_FIELD_MAP.items():
+                valor = getattr(det, campo, None)
+                if valor:
+                    acc[material_key] += Decimal(str(valor))
 
         # --- Construir filas + total ---
         filas = []
