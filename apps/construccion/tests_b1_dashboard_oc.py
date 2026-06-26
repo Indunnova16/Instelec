@@ -92,17 +92,49 @@ def _torre_oc_completa(proyecto, numero):
 
 @pytest.mark.django_db
 def test_b1_curva_s_oc_ejecutado_real(authenticated_client, proyecto_oc):
-    """La Curva S de OC toma "Ejecutado" del avance real (oc_detalle), NO del
-    DashboardAvanceSemanal vacío → con 1 torre 100% el último punto > 0%."""
+    """La Curva S de OC toma "Ejecutado" del avance real, NO del
+    DashboardAvanceSemanal vacío → con 1 torre cerrada el último punto > 0%.
+
+    #122 Fase 2: el dashboard ahora ancla el "Ejecutado" en el CONTEO de torres
+    por su ``ObraCivilTorre.fecha_final`` (fecha real), no en el avance ponderado
+    por pata. La serie ``serie_curva_s_real`` (por avance ponderado) sigue
+    existiendo; la tarjeta del dashboard usa la serie por fechas.
+    """
+    from datetime import date
+
     from apps.construccion import calculators_avance_real as car
+    from apps.construccion.models import ObraCivilTorre
 
-    _torre_oc_completa(proyecto_oc, 'T1')
-    _torre(proyecto_oc, 'T2')  # 2ª torre sin oc_detalle → arrastra el promedio
+    t1 = _torre_oc_completa(proyecto_oc, 'T1')
+    t2 = _torre(proyecto_oc, 'T2')  # 2ª torre sin cerrar → arrastra el promedio
+    # #122: la tarjeta ejecutada cuenta torres con fecha_final. T1 cerrada en
+    # 2025, T2 sin fecha_final → 1 de 2 torres = 50%. El cache ObraCivilTorre de
+    # T1 ya lo creó el signal de oc_detalle → update_or_create para fijar fechas.
+    ObraCivilTorre.objects.update_or_create(
+        torre=t1, defaults={
+            'proyecto': proyecto_oc,
+            'fecha_inicio': date(2025, 1, 2), 'fecha_esperada': date(2025, 1, 10),
+            'fecha_final': date(2025, 1, 15),
+        },
+    )
+    ObraCivilTorre.objects.update_or_create(
+        torre=t2, defaults={
+            'proyecto': proyecto_oc,
+            'fecha_inicio': date(2025, 2, 1), 'fecha_esperada': date(2025, 2, 10),
+            'fecha_final': None,
+        },
+    )
 
+    # La serie por avance ponderado (legacy) sigue funcionando.
     serie = car.serie_curva_s_real(proyecto_oc, 'OOCC')
     assert serie['ejecutado'], 'la serie Ejecutado no debe estar vacía'
     # 1 de 2 torres al 100% → acumulado final = 50% del proyecto.
     assert serie['ejecutado'][-1] == pytest.approx(50.0, abs=0.01)
+
+    # #122: la serie por fechas reales (la que cablea el dashboard) ancla en 2025.
+    serie_fechas = car.serie_ejecutado_oc_fechas(proyecto_oc)
+    assert serie_fechas['ejecutado'][-1] == pytest.approx(50.0, abs=0.01)
+    assert serie_fechas['labels'][-1].startswith('2025')
 
     # Render del dashboard: la línea Ejecutado se cablea en datos_chart real.
     url = reverse('construccion:dashboard_obra_civil',

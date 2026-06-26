@@ -343,6 +343,153 @@ def serie_planeado(proyecto, fase) -> dict:
 
 
 # ==========================================================================
+# Curva S por FECHAS REALES — conteo acumulado de torres (#122 Fase 2)
+# ==========================================================================
+# Decisión de Miguel (#122): las series de los dashboards de Obra Civil y
+# Montaje deben anclarse en las FECHAS REALES por torre (2025), no en la cascada
+# updated_at (que cae a 2026) ni en el cronograma project-level (vacío en QA).
+# La métrica es CONTEO DE TORRES (acumulado, normalizado a % sobre el total de
+# torres aplica=True), NO el avance ponderado por etapas:
+#   - OC Planeado  = acumulado de torres por ObraCivilTorre.fecha_esperada
+#   - OC Ejecutado = acumulado de torres por ObraCivilTorre.fecha_final
+#   - Montaje Ejecutado = acumulado de torres por montaje_fecha_fin
+# Cada punto = {fecha ISO, pct = conteo_acumulado / n_torres_aplica * 100}.
+
+def _serie_conteo_por_fecha(fechas, n_torres, clave_data) -> dict:
+    """Curva S de CONTEO de torres acumulado, normalizado a % sobre n_torres.
+
+    ``fechas`` = iterable de ``date`` (una por torre con la fecha poblada; los
+    NULL se filtran ANTES de llamar). Agrupa por fecha, acumula el conteo y lo
+    expresa como % del total de torres (aplica=True). Monótona creciente.
+
+    Retorna ``{'labels':[iso], <clave_data>:[float redondeado a 2]}`` para que
+    el contrato de salida sea el mismo que ``serie_curva_s_real`` (clave_data=
+    'ejecutado') o ``serie_planeado`` (clave_data='planeado'), y NO haya que
+    tocar el JS de los templates.
+    """
+    if n_torres <= 0:
+        return {'labels': [], clave_data: []}
+    from collections import defaultdict
+    conteo_por_fecha = defaultdict(int)
+    for f in fechas:
+        if f is None:
+            continue
+        conteo_por_fecha[f] += 1
+    if not conteo_por_fecha:
+        return {'labels': [], clave_data: []}
+    fechas_ordenadas = sorted(conteo_por_fecha.keys())
+    labels = []
+    data = []
+    acum = 0
+    for f in fechas_ordenadas:
+        acum += conteo_por_fecha[f]
+        labels.append(f.isoformat())
+        data.append(round((acum / n_torres) * 100.0, 2))
+    return {'labels': labels, clave_data: data}
+
+
+def serie_planeado_oc_fechas(proyecto) -> dict:
+    """Serie "Planeado" de Obra Civil por FECHAS REALES (#122 Fase 2).
+
+    Acumula el CONTEO de torres (aplica=True) por su
+    ``ObraCivilTorre.fecha_esperada`` (los NULL se ignoran), ordenado por fecha,
+    normalizado a % sobre el total de torres aplica=True. Reemplaza al
+    cronograma project-level (vacío en QA) como fuente del "Planeado" de OC.
+
+    Devuelve ``{'labels':[iso], 'planeado':[float]}`` (mismo contrato que
+    ``serie_planeado``).
+    """
+    from .models import ObraCivilTorre
+    n_torres = proyecto.torres.filter(aplica=True).count() or 0
+    qs = (ObraCivilTorre.objects
+          .filter(proyecto=proyecto, torre__aplica=True, fecha_esperada__isnull=False)
+          .values_list('fecha_esperada', flat=True))
+    return _serie_conteo_por_fecha(list(qs), n_torres, 'planeado')
+
+
+def serie_ejecutado_oc_fechas(proyecto) -> dict:
+    """Serie "Ejecutado" de Obra Civil por FECHAS REALES (#122 Fase 2).
+
+    Acumula el CONTEO de torres (aplica=True) por su
+    ``ObraCivilTorre.fecha_final`` (los NULL se ignoran), ordenado por fecha,
+    normalizado a % sobre el total de torres aplica=True. Ancla el "Ejecutado"
+    en las fechas reales (2025), NO en la cascada ``updated_at`` (2026).
+
+    Devuelve ``{'labels':[iso], 'ejecutado':[float]}`` (mismo contrato que
+    ``serie_curva_s_real``).
+    """
+    from .models import ObraCivilTorre
+    n_torres = proyecto.torres.filter(aplica=True).count() or 0
+    qs = (ObraCivilTorre.objects
+          .filter(proyecto=proyecto, torre__aplica=True, fecha_final__isnull=False)
+          .values_list('fecha_final', flat=True))
+    return _serie_conteo_por_fecha(list(qs), n_torres, 'ejecutado')
+
+
+def serie_ejecutado_montaje_fechas(proyecto) -> dict:
+    """Serie "Ejecutado" de Montaje por FECHAS REALES (#122 Fase 2).
+
+    Acumula el CONTEO de torres (aplica=True) por su
+    ``MontajeEstructuraTorreDetalle.montaje_fecha_fin`` (los NULL se ignoran),
+    ordenado por fecha, normalizado a % sobre el total de torres aplica=True.
+    Ancla el "Ejecutado" de Montaje en las fechas reales (2025), NO en la
+    cascada ``updated_at`` (2026).
+
+    NOTA DE SCOPE (#122): Montaje NO tiene un campo "fecha esperada" por torre
+    equivalente a ``ObraCivilTorre.fecha_esperada`` → el "Planeado" de Montaje
+    por fechas queda PENDIENTE de agregar dicho campo al modelo
+    ``MontajeEstructuraTorreDetalle``. No se inventa una serie planeada; el
+    Planeado de Montaje se deja como está hoy (cronograma / plano) hasta que el
+    cliente confirme el campo de fecha esperada de montaje.
+
+    Devuelve ``{'labels':[iso], 'ejecutado':[float]}`` (mismo contrato que
+    ``serie_curva_s_real``).
+    """
+    from .models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+    n_torres = proyecto.torres.filter(aplica=True).count() or 0
+    qs = (MontajeEstructuraTorreDetalle.objects
+          .filter(proyecto=proyecto, torre__aplica=True, montaje_fecha_fin__isnull=False)
+          .values_list('montaje_fecha_fin', flat=True))
+    return _serie_conteo_por_fecha(list(qs), n_torres, 'ejecutado')
+
+
+# ==========================================================================
+# Gantt de Obra Civil — barras por torre (#122 Fase 2)
+# ==========================================================================
+
+def gantt_oc(proyecto) -> list:
+    """Datos del Gantt de Obra Civil: una barra por torre con sus 3 fechas.
+
+    Devuelve ``[{'torre','inicio','esperada','final'}]`` (fechas en ISO o None)
+    ordenado por ``TorreConstruccion.orden_numerico``, SOLO para las torres
+    aplica=True que tienen ``fecha_inicio`` poblada (sin inicio no hay barra).
+
+    El template del Dashboard OC lo pinta como barras horizontales (una por
+    torre) con Chart.js (indexAxis:'y'), barra flotante [inicio, final].
+    """
+    from .models import ObraCivilTorre
+    qs = (ObraCivilTorre.objects
+          .filter(proyecto=proyecto, torre__aplica=True, fecha_inicio__isnull=False)
+          .select_related('torre'))
+    # orden_numerico es una @property (no columna) → ordenar en Python, mismo
+    # patrón que las demás vistas por torre (orden natural T-1, T-2, …, T-10).
+    ocs = sorted(qs, key=lambda oc: (oc.torre.orden_numerico, oc.torre.numero or ''))
+
+    def _iso(d):
+        return d.isoformat() if d else None
+
+    filas = []
+    for oc in ocs:
+        filas.append({
+            'torre': oc.torre.numero_display or (oc.torre.numero or ''),
+            'inicio': _iso(oc.fecha_inicio),
+            'esperada': _iso(oc.fecha_esperada),
+            'final': _iso(oc.fecha_final),
+        })
+    return filas
+
+
+# ==========================================================================
 # avance_por_etapa — genérico para las 3 fases (G2 universal)
 # ==========================================================================
 

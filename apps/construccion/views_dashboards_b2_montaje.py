@@ -49,6 +49,25 @@ class DashboardMontajeRealView(_DashboardCurvaSBase):
     FASE_DEFAULT = 'MONTAJE'
     FASE_BACKBONE = car.FASE_MONTAJE  # 'MONTAJE'
 
+    def build_curva_real(self, proyecto, fase):
+        """Curva S de Montaje con el "Ejecutado" anclado en FECHAS REALES (#122).
+
+        Ejecutado = CONTEO acumulado de torres por ``montaje_fecha_fin`` (2025),
+        no el avance ponderado anclado en ``updated_at`` (2026). El Planeado de
+        Montaje se deja como está hoy (``serie_planeado`` del cronograma): el
+        modelo de Montaje NO tiene un campo "fecha esperada" por torre →
+        construir un Planeado por fechas queda PENDIENTE de agregar ese campo a
+        ``MontajeEstructuraTorreDetalle`` (no se inventa la serie). Mantiene el
+        mismo contrato de salida que la base (dict con ejecutado/planeado).
+        """
+        ejecutado = car.serie_ejecutado_montaje_fechas(proyecto)
+        planeado = car.serie_planeado(proyecto, fase)
+        return {
+            'fase': fase,
+            'ejecutado': ejecutado,
+            'planeado': planeado,
+        }
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         proyecto = ctx.get('proyecto')
@@ -107,7 +126,10 @@ class DashboardMontajeDatosGraficasView(_DashboardCurvaSBaseLegacy):
         payload = {
             'fase': fase,
             'curva_real': {
-                'ejecutado': car.serie_curva_s_real(proyecto, fase),
+                # #122 Fase 2: Ejecutado por CONTEO de torres en fechas reales
+                # (montaje_fecha_fin, 2025). Planeado se deja como está (sin campo
+                # de fecha esperada de montaje → pendiente, no se inventa).
+                'ejecutado': car.serie_ejecutado_montaje_fechas(proyecto),
                 'planeado': car.serie_planeado(proyecto, fase),
             },
             'avance_etapas': car.avance_por_etapa(proyecto, fase),
