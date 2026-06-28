@@ -1,23 +1,26 @@
-"""Tests #149 — Obras de Protección: desacoplar del flag global #160.
+"""Tests #149 (bounce=5, decisión HITL) — ELIMINAR la aplicabilidad por-torre.
 
-El módulo Obras de Protección (TrinchosCunetasListView) debe regirse SOLO por
-``ObraCivilTorre.aplica_obras_proteccion`` (opt-in real curado por el cliente),
-DESACOPLADO del flag global ``TorreConstruccion.aplica`` (#160).
+Reproceso bounce-5 (MALENTENDIDO): durante 5 intervenciones se intentó MEJORAR
+el mecanismo de filtro por-torre ``ObraCivilTorre.aplica_obras_proteccion``,
+cuando la solicitud real del cliente (verbo imperativo "eliminar") + el HITL de
+Miguel era ELIMINAR ese checkbox de raíz.
 
-Dos bugs que el fix corrige (ambos invierten comportamiento):
+Comportamiento NUEVO (lo que estos tests asertan):
 
-  (a) El selector ``torres_disponibles`` pasaba por
-      ``ordenar_torres_construccion(qs)`` con ``incluir_no_aplica=False``, que
-      aplica el filtro GLOBAL ``aplica=True`` ENCIMA del filtro por módulo. Una
-      torre con ``aplica_obras_proteccion=True`` pero ``aplica=False`` (global)
-      quedaba OCULTA. El fix pasa ``incluir_no_aplica=True`` → aparece.
+  * El módulo Obras de Protección (``TrinchosCunetasListView``) lista TODAS las
+    torres APLICABLES del proyecto, gobernadas SOLO por el flag global
+    ``TorreConstruccion.aplica`` (#160). Ya NO hay opt-in/opt-out por-torre.
+      - Una torre con ``aplica_obras_proteccion=False`` (antes oculta) ahora
+        APARECE (porque su flag global ``aplica=True``). ← dato legacy.
+      - La torre ANULADA (``aplica=False``) NO aparece (no se rompe nada).
+  * El checkbox "Obras Protección" se eliminó de la matriz Obra Civil: el markup
+    ``data-toggle-aplica="aplica_obras_proteccion"`` ya NO se renderiza; los
+    toggles que QUEDAN (``aplica`` global y ``aplica_pintura_aeronautica``) sí.
+  * El upsert (``TrinchosCunetasUpsertView``) ya NO rechaza una torre por el flag
+    eliminado.
 
-  (b) La tabla de obras existentes (``obras``) no filtraba por
-      ``aplica_obras_proteccion``. Una torre con ``aplica_obras_proteccion=False``
-      que ya tenía una fila ``TrinchoCuneta`` preexistente seguía apareciendo.
-      El fix filtra ``torre__obra_civil__aplica_obras_proteccion=True`` → no aparece.
-
-SIN migración, SIN data_fix (la curación opt-in del cliente vive en la data).
+SIN migración: la columna ``ObraCivilTorre.aplica_obras_proteccion`` queda
+DORMIDA (reversible, no se borra).
 """
 import re
 
@@ -69,42 +72,53 @@ def proyecto_i149(db):
 
 @pytest.fixture
 def torres_i149(proyecto_i149):
-    """Dos torres que aíslan los dos bugs:
+    """Torres que cubren el comportamiento NUEVO (gobernado por torre.aplica):
 
-    - E19: oc (obras protección) = True, pero flag GLOBAL aplica = False.
-      Debe APARECER en el selector (el global no debe ocultarla).
-    - E1:  oc = False, flag GLOBAL aplica = True, con obra preexistente.
-      NO debe APARECER en la tabla de obras (oc gobierna).
+    - E10: aplica=True, aplica_obras_proteccion=False (el flag por-torre eliminado).
+      ANTES estaba OCULTA por el filtro; AHORA debe APARECER. ← DATO LEGACY:
+      la fila ObraCivilTorre con el flag por-torre en False existía antes del fix.
+    - E19: aplica=True, aplica_obras_proteccion=True, con obra capturada (legacy).
+      Sigue visible (con su obra).
+    - E25: aplica=False (torre ANULADA, #160). NO debe colarse en el listado.
     """
     from apps.construccion.models import (
         TorreConstruccion, ObraCivilTorre, TrinchoCuneta,
     )
 
-    # E19: marcada en Obras de Protección, pero "No aplica" globalmente.
+    # E10: aplica global True, flag por-torre (eliminado) en False → DATO LEGACY.
+    e10 = TorreConstruccion.objects.create(
+        proyecto=proyecto_i149, numero='10', tipo='D6', aplica=True,
+    )
+    ObraCivilTorre.objects.create(
+        proyecto=proyecto_i149, torre=e10, aplica_obras_proteccion=False,
+    )
+
+    # E19: aplica global True, flag por-torre en True, con obra capturada legacy.
     e19 = TorreConstruccion.objects.create(
-        proyecto=proyecto_i149, numero='19', tipo='D6', aplica=False,
+        proyecto=proyecto_i149, numero='19', tipo='D6', aplica=True,
     )
     ObraCivilTorre.objects.create(
         proyecto=proyecto_i149, torre=e19, aplica_obras_proteccion=True,
     )
+    TrinchoCuneta.objects.create(
+        proyecto=proyecto_i149, torre=e19,
+        medida_manejo=TrinchoCuneta.TipoObra.AMBAS,
+        metros_trinchos=12, metros_cunetas=8, cuadrilla='Cuadrilla A',
+        completado=True,
+    )
 
-    # E1: NO marcada en Obras de Protección, global aplica=True, con obra previa.
-    e1 = TorreConstruccion.objects.create(
-        proyecto=proyecto_i149, numero='1', tipo='D6', aplica=True,
+    # E25: torre ANULADA (aplica global False) → no debe aparecer.
+    e25 = TorreConstruccion.objects.create(
+        proyecto=proyecto_i149, numero='25', tipo='D6', aplica=False,
     )
     ObraCivilTorre.objects.create(
-        proyecto=proyecto_i149, torre=e1, aplica_obras_proteccion=False,
+        proyecto=proyecto_i149, torre=e25, aplica_obras_proteccion=True,
     )
-    # Obra preexistente sobre E1 (creada antes de desmarcar oc).
-    TrinchoCuneta.objects.create(
-        proyecto=proyecto_i149, torre=e1,
-        medida_manejo=TrinchoCuneta.TipoObra.CUNETA,
-    )
-    return {'e19': e19, 'e1': e1}
+    return {'e10': e10, 'e19': e19, 'e25': e25}
 
 
 def _ctx(authenticated_client, proyecto):
-    """GET la lista y devuelve el context (ids del selector + obras)."""
+    """GET la lista del módulo Obras de Protección y devuelve la respuesta."""
     url = reverse('construccion:trinchos_cunetas',
                   kwargs={'proyecto_id': proyecto.id})
     resp = authenticated_client.get(url)
@@ -112,226 +126,137 @@ def _ctx(authenticated_client, proyecto):
     return resp
 
 
-# ===========================================================================
-# Bug (a) — selector desacoplado del flag global #160
-# ===========================================================================
-
-@pytest.mark.django_db
-def test_selector_muestra_torre_oc_true_aunque_global_false(
-        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
-    """E19 (oc=True, global aplica=False) DEBE aparecer en torres_disponibles.
-
-    Antes del fix el segundo filtro global aplica=True la ocultaba.
-    """
-    resp = _ctx(authenticated_client, proyecto_i149)
-    ids = [t.id for t in resp.context['torres_disponibles']]
-    assert torres_i149['e19'].id in ids, (
-        "E19 (oc=True, global=False) debe aparecer: el módulo se rige SOLO por "
-        "aplica_obras_proteccion, no por el flag global #160.")
-
-
-@pytest.mark.django_db
-def test_selector_excluye_torre_oc_false(
-        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
-    """E1 (oc=False) NO debe aparecer en el selector (opt-in real)."""
-    resp = _ctx(authenticated_client, proyecto_i149)
-    ids = [t.id for t in resp.context['torres_disponibles']]
-    assert torres_i149['e1'].id not in ids, (
-        "E1 (oc=False) NO debe aparecer en el selector.")
-
-
-# ===========================================================================
-# Bug (b) — tabla de obras filtra por aplica_obras_proteccion
-# ===========================================================================
-
-@pytest.mark.django_db
-def test_tabla_obras_excluye_oc_false_con_obra_preexistente(
-        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
-    """E1 (oc=False) con TrinchoCuneta preexistente NO debe salir en la tabla.
-
-    Antes del fix la tabla 'obras' no filtraba por aplica_obras_proteccion.
-    """
-    resp = _ctx(authenticated_client, proyecto_i149)
-    obras_torre_ids = [o.torre_id for o in resp.context['obras']]
-    assert torres_i149['e1'].id not in obras_torre_ids, (
-        "E1 (oc=False) con obra preexistente NO debe aparecer en la tabla.")
-
-
-@pytest.mark.django_db
-def test_tabla_obras_incluye_oc_true_con_obra(
-        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
-    """Una torre oc=True con obra creada SÍ debe seguir apareciendo en la tabla
-    (test contra dato legacy: la obra de E19 existía antes del cambio)."""
-    from apps.construccion.models import TrinchoCuneta
-    # E19 tiene oc=True; le creamos una obra (simula dato legacy preexistente).
-    TrinchoCuneta.objects.create(
-        proyecto=proyecto_i149, torre=torres_i149['e19'],
-        medida_manejo=TrinchoCuneta.TipoObra.TRINCHO,
-    )
-    resp = _ctx(authenticated_client, proyecto_i149)
-    obras_torre_ids = [o.torre_id for o in resp.context['obras']]
-    assert torres_i149['e19'].id in obras_torre_ids, (
-        "E19 (oc=True) con obra debe seguir visible en la tabla.")
-
-
-# ===========================================================================
-# Bug PRINCIPAL (bounce=3) — el LISTADO lista UNA FILA POR TORRE QUE APLICA
-# (no solo las torres con obra capturada). invierte_comportamiento=True.
-# ===========================================================================
-
-@pytest.fixture
-def torres_pendientes_i149(proyecto_i149):
-    """Torres que aplican a Obras de Protección pero SIN obra capturada
-    (escenario exacto del cliente: E19/E34 marcadas en Obra Civil, 0 obras).
-
-    Cubre ≥2 torres distintas (generalización, raíz del reproceso #3):
-      - e19 / e34: oc=True, 0 TrinchoCuneta → DEBEN salir como "Pendiente".
-      - e23: oc=True, CON obra capturada (dato legacy) → sale con sus datos.
-      - e1:  oc=False → NO debe salir en el listado.
-    """
-    from apps.construccion.models import (
-        TorreConstruccion, ObraCivilTorre, TrinchoCuneta,
-    )
-
-    def _torre(num, *, oc_aplica, global_aplica=True):
-        t = TorreConstruccion.objects.create(
-            proyecto=proyecto_i149, numero=str(num), tipo='D6',
-            aplica=global_aplica,
-        )
-        ObraCivilTorre.objects.create(
-            proyecto=proyecto_i149, torre=t,
-            aplica_obras_proteccion=oc_aplica,
-        )
-        return t
-
-    e19 = _torre(19, oc_aplica=True)   # aplica, 0 obras → Pendiente
-    e34 = _torre(34, oc_aplica=True)   # aplica, 0 obras → Pendiente (2ª torre)
-    e23 = _torre(23, oc_aplica=True)   # aplica, con obra (legacy)
-    e1 = _torre(1, oc_aplica=False)    # no aplica → ausente
-
-    # Dato legacy: E23 ya tenía una obra capturada antes del cambio.
-    TrinchoCuneta.objects.create(
-        proyecto=proyecto_i149, torre=e23,
-        medida_manejo=TrinchoCuneta.TipoObra.AMBAS,
-        metros_trinchos=12, metros_cunetas=8, cuadrilla='Cuadrilla A',
-        completado=True,
-    )
-    return {'e19': e19, 'e34': e34, 'e23': e23, 'e1': e1}
-
-
 def _filas_por_torre(resp):
     return {f['torre'].id: f for f in resp.context['filas']}
 
 
-@pytest.mark.django_db
-def test_listado_lista_torres_que_aplican_sin_obra(
-        authenticated_client, proyecto_i149, torres_pendientes_i149,
-        sqlite_regexp_replace):
-    """REPRODUCE EL BUG (bounce=3): E19 y E34 aplican pero tienen 0 obras
-    capturadas. ANTES del fix estaban ausentes del listado (que solo iteraba
-    TrinchoCuneta). AHORA deben aparecer como filas 'Pendiente'.
+# ===========================================================================
+# Listado gobernado SOLO por torre.aplica (#160) — el filtro por-torre se eliminó
+# ===========================================================================
 
-    Cubre ≥2 torres (E19 + E34) para generalizar (raíz #3: no validar 1 sola).
+@pytest.mark.django_db
+def test_listado_lista_torre_con_flag_por_torre_false(
+        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
+    """DATO LEGACY + inversión: E10 (aplica=True, aplica_obras_proteccion=False)
+    estaba OCULTA por el filtro eliminado; AHORA debe APARECER en el listado.
+
+    Es el corazón del fix: el módulo ya no se rige por el flag por-torre.
     """
     resp = _ctx(authenticated_client, proyecto_i149)
     filas = _filas_por_torre(resp)
-    for clave in ('e19', 'e34'):
-        torre = torres_pendientes_i149[clave]
-        assert torre.id in filas, (
-            f"{torre.numero_display} (aplica=True, 0 obras) DEBE aparecer en el "
-            "listado como fila pendiente — es lo que el cliente reclama.")
-        assert filas[torre.id]['obra'] is None, (
-            f"{torre.numero_display} no tiene obra capturada → obra=None "
-            "(fila placeholder Pendiente).")
+    e10 = torres_i149['e10']
+    assert e10.id in filas, (
+        "E10 (aplica=True, flag por-torre=False) DEBE aparecer: el módulo se "
+        "rige SOLO por torre.aplica, ya no por aplica_obras_proteccion.")
+    assert filas[e10.id]['obra'] is None, (
+        "E10 no tiene obra capturada → fila placeholder (Pendiente).")
 
 
 @pytest.mark.django_db
-def test_listado_renderiza_torre_pendiente_en_html(
-        authenticated_client, proyecto_i149, torres_pendientes_i149,
-        sqlite_regexp_replace):
-    """El observable que VE el cliente: la etiqueta T-19 (y T-34) presentes en
-    el HTML renderizado del módulo + el marcador 'Pendiente' / 'Capturar'."""
-    resp = _ctx(authenticated_client, proyecto_i149)
-    html = resp.content.decode()
-    assert 'T-19' in html, "T-19 debe estar en el HTML del listado."
-    assert 'T-34' in html, "T-34 debe estar en el HTML del listado."
-    assert 'Capturar' in html, (
-        "Las torres pendientes deben ofrecer la acción 'Capturar'.")
-
-
-@pytest.mark.django_db
-def test_listado_incluye_torre_legacy_con_sus_datos(
-        authenticated_client, proyecto_i149, torres_pendientes_i149,
-        sqlite_regexp_replace):
-    """Dato legacy: E23 (oc=True, con obra capturada antes del cambio) sigue
-    apareciendo CON su obra (no se rompe el caso ya existente)."""
+def test_listado_excluye_torre_anulada(
+        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
+    """No se rompe nada: la torre ANULADA (E25, aplica=False) NO se cuela en el
+    listado, aunque su flag por-torre (dormido) esté en True."""
     resp = _ctx(authenticated_client, proyecto_i149)
     filas = _filas_por_torre(resp)
-    e23 = torres_pendientes_i149['e23']
-    assert e23.id in filas, "E23 (con obra) debe seguir en el listado."
-    obra = filas[e23.id]['obra']
-    assert obra is not None, "E23 conserva su obra capturada en la fila."
+    assert torres_i149['e25'].id not in filas, (
+        "E25 (torre anulada, aplica=False) NO debe aparecer en el listado.")
+
+
+@pytest.mark.django_db
+def test_listado_incluye_torre_legacy_con_su_obra(
+        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
+    """Dato legacy: E19 (con obra capturada antes del cambio) sigue apareciendo
+    CON su obra (no se rompe el caso ya existente)."""
+    resp = _ctx(authenticated_client, proyecto_i149)
+    filas = _filas_por_torre(resp)
+    e19 = torres_i149['e19']
+    assert e19.id in filas, "E19 (aplica=True) debe seguir en el listado."
+    obra = filas[e19.id]['obra']
+    assert obra is not None, "E19 conserva su obra capturada en la fila."
     assert obra.completado is True
     assert obra.cuadrilla == 'Cuadrilla A'
 
 
 @pytest.mark.django_db
-def test_listado_excluye_torre_que_no_aplica(
-        authenticated_client, proyecto_i149, torres_pendientes_i149,
-        sqlite_regexp_replace):
-    """E1 (oc=False) NO debe aparecer como fila en el listado (opt-in real)."""
+def test_listado_lista_todas_las_torres_aplicables(
+        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
+    """El listado lista TODAS las torres aplicables (E10 + E19), independiente
+    del flag por-torre eliminado; la anulada (E25) queda fuera → total = 2.
+
+    Cubre ≥2 registros (no 1 fixture), incluyendo el legacy E10 (flag=False)."""
     resp = _ctx(authenticated_client, proyecto_i149)
     filas = _filas_por_torre(resp)
-    assert torres_pendientes_i149['e1'].id not in filas, (
-        "E1 (oc=False) no debe aparecer en el listado.")
+    ids = set(filas)
+    assert torres_i149['e10'].id in ids
+    assert torres_i149['e19'].id in ids
+    assert torres_i149['e25'].id not in ids
+    assert resp.context['total_torres'] == 2, (
+        "Solo las 2 torres aplicables (E10 + E19); la anulada queda fuera.")
 
 
 @pytest.mark.django_db
-def test_contadores_pendientes(
-        authenticated_client, proyecto_i149, torres_pendientes_i149,
-        sqlite_regexp_replace):
-    """Los contadores del header reflejan torres que aplican vs capturadas."""
+def test_selector_gobernado_por_aplica_global(
+        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
+    """El selector (torres_disponibles) ofrece todas las torres aplicables y
+    excluye la anulada — gobernado SOLO por torre.aplica."""
     resp = _ctx(authenticated_client, proyecto_i149)
-    # 3 torres aplican (e19, e34, e23); 1 con obra capturada (e23) → 2 pendientes.
-    assert resp.context['total_torres'] == 3
-    assert resp.context['pendientes'] == 2
-    assert len(resp.context['obras']) == 1
+    ids = {t.id for t in resp.context['torres_disponibles']}
+    assert torres_i149['e10'].id in ids, (
+        "E10 (aplica=True, flag por-torre=False) debe ofrecerse en el selector.")
+    assert torres_i149['e19'].id in ids
+    assert torres_i149['e25'].id not in ids, (
+        "E25 (anulada) no debe ofrecerse en el selector.")
 
 
 # ===========================================================================
-# Rename de ruta — /trinchos-cunetas/ → /obras-proteccion/ (301)
+# Upsert ya no rechaza por el flag eliminado
 # ===========================================================================
 
 @pytest.mark.django_db
-def test_ruta_nueva_obras_proteccion_resuelve(
-        authenticated_client, proyecto_i149, torres_pendientes_i149,
-        sqlite_regexp_replace):
-    """La ruta canónica nueva /obras-proteccion/ responde 200 (name= intacto)."""
-    url = reverse('construccion:trinchos_cunetas',
+def test_upsert_no_rechaza_torre_por_flag_eliminado(
+        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
+    """E10 tenía aplica_obras_proteccion=False; ANTES el upsert la rechazaba con
+    400. AHORA el guard se eliminó → el upsert procesa la torre (no 400 por el
+    flag). Verifica que NO devuelve el error de aplicabilidad por-torre."""
+    url = reverse('construccion:trinchos_cunetas_upsert',
                   kwargs={'proyecto_id': proyecto_i149.id})
-    assert url.endswith('/obras-proteccion/'), (
-        f"El reverse debe apuntar a la ruta nueva, no a {url!r}.")
+    resp = authenticated_client.post(url, data={
+        'torre_id': str(torres_i149['e10'].id),
+        'medida_manejo': 'CUNETA',
+        'metros_cunetas': '15',
+    })
+    # No debe ser el rechazo por el flag eliminado (status 400 con ese mensaje).
+    body = resp.content.decode().lower()
+    assert 'no aplica a obras de protección' not in body, (
+        "El upsert NO debe rechazar la torre por el flag por-torre eliminado.")
+    assert resp.status_code in (200, 201), (
+        f"El upsert debe procesar la torre, status={resp.status_code}, "
+        f"body={resp.content[:300]!r}")
+
+
+# ===========================================================================
+# Matriz Obra Civil — el checkbox 'Obras Protección' se eliminó del render
+# ===========================================================================
+
+@pytest.mark.django_db
+def test_matriz_oc_no_renderiza_checkbox_obras_proteccion(
+        authenticated_client, proyecto_i149, torres_i149, sqlite_regexp_replace):
+    """El observable VISIBLE del cliente: la matriz OC ya NO contiene el markup
+    del checkbox removido, pero SÍ los toggles que quedan (aplica + pintura)."""
+    url = reverse('construccion:obra_civil_lista',
+                  kwargs={'proyecto_id': proyecto_i149.id})
     resp = authenticated_client.get(url)
-    assert resp.status_code == 200
-
-
-@pytest.mark.django_db
-def test_ruta_vieja_trinchos_cunetas_redirige(
-        authenticated_client, proyecto_i149):
-    """El path viejo /trinchos-cunetas/ redirige 301 a /obras-proteccion/
-    (no rompe backlinks/bookmarks que el cliente tenga guardados)."""
-    vieja = f'/construccion/{proyecto_i149.id}/trinchos-cunetas/'
-    resp = authenticated_client.get(vieja)
-    assert resp.status_code in (301, 302), (
-        f"La ruta vieja debe redirigir, status={resp.status_code}.")
-    assert '/obras-proteccion/' in resp['Location'], (
-        f"Debe redirigir a la ruta nueva, Location={resp.get('Location')!r}.")
-
-
-@pytest.mark.django_db
-def test_ruta_vieja_upsert_redirige(authenticated_client, proyecto_i149):
-    """El path viejo /trinchos-cunetas/upsert/ redirige a /obras-proteccion/upsert/."""
-    vieja = f'/construccion/{proyecto_i149.id}/trinchos-cunetas/upsert/'
-    resp = authenticated_client.get(vieja)
-    assert resp.status_code in (301, 302)
-    assert '/obras-proteccion/upsert/' in resp['Location']
+    assert resp.status_code == 200, resp.content[:500]
+    html = resp.content.decode()
+    # Removido:
+    assert 'data-toggle-aplica="aplica_obras_proteccion"' not in html, (
+        "El checkbox 'Obras Protección' (data-toggle-aplica="
+        "\"aplica_obras_proteccion\") debe estar AUSENTE del render.")
+    assert 'Obras Protección' not in html, (
+        "El label 'Obras Protección' debe estar AUSENTE del render.")
+    # Conservados:
+    assert 'data-toggle-aplica="aplica"' in html, (
+        "El toggle global 'aplica' (#160) debe seguir presente.")
+    assert 'data-toggle-aplica="aplica_pintura_aeronautica"' in html, (
+        "El toggle 'Pintura Aero.' (#153) debe seguir presente.")

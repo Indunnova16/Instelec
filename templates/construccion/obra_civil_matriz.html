@@ -196,7 +196,6 @@
                                          x-data='aplicaTorre({
                                              url: "{% url "construccion:obra_civil_aplica_update" proyecto_id=proyecto.id torre_id=torre.id %}",
                                              csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
-                                             obras: {% if oc.aplica_obras_proteccion %}true{% else %}false{% endif %},
                                              pintura: {% if oc.aplica_pintura_aeronautica %}true{% else %}false{% endif %},
                                              aplica: {% if torre.aplica %}true{% else %}false{% endif %}
                                          })'>
@@ -207,12 +206,6 @@
                                                    data-toggle-aplica="aplica" data-torre="{{ torre.id }}"
                                                    class="rounded border-gray-300 dark:border-gray-600">
                                             <span x-text="aplica ? 'Torre aplica' : 'Torre NO aplica'"></span>
-                                        </label>
-                                        <label class="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1 justify-between">
-                                            <span>Obras Protección</span>
-                                            <input type="checkbox" x-model="obras" @change="guardar('aplica_obras_proteccion', obras)"
-                                                   data-toggle-aplica="aplica_obras_proteccion" data-torre="{{ torre.id }}"
-                                                   class="rounded border-gray-300 dark:border-gray-600">
                                         </label>
                                         <label class="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1 justify-between">
                                             <span>Pintura Aero.</span>
@@ -377,7 +370,6 @@ function aplicaTorre(cfg) {
     return {
         url: cfg.url,
         csrfToken: cfg.csrfToken,
-        obras: cfg.obras,
         pintura: cfg.pintura,
         aplica: cfg.aplica,
         mensajeAplica: '',

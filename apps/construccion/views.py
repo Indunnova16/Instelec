@@ -1609,12 +1609,16 @@ class ObraCivilAplicaUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
 
     Espeja ObraCivilFechasUpdateView (View.post(proyecto_id, torre_id) ->
     get_object_or_404(ObraCivilTorre) -> save -> JsonResponse). Acepta un
-    campo whitelisteado y su valor booleano. Sirve a #149
-    (aplica_obras_proteccion) y #153 (aplica_pintura_aeronautica) con un solo
-    endpoint para no duplicar mecanismos de guardado.
+    campo whitelisteado y su valor booleano. Sirve a #153
+    (aplica_pintura_aeronautica) y al flag global #160 (torre.aplica) con un
+    solo endpoint para no duplicar mecanismos de guardado.
+
+    #149 (bounce=5): se eliminó `aplica_obras_proteccion` del whitelist; el
+    frontend ya no envía ese campo (checkbox removido). La columna BD queda
+    dormida (reversible, sin migración).
     """
     allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
-    CAMPOS_PERMITIDOS = {'aplica_obras_proteccion', 'aplica_pintura_aeronautica'}
+    CAMPOS_PERMITIDOS = {'aplica_pintura_aeronautica'}
 
     def post(self, request, proyecto_id, torre_id, *args, **kwargs):
         from django.http import JsonResponse
@@ -2229,36 +2233,21 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
         torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
-        # #149: el filtro `obra_civil__aplica_obras_proteccion=True` es un INNER JOIN
-        # que excluía las torres SIN fila ObraCivilTorre (solo aparecía la única que
-        # tenía fila, p.ej. T-1). Aseguramos una fila por torre (idempotente, default
-        # aplica=True = opt-out) ANTES de filtrar, igual que ObraCivilMatrizView.
-        _existentes = set(
-            ObraCivilTorre.objects.filter(proyecto=proyecto).values_list('torre_id', flat=True))
-        _faltantes = [
-            ObraCivilTorre(proyecto=proyecto, torre=t)
-            for t in torres_qs if t.id not in _existentes
-        ]
-        if _faltantes:
-            ObraCivilTorre.objects.bulk_create(_faltantes, ignore_conflicts=True)
-        # Ahora sí: solo las torres que aplican a Obras de Protección (desmarcar para excluir).
-        torres_qs = torres_qs.filter(obra_civil__aplica_obras_proteccion=True)
-
-        # #149 (causa raíz del reproceso, bounce=3): el LISTADO debe mostrar UNA
-        # FILA POR TORRE QUE APLICA, no una fila por obra TrinchoCuneta capturada.
-        # Los 3 bounces previos arreglaron el DROPDOWN (torres_disponibles), pero
-        # el cliente reclama sobre la TABLA: una torre con aplica_obras_proteccion
-        # =True y 0 obras capturadas (E10/E19/E34/E52/E53) era invisible aquí.
-        # Ahora: torre-driven con LEFT JOIN — cada torre que aplica aparece, con
-        # su obra capturada (estado real) o como fila placeholder "Pendiente".
+        # #149 (bounce=5, decisión HITL): se ELIMINA el mecanismo de aplicabilidad
+        # por-torre `aplica_obras_proteccion`. El cliente pidió quitar el checkbox
+        # (no mejorar el filtro). El módulo Obras de Protección ahora lista TODAS
+        # las torres APLICABLES del proyecto, gobernadas SOLO por el flag global
+        # torre.aplica (#160) — la torre anulada (aplica=False) sigue excluida.
+        # `incluir_no_aplica=False` materializa "todas las torres aplicables" y
+        # evita colar la torre anulada (E25). La columna BD
+        # ObraCivilTorre.aplica_obras_proteccion queda DORMIDA (sin migración).
         torres_ordenadas = list(
-            ordenar_torres_construccion(torres_qs, incluir_no_aplica=True))
-        # Las obras existentes siguen rigiéndose SOLO por aplica_obras_proteccion:
-        # una torre con oc=False que tenga una fila TrinchoCuneta preexistente NO
-        # aparece (porque su torre no está en torres_qs).
+            ordenar_torres_construccion(torres_qs, incluir_no_aplica=False))
+        # El LISTADO es torre-driven (una fila por torre aplicable): cada torre
+        # aparece con su obra capturada (estado real) o como fila placeholder
+        # "Pendiente". Las obras existentes ya no se filtran por el flag eliminado.
         obras = list(TrinchoCuneta.objects
-                     .filter(proyecto=proyecto,
-                             torre__obra_civil__aplica_obras_proteccion=True)
+                     .filter(proyecto=proyecto)
                      .select_related('torre').order_by('torre__numero'))
         obras_por_torre = {o.torre_id: o for o in obras}
         # `filas`: una entrada por torre que aplica. `obra` es la TrinchoCuneta
@@ -2284,11 +2273,10 @@ class TrinchosCunetasListView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
             'obras': obras,
             'total_torres': len(filas),
             'pendientes': pendientes,
-            # #149: el módulo Obras de Protección se rige SOLO por
-            # aplica_obras_proteccion (torres_qs ya está filtrado por ese flag).
-            # NO aplicar el segundo filtro global torre.aplica (#160) del orden:
-            # incluir_no_aplica=True desacopla el selector del flag global, así
-            # una torre marcada oc=True aparece aunque su flag global sea False.
+            # #149 (bounce=5): el módulo Obras de Protección se rige SOLO por el
+            # flag global torre.aplica (#160). El selector ofrece todas las torres
+            # aplicables del proyecto (la torre anulada queda excluida vía
+            # incluir_no_aplica=False).
             'torres_disponibles': torres_ordenadas,
             'total_metros': total_metros,
             'completadas': completadas,
@@ -2373,11 +2361,9 @@ class TrinchosCunetasUpsertView(LoginRequiredMixin, RoleRequiredMixin, View):
             return JsonResponse({'error': 'torre_id requerido'}, status=400)
         torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
 
-        # #149: bloquear si la torre no aplica a Obras de Protección.
-        oc = ObraCivilTorre.objects.filter(proyecto=proyecto, torre=torre).first()
-        if oc is not None and not oc.aplica_obras_proteccion:
-            return JsonResponse(
-                {'error': 'La torre no aplica a Obras de Protección.'}, status=400)
+        # #149 (bounce=5): se eliminó la aplicabilidad por-torre
+        # `aplica_obras_proteccion`. El upsert ya NO la usa como guardia; la
+        # aplicabilidad la gobierna el flag global torre.aplica (#160).
 
         tipo = request.POST.get('medida_manejo', '').strip()
         if tipo not in dict(TrinchoCuneta.TipoObra.choices):

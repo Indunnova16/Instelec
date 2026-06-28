@@ -162,8 +162,13 @@ class AplicaTorreBindingSourceTest(SimpleTestCase):
             "aplicaTorre() NO inicializa `aplica` → x-model='aplica' queda undefined "
             "y el toggle 'Torre aplica/NO aplica' renderiza sin label (bounce#4).",
         )
-        # Coherencia: los hermanos obras/pintura ya estaban; aplica debe acompañarlos.
-        self.assertIn("obras: cfg.obras", body)
+        # #149 (bounce=5): el binding `obras` se ELIMINÓ junto con el checkbox
+        # 'Obras Protección'; `aplica` y `pintura` quedan.
+        self.assertNotIn(
+            "obras: cfg.obras", body,
+            "El binding `obras` debió eliminarse al quitar el checkbox 'Obras "
+            "Protección' (bounce#5).",
+        )
         self.assertIn("pintura: cfg.pintura", body)
 
     def test_x_data_pasa_aplica_y_el_label_lo_consume(self):
