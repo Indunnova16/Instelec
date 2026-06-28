@@ -211,15 +211,21 @@ class TestTrinchosDelete:
 
 @pytest.mark.django_db
 class TestAplicaObrasProteccion:
-    """#149 — gating de torres por aplica_obras_proteccion."""
+    """#149 (bounce=5, HITL): la aplicabilidad por-torre aplica_obras_proteccion
+    se ELIMINÓ. El módulo se rige SOLO por el flag global torre.aplica (#160).
 
-    def test_default_true(self, proyecto, torres):
+    La columna BD queda dormida (default=True), pero ya no gobierna el listado ni
+    el upsert. Estos tests asertan el comportamiento NUEVO (anti golden-stale)."""
+
+    def test_default_true_columna_dormida(self, proyecto, torres):
+        # La columna sigue existiendo (dormida, sin migración): default True.
         oc = ObraCivilTorre.objects.create(proyecto=proyecto, torre=torres[0])
         assert oc.aplica_obras_proteccion is True
 
-    def test_listado_excluye_torre_no_aplica(self, admin_client, proyecto, torres,
-                                              sqlite_regexp_replace):
-        # torres[0] aplica, torres[1] NO aplica
+    def test_listado_no_excluye_por_flag_por_torre(self, admin_client, proyecto,
+                                                   torres, sqlite_regexp_replace):
+        # Aunque torres[1] tenga el flag por-torre en False, AMBAS aparecen:
+        # el módulo ya no se rige por aplica_obras_proteccion (solo torre.aplica).
         ObraCivilTorre.objects.create(
             proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=True)
         ObraCivilTorre.objects.create(
@@ -230,9 +236,27 @@ class TestAplicaObrasProteccion:
         assert resp.status_code == 200
         ids = {t.id for t in resp.context["torres_disponibles"]}
         assert torres[0].id in ids
-        assert torres[1].id not in ids
+        assert torres[1].id in ids, (
+            "torres[1] (flag por-torre=False) DEBE aparecer: el filtro se eliminó.")
 
-    def test_upsert_bloquea_torre_no_aplica(self, admin_client, proyecto, torres):
+    def test_listado_excluye_torre_anulada_global(self, admin_client, proyecto,
+                                                  torres, sqlite_regexp_replace):
+        # El único gobernante es torre.aplica (#160): anular globalmente excluye.
+        torres[1].aplica = False
+        torres[1].save(update_fields=["aplica"])
+        url = reverse("construccion:trinchos_cunetas",
+                      kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        ids = {t.id for t in resp.context["torres_disponibles"]}
+        assert torres[0].id in ids
+        assert torres[1].id not in ids, (
+            "torres[1] (aplica global=False) NO debe aparecer.")
+
+    def test_upsert_no_bloquea_por_flag_por_torre(self, admin_client, proyecto,
+                                                  torres):
+        # ANTES el upsert rechazaba con 400 si aplica_obras_proteccion=False.
+        # AHORA el guard se eliminó → procesa la torre normalmente.
         ObraCivilTorre.objects.create(
             proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=False)
         url = reverse("construccion:trinchos_cunetas_upsert",
@@ -242,11 +266,11 @@ class TestAplicaObrasProteccion:
             "medida_manejo": "CUNETA",
             "metros_cunetas": "15.0",
         })
-        assert resp.status_code == 400
-        assert "no aplica" in resp.json()["error"].lower()
-        assert not TrinchoCuneta.objects.filter(torre=torres[0]).exists()
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert TrinchoCuneta.objects.filter(torre=torres[0]).exists()
 
-    def test_upsert_permite_torre_aplica(self, admin_client, proyecto, torres):
+    def test_upsert_permite_torre(self, admin_client, proyecto, torres):
         ObraCivilTorre.objects.create(
             proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=True)
         url = reverse("construccion:trinchos_cunetas_upsert",
@@ -259,17 +283,32 @@ class TestAplicaObrasProteccion:
         assert resp.status_code == 200
         assert TrinchoCuneta.objects.filter(torre=torres[0]).exists()
 
-    def test_aplica_update_endpoint(self, admin_client, proyecto, torres):
-        oc = ObraCivilTorre.objects.create(
+    def test_aplica_update_endpoint_rechaza_campo_eliminado(self, admin_client,
+                                                            proyecto, torres):
+        # #149 (bounce=5): aplica_obras_proteccion salió del whitelist. El
+        # endpoint ahora lo rechaza (400) — el frontend ya no envía ese campo.
+        ObraCivilTorre.objects.create(
             proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=True)
         url = reverse("construccion:obra_civil_aplica_update",
                       kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
         resp = admin_client.post(url, {
             "campo": "aplica_obras_proteccion", "aplica": "0"})
+        assert resp.status_code == 400, (
+            "El campo eliminado ya no está en CAMPOS_PERMITIDOS.")
+
+    def test_aplica_update_endpoint_pintura_sigue_ok(self, admin_client, proyecto,
+                                                     torres):
+        # El toggle que QUEDA (#153 pintura aeronáutica) sigue funcionando.
+        oc = ObraCivilTorre.objects.create(
+            proyecto=proyecto, torre=torres[0], aplica_pintura_aeronautica=True)
+        url = reverse("construccion:obra_civil_aplica_update",
+                      kwargs={"proyecto_id": proyecto.id, "torre_id": torres[0].id})
+        resp = admin_client.post(url, {
+            "campo": "aplica_pintura_aeronautica", "aplica": "0"})
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
         oc.refresh_from_db()
-        assert oc.aplica_obras_proteccion is False
+        assert oc.aplica_pintura_aeronautica is False
 
     def test_aplica_update_campo_no_permitido(self, admin_client, proyecto, torres):
         ObraCivilTorre.objects.create(proyecto=proyecto, torre=torres[0])
@@ -281,27 +320,26 @@ class TestAplicaObrasProteccion:
 
 @pytest.mark.django_db
 class TestObrasProteccionFiltro149:
-    """#149 (rebote): el listado de Obras de Protección solo mostraba la torre 1
-    porque el filtro INNER JOIN excluía torres sin fila ObraCivilTorre."""
+    """#149 (bounce=5, HITL): el listado de Obras de Protección lista TODAS las
+    torres aplicables (gobernadas por torre.aplica), sin el filtro por-torre."""
 
-    def test_listado_crea_oc_y_muestra_todas(self, admin_client, proyecto, torres,
-                                             sqlite_regexp_replace):
-        # NINGUNA torre tiene ObraCivilTorre al entrar (caso del cliente).
-        assert ObraCivilTorre.objects.count() == 0
+    def test_listado_muestra_todas_las_torres_aplicables(
+            self, admin_client, proyecto, torres, sqlite_regexp_replace):
+        # NINGUNA torre tiene ObraCivilTorre al entrar (caso del cliente): todas
+        # aplican (torre.aplica=True por default) → todas deben listarse.
         url = reverse("construccion:trinchos_cunetas",
                       kwargs={"proyecto_id": proyecto.id})
         resp = admin_client.get(url)
         assert resp.status_code == 200
-        # Se crea una fila por torre (idempotente, default aplica=True = opt-out).
-        assert ObraCivilTorre.objects.filter(proyecto=proyecto).count() == len(torres)
-        # Y todas las torres quedan disponibles (antes solo aparecía 1).
         ids = {t.id for t in resp.context["torres_disponibles"]}
         for t in torres:
             assert t.id in ids
+        assert resp.context["total_torres"] == len(torres)
 
-    def test_listado_excluye_torre_desmarcada(self, admin_client, proyecto, torres,
-                                              sqlite_regexp_replace):
-        # Marcar una torre como NO aplica → no aparece; las demás sí (opt-out).
+    def test_listado_muestra_torre_con_flag_por_torre_false(
+            self, admin_client, proyecto, torres, sqlite_regexp_replace):
+        # Dato legacy: una torre con aplica_obras_proteccion=False (antes oculta)
+        # AHORA aparece, porque el flag por-torre ya no gobierna el listado.
         ObraCivilTorre.objects.create(
             proyecto=proyecto, torre=torres[0], aplica_obras_proteccion=False)
         url = reverse("construccion:trinchos_cunetas",
@@ -309,5 +347,6 @@ class TestObrasProteccionFiltro149:
         resp = admin_client.get(url)
         assert resp.status_code == 200
         ids = {t.id for t in resp.context["torres_disponibles"]}
-        assert torres[0].id not in ids
+        assert torres[0].id in ids, (
+            "Torre con flag por-torre=False DEBE aparecer (filtro eliminado).")
         assert torres[1].id in ids

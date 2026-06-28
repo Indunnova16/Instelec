@@ -215,17 +215,21 @@ class TestDashboardSemanaDelete:
 @pytest.mark.django_db
 class TestDashboardChartData:
     def test_devuelve_3_arrays(self, admin_client, proyecto):
+        # #122 Fase 2: la fase OOCC del endpoint pasó a servir el conteo de torres
+        # por fechas reales (no DashboardAvanceSemanal) — ver DashboardChartDataView.
+        # El path de DashboardAvanceSemanal (labels/planeado/ejecutado) sigue vigente
+        # para MONTAJE/TENDIDO; este test valida ese contrato con MONTAJE.
         DashboardAvanceSemanal.objects.create(
-            proyecto=proyecto, fase='OOCC', semana=date(2026, 1, 5),
+            proyecto=proyecto, fase='MONTAJE', semana=date(2026, 1, 5),
             torres_programadas_semana=2, torres_construidas_semana=1,
         )
         DashboardAvanceSemanal.objects.create(
-            proyecto=proyecto, fase='OOCC', semana=date(2026, 1, 12),
+            proyecto=proyecto, fase='MONTAJE', semana=date(2026, 1, 12),
             torres_programadas_semana=2, torres_construidas_semana=2,
         )
-        recalcular_dashboard_acumulados(proyecto, 'OOCC')
+        recalcular_dashboard_acumulados(proyecto, 'MONTAJE')
         url = reverse("construccion:dashboard_chart_data", kwargs={"proyecto_id": proyecto.id})
-        resp = admin_client.get(url + "?fase=OOCC")
+        resp = admin_client.get(url + "?fase=MONTAJE")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["labels"]) == 2
