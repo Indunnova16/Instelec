@@ -29,7 +29,8 @@ class ProgramaTranselcaImporter:
 
     # Mapeo de nombres de columnas posibles a campos internos
     COLUMN_MAPPINGS = {
-        'aviso_sap': ['aviso sap', 'aviso', 'nro aviso', 'numero aviso', 'sap', 'no. aviso'],
+        'aviso_sap': ['aviso sap', 'aviso', 'nro aviso', 'numero aviso', 'sap', 'no. aviso',
+                      'avisosap', 'avísosap'],  # defensivo: plantillas viejas sin espacio o con tilde
         'linea': ['línea', 'linea', 'line', 'codigo linea', 'código línea'],
         'tipo_actividad': ['tipo actividad', 'actividad', 'tipo', 'tipo de actividad', 'descripcion actividad'],
         'mes': ['mes', 'mes programado', 'fecha programada', 'mes ejecucion'],
