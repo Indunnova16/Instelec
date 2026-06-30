@@ -1279,7 +1279,7 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
 
         # Headers
         headers = [
-            'AvísoSAP',                 # A - Aviso SAP (primer campo)
+            'Aviso SAP',                # A - Aviso SAP (primer campo)
             'Línea',                    # B
             'Torre',                    # C
             'TipoActividad',            # D
@@ -1300,7 +1300,7 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
 
         # Fila de ejemplo
         ejemplo = [
-            '4500001234',                           # AvísoSAP
+            '4500001234',                           # Aviso SAP
             'L-838',                                # Línea
             '25',                                   # Torre
             'PODA',                                 # TipoActividad
@@ -1319,7 +1319,7 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
 
         # Ajustar anchos de columna
         column_widths = {
-            'A': 14,    # AvísoSAP
+            'A': 14,    # Aviso SAP
             'B': 12,    # Línea
             'C': 8,     # Torre
             'D': 18,    # TipoActividad
@@ -1341,7 +1341,7 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
             "",
             "1. FORMATO DE COLUMNAS (en la hoja 'Programación'):",
             "",
-            "   A. AvísoSAP (Requerido):",
+            "   A. Aviso SAP (Requerido):",
             "      - Número de aviso en el sistema SAP de Transelca",
             "      - Ejemplo: 4500001234",
             "",
@@ -1395,7 +1395,7 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
             "4. NOTAS IMPORTANTES:",
             "   - No modifique los nombres de las columnas",
             "   - Use el formato de fecha especificado (YYYY-MM-DD)",
-            "   - El AvísoSAP es obligatorio en cada fila",
+            "   - El Aviso SAP es obligatorio en cada fila",
             "   - Las líneas vacías serán ignoradas",
             "   - Si hay errores, se mostrarán advertencias pero el proceso continuará",
             "",
