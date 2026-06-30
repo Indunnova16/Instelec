@@ -1049,6 +1049,7 @@ class VanoEstadoUpdateView(LoginRequiredMixin, View):
 
         nuevo_estado = request.POST.get('estado', '').strip()
         observaciones = request.POST.get('observaciones', '').strip()
+        foto = request.FILES.get('foto')
 
         if nuevo_estado not in dict(Vano.Estado.choices):
             return HttpResponse('Estado inválido', status=400)
@@ -1058,6 +1059,8 @@ class VanoEstadoUpdateView(LoginRequiredMixin, View):
         vano.fecha_marcado = timezone.now()
         if observaciones:
             vano.observaciones = observaciones
+        if foto:
+            vano.foto = foto
         vano.save()
 
         # Return updated vano partial

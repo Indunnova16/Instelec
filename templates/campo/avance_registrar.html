@@ -110,6 +110,7 @@
 
     <!-- Chart.js Script -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script>
         const estadoData = {
             'pendiente': {{ vanos_pendientes }},
@@ -119,11 +120,13 @@
             'en_espera': {{ vanos_en_espera }},
         };
 
+        Chart.register(ChartDataLabels);
+
         const ctx = document.getElementById('estadoChart').getContext('2d');
         new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['Pendiente', 'Ejecutado', 'Sin Permiso', 'No Ejecutado', 'En Espera'],
+                labels: ['Pendiente', 'Ejecutado', 'Sin Permiso', 'No Ejecutado', 'Parcial'],
                 datasets: [{
                     data: [
                         estadoData.pendiente,
@@ -158,6 +161,13 @@
                             label: function(context) {
                                 return context.label + ': ' + context.parsed + ' vanos';
                             },
+                        },
+                    },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 13 },
+                        formatter: function(value) {
+                            return value > 0 ? value : '';
                         },
                     },
                 },

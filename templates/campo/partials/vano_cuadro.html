@@ -35,8 +35,19 @@
         <form hx-post="{% url 'campo:vano_estado' vano.id %}"
             hx-target="#vano-{{ vano.id }}"
             hx-swap="outerHTML"
+            hx-encoding="multipart/form-data"
+            enctype="multipart/form-data"
             @submit="showMenu = null">
             {% csrf_token %}
+
+            <div class="px-2 pt-2 space-y-2">
+                <textarea name="observaciones"
+                    rows="2"
+                    placeholder="Nota (opcional)"
+                    class="w-full text-xs rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+                <input type="file" name="foto" accept="image/*"
+                    class="w-full text-xs text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200">
+            </div>
 
             <div class="space-y-1 p-2">
                 {% for value, label in vano.Estado.choices %}

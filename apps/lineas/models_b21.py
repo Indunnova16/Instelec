@@ -112,7 +112,7 @@ class VanoSemestre(BaseModel):
         EJECUTADO = 'ejecutado', 'Ejecutado'
         SIN_PERMISO = 'sin_permiso', 'Sin Permiso'
         NO_EJECUTADO = 'no_ejecutado', 'No Ejecutado'
-        EN_ESPERA = 'en_espera', 'En Espera'
+        EN_ESPERA = 'en_espera', 'Parcial'
 
     vano = models.ForeignKey(
         'lineas.Vano',
