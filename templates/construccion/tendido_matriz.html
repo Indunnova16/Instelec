@@ -43,7 +43,7 @@
                 <p class="text-lg font-bold text-blue-700 dark:text-blue-300">{{ avance_general_conductor }}%</p>
             </div>
             <div class="bg-purple-50 dark:bg-purple-900/30 rounded-lg px-3 py-2 text-center">
-                <p class="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Fibra OPGW</p>
+                <p class="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Cable de guarda</p>
                 <p class="text-lg font-bold text-purple-700 dark:text-purple-300">{{ avance_general_fibra }}%</p>
             </div>
         </div>
@@ -75,10 +75,10 @@
             </div>
         </div>
 
-        <!-- Fibra OPGW -->
+        <!-- Cable de guarda -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-3">
             <div class="flex items-center justify-between mb-2">
-                <h3 class="font-semibold text-sm">Pesos Fibra OPGW (suma=100)</h3>
+                <h3 class="font-semibold text-sm">Pesos Cable de guarda (suma=100)</h3>
                 <div class="flex items-center gap-2">
                     <span class="text-xs"
                           :class="sumaFibra === 100 ? 'text-green-600' : 'text-red-600'"
@@ -90,11 +90,11 @@
                 </div>
             </div>
             <div class="grid grid-cols-3 gap-2 text-xs">
-                <label class="flex flex-col"><span class="text-gray-500">Manila fibra</span><input type="number" min="0" max="100" x-model.number="pesosFibra.riega_manila_fibra" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
-                <label class="flex flex-col"><span class="text-gray-500">Guaya OPGW</span><input type="number" min="0" max="100" x-model.number="pesosFibra.riega_guaya_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
-                <label class="flex flex-col"><span class="text-gray-500">Tendido OPGW</span><input type="number" min="0" max="100" x-model.number="pesosFibra.tendido_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
-                <label class="flex flex-col"><span class="text-gray-500">Grapado fibra</span><input type="number" min="0" max="100" x-model.number="pesosFibra.grapado_fibra" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
-                <label class="flex flex-col"><span class="text-gray-500">Empalmes OPGW</span><input type="number" min="0" max="100" x-model.number="pesosFibra.empalmes_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Manila cable guarda</span><input type="number" min="0" max="100" x-model.number="pesosFibra.riega_manila_fibra" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Guaya cable guarda</span><input type="number" min="0" max="100" x-model.number="pesosFibra.riega_guaya_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Tendido cable guarda</span><input type="number" min="0" max="100" x-model.number="pesosFibra.tendido_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Grapado cable guarda</span><input type="number" min="0" max="100" x-model.number="pesosFibra.grapado_fibra" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
+                <label class="flex flex-col"><span class="text-gray-500">Empalmes cable guarda</span><input type="number" min="0" max="100" x-model.number="pesosFibra.empalmes_opgw" class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"></label>
             </div>
         </div>
     </div>
@@ -115,10 +115,9 @@
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-blue-50 dark:bg-blue-900/30">% Cond.</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (C)</th>
                         <th rowspan="2" class="px-1 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700" title="Vestida fibra">VestF</th>
-                        <th colspan="5" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Fibra OPGW</th>
-                        <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-purple-50 dark:bg-purple-900/30">% Fibra</th>
-                        <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (F)</th>
-                        <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Detalle</th>
+                        <th colspan="5" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Cable de guarda</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-purple-50 dark:bg-purple-900/30">% C. guarda</th>
+                        <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (CG)</th>
                     </tr>
                     <tr>
                         {% for slug, label in columnas_conductor %}
@@ -150,7 +149,11 @@
                             empalmes_opgw: {% if fila.empalmes_opgw %}true{% else %}false{% endif %}
                         })'
                         class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not fila.torre.aplica %} opacity-50{% endif %}">
-                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">{{ fila.torre.numero_display }}</td>
+                        {# #147: columna Torre clickeable al detalle (circuitos/fases/tandas) — reemplaza la columna Detalle/Editar eliminada #}
+                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">
+                            <a href="{% url 'construccion:tendido_torre' proyecto.id fila.torre.id %}"
+                               class="hover:underline{% if not fila.torre.aplica %} text-red-600{% else %} text-blue-600 dark:text-blue-400{% endif %}">{{ fila.torre.numero_display }}</a>
+                        </td>
                         <td class="px-2 py-1 text-center align-middle">
                             {% include "construccion/_toggle_aplica_torre.html" %}
                         </td>
@@ -180,13 +183,6 @@
                             <input type="text" value="{{ fila.realizo_fibra }}"
                                    @change="actualizarRealizo('fibra', $event.target.value)"
                                    class="w-24 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                        </td>
-                        {# #147: link al detalle por torre (circuitos/fases/tandas) — antes la matriz no permitía entrar #}
-                        <td class="px-2 py-1 text-center border-l border-gray-200 dark:border-gray-700">
-                            <a href="{% url 'construccion:tendido_torre' proyecto.id fila.torre.id %}"
-                               class="text-blue-600 hover:underline text-xs font-medium whitespace-nowrap">
-                                <i class="bi bi-pencil-square"></i> Editar
-                            </a>
                         </td>
                     </tr>
                     {% empty %}

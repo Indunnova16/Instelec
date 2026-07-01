@@ -11,12 +11,11 @@ así el flag sirve a los 3 bloques. Requiere `proyecto` y `fila.torre` en el con
          csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
          aplica: {% if fila.torre.aplica %}true{% else %}false{% endif %}
      })'>
-    <label class="text-[10px] font-semibold flex items-center gap-1 justify-center"
+    <label class="flex items-center justify-center"
            :class="aplica ? 'text-gray-700' : 'text-red-600'">
         <input type="checkbox" x-model="aplica" @change="guardar('aplica', aplica)"
                data-toggle-aplica="aplica" data-torre="{{ fila.torre.id }}"
                class="rounded border-gray-300">
-        <span x-text="aplica ? 'Aplica' : 'NO aplica'"></span>
     </label>
     <span x-show="mensajeAplica" x-text="mensajeAplica"
           :class="mensajeAplicaTipo === 'error' ? 'text-red-600 text-[10px]' : 'text-green-600 text-[10px]'"></span>
