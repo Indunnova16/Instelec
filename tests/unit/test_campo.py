@@ -401,3 +401,223 @@ class TestDetalleDanoFotoDefensiva:
         assert response.status_code == 200
         html = response.content.decode()
         assert "Fotografías" not in html
+
+
+# ==============================================================================
+# Issue #175 — A4: mapa de reportes de daño filtrable (feature nueva)
+# ==============================================================================
+
+
+@pytest.mark.django_db
+class TestReportesDanoMapaDataView:
+    """A4 (#175): endpoint JSON `campo:reportes_dano_mapa_data` -- pines de
+    reportes de daño con coordenadas, filtrable por línea/severidad/tipo
+    (mismos filtros que ReportesDanoListView). Excluye reportes sin GPS.
+    """
+
+    def test_happy_path_tres_reportes_tres_pines(self, client, user_password):
+        """3 ReporteDano con lat/long distintas -> 3 pines en la respuesta."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        for i in range(3):
+            ReporteDanoFactory(
+                usuario=usuario,
+                latitud=Decimal(f"1{i}.00000000"),
+                longitud=Decimal(f"-7{i}.00000000"),
+            )
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reportes"]) == 3
+        for rep in data["reportes"]:
+            assert "lat" in rep and "lng" in rep
+            assert "severidad_display" in rep
+            assert "tipo_dano_display" in rep
+            assert "detalle_url" in rep
+
+    def test_filtro_por_linea(self, client, user_password):
+        """Filtro por línea devuelve solo los reportes de esa línea."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory, LineaFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        linea_a = LineaFactory()
+        linea_b = LineaFactory()
+        ReporteDanoFactory(usuario=usuario, linea=linea_a)
+        ReporteDanoFactory(usuario=usuario, linea=linea_a)
+        ReporteDanoFactory(usuario=usuario, linea=linea_b)
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, {"linea": str(linea_a.id)}, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reportes"]) == 2
+        assert all(r["linea_codigo"] == linea_a.codigo for r in data["reportes"])
+
+    def test_filtro_por_severidad(self, client, user_password):
+        """Filtro por severidad devuelve solo los reportes con esa severidad."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        ReporteDanoFactory(usuario=usuario, severidad="CRITICA")
+        ReporteDanoFactory(usuario=usuario, severidad="CRITICA")
+        ReporteDanoFactory(usuario=usuario, severidad="BAJA")
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, {"severidad": "CRITICA"}, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reportes"]) == 2
+        assert all(r["severidad"] == "CRITICA" for r in data["reportes"])
+
+    def test_filtro_por_tipo(self, client, user_password):
+        """Filtro por tipo de daño devuelve solo los reportes de ese tipo."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        ReporteDanoFactory(usuario=usuario, tipo_dano="VANDALISMO")
+        ReporteDanoFactory(usuario=usuario, tipo_dano="ESTRUCTURAL")
+        ReporteDanoFactory(usuario=usuario, tipo_dano="ESTRUCTURAL")
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, {"tipo": "ESTRUCTURAL"}, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reportes"]) == 2
+        assert all(r["tipo_dano"] == "ESTRUCTURAL" for r in data["reportes"])
+
+    def test_edge_reporte_sin_coordenadas_excluido(self, client, user_password):
+        """Reporte con latitud/longitud NULL no debe aparecer en el mapa."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        ReporteDanoFactory(usuario=usuario, latitud=None, longitud=None)
+        con_gps = ReporteDanoFactory(usuario=usuario)
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reportes"]) == 1
+        assert data["reportes"][0]["id"] == str(con_gps.pk)
+
+    def test_edge_reporte_sin_fotos_foto_url_null(self, client, user_password):
+        """Reporte sin fotos: foto_url debe ser null, sin romper la respuesta."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        ReporteDanoFactory(usuario=usuario)
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reportes"]) == 1
+        assert data["reportes"][0]["foto_url"] is None
+
+    def test_registro_legacy_marzo_incluido(self, client, user_password):
+        """El registro legacy (creado antes del cambio, con fecha vieja)
+        también debe pinearse -- no solo los datos nuevos de fixtures."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        legacy = ReporteDanoFactory(usuario=usuario)
+        legacy.created_at = timezone.make_aware(timezone.datetime(2026, 3, 31, 10, 0, 0))
+        legacy.save(update_fields=["created_at"])
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reportes"]) == 1
+        assert data["reportes"][0]["id"] == str(legacy.pk)
+
+    def test_permisos_rol_no_permitido_403(self, client, user_password):
+        """Rol fuera de allowed_roles (ej. auxiliar) recibe 403, igual que
+        ReportesDanoListView (mismo esquema RoleRequiredMixin)."""
+        from tests.factories import UsuarioFactory
+
+        usuario = UsuarioFactory(rol="auxiliar")
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 403
+
+    def test_anonimo_redirige_a_login(self, client):
+        """Usuario no autenticado es redirigido a login."""
+        url = reverse("campo:reportes_dano_mapa_data")
+        response = client.get(url)
+
+        assert response.status_code == 302
+        assert "login" in response.url
+
+
+@pytest.mark.django_db
+class TestReportesDanoMapaView:
+    """A4 (#175): vista HTML `campo:reportes_dano_mapa` (template + filtros)."""
+
+    def test_pagina_carga_ok(self, client, user_password):
+        """La página del mapa carga con 200 y expone lineas/tipos/severidades."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        ReporteDanoFactory(usuario=usuario)
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:reportes_dano_mapa")
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "Mapa de Reportes de Daño" in html
+
+    def test_permisos_rol_no_permitido_403(self, client, user_password):
+        """Rol fuera de allowed_roles recibe 403."""
+        from tests.factories import UsuarioFactory
+
+        usuario = UsuarioFactory(rol="auxiliar")
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:reportes_dano_mapa")
+        response = client.get(url)
+
+        assert response.status_code == 403
+
+    def test_link_ver_en_mapa_desde_lista_danos(self, client, user_password):
+        """La lista de reportes de daño debe tener un link de entrada al mapa."""
+        from tests.factories import LinieroFactory
+
+        usuario = LinieroFactory()
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:reportes_dano")
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert reverse("campo:reportes_dano_mapa") in html
