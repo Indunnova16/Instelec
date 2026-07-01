@@ -1,11 +1,15 @@
-"""Tests #147 — Tendido items 9/10/11 (feature).
+"""Tests #147 — Tendido: items 9/10/11 (protecciones/regulación/riega) +
+rediseño 2026-07-01 (mockup Gabriel Valencia, 2026-06-29): 1 torre = 1 tiro.
 
 - Item 9: protecciones con "No aplica" (protecciones_no_aplica gana sobre
   protecciones_ok en form_valid).
-- Item 10: fecha_riega_manila (cabecera) + modelo hijo RiegaManilaTiro por tiros
-  (F.T = flecha de tendido).
 - Item 11: regulación/flechado por circuito (c1/c2/guarda); regulacion_flechado_ok
   legacy se conserva; si C2 no aplica se limpia regulacion_flechado_c2.
+- Rediseño A1-A9: el formset dinámico `RiegaManilaTiro` (botón "+ Agregar
+  tiro") se elimina de la UI — reemplazado por `FaseTorre.numero_tiro`
+  editable + `FaseTorre.ft931_ok`. `RiegaManilaTiro` (tabla) sigue viva como
+  legacy de solo-lectura (backfill migración 0041) para no perder el
+  histórico de F.T (`flecha_tendido_m`).
 """
 
 from datetime import date
@@ -53,19 +57,19 @@ def _tendido_url(proyecto, torre):
     )
 
 
+def _matriz_url(proyecto):
+    return reverse("construccion:tendido_lista", kwargs={"proyecto_id": proyecto.id})
+
+
 def _base_post():
-    """POST mínimo con el management_form vacío del formset de tiros."""
+    """POST mínimo del form de Tendido (#147 rediseño: sin formset de tiros)."""
     return {
         "circuito_2_aplica": "on",
-        "tiros_manila-TOTAL_FORMS": "0",
-        "tiros_manila-INITIAL_FORMS": "0",
-        "tiros_manila-MIN_NUM_FORMS": "0",
-        "tiros_manila-MAX_NUM_FORMS": "1000",
     }
 
 
 # ===========================================================================
-# 1. Modelo: campos nuevos + RiegaManilaTiro
+# 1. Modelo: campos nuevos (numero_tiro, ft931_ok) + RiegaManilaTiro legacy
 # ===========================================================================
 
 
@@ -83,10 +87,16 @@ def test_fasetorre_campos_nuevos_default(torre_i147):
     assert fase.regulacion_flechado_guarda_ok is False
     # legacy conservado
     assert hasattr(fase, "regulacion_flechado_ok")
+    # #147 rediseño: 1 torre = 1 tiro
+    assert fase.numero_tiro is None
+    assert fase.ft931_ok is False
 
 
 @pytest.mark.django_db
 def test_riega_manila_tiro_ordering_y_unique(torre_i147):
+    """RiegaManilaTiro (tabla legacy, ya no expuesta en UI) conserva su
+    integridad — sigue viva de solo-lectura para no perder el histórico
+    de F.T (ver migración 0041 backfill)."""
     from django.db import IntegrityError, transaction
 
     from apps.construccion.models import FaseTorre, RiegaManilaTiro
@@ -102,8 +112,47 @@ def test_riega_manila_tiro_ordering_y_unique(torre_i147):
             RiegaManilaTiro.objects.create(fase=fase, numero_tiro=1)
 
 
+@pytest.mark.django_db
+def test_backfill_numero_tiro_desde_legacy_toma_el_minimo(torre_i147):
+    """Migración 0041: backfill_numero_tiro() puebla FaseTorre.numero_tiro
+    con el MÍNIMO de sus RiegaManilaTiro legacy (caso real: torre con >1 fila
+    histórica en la tabla vieja). Llama la función de la migración directo
+    (usa solo apps.get_model, no schema_editor) contra los modelos reales."""
+    from django.apps import apps as real_apps
+
+    from apps.construccion.migrations import (
+        __path__ as _,  # noqa: F401  (asegura el paquete importable)
+    )
+    from apps.construccion.models import FaseTorre, RiegaManilaTiro
+    from importlib import import_module
+
+    backfill = import_module(
+        "apps.construccion.migrations.0041_tiro_unico_ft931"
+    ).backfill_numero_tiro
+
+    fase_con_tiros = FaseTorre.objects.create(torre=torre_i147, proyecto=torre_i147.proyecto)
+    RiegaManilaTiro.objects.create(fase=fase_con_tiros, numero_tiro=5, flecha_tendido_m=1.0)
+    RiegaManilaTiro.objects.create(fase=fase_con_tiros, numero_tiro=2, flecha_tendido_m=2.0)
+
+    from apps.construccion.models import TorreConstruccion
+
+    torre_sin_tiros = TorreConstruccion.objects.create(
+        proyecto=torre_i147.proyecto, numero="43", tipo="D6"
+    )
+    fase_sin_tiros = FaseTorre.objects.create(
+        torre=torre_sin_tiros, proyecto=torre_i147.proyecto
+    )
+
+    backfill(real_apps, None)
+
+    fase_con_tiros.refresh_from_db()
+    fase_sin_tiros.refresh_from_db()
+    assert fase_con_tiros.numero_tiro == 2, "toma el MÍNIMO de los tiros legacy"
+    assert fase_sin_tiros.numero_tiro is None, "sin tiros legacy, numero_tiro queda NULL"
+
+
 # ===========================================================================
-# 2. View POST: protecciones N/A + tiros
+# 2. View POST: numero_tiro, ft931_ok, protecciones N/A, circuito 2
 # ===========================================================================
 
 
@@ -133,54 +182,39 @@ def test_post_protecciones_no_aplica_gana(authenticated_client, proyecto_i147, t
 
 
 @pytest.mark.django_db
-def test_post_crea_dos_tiros(authenticated_client, proyecto_i147, torre_i147):
-    """POST con 2 filas de tiros crea 2 RiegaManilaTiro en DB."""
-    from apps.construccion.models import FaseTorre, RiegaManilaTiro
-
-    url = _tendido_url(proyecto_i147, torre_i147)
-    data = _base_post()
-    data.update(
-        {
-            "tiros_manila-TOTAL_FORMS": "2",
-            "tiros_manila-0-numero_tiro": "1",
-            "tiros_manila-0-fecha": "2026-06-10",
-            "tiros_manila-0-flecha_tendido_m": "10.5",
-            "tiros_manila-0-observaciones": "tiro uno",
-            "tiros_manila-1-numero_tiro": "2",
-            "tiros_manila-1-fecha": "2026-06-11",
-            "tiros_manila-1-flecha_tendido_m": "11.0",
-            "tiros_manila-1-observaciones": "tiro dos",
-        }
-    )
-    resp = authenticated_client.post(url, data)
-    assert resp.status_code in (200, 302), resp.content[:600]
-
-    fase = FaseTorre.objects.get(torre=torre_i147)
-    tiros = list(fase.tiros_manila.all())
-    assert len(tiros) == 2, [t.numero_tiro for t in tiros]
-    assert {t.numero_tiro for t in tiros} == {1, 2}
-    assert RiegaManilaTiro.objects.filter(fase=fase, flecha_tendido_m=10.5).exists()
-
-
-@pytest.mark.django_db
-def test_post_tiro_sin_numero_autoasigna(authenticated_client, proyecto_i147, torre_i147):
-    """numero_tiro vacío → autoasigna max+1 (empieza en 1)."""
+def test_post_numero_tiro_editable(authenticated_client, proyecto_i147, torre_i147):
+    """#147 rediseño: N° de tiro es un campo editable simple (no un formset)."""
     from apps.construccion.models import FaseTorre
 
     url = _tendido_url(proyecto_i147, torre_i147)
     data = _base_post()
-    data.update(
-        {
-            "tiros_manila-TOTAL_FORMS": "1",
-            "tiros_manila-0-numero_tiro": "",  # vacío
-            "tiros_manila-0-flecha_tendido_m": "7.0",
-        }
-    )
+    data.update({"numero_tiro": "4"})
+    resp = authenticated_client.post(url, data)
+    assert resp.status_code in (200, 302), resp.content[:600]
+
+    fase = FaseTorre.objects.get(torre=torre_i147)
+    assert fase.numero_tiro == 4
+
+
+@pytest.mark.django_db
+def test_post_ft931_ok_persiste(authenticated_client, proyecto_i147, torre_i147):
+    """Campo nuevo FT-931 (pedido explícito del meeting 23/06): se guarda al marcar
+    y se limpia al desmarcar."""
+    from apps.construccion.models import FaseTorre
+
+    url = _tendido_url(proyecto_i147, torre_i147)
+    data = _base_post()
+    data.update({"ft931_ok": "on"})
     resp = authenticated_client.post(url, data)
     assert resp.status_code in (200, 302), resp.content[:600]
     fase = FaseTorre.objects.get(torre=torre_i147)
-    nums = list(fase.tiros_manila.values_list("numero_tiro", flat=True))
-    assert nums == [1], f"autoasignar a 1, fue {nums}"
+    assert fase.ft931_ok is True
+
+    # desmarcado (ausente del POST) -> False
+    resp2 = authenticated_client.post(url, _base_post())
+    assert resp2.status_code in (200, 302)
+    fase.refresh_from_db()
+    assert fase.ft931_ok is False
 
 
 @pytest.mark.django_db
@@ -210,7 +244,7 @@ def test_post_circuito2_no_aplica_limpia_regulacion_c2(
 
 
 # ===========================================================================
-# 3. Render del detalle muestra los campos nuevos
+# 3. Render del detalle: campos nuevos, labels renombrados, botón eliminado
 # ===========================================================================
 
 
@@ -224,245 +258,71 @@ def test_render_incluye_campos_nuevos(authenticated_client, proyecto_i147, torre
         'name="protecciones_no_aplica"',
         'name="protecciones_ok"',
         'name="fecha_riega_manila"',
-        "data-tiros-manila",
+        'name="numero_tiro"',
+        'name="ft931_ok"',
         'name="regulacion_flechado_c1_ok"',
         'name="regulacion_flechado_c2_ok"',
         'name="regulacion_flechado_guarda_ok"',
     ):
         assert needle in body, f"falta {needle} en el render"
-    # textos que el journey espera
     assert "riega de manila" in body.lower()
-    assert "F.T" in body
 
 
 @pytest.mark.django_db
-def test_render_incluye_boton_agregar_tiro(authenticated_client, proyecto_i147, torre_i147):
-    """#147 UI: el detalle de tendido renderiza el botón dinámico
-    [data-add-tiro] + la plantilla empty_form (placeholder __prefix__) para
-    que el cliente pueda agregar tiros (síntoma original: solo 'Quitar')."""
+def test_render_boton_agregar_tiro_no_existe(authenticated_client, proyecto_i147, torre_i147):
+    """#147 rediseño (pedido explícito 2026-06-29): el número de tiros es fijo
+    por torre (1); el botón dinámico '+ Agregar tiro' y su formset se eliminan."""
     url = _tendido_url(proyecto_i147, torre_i147)
     resp = authenticated_client.get(url)
     assert resp.status_code == 200, resp.content[:600]
     body = resp.content.decode()
-    # botón con selector contractual del E2E
-    assert "data-add-tiro" in body, "falta el botón '+ Agregar tiro'"
-    assert "Agregar tiro" in body
-    # plantilla oculta con el empty_form (placeholder __prefix__)
-    assert "__prefix__" in body, "falta la plantilla empty_form clonable"
-    assert 'name="tiros_manila-__prefix__-flecha_tendido_m"' in body
-    # componente Alpine registrado + management_form presente
-    assert "Alpine.data('tirosManila'" in body
-    assert "id_tiros_manila-TOTAL_FORMS" in body
+    assert "data-add-tiro" not in body, "el botón '+ Agregar tiro' debe haberse eliminado"
+    assert "Agregar tiro" not in body
+    assert "tiros_manila-TOTAL_FORMS" not in body, "el formset dinámico ya no se renderiza"
+    assert "tirosManila" not in body, "el componente Alpine del formset ya no se registra"
 
 
 @pytest.mark.django_db
-def test_render_total_forms_cuenta_la_fila_extra(authenticated_client, proyecto_i147, torre_i147):
-    """Con 0 tiros guardados, el formset (extra=1) rinde 1 fila editable y
-    TOTAL_FORMS=1 → tras 1 click de 'Agregar tiro' el JS añade el índice 1
-    (tiros_manila-1-*) y deja TOTAL_FORMS=2, como espera el journey."""
-    url = _tendido_url(proyecto_i147, torre_i147)
-    resp = authenticated_client.get(url)
-    body = resp.content.decode()
-    # management_form TOTAL_FORMS = INITIAL(0) + extra(1) = 1
-    assert 'name="tiros_manila-TOTAL_FORMS" value="1"' in body, (
-        "TOTAL_FORMS inicial debe contar la fila extra editable"
-    )
-    # la fila extra (índice 0) es editable de entrada
-    assert 'name="tiros_manila-0-flecha_tendido_m"' in body
-
-
-# ===========================================================================
-# 4. UI: consistencia visual del control "Quitar" (fix vigente del bounce #147)
-# ===========================================================================
-
-
-@pytest.mark.django_db
-def test_quitar_ui_consistente_fila_guardada(authenticated_client, proyecto_i147, torre_i147):
-    """#147 (fix visual): una fila YA guardada NO debe mostrar el checkbox DELETE
-    crudo + label 'Quitar'; debe mostrar el MISMO botón rojo 'Quitar' que las
-    filas nuevas, con el checkbox DELETE oculto que ese botón togglea.
-
-    Síntoma (oráculo att_07): fila guardada = checkbox + 'Quitar' gris; fila
-    nueva = botón texto rojo. El fix unifica ambos al botón rojo."""
-    from apps.construccion.models import FaseTorre, RiegaManilaTiro
-
-    # crear una fila guardada (legacy) para que se renderice como INITIAL_FORMS=1
-    fase = FaseTorre.objects.create(torre=torre_i147, proyecto=torre_i147.proyecto)
-    RiegaManilaTiro.objects.create(fase=fase, numero_tiro=1, flecha_tendido_m=9.5)
-
-    url = _tendido_url(proyecto_i147, torre_i147)
-    resp = authenticated_client.get(url)
-    assert resp.status_code == 200, resp.content[:600]
-    body = resp.content.decode()
-
-    # el checkbox DELETE de la fila guardada existe pero va OCULTO (envuelto en
-    # un contenedor .hidden con data-tiro-delete-saved)
-    assert "data-tiro-delete-saved" in body, "falta el wrapper del DELETE oculto"
-    assert 'name="tiros_manila-0-DELETE"' in body, (
-        "el checkbox DELETE del formset debe seguir presente (semántica can_delete)"
-    )
-    # el control visible de la fila guardada es el MISMO botón rojo de las nuevas
-    assert "quitarFilaGuardada($event)" in body, (
-        "la fila guardada debe usar el botón rojo que togglea el DELETE oculto"
-    )
-    # el wrapper oculto envuelve el checkbox (clase hidden + el DELETE adentro)
-    assert '<span class="hidden" data-tiro-delete-saved>' in body, (
-        "el checkbox DELETE de la fila guardada debe ir oculto"
-    )
-    # botón rojo presente con el mismo styling text-red-600 que las filas nuevas
-    assert "data-remove-tiro" in body
-    assert "text-red-600" in body
-
-
-# ===========================================================================
-# 5. BLINDAJE de persistencia (directiva Miguel, bounce x4 — red de seguridad)
-#    Si la persistencia se rompiera, este test debe atraparlo en el gate.
-# ===========================================================================
-
-
-@pytest.mark.django_db
-def test_persistencia_blindaje_dos_tiros_recarga(authenticated_client, proyecto_i147, torre_i147):
-    """RED DE SEGURIDAD: POST de ≥2 tiros via formset -> guardar -> re-query a
-    construccion_riega_manila_tiro -> assert COUNT == esperado. Recargar el GET
-    (simula el reload del cliente) y verificar que las filas siguen renderizando.
-
-    Blinda el flujo que el cliente reportó como roto ('si actualizo se borran
-    los datos'); la persistencia YA funciona en prod (rev 00173-cax), este test
-    evita que un cambio futuro la rompa sin ser detectado."""
-    from django.db import connection
-
-    from apps.construccion.models import FaseTorre, RiegaManilaTiro
-
-    url = _tendido_url(proyecto_i147, torre_i147)
-    data = _base_post()
-    data.update(
-        {
-            "tiros_manila-TOTAL_FORMS": "2",
-            "tiros_manila-0-numero_tiro": "1",
-            "tiros_manila-0-fecha": "2026-06-10",
-            "tiros_manila-0-flecha_tendido_m": "10.5",
-            "tiros_manila-0-observaciones": "tiro uno",
-            "tiros_manila-1-numero_tiro": "2",
-            "tiros_manila-1-fecha": "2026-06-11",
-            "tiros_manila-1-flecha_tendido_m": "11.0",
-            "tiros_manila-1-observaciones": "tiro dos",
-        }
-    )
-    resp = authenticated_client.post(url, data)
-    assert resp.status_code in (200, 302), resp.content[:600]
-
-    fase = FaseTorre.objects.get(torre=torre_i147)
-
-    # (a) COUNT via ORM re-query
-    assert RiegaManilaTiro.objects.filter(fase=fase).count() == 2, (
-        "los 2 tiros deben persistir tras guardar"
-    )
-
-    # (b) COUNT directo contra la TABLA física (nombre que cita Miguel).
-    #     Se prepara el valor del PK con el MISMO conversor del UUIDField del
-    #     backend (NO str(pk)): en Postgres queda uuid nativo y en sqlite el hex
-    #     sin guiones, de modo que el binding del raw SQL es robusto en ambos.
-    fase_id_param = FaseTorre._meta.pk.get_db_prep_value(fase.pk, connection)
-    with connection.cursor() as cur:
-        cur.execute(
-            "SELECT COUNT(*) FROM construccion_riega_manila_tiro WHERE fase_id = %s",
-            [fase_id_param],
-        )
-        count_tabla = cur.fetchone()[0]
-    assert count_tabla == 2, (
-        f"construccion_riega_manila_tiro debe tener 2 filas, tiene {count_tabla}"
-    )
-
-    # (c) recarga del GET (el reload del cliente) sigue mostrando las filas
-    resp2 = authenticated_client.get(url)
-    body = resp2.content.decode()
-    assert 'value="10.5"' in body, "tiro 1 sobrevive a la recarga"
-    assert 'value="11.0"' in body, "tiro 2 sobrevive a la recarga"
-
-
-@pytest.mark.django_db
-def test_persistencia_blindaje_agrega_a_legacy_existente(
+def test_render_labels_renombrados_cable_de_guarda_y_fases(
     authenticated_client, proyecto_i147, torre_i147
 ):
-    """RED DE SEGURIDAD + dato LEGACY: con 1 tiro pre-existente (INITIAL_FORMS=1),
-    agregar 2 nuevos -> COUNT debe ser 3 (el legacy sobrevive + 2 nuevos). Atrapa
-    una regresión que perdiera los tiros guardados al editar."""
-    from apps.construccion.models import FaseTorre, RiegaManilaTiro
-
-    # registro LEGACY pre-existente (no fixture del POST)
-    fase = FaseTorre.objects.create(torre=torre_i147, proyecto=torre_i147.proyecto)
-    legacy = RiegaManilaTiro.objects.create(
-        fase=fase, numero_tiro=1, flecha_tendido_m=5.5, observaciones="legacy"
-    )
-
+    """#147 rediseño: OPGW → 'Cable de guarda' y Fase A/B/C → Fase 1/2/3
+    (renombrado visual, los nombres de campo Python NO cambian)."""
     url = _tendido_url(proyecto_i147, torre_i147)
-    data = _base_post()
-    # INITIAL_FORMS=1 (la fila legacy) + 2 nuevas
-    data.update(
-        {
-            "tiros_manila-INITIAL_FORMS": "1",
-            "tiros_manila-TOTAL_FORMS": "3",
-            # fila 0 = el registro legacy (se reenvía con su pk + datos actuales)
-            "tiros_manila-0-id": str(legacy.pk),
-            "tiros_manila-0-numero_tiro": "1",
-            "tiros_manila-0-flecha_tendido_m": "5.5",
-            "tiros_manila-0-observaciones": "legacy",
-            # filas nuevas
-            "tiros_manila-1-numero_tiro": "2",
-            "tiros_manila-1-flecha_tendido_m": "7.0",
-            "tiros_manila-2-numero_tiro": "3",
-            "tiros_manila-2-flecha_tendido_m": "8.0",
-        }
-    )
-    resp = authenticated_client.post(url, data)
-    assert resp.status_code in (200, 302), resp.content[:600]
-
-    assert RiegaManilaTiro.objects.filter(fase=fase).count() == 3, (
-        "el legacy debe sobrevivir + 2 nuevos = 3"
-    )
-    # el legacy específico sigue ahí
-    assert RiegaManilaTiro.objects.filter(pk=legacy.pk).exists(), (
-        "el tiro legacy pre-existente NO debe borrarse al editar"
-    )
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+    assert "Cable de guarda" in body
+    assert "OPGW" not in body, "ningún texto visible debe seguir diciendo OPGW"
+    assert "Fase 1" in body
+    assert "Fase 2" in body
+    assert "Fase 3" in body
 
 
 @pytest.mark.django_db
-def test_delete_oculto_borra_fila_guardada(authenticated_client, proyecto_i147, torre_i147):
-    """El checkbox DELETE oculto que togglea el botón rojo SIGUE borrando la fila
-    al guardar (la semántica can_delete=True no se rompe con el fix visual)."""
-    from apps.construccion.models import FaseTorre, RiegaManilaTiro
-
-    fase = FaseTorre.objects.create(torre=torre_i147, proyecto=torre_i147.proyecto)
-    t1 = RiegaManilaTiro.objects.create(fase=fase, numero_tiro=1, flecha_tendido_m=9.0)
-    t2 = RiegaManilaTiro.objects.create(fase=fase, numero_tiro=2, flecha_tendido_m=9.5)
-
+def test_render_secciones_reorganizadas(authenticated_client, proyecto_i147, torre_i147):
+    """#147 rediseño: 'Regulación y flechado' ya no es una sección standalone al
+    final — vive dentro de cada circuito/cable de guarda; la sección final
+    'Cable de guarda + regulación final + cuadrilla' (con sus duplicados) se
+    elimina por completo."""
     url = _tendido_url(proyecto_i147, torre_i147)
-    data = _base_post()
-    data.update(
-        {
-            "tiros_manila-INITIAL_FORMS": "2",
-            "tiros_manila-TOTAL_FORMS": "2",
-            "tiros_manila-0-id": str(t1.pk),
-            "tiros_manila-0-numero_tiro": "1",
-            "tiros_manila-0-flecha_tendido_m": "9.0",
-            "tiros_manila-0-DELETE": "on",  # marcado por el botón rojo (toggle)
-            "tiros_manila-1-id": str(t2.pk),
-            "tiros_manila-1-numero_tiro": "2",
-            "tiros_manila-1-flecha_tendido_m": "9.5",
-        }
-    )
-    resp = authenticated_client.post(url, data)
-    assert resp.status_code in (200, 302), resp.content[:600]
-
-    assert not RiegaManilaTiro.objects.filter(pk=t1.pk).exists(), (
-        "el tiro con DELETE marcado debe borrarse"
-    )
-    assert RiegaManilaTiro.objects.filter(pk=t2.pk).exists(), "el tiro sin DELETE sobrevive"
-    assert RiegaManilaTiro.objects.filter(fase=fase).count() == 1
+    resp = authenticated_client.get(url)
+    body = resp.content.decode()
+    # la sección standalone vieja ya no existe (el nombre largo era exclusivo de ella)
+    assert "Regulación y flechado por circuito" not in body
+    # pero SÍ vive, reubicada, dentro de cada circuito/cable de guarda
+    assert "Regulación y flechado — Circuito 1" in body
+    assert "Regulación y flechado — Circuito 2" in body
+    assert "Regulación y flechado — Cable de guarda" in body
+    # cuadrilla/%tendido/%facturación/observaciones: 1 sola aparición (fusionados en Tiro)
+    assert body.count('name="cuadrilla_tendido"') == 1
+    assert body.count('name="pct_tendido"') == 1
+    assert body.count('name="pct_facturacion"') == 1
+    assert body.count('name="observaciones"') == 1
 
 
 # ===========================================================================
-# 6. #147 (rebote x5) — Tendido editable AUNQUE Montaje no marque "entrega
+# 4. #147 (rebote x5) — Tendido editable AUNQUE Montaje no marque "entrega
 #    para carga": quitar el candado de la lista + banner no-bloqueante.
 #    Decisión Miguel: editable siempre, 🔒 sobrevive como badge INFORMATIVO.
 # ===========================================================================
@@ -611,3 +471,56 @@ def test_147_entrega_carga_propaga_montaje_a_tendido(proyecto_i147, torre_i147):
     det.save()
     fase.refresh_from_db()
     assert fase.entrega_carga_ok is False
+
+
+# ===========================================================================
+# 5. CANT TENDIDO (matriz) — A6/A7/A8: renombrado, link, columna eliminada
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_matriz_renombra_fibra_opgw_a_cable_de_guarda(
+    authenticated_client, proyecto_i147, torre_i147
+):
+    """A6: 'Fibra OPGW' -> 'Cable de guarda' en los 5 puntos pedidos por el
+    cliente (KPI, panel de pesos, encabezado de grupo de columnas, columna
+    '% C. guarda', columna 'Realizó (CG)'). Los slugs/labels internos de
+    `COLUMNAS_FIBRA` (tooltips por sub-columna: Riega guaya OPGW, Tendido OPGW,
+    Empalmes OPGW) quedan fuera de scope a propósito — son internos, no parte
+    de los 5 puntos que el cliente nombró (ver PLAN_2026-07-01_147, A6)."""
+    url = _matriz_url(proyecto_i147)
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+    assert "Cable de guarda" in body
+    assert "% C. guarda" in body
+    assert "Realizó (CG)" in body
+    assert "Fibra OPGW" not in body, "el nombre de grupo/KPI/panel viejo no debe sobrevivir"
+
+
+@pytest.mark.django_db
+def test_matriz_torre_clickeable_sin_columna_detalle(
+    authenticated_client, proyecto_i147, torre_i147
+):
+    """A7: la columna Torre es un link directo al detalle; la columna
+    Detalle/Editar al extremo derecho se elimina."""
+    url = _matriz_url(proyecto_i147)
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+    detalle_url = _tendido_url(proyecto_i147, torre_i147)
+    assert f'href="{detalle_url}"' in body, "el número de torre debe linkear al detalle"
+    assert ">Detalle<" not in body, "la columna Detalle/Editar debe haberse eliminado"
+
+
+@pytest.mark.django_db
+def test_matriz_columna_aplica_solo_checkbox(authenticated_client, proyecto_i147, torre_i147):
+    """A8: la columna 'Aplica' muestra únicamente el checkbox, sin texto
+    redundante por fila (el encabezado ya comunica el concepto)."""
+    url = _matriz_url(proyecto_i147)
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+    assert 'data-toggle-aplica="aplica"' in body
+    # sin texto "Aplica"/"No aplica" repetido dentro de cada fila (solo el <th>)
+    assert body.count(">Aplica<") <= 1, "el texto 'Aplica' solo debe aparecer en el encabezado"
