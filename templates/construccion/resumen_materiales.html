@@ -39,57 +39,56 @@
     </div>
     {% endif %}
 
-    {% comment %} === Tabla: filas = torres + fila Total === {% endcomment %}
+    {% comment %}
+      === Tabla: filas = materiales, columnas = torres + Total (#154 O2) ===
+      Invertido desde la orientación original (Torre=filas/Material=columnas,
+      ~25 columnas con scroll horizontal excesivo). Ahora cada fila es UN
+      material con un valor por torre + la Σ de esa fila al final.
+    {% endcomment %}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-x-auto">
         <table class="min-w-full text-sm" data-tabla-materiales>
             <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
                 <tr>
                     <th class="px-4 py-3 text-left font-semibold sticky left-0 bg-gray-50 dark:bg-gray-700/50">
-                        Torre
+                        Material
                     </th>
-                    {% for col in resumen.columnas %}
+                    {% for torre in torres_labels %}
                     <th class="px-4 py-3 text-right font-semibold whitespace-nowrap">
-                        {{ col.label }}
-                        <span class="block text-[11px] font-normal text-gray-400 dark:text-gray-500">
-                            ({{ col.unidad }})
-                        </span>
+                        {{ torre }}
                     </th>
                     {% endfor %}
+                    <th class="px-4 py-3 text-right font-semibold whitespace-nowrap border-l-2 border-gray-300 dark:border-gray-600">
+                        Total
+                    </th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                 {% for fila in filas_tabla %}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40" data-torre-row>
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40" data-material-row>
                     <td class="px-4 py-2 font-medium text-gray-700 dark:text-gray-200 sticky left-0 bg-white dark:bg-gray-800">
-                        {{ fila.torre }}
+                        {{ fila.material }}
+                        <span class="block text-[11px] font-normal text-gray-400 dark:text-gray-500">
+                            ({{ fila.unidad }})
+                        </span>
                     </td>
                     {% for v in fila.valores %}
                     <td class="px-4 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
                         {{ v|floatformat:"2g" }}
                     </td>
                     {% endfor %}
+                    <td class="px-4 py-2 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100 border-l-2 border-gray-200 dark:border-gray-700">
+                        {{ fila.total|floatformat:"2g" }}
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="{{ resumen.columnas|length|add:1 }}"
+                    <td colspan="{{ torres_labels|length|add:2 }}"
                         class="px-4 py-6 text-center text-gray-400">
-                        No hay torres que apliquen en este proyecto.
+                        No hay materiales que mostrar en este proyecto.
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
-            {% if filas_tabla %}
-            <tfoot class="bg-gray-50 dark:bg-gray-700/50 font-bold text-gray-800 dark:text-gray-100 border-t-2 border-gray-300 dark:border-gray-600">
-                <tr data-fila-total>
-                    <td class="px-4 py-3 sticky left-0 bg-gray-50 dark:bg-gray-700/50">Total</td>
-                    {% for v in total_valores %}
-                    <td class="px-4 py-3 text-right tabular-nums">
-                        {{ v|floatformat:"2g" }}
-                    </td>
-                    {% endfor %}
-                </tr>
-            </tfoot>
-            {% endif %}
         </table>
     </div>
 

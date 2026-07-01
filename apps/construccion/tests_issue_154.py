@@ -349,3 +349,131 @@ def test_view_get_200_proyecto_vacio(client, admin_user, proyecto_i154):
     resp = client.get(url)
     assert resp.status_code == 200
     assert "sin-materiales" in resp.content.decode()
+
+
+# ===========================================================================
+# A3 — #154 O2 (QA 29-jun): tabla invertida — Material=filas / Torre=columnas
+# ===========================================================================
+#
+# Antes: filas_tabla = [{'torre': label, 'valores': [...]}] (1 fila x torre,
+# N valores = N materiales, header con 1 <th> por material -> ~25 columnas).
+# Ahora: filas_tabla = [{'material','unidad','valores','total'}] (1 fila x
+# material, 1 valor por torre + columna Total), header con 1 <th> por torre.
+
+
+@pytest.mark.django_db
+def test_filas_tabla_invertida_una_fila_por_material_con_total(client, admin_user, proyecto_i154):
+    """La tabla invertida trae 1 fila por material, valores alineados a
+    torres_labels, y el total de la fila = SUM manual a través de las torres.
+    """
+    from django.urls import reverse
+
+    t33 = _torre(proyecto_i154, "E-33")
+    t54 = _torre(proyecto_i154, "E-54")
+    _trincho(proyecto_i154, t33, cemento=Decimal("10"), arena=Decimal("5"))  # 500 kg cemento
+    _trincho(proyecto_i154, t54, cemento=Decimal("6"), arena=Decimal("2"))  # 300 kg cemento
+
+    client.force_login(admin_user)
+    url = reverse("construccion:resumen_materiales", kwargs={"proyecto_id": proyecto_i154.id})
+    resp = client.get(url)
+    assert resp.status_code == 200
+
+    ctx_filas = resp.context["filas_tabla"]
+    torres_labels = resp.context["torres_labels"]
+
+    # Header: 1 columna por torre, en el mismo orden que `resumen.torres`.
+    assert torres_labels == ["T-33", "T-54"]
+
+    # 1 fila por material (mismo orden que resumen.columnas), no por torre.
+    resumen = resp.context["resumen"]
+    assert len(ctx_filas) == len(resumen["columnas"])
+    assert [f["material"] for f in ctx_filas] == [c["label"] for c in resumen["columnas"]]
+
+    # La fila de "Cemento" (trinchos) trae [500, 300] alineado a torres_labels
+    # + total = SUM manual (500 + 300 = 800).
+    cemento_col = next(c for c in resumen["columnas"] if c["key"] == "cemento_kg")
+    fila_cemento = next(f for f in ctx_filas if f["material"] == cemento_col["label"])
+    assert fila_cemento["valores"] == [Decimal("500"), Decimal("300")]
+    assert fila_cemento["total"] == Decimal("500") + Decimal("300") == Decimal("800")
+    assert fila_cemento["total"] == resumen["total"]["cemento_kg"]
+
+    # La tabla renderizada trae el header por torre + columna Total, no la
+    # antigua columna "Torre".
+    body = resp.content.decode()
+    assert "data-tabla-materiales" in body
+    assert "Material" in body
+    assert "Total" in body
+    assert "data-material-row" in body
+
+
+@pytest.mark.django_db
+def test_filas_tabla_invertida_edge_cero_torres(client, admin_user, proyecto_i154):
+    """Edge: proyecto sin torres -> filas_tabla no rompe (valores=[], total=0)."""
+    from django.urls import reverse
+
+    client.force_login(admin_user)
+    url = reverse("construccion:resumen_materiales", kwargs={"proyecto_id": proyecto_i154.id})
+    resp = client.get(url)
+    assert resp.status_code == 200
+
+    assert resp.context["torres_labels"] == []
+    ctx_filas = resp.context["filas_tabla"]
+    resumen = resp.context["resumen"]
+    # Sigue habiendo 1 fila por material declarado, solo que sin valores.
+    assert len(ctx_filas) == len(resumen["columnas"])
+    for fila in ctx_filas:
+        assert fila["valores"] == []
+        assert fila["total"] == Decimal("0")
+
+
+@pytest.mark.django_db
+def test_filas_tabla_invertida_edge_material_sin_datos_en_ninguna_torre(
+    client, admin_user, proyecto_i154
+):
+    """Edge: material sin datos en NINGUNA torre -> fila en 0 en todas las
+    columnas, sin crash (geotextil no se captura en este escenario).
+    """
+    from django.urls import reverse
+
+    t = _torre(proyecto_i154, "E-1")
+    _trincho(proyecto_i154, t, cemento=Decimal("4"))  # solo cemento, sin geotextil
+
+    client.force_login(admin_user)
+    url = reverse("construccion:resumen_materiales", kwargs={"proyecto_id": proyecto_i154.id})
+    resp = client.get(url)
+    assert resp.status_code == 200
+
+    resumen = resp.context["resumen"]
+    ctx_filas = resp.context["filas_tabla"]
+    geotextil_col = next(c for c in resumen["columnas"] if c["key"] == "geotextil")
+    fila_geotextil = next(f for f in ctx_filas if f["material"] == geotextil_col["label"])
+    assert fila_geotextil["valores"] == [Decimal("0")]
+    assert fila_geotextil["total"] == Decimal("0")
+
+
+@pytest.mark.django_db
+def test_filas_tabla_invertida_proyecto_qa_real_uuid(db):
+    """Test contra el UUID del proyecto QA real (Puerta de Oro, #154) — si no
+    existe localmente (fixture/factory no disponible en este entorno), se
+    skippea; sirve de smoke de agregación cuando SÍ hay datos QA cargados.
+    """
+    from apps.construccion.models import ProyectoConstruccion
+
+    qa_uuid = "ec2a68aa-47fe-4772-89bc-2cd2b1c8b5c7"
+    proyecto = ProyectoConstruccion.objects.filter(id=qa_uuid).first()
+    if proyecto is None:
+        pytest.skip("Proyecto QA real (Puerta de Oro) no disponible en este entorno de test")
+
+    resumen = proyecto.resumen_materiales()
+    col_keys = [c["key"] for c in resumen["columnas"]]
+    filas_tabla = [
+        {
+            "material": col["label"],
+            "valores": [f[col["key"]] for f in resumen["torres"]],
+            "total": resumen["total"][col["key"]],
+        }
+        for col in resumen["columnas"]
+    ]
+    assert len(filas_tabla) == len(col_keys)
+    for fila in filas_tabla:
+        assert fila["total"] == sum(fila["valores"], Decimal("0"))
