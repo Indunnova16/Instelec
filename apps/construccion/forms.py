@@ -195,11 +195,14 @@ class FaseTorreTendidoForm(forms.ModelForm):
         fields = [
             # Vestida
             'vestida_torres_ok', 'vestida_torres_fecha',
+            # #147 rediseño (mockup 2026-06-29): 1 torre = 1 tiro, numero_tiro
+            # editable reemplaza al formset RiegaManilaTiro.
+            'numero_tiro',
             # Sub-flujo conductor
             'riega_manila_ok', 'riega_guaya_ok',
             # #147 item 10: fecha cabecera de la riega de manila
             'fecha_riega_manila',
-            'ft046_ok', 'ft047_ok', 'ft932_ok',
+            'ft046_ok', 'ft047_ok', 'ft931_ok', 'ft932_ok',
             'regulacion_flechado_ok', 'ft918_ok',
             # #147 item 11: regulación/flechado por circuito + cable de guarda
             'regulacion_flechado_c1_ok', 'regulacion_flechado_c1_fecha',

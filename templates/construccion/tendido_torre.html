@@ -24,124 +24,114 @@
   <form method="post" class="space-y-4">
     {% csrf_token %}
 
-    {# === Vestida + sub-flujo conductor === #}
+    {# === #147 rediseño (mockup 2026-06-29): sección "Tiro" única === #}
+    {% comment %}
+    Fusiona: N° de tiro editable + Vestida + sub-flujo conductor (checks,
+    incl. FT-931 nuevo) + Cuadrilla/%Tendido/%Facturación/Observaciones
+    (antes en "Información general" / sección final, ver A5).
+    {% endcomment %}
     <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Vestida de torres + sub-flujo conductor</summary>
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Tiro</summary>
       <div class="p-4 space-y-3 border-t">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+        <div class="px-3 py-2 bg-blue-50 text-blue-800 text-xs rounded">
+          ℹ️ Cada torre pertenece a un único tiro. Ingresa el N° de tiro y completa los datos del mismo.
+        </div>
+
+        {# N° de tiro + Cuadrilla + Fecha riega de manila + Distancia vano adelante #}
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <label class="text-sm font-semibold">{{ form.numero_tiro.label }}<br>{{ form.numero_tiro }}</label>
+          <label>{{ form.cuadrilla_tendido.label }}<br>{{ form.cuadrilla_tendido }}</label>
+          <label>{{ form.fecha_riega_manila.label }}<br>{{ form.fecha_riega_manila }}</label>
+          <label>{{ form.distancia_vano_adelante_m.label }}<br>{{ form.distancia_vano_adelante_m }}</label>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
           <label class="flex items-center gap-2">{{ form.vestida_torres_ok }} <span>{{ form.vestida_torres_ok.label }}</span></label>
           <label>{{ form.vestida_torres_fecha.label }}<br>{{ form.vestida_torres_fecha }}</label>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 border-t pt-3">
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 border-t pt-3">
           <label class="flex items-center gap-2">{{ form.riega_manila_ok }} <span class="text-xs">{{ form.riega_manila_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.riega_guaya_ok }} <span class="text-xs">{{ form.riega_guaya_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft046_ok }} <span class="text-xs">{{ form.ft046_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft047_ok }} <span class="text-xs">{{ form.ft047_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.ft931_ok }} <span class="text-xs">{{ form.ft931_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft932_ok }} <span class="text-xs">{{ form.ft932_ok.label }}</span></label>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_ok }} <span class="text-xs">{{ form.regulacion_flechado_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft918_ok }} <span class="text-xs">{{ form.ft918_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.grapado_ok }} <span class="text-xs">{{ form.grapado_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.accesorios_ok }} <span class="text-xs">{{ form.accesorios_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.placas_senalizacion_ok }} <span class="text-xs">{{ form.placas_senalizacion_ok.label }}</span></label>
-          <label class="md:col-span-2">{{ form.distancia_vano_adelante_m.label }}<br>{{ form.distancia_vano_adelante_m }}</label>
         </div>
 
-        {# === #147 item 10: riega de manila por tiros + F.T === #}
-        <div class="border-t pt-3 space-y-3"
-             x-data="tirosManila('id_tiros_manila-TOTAL_FORMS')">
-          <label class="block text-sm">{{ form.fecha_riega_manila.label }}<br>{{ form.fecha_riega_manila }}</label>
-          <p class="text-xs font-semibold uppercase text-gray-500">Tiros de riega de manila (F.T por tiro)</p>
-          {{ tiros_formset.management_form }}
-          <div data-tiros-manila class="space-y-2">
-            {% for tiro_form in tiros_formset %}
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end border rounded p-2"
-                 data-tiro-row x-data="{ marcadaQuitar: false }"
-                 :class="marcadaQuitar ? 'opacity-40' : ''">
-              {% for hidden in tiro_form.hidden_fields %}{{ hidden }}{% endfor %}
-              <label class="text-xs">N° tiro<br>{{ tiro_form.numero_tiro }}</label>
-              <label class="text-xs">Fecha<br>{{ tiro_form.fecha }}</label>
-              <label class="text-xs">F.T (m)<br>{{ tiro_form.flecha_tendido_m }}</label>
-              <label class="text-xs md:col-span-1">Observaciones<br>{{ tiro_form.observaciones }}</label>
-              {% if tiro_form.instance.pk %}
-              {% comment %}
-                fila guardada: el checkbox DELETE del formset (can_delete=True) va
-                OCULTO; el botón rojo lo togglea y atenúa la fila SIN sacarla del DOM
-                (para que el inlineformset la procese como borrada al guardar).
-              {% endcomment %}
-              <span class="hidden" data-tiro-delete-saved>{{ tiro_form.DELETE }}</span>
-              <button type="button" data-remove-tiro
-                      class="text-xs text-red-600 hover:text-red-800 justify-self-start"
-                      @click="marcadaQuitar = quitarFilaGuardada($event)"
-                      x-text="marcadaQuitar ? 'Deshacer' : 'Quitar'">Quitar</button>
-              {% else %}
-              {# fila nueva sin guardar: remover del DOM + ajustar TOTAL_FORMS #}
-              <button type="button" data-remove-tiro
-                      class="text-xs text-red-600 hover:text-red-800 justify-self-start"
-                      @click="quitarFila($event)">Quitar</button>
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div>
-
-          {# plantilla oculta = empty_form del formset (placeholder __prefix__) #}
-          <template x-ref="tiroTemplate">
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end border rounded p-2" data-tiro-row>
-              {% for hidden in tiros_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-              <label class="text-xs">N° tiro<br>{{ tiros_formset.empty_form.numero_tiro }}</label>
-              <label class="text-xs">Fecha<br>{{ tiros_formset.empty_form.fecha }}</label>
-              <label class="text-xs">F.T (m)<br>{{ tiros_formset.empty_form.flecha_tendido_m }}</label>
-              <label class="text-xs md:col-span-1">Observaciones<br>{{ tiros_formset.empty_form.observaciones }}</label>
-              <button type="button" data-remove-tiro
-                      class="text-xs text-red-600 hover:text-red-800 justify-self-start"
-                      @click="quitarFila($event)">Quitar</button>
-            </div>
-          </template>
-
-          <button type="button" data-add-tiro @click="agregarTiro()"
-                  class="inline-flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700">
-            <span aria-hidden="true">+</span> Agregar tiro
-          </button>
+        {# % Tendido + % Facturación + Observaciones al cierre del tiro #}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
+          <label>{{ form.pct_tendido.label }}<br>{{ form.pct_tendido }}</label>
+          <label>{{ form.pct_facturacion.label }}<br>{{ form.pct_facturacion }}</label>
         </div>
+        <label class="block">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
       </div>
     </details>
 
-    {# === Circuito 1 + OPGW === #}
+    {# === Circuito 1 + Cable de guarda (#147 rediseño: OPGW→Cable de guarda, Fase A/B/C→1/2/3) === #}
     <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 1 (3 fases) + OPGW (izq/der)</summary>
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 1 (3 fases) + Cable de guarda (izq/der)</summary>
       <div class="p-4 space-y-3 border-t">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">Fase A</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase 1</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_a_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_a_fecha.label }}<br>{{ form.tendido_conductor_a_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">Fase B</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase 2</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_b_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_b_fecha.label }}<br>{{ form.tendido_conductor_b_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">Fase C</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase 3</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c_fecha.label }}<br>{{ form.tendido_conductor_c_fecha }}</label>
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">OPGW Izquierda</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Cable de guarda — Izquierda</p>
             <label class="flex items-center gap-2">{{ form.tendido_opgw_izq_ok }} <span>OK</span></label>
             <label>{{ form.tendido_opgw_izq_fecha.label }}<br>{{ form.tendido_opgw_izq_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">OPGW Derecha</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Cable de guarda — Derecha</p>
             <label class="flex items-center gap-2">{{ form.tendido_opgw_der_ok }} <span>OK</span></label>
             <label>{{ form.tendido_opgw_der_fecha.label }}<br>{{ form.tendido_opgw_der_fecha }}</label>
           </div>
+
+          {% comment %}
+          #147 item 11: Regulación/flechado — Cable de guarda (movida desde
+          la sección standalone "Regulación y flechado por circuito")
+          {% endcomment %}
+          <div class="md:col-span-2 flex items-center gap-3 border rounded p-3 bg-gray-50 dark:bg-gray-700/40">
+            <label class="flex items-center gap-2 text-sm font-medium">
+              {{ form.regulacion_flechado_guarda_ok }} <span>Regulación y flechado — Cable de guarda</span>
+            </label>
+            <label class="text-xs text-gray-500">Fecha<br>{{ form.regulacion_flechado_guarda_fecha }}</label>
+          </div>
+        </div>
+
+        {% comment %}
+        #147 item 11: Regulación/flechado — Circuito 1 (movida desde la
+        sección standalone "Regulación y flechado por circuito")
+        {% endcomment %}
+        <div class="flex items-center gap-3 border rounded p-3 bg-gray-50 dark:bg-gray-700/40">
+          <label class="flex items-center gap-2 text-sm font-medium">
+            {{ form.regulacion_flechado_c1_ok }} <span>Regulación y flechado — Circuito 1</span>
+          </label>
+          <label class="text-xs text-gray-500">Fecha<br>{{ form.regulacion_flechado_c1_fecha }}</label>
         </div>
       </div>
     </details>
 
-    {# === Circuito 2 === #}
+    {# === Circuito 2 (#147 rediseño: Fase A/B/C→1/2/3) === #}
     <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700"
              x-data="{ aplica: {{ form.circuito_2_aplica.value|yesno:'true,false,true' }} }">
       <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 2 (3 fases adicionales)</summary>
@@ -156,20 +146,33 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3"
              x-show="aplica" :class="aplica ? '' : 'opacity-40 pointer-events-none'">
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase A</p>
+            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase 1</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_a_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c2_a_fecha.label }}<br>{{ form.tendido_conductor_c2_a_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase B</p>
+            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase 2</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_b_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c2_b_fecha.label }}<br>{{ form.tendido_conductor_c2_b_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase C</p>
+            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase 3</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_c_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c2_c_fecha.label }}<br>{{ form.tendido_conductor_c2_c_fecha }}</label>
           </div>
+        </div>
+
+        {% comment %}
+        #147 item 11: Regulación/flechado — Circuito 2 (movida desde la
+        sección standalone; solo visible si C2 aplica, mismo x-show que
+        el resto de la sección)
+        {% endcomment %}
+        <div class="flex items-center gap-3 border rounded p-3 bg-gray-50 dark:bg-gray-700/40 mt-3"
+             x-show="aplica" :class="aplica ? '' : 'opacity-40 pointer-events-none'">
+          <label class="flex items-center gap-2 text-sm font-medium">
+            {{ form.regulacion_flechado_c2_ok }} <span>Regulación y flechado — Circuito 2</span>
+          </label>
+          <label class="text-xs text-gray-500">Fecha<br>{{ form.regulacion_flechado_c2_fecha }}</label>
         </div>
       </div>
     </details>
@@ -193,115 +196,10 @@
       </div>
     </details>
 
-    {# === #147 item 11: Regulación y flechado por circuito + cable de guarda === #}
-    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Regulación y flechado por circuito</summary>
-      <div class="p-4 border-t grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div class="space-y-2 border rounded p-3">
-          <p class="text-xs font-semibold uppercase text-gray-500">Circuito 1</p>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_c1_ok }} <span>OK</span></label>
-          <label>Fecha<br>{{ form.regulacion_flechado_c1_fecha }}</label>
-        </div>
-        <div class="space-y-2 border rounded p-3">
-          <p class="text-xs font-semibold uppercase text-gray-500">Circuito 2</p>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_c2_ok }} <span>OK</span></label>
-          <label>Fecha<br>{{ form.regulacion_flechado_c2_fecha }}</label>
-        </div>
-        <div class="space-y-2 border rounded p-3">
-          <p class="text-xs font-semibold uppercase text-gray-500">Cable de guarda</p>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_guarda_ok }} <span>OK</span></label>
-          <label>Fecha<br>{{ form.regulacion_flechado_guarda_fecha }}</label>
-        </div>
-      </div>
-    </details>
-
-    {# === Cable de guarda + regulación final === #}
-    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Cable de guarda + regulación final + cuadrilla</summary>
-      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
-        <label class="flex items-center gap-2">{{ form.tendido_guarda_ok }} <span>{{ form.tendido_guarda_ok.label }}</span></label>
-        <label>{{ form.tendido_guarda_fecha.label }}<br>{{ form.tendido_guarda_fecha }}</label>
-        <label class="flex items-center gap-2">{{ form.regulacion_ok }} <span>{{ form.regulacion_ok.label }}</span></label>
-        <label>{{ form.regulacion_fecha.label }}<br>{{ form.regulacion_fecha }}</label>
-        <label>{{ form.cuadrilla_tendido.label }}<br>{{ form.cuadrilla_tendido }}</label>
-        <label>{{ form.pct_tendido.label }}<br>{{ form.pct_tendido }}</label>
-        <label>{{ form.pct_facturacion.label }}<br>{{ form.pct_facturacion }}</label>
-        <label class="md:col-span-2">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
-      </div>
-    </details>
-
     <div class="flex justify-end space-x-2">
       <a href="{% url 'construccion:tendido_lista' proyecto.id %}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 dark:text-gray-300">Cancelar</a>
       <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar</button>
     </div>
   </form>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-{{ block.super }}
-<script>
-  // #147 item 10 — formset dinámico de "tiros de riega de manila".
-  // Clona el empty_form del formset (placeholder __prefix__) e incrementa
-  // tiros_manila-TOTAL_FORMS. Registrado en alpine:init para evitar la
-  // condición de carrera con el Alpine `defer` de base.html.
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('tirosManila', (totalFormsId) => ({
-      total() {
-        return document.getElementById(totalFormsId);
-      },
-      agregarTiro() {
-        const tpl = this.$refs.tiroTemplate;
-        const cont = this.$root.querySelector('[data-tiros-manila]');
-        if (!tpl || !cont) return;
-        const totalInput = this.total();
-        const idx = parseInt(totalInput.value || '0', 10);
-        const html = tpl.innerHTML.replaceAll('__prefix__', idx);
-        const frag = document.createElement('div');
-        frag.innerHTML = html.trim();
-        const fila = frag.firstElementChild;
-        cont.appendChild(fila);
-        totalInput.value = idx + 1;
-      },
-      quitarFila(ev) {
-        const fila = ev.target.closest('[data-tiro-row]');
-        if (!fila) return;
-        fila.remove();
-        this.reindexar();
-      },
-      quitarFilaGuardada(ev) {
-        // Fila YA guardada: en vez de sacarla del DOM, togglear el checkbox
-        // DELETE oculto del formset para que el inlineformset (can_delete=True)
-        // la procese como borrada al guardar. Devuelve el nuevo estado marcado
-        // para que Alpine atenúe la fila y cambie el texto del botón.
-        const fila = ev.target.closest('[data-tiro-row]');
-        if (!fila) return false;
-        const del = fila.querySelector('[data-tiro-delete-saved] input[type="checkbox"]');
-        if (!del) return false;
-        del.checked = !del.checked;
-        return del.checked;
-      },
-      reindexar() {
-        // Renumera name/id de las filas SIN guardar (no tienen DELETE) para que
-        // sean contiguas 0..N-1 y ajusta TOTAL_FORMS al conteo real de filas.
-        const cont = this.$root.querySelector('[data-tiros-manila]');
-        if (!cont) return;
-        const filas = cont.querySelectorAll('[data-tiro-row]');
-        let i = 0;
-        filas.forEach((fila) => {
-          fila.querySelectorAll('input, select, textarea').forEach((el) => {
-            ['name', 'id'].forEach((attr) => {
-              const v = el.getAttribute(attr);
-              if (v) {
-                el.setAttribute(attr, v.replace(/tiros_manila-\d+-/, 'tiros_manila-' + i + '-'));
-              }
-            });
-          });
-          i += 1;
-        });
-        this.total().value = filas.length;
-      },
-    }));
-  });
-</script>
 {% endblock %}
