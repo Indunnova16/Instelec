@@ -217,35 +217,38 @@
         </div>
         <form method="post" action="{% url 'cuadrillas:miembro_agregar' cuadrilla.pk %}" class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
             {% csrf_token %}
-            <div>
-                <label for="usuario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Personal</label>
-                <select name="usuario" id="usuario" required onchange="autoCargarDatos()"
-                        class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
-                    <option value="">Seleccionar...</option>
-                    {% for user in usuarios_disponibles %}
-                    <option value="{{ user.id }}"
-                            data-documento="{{ user.documento|default:'' }}"
-                            data-cargo="{{ user.cargo|default:'' }}"
-                            data-salario="{{ user.salario_mensual|default:0 }}">
-                        {{ user.get_full_name }} {% if user.documento %}({{ user.documento }}){% endif %}
-                    </option>
+            <div class="relative">
+                <label for="documento_input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Documento del Colaborador
+                </label>
+                <input type="text" name="documento" id="documento_input" required
+                       autocomplete="off"
+                       list="personal_disponible_list"
+                       oninput="autoCargarDatosPorDocumento()"
+                       placeholder="Ingrese documento..."
+                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <datalist id="personal_disponible_list">
+                    {% for personal in personal_disponible %}
+                    <option value="{{ personal.documento }}">{{ personal.nombre }}</option>
                     {% endfor %}
-                </select>
+                </datalist>
+                <p id="documento_feedback" class="mt-1 text-xs" role="status" aria-live="polite"></p>
             </div>
             <div>
-                <label for="documento_display" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Documento</label>
-                <input type="text" id="documento_display" readonly
+                <label for="nombre_display" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>
+                <input type="text" id="nombre_display" readonly
                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm bg-gray-50 dark:bg-gray-600">
             </div>
             <div>
-                <label for="rol_cuadrilla" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cargo</label>
-                <select name="rol_cuadrilla" id="rol_cuadrilla"
-                        onchange="actualizarCostoDia()"
-                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
-                    {% for value, label in roles_cuadrilla %}
-                    <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
-                </select>
+                <label for="rol_cuadrilla_display" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Cargo (del maestro de Colaboradores)
+                </label>
+                <input type="text" id="rol_cuadrilla_display" readonly
+                       title="El cargo se toma del maestro de Colaboradores y no es editable aquí. Para cambiarlo, edite el colaborador en /cuadrillas/colaboradores/."
+                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm bg-gray-50 dark:bg-gray-600">
+                <!-- rol_cuadrilla NO es editable en este form (issue #176, A4):
+                     se resuelve en el backend desde PersonalCuadrilla, cualquier
+                     valor distinto que llegue en el POST se ignora. -->
             </div>
             <div>
                 <label for="cargo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rol</label>
@@ -263,8 +266,8 @@
                 <input type="hidden" name="costo_dia" id="costo_dia" value="0">
             </div>
             <div>
-                <button type="submit"
-                        class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2">
+                <button type="submit" id="btn_agregar_miembro" disabled
+                        class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
@@ -604,42 +607,70 @@
         return '$ ' + Number(valor).toLocaleString('es-CO');
     }
 
-    function actualizarCostoDia() {
-        const rol = document.getElementById('rol_cuadrilla').value;
+    function actualizarCostoDiaPorRol(rol) {
         const costoHidden = document.getElementById('costo_dia');
         const costoDisplay = document.getElementById('costo_dia_display');
         if (COSTO_POR_ROL.hasOwnProperty(rol)) {
             costoHidden.value = COSTO_POR_ROL[rol];
             costoDisplay.value = formatoPesos(COSTO_POR_ROL[rol]);
+        } else {
+            costoHidden.value = 0;
+            costoDisplay.value = '';
         }
     }
 
-    // Auto-fill on page load based on default selection
-    document.addEventListener('DOMContentLoaded', actualizarCostoDia);
+    // Autocompletado AJAX por documento (issue #176, A4): reusa
+    // PersonalCuadrillaAPIView existente. Debounce simple + estados
+    // loading/success/error visibles en #documento_feedback.
+    let _autoCargarTimeout = null;
+    const ROL_CUADRILLA_LABELS = {
+        {% for value, label in roles_cuadrilla %}'{{ value }}': '{{ label|escapejs }}',{% endfor %}
+    };
 
-    // Auto-cargar datos del usuario seleccionado
-    function autoCargarDatos() {
-        const select = document.getElementById('usuario');
-        const option = select.options[select.selectedIndex];
+    function autoCargarDatosPorDocumento() {
+        clearTimeout(_autoCargarTimeout);
+        const documento = document.getElementById('documento_input').value.trim();
+        const feedback = document.getElementById('documento_feedback');
+        const btnAgregar = document.getElementById('btn_agregar_miembro');
+        const nombreDisplay = document.getElementById('nombre_display');
+        const rolDisplay = document.getElementById('rol_cuadrilla_display');
 
-        if (!option || !option.value) {
-            document.getElementById('documento_display').value = '';
-            document.getElementById('costo_dia').value = 0;
-            document.getElementById('costo_dia_display').value = '';
+        // Reset mientras se escribe
+        nombreDisplay.value = '';
+        rolDisplay.value = '';
+        btnAgregar.disabled = true;
+        document.getElementById('costo_dia').value = 0;
+        document.getElementById('costo_dia_display').value = '';
+
+        if (!documento) {
+            feedback.textContent = '';
+            feedback.className = 'mt-1 text-xs';
             return;
         }
 
-        const documento = option.getAttribute('data-documento') || '';
-        const cargo = option.getAttribute('data-cargo') || '';
-        const salario = parseFloat(option.getAttribute('data-salario') || 0);
+        feedback.textContent = 'Buscando...';
+        feedback.className = 'mt-1 text-xs text-gray-500 dark:text-gray-400';
 
-        // Mostrar documento
-        document.getElementById('documento_display').value = documento;
-
-        // Calcular costo diario como salario / 30
-        const costoDia = salario > 0 ? (salario / 30).toFixed(2) : 0;
-        document.getElementById('costo_dia').value = costoDia;
-        document.getElementById('costo_dia_display').value = formatoPesos(costoDia);
+        _autoCargarTimeout = setTimeout(() => {
+            fetch(`{% url 'cuadrillas:personal_detalle_api' %}?documento=${encodeURIComponent(documento)}`)
+                .then(r => {
+                    if (!r.ok) throw new Error('no_encontrado');
+                    return r.json();
+                })
+                .then(data => {
+                    nombreDisplay.value = data.nombre || '';
+                    rolDisplay.value = ROL_CUADRILLA_LABELS[data.rol_cuadrilla] || data.rol_cuadrilla || '';
+                    btnAgregar.disabled = false;
+                    feedback.textContent = `Encontrado: ${data.nombre}`;
+                    feedback.className = 'mt-1 text-xs text-green-600 dark:text-green-400';
+                    actualizarCostoDiaPorRol(data.rol_cuadrilla);
+                })
+                .catch(() => {
+                    btnAgregar.disabled = true;
+                    feedback.textContent = 'No se encontró un colaborador ACTIVO con ese documento.';
+                    feedback.className = 'mt-1 text-xs text-red-600 dark:text-red-400';
+                });
+        }, 300);
     }
 
     function editarMiembro(miembroId) {

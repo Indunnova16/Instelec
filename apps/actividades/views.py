@@ -16,6 +16,7 @@ from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from apps.core.cache import get_lineas_activas, get_cuadrillas_activas, get_tipos_actividad_activos
 from apps.core.utils import get_unidad_negocio, UNIDAD_NEGOCIO_TODOS
 from .models import Actividad, ProgramacionMensual, TipoActividad, HistorialIntervencion
+from .forms import TipoActividadForm
 
 
 class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
@@ -1434,3 +1435,91 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
 
         wb.save(response)
         return response
+
+
+# ---------------------------------------------------------------------------
+# Tipos de Actividad — CRUD (issue #176, A1)
+# ---------------------------------------------------------------------------
+class TipoActividadListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
+    """Listado del maestro Tipos de Actividad, con activos e inactivos."""
+    model = TipoActividad
+    template_name = 'actividades/tipos_lista.html'
+    context_object_name = 'tipos'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_queryset(self):
+        qs = TipoActividad.objects.all()
+        estado = self.request.GET.get('estado', '').strip()
+        if estado == 'activos':
+            qs = qs.filter(activo=True)
+        elif estado == 'inactivos':
+            qs = qs.filter(activo=False)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['estado_filtro'] = self.request.GET.get('estado', '')
+        context['total_activos'] = TipoActividad.objects.filter(activo=True).count()
+        context['total_inactivos'] = TipoActividad.objects.filter(activo=False).count()
+        return context
+
+
+class TipoActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
+    """Crear un nuevo Tipo de Actividad."""
+    template_name = 'actividades/tipos_form.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', TipoActividadForm())
+        context['modo'] = 'crear'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = TipoActividadForm(request.POST)
+        if form.is_valid():
+            tipo = form.save()
+            messages.success(request, f'Tipo de actividad "{tipo.nombre}" creado exitosamente.')
+            return redirect('actividades:tipos_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class TipoActividadEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
+    """Editar un Tipo de Actividad existente."""
+    model = TipoActividad
+    template_name = 'actividades/tipos_form.html'
+    context_object_name = 'tipo'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', TipoActividadForm(instance=self.object))
+        context['modo'] = 'editar'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = TipoActividadForm(request.POST, instance=self.object)
+        if form.is_valid():
+            tipo = form.save()
+            messages.success(request, f'Tipo de actividad "{tipo.nombre}" actualizado exitosamente.')
+            return redirect('actividades:tipos_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class TipoActividadInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Alterna activo/inactivo de un Tipo de Actividad. Nunca borra el registro."""
+    model = TipoActividad
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        tipo = self.get_object()
+        tipo.activo = not tipo.activo
+        tipo.save(update_fields=['activo', 'updated_at'])
+        if tipo.activo:
+            messages.success(request, f'Tipo de actividad "{tipo.nombre}" reactivado.')
+        else:
+            messages.success(request, f'Tipo de actividad "{tipo.nombre}" inactivado. No aparecerá en los dropdowns de nuevas actividades.')
+        return redirect('actividades:tipos_lista')

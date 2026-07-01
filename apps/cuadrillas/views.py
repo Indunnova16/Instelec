@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Asistencia, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
+from .forms_personal import PersonalCuadrillaForm
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -201,11 +202,24 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
             (m.costo_dia for m in miembros), Decimal('0')
         )
 
-        # Available users for add member form
+        # Available users for add member form (legacy — se mantiene por si
+        # algun template/reporte externo aun lo consume).
         miembros_ids = [m.usuario_id for m in miembros]
         context['usuarios_disponibles'] = Usuario.objects.filter(
             is_active=True
         ).exclude(id__in=miembros_ids).order_by('first_name', 'last_name')
+
+        # Picklist de colaboradores disponibles (issue #176, A4): origen de
+        # datos = PersonalCuadrilla.activo=True, excluyendo los que ya son
+        # miembros activos de esta cuadrilla (match por documento, no por
+        # Usuario -- un PersonalCuadrilla puede no tener Usuario vinculado
+        # aun la primera vez que se asigna).
+        miembros_documentos = {
+            m.usuario.documento for m in miembros if m.usuario and m.usuario.documento
+        }
+        context['personal_disponible'] = PersonalCuadrilla.objects.filter(
+            activo=True
+        ).exclude(documento__in=miembros_documentos).order_by('nombre')
 
         # Choices for form selects
         context['roles_cuadrilla'] = CuadrillaMiembro.RolCuadrilla.choices
@@ -495,29 +509,82 @@ class CuadrillaCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
 
 
 class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
-    """Add a member to a cuadrilla."""
+    """Add a member to a cuadrilla.
+
+    Refactor issue #176 (A4): el origen de datos del picker pasa de
+    `Usuario` a `PersonalCuadrilla` (maestro de Colaboradores). El usuario
+    ingresa el `documento` de un colaborador ACTIVO (autocompletado AJAX
+    vía `PersonalCuadrillaAPIView`); el `rol_cuadrilla` (Cargo) NO es
+    editable en el form -- se toma siempre del maestro `PersonalCuadrilla`,
+    ignorando cualquier valor distinto que venga en el POST. Al hacer
+    submit, se resuelve/crea el `Usuario` correspondiente por
+    documento+nombre (mismo patrón de `apps.cuadrillas.importers._crear_usuario`:
+    email sintético, password no utilizable). `CuadrillaMiembro.usuario`
+    se mantiene como FK a Usuario -- no se toca el modelo de datos (otros
+    flujos como TrackingUbicacion/fotos/reportes dependen de él).
+    """
     model = Cuadrilla
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
-    def post(self, request, *args, **kwargs):
+    @staticmethod
+    def _resolver_o_crear_usuario(personal):
+        """Resuelve el Usuario vinculado a un PersonalCuadrilla por documento,
+        o lo crea si es la primera vez que se asigna (mismo patrón de
+        apps.cuadrillas.importers._crear_usuario para altas masivas S18):
+        email sintético determinístico, is_active=False, sin password
+        utilizable -- es solo un registro de vínculo, no una cuenta operativa.
+        """
         from apps.usuarios.models import Usuario
+
+        usuario = Usuario.objects.filter(documento=personal.documento).first()
+        if usuario:
+            return usuario
+
+        nombre = personal.nombre or f'Colaborador {personal.documento}'
+        partes = nombre.split()
+        first = partes[0] if partes else nombre
+        last = ' '.join(partes[1:]) if len(partes) > 1 else ''
+        email = f'{personal.documento}@instelec-colaborador.local'
+
+        usuario = Usuario.objects.create(
+            email=email,
+            first_name=first[:150],
+            last_name=last[:150],
+            documento=personal.documento,
+            rol='operario_general',
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save(update_fields=['password'])
+        return usuario
+
+    def post(self, request, *args, **kwargs):
         from datetime import date
 
         cuadrilla = self.get_object()
-        usuario_id = request.POST.get('usuario')
-        rol = request.POST.get('rol_cuadrilla', 'LINIERO_I')
-        cargo = request.POST.get('cargo', 'MIEMBRO')
+        documento = (request.POST.get('documento') or '').strip()
         costo_dia = request.POST.get('costo_dia', '0') or '0'
 
-        if not usuario_id:
-            messages.error(request, 'Debe seleccionar un usuario.')
+        if not documento:
+            messages.error(request, 'Debe ingresar el documento de un colaborador.')
             return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
 
-        try:
-            usuario = Usuario.objects.get(pk=usuario_id)
-        except Usuario.DoesNotExist:
-            messages.error(request, 'Usuario no encontrado.')
+        personal = PersonalCuadrilla.objects.filter(documento=documento, activo=True).first()
+        if not personal:
+            messages.error(
+                request,
+                f'No se encontró un colaborador activo con documento "{documento}". '
+                'Verifique el documento o dé de alta el colaborador en el maestro.',
+            )
             return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+        # Cargo (rol_cuadrilla) NO es editable en el form de asignación: se
+        # toma siempre del maestro PersonalCuadrilla, ignorando cualquier
+        # valor distinto que venga en el POST (issue #176, A4).
+        rol = personal.rol_cuadrilla
+        cargo = request.POST.get('cargo', 'MIEMBRO')
+
+        usuario = self._resolver_o_crear_usuario(personal)
 
         if CuadrillaMiembro.objects.filter(
             cuadrilla=cuadrilla, usuario=usuario, activo=True
@@ -529,7 +596,7 @@ class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
             CuadrillaMiembro.objects.create(
                 cuadrilla=cuadrilla,
                 usuario=usuario,
-                rol_cuadrilla=rol if rol in dict(CuadrillaMiembro.RolCuadrilla.choices) else 'LINIERO_I',
+                rol_cuadrilla=rol,
                 cargo=cargo if cargo in dict(CuadrillaMiembro.CargoJerarquico.choices) else 'MIEMBRO',
                 costo_dia=float(costo_dia),
                 fecha_inicio=date.today(),
@@ -1146,8 +1213,47 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 
 class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Upload crew personnel from Excel/CSV."""
+    """Upload crew personnel from Excel/CSV.
+
+    Columnas soportadas (issue #176, A5): Nombre | Documento | Cargo |
+    Salario Base | Fecha Ingreso | Fecha Salida. Las 3 columnas nuevas son
+    opcionales (retrocompatible con el formato original de 3 columnas) --
+    si faltan, quedan en su default del modelo (salario_base=0,
+    fecha_ingreso/fecha_salida=None -> activo=True).
+    """
     allowed_roles = ['admin', 'director', 'coordinador']
+
+    @staticmethod
+    def _parse_fecha(valor):
+        """Acepta date/datetime nativos de openpyxl o texto 'YYYY-MM-DD'."""
+        from datetime import date, datetime
+
+        if valor in (None, ''):
+            return None
+        if isinstance(valor, datetime):
+            return valor.date()
+        if isinstance(valor, date):
+            return valor
+        texto = str(valor).strip()
+        if not texto:
+            return None
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+            try:
+                return datetime.strptime(texto, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _parse_decimal(valor):
+        from decimal import Decimal, InvalidOperation
+
+        if valor in (None, ''):
+            return Decimal('0')
+        try:
+            return Decimal(str(valor).replace(',', '').strip() or '0')
+        except InvalidOperation:
+            return Decimal('0')
 
     def post(self, request, *args, **kwargs):
         import openpyxl
@@ -1173,25 +1279,48 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                 if not row or not row[0]:
                     continue
 
-                nombre = str(row[0]).strip()
-                documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
-                rol_raw = str(row[2]).strip().upper() if len(row) > 2 and row[2] else ''
+                try:
+                    nombre = str(row[0]).strip()
+                    documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                    rol_raw = str(row[2]).strip().upper() if len(row) > 2 and row[2] else ''
+                    salario_raw = row[3] if len(row) > 3 else None
+                    fecha_ingreso_raw = row[4] if len(row) > 4 else None
+                    fecha_salida_raw = row[5] if len(row) > 5 else None
 
-                if not nombre or not documento:
-                    errores.append(f'Fila {idx}: nombre o documento vacío')
+                    if not nombre or not documento:
+                        errores.append(f'Fila {idx}: nombre o documento vacío')
+                        continue
+
+                    # Resolve role
+                    rol = rol_raw if rol_raw in roles_validos else roles_por_nombre.get(rol_raw, 'LINIERO_I')
+                    salario_base = self._parse_decimal(salario_raw)
+                    fecha_ingreso = self._parse_fecha(fecha_ingreso_raw)
+                    fecha_salida = self._parse_fecha(fecha_salida_raw)
+
+                    defaults = {
+                        'nombre': nombre,
+                        'rol_cuadrilla': rol,
+                        'salario_base': salario_base,
+                        'fecha_ingreso': fecha_ingreso,
+                        'fecha_salida': fecha_salida,
+                        # activo se resuelve en PersonalCuadrilla.save(): True salvo
+                        # que fecha_salida venga poblada (issue #176, A2).
+                        'activo': True,
+                    }
+
+                    obj, created = PersonalCuadrilla.objects.update_or_create(
+                        documento=documento,
+                        defaults=defaults,
+                    )
+                    if created:
+                        creados += 1
+                    else:
+                        actualizados += 1
+                except Exception as row_exc:
+                    # Documento duplicado intra-archivo u otro error de fila:
+                    # se reporta y se sigue con el resto (no se aborta el lote).
+                    errores.append(f'Fila {idx}: {row_exc}')
                     continue
-
-                # Resolve role
-                rol = rol_raw if rol_raw in roles_validos else roles_por_nombre.get(rol_raw, 'LINIERO_I')
-
-                obj, created = PersonalCuadrilla.objects.update_or_create(
-                    documento=documento,
-                    defaults={'nombre': nombre, 'rol_cuadrilla': rol, 'activo': True},
-                )
-                if created:
-                    creados += 1
-                else:
-                    actualizados += 1
 
             msg = f'Personal cargado: {creados} nuevos, {actualizados} actualizados.'
             if errores:
@@ -1580,3 +1709,103 @@ class DescargarPlantillaCuadrillasView(LoginRequiredMixin, RoleRequiredMixin, Vi
 
         wb.save(response)
         return response
+
+
+# ---------------------------------------------------------------------------
+# Colaboradores — CRUD sobre PersonalCuadrilla (issue #176, A3)
+# ---------------------------------------------------------------------------
+class ColaboradorListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
+    """Listado del maestro Colaboradores, con activos e inactivos."""
+    model = PersonalCuadrilla
+    template_name = 'cuadrillas/colaboradores_lista.html'
+    context_object_name = 'colaboradores'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_queryset(self):
+        qs = PersonalCuadrilla.objects.all()
+        estado = self.request.GET.get('estado', '').strip()
+        if estado == 'activos':
+            qs = qs.filter(activo=True)
+        elif estado == 'inactivos':
+            qs = qs.filter(activo=False)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['estado_filtro'] = self.request.GET.get('estado', '')
+        context['total_activos'] = PersonalCuadrilla.objects.filter(activo=True).count()
+        context['total_inactivos'] = PersonalCuadrilla.objects.filter(activo=False).count()
+        return context
+
+
+class ColaboradorCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
+    """Crear un nuevo Colaborador (PersonalCuadrilla)."""
+    template_name = 'cuadrillas/colaboradores_form.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', PersonalCuadrillaForm())
+        context['modo'] = 'crear'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = PersonalCuadrillaForm(request.POST)
+        if form.is_valid():
+            colaborador = form.save()
+            messages.success(request, f'Colaborador "{colaborador.nombre}" creado exitosamente.')
+            return redirect('cuadrillas:colaboradores_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class ColaboradorEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
+    """Editar un Colaborador (PersonalCuadrilla) existente."""
+    model = PersonalCuadrilla
+    template_name = 'cuadrillas/colaboradores_form.html'
+    context_object_name = 'colaborador'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', PersonalCuadrillaForm(instance=self.object))
+        context['modo'] = 'editar'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = PersonalCuadrillaForm(request.POST, instance=self.object)
+        if form.is_valid():
+            colaborador = form.save()
+            messages.success(request, f'Colaborador "{colaborador.nombre}" actualizado exitosamente.')
+            return redirect('cuadrillas:colaboradores_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class ColaboradorInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Alterna activo/inactivo de un Colaborador. Nunca borra el registro.
+
+    Al reactivar (de inactivo a activo), limpia fecha_salida (si no,
+    save() la volveria a marcar inactivo inmediatamente — ver A2).
+    """
+    model = PersonalCuadrilla
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        colaborador = self.get_object()
+        if colaborador.activo:
+            from datetime import date
+            colaborador.fecha_salida = date.today()
+            colaborador.save(update_fields=['fecha_salida', 'activo', 'updated_at'])
+            messages.success(
+                request,
+                f'Colaborador "{colaborador.nombre}" inactivado. '
+                'No aparecerá en el picklist de asignación a cuadrillas.',
+            )
+        else:
+            colaborador.fecha_salida = None
+            colaborador.activo = True
+            colaborador.save(update_fields=['fecha_salida', 'activo', 'updated_at'])
+            messages.success(request, f'Colaborador "{colaborador.nombre}" reactivado.')
+        return redirect('cuadrillas:colaboradores_lista')

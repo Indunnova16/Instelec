@@ -100,6 +100,24 @@ class PersonalCuadrilla(BaseModel):
         default=RolCuadrilla.LINIERO_I,
     )
     activo = models.BooleanField('Activo', default=True)
+    salario_base = models.DecimalField(
+        'Salario base',
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Salario mensual base del colaborador (permite calcular costo/día en reportes de cuadrilla semanal)',
+    )
+    fecha_ingreso = models.DateField(
+        'Fecha de ingreso',
+        null=True,
+        blank=True,
+    )
+    fecha_salida = models.DateField(
+        'Fecha de salida',
+        null=True,
+        blank=True,
+        help_text='Al registrarla, el colaborador se marca automáticamente como inactivo',
+    )
 
     class Meta:
         db_table = 'personal_cuadrilla'
@@ -109,6 +127,18 @@ class PersonalCuadrilla(BaseModel):
 
     def __str__(self):
         return f"{self.nombre} - {self.get_rol_cuadrilla_display()}"
+
+    def save(self, *args, **kwargs):
+        """
+        Issue #176 (A2): registrar fecha_salida marca automaticamente
+        activo=False. No se revierte automaticamente si se borra
+        fecha_salida despues (decision de diseno: la reactivacion es un
+        acto explicito del usuario via el CRUD de colaboradores, no un
+        efecto secundario implicito de limpiar una fecha).
+        """
+        if self.fecha_salida:
+            self.activo = False
+        super().save(*args, **kwargs)
 
 
 class Cuadrilla(BaseModel):

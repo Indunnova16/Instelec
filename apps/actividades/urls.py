@@ -27,4 +27,9 @@ urlpatterns = [
     path('programacion/bulk-asignar/', views.BulkAsignarCuadrillaView.as_view(), name='bulk_asignar_cuadrilla'),
     path('programacion/bulk-estado/', views.BulkCambiarEstadoView.as_view(), name='bulk_cambiar_estado'),
     path('reportes/avance/', views.ExportarAvanceView.as_view(), name='exportar_avance'),
+    # Tipos de Actividad — CRUD (issue #176, A1)
+    path('tipos/', views.TipoActividadListView.as_view(), name='tipos_lista'),
+    path('tipos/crear/', views.TipoActividadCreateView.as_view(), name='tipos_crear'),
+    path('tipos/<uuid:pk>/editar/', views.TipoActividadEditView.as_view(), name='tipos_editar'),
+    path('tipos/<uuid:pk>/inactivar/', views.TipoActividadInactivarView.as_view(), name='tipos_inactivar'),
 ]
