@@ -25,9 +25,11 @@
     {% csrf_token %}
 
     {# === #147 rediseño (mockup 2026-06-29): sección "Tiro" única === #}
-    {# Fusiona: N° de tiro editable + Vestida + sub-flujo conductor (checks,
-       incl. FT-931 nuevo) + Cuadrilla/%Tendido/%Facturación/Observaciones
-       (antes en "Información general" / sección final, ver A5). #}
+    {% comment %}
+    Fusiona: N° de tiro editable + Vestida + sub-flujo conductor (checks,
+    incl. FT-931 nuevo) + Cuadrilla/%Tendido/%Facturación/Observaciones
+    (antes en "Información general" / sección final, ver A5).
+    {% endcomment %}
     <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
       <summary class="px-4 py-3 font-semibold cursor-pointer">Tiro</summary>
       <div class="p-4 space-y-3 border-t">
@@ -71,43 +73,65 @@
       </div>
     </details>
 
-    {# === Circuito 1 + OPGW === #}
+    {# === Circuito 1 + Cable de guarda (#147 rediseño: OPGW→Cable de guarda, Fase A/B/C→1/2/3) === #}
     <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 1 (3 fases) + OPGW (izq/der)</summary>
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 1 (3 fases) + Cable de guarda (izq/der)</summary>
       <div class="p-4 space-y-3 border-t">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">Fase A</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase 1</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_a_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_a_fecha.label }}<br>{{ form.tendido_conductor_a_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">Fase B</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase 2</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_b_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_b_fecha.label }}<br>{{ form.tendido_conductor_b_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">Fase C</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Fase 3</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c_fecha.label }}<br>{{ form.tendido_conductor_c_fecha }}</label>
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">OPGW Izquierda</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Cable de guarda — Izquierda</p>
             <label class="flex items-center gap-2">{{ form.tendido_opgw_izq_ok }} <span>OK</span></label>
             <label>{{ form.tendido_opgw_izq_fecha.label }}<br>{{ form.tendido_opgw_izq_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-gray-500">OPGW Derecha</p>
+            <p class="text-xs font-semibold uppercase text-gray-500">Cable de guarda — Derecha</p>
             <label class="flex items-center gap-2">{{ form.tendido_opgw_der_ok }} <span>OK</span></label>
             <label>{{ form.tendido_opgw_der_fecha.label }}<br>{{ form.tendido_opgw_der_fecha }}</label>
           </div>
+
+          {% comment %}
+          #147 item 11: Regulación/flechado — Cable de guarda (movida desde
+          la sección standalone "Regulación y flechado por circuito")
+          {% endcomment %}
+          <div class="md:col-span-2 flex items-center gap-3 border rounded p-3 bg-gray-50 dark:bg-gray-700/40">
+            <label class="flex items-center gap-2 text-sm font-medium">
+              {{ form.regulacion_flechado_guarda_ok }} <span>Regulación y flechado — Cable de guarda</span>
+            </label>
+            <label class="text-xs text-gray-500">Fecha<br>{{ form.regulacion_flechado_guarda_fecha }}</label>
+          </div>
+        </div>
+
+        {% comment %}
+        #147 item 11: Regulación/flechado — Circuito 1 (movida desde la
+        sección standalone "Regulación y flechado por circuito")
+        {% endcomment %}
+        <div class="flex items-center gap-3 border rounded p-3 bg-gray-50 dark:bg-gray-700/40">
+          <label class="flex items-center gap-2 text-sm font-medium">
+            {{ form.regulacion_flechado_c1_ok }} <span>Regulación y flechado — Circuito 1</span>
+          </label>
+          <label class="text-xs text-gray-500">Fecha<br>{{ form.regulacion_flechado_c1_fecha }}</label>
         </div>
       </div>
     </details>
 
-    {# === Circuito 2 === #}
+    {# === Circuito 2 (#147 rediseño: Fase A/B/C→1/2/3) === #}
     <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700"
              x-data="{ aplica: {{ form.circuito_2_aplica.value|yesno:'true,false,true' }} }">
       <summary class="px-4 py-3 font-semibold cursor-pointer">Circuito 2 (3 fases adicionales)</summary>
@@ -122,20 +146,33 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3"
              x-show="aplica" :class="aplica ? '' : 'opacity-40 pointer-events-none'">
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase A</p>
+            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase 1</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_a_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c2_a_fecha.label }}<br>{{ form.tendido_conductor_c2_a_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase B</p>
+            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase 2</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_b_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c2_b_fecha.label }}<br>{{ form.tendido_conductor_c2_b_fecha }}</label>
           </div>
           <div class="space-y-2 border rounded p-3">
-            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase C</p>
+            <p class="text-xs font-semibold uppercase text-purple-600">C2 Fase 3</p>
             <label class="flex items-center gap-2">{{ form.tendido_conductor_c2_c_ok }} <span>OK</span></label>
             <label>{{ form.tendido_conductor_c2_c_fecha.label }}<br>{{ form.tendido_conductor_c2_c_fecha }}</label>
           </div>
+        </div>
+
+        {% comment %}
+        #147 item 11: Regulación/flechado — Circuito 2 (movida desde la
+        sección standalone; solo visible si C2 aplica, mismo x-show que
+        el resto de la sección)
+        {% endcomment %}
+        <div class="flex items-center gap-3 border rounded p-3 bg-gray-50 dark:bg-gray-700/40 mt-3"
+             x-show="aplica" :class="aplica ? '' : 'opacity-40 pointer-events-none'">
+          <label class="flex items-center gap-2 text-sm font-medium">
+            {{ form.regulacion_flechado_c2_ok }} <span>Regulación y flechado — Circuito 2</span>
+          </label>
+          <label class="text-xs text-gray-500">Fecha<br>{{ form.regulacion_flechado_c2_fecha }}</label>
         </div>
       </div>
     </details>
@@ -155,28 +192,6 @@
              :class="na ? 'opacity-40 pointer-events-none' : ''">
           <label class="flex items-center gap-2">{{ form.protecciones_ok }} <span>{{ form.protecciones_ok.label }}</span></label>
           <label>{{ form.protecciones_fecha.label|default:"Fecha" }}<br>{{ form.protecciones_fecha }}</label>
-        </div>
-      </div>
-    </details>
-
-    {# === #147 item 11: Regulación y flechado por circuito + cable de guarda === #}
-    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Regulación y flechado por circuito</summary>
-      <div class="p-4 border-t grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div class="space-y-2 border rounded p-3">
-          <p class="text-xs font-semibold uppercase text-gray-500">Circuito 1</p>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_c1_ok }} <span>OK</span></label>
-          <label>Fecha<br>{{ form.regulacion_flechado_c1_fecha }}</label>
-        </div>
-        <div class="space-y-2 border rounded p-3">
-          <p class="text-xs font-semibold uppercase text-gray-500">Circuito 2</p>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_c2_ok }} <span>OK</span></label>
-          <label>Fecha<br>{{ form.regulacion_flechado_c2_fecha }}</label>
-        </div>
-        <div class="space-y-2 border rounded p-3">
-          <p class="text-xs font-semibold uppercase text-gray-500">Cable de guarda</p>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_guarda_ok }} <span>OK</span></label>
-          <label>Fecha<br>{{ form.regulacion_flechado_guarda_fecha }}</label>
         </div>
       </div>
     </details>
