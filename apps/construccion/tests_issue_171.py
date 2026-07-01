@@ -6,15 +6,15 @@ que corre en paralelo sobre el mismo repo.
 import pytest
 from django.urls import reverse
 
-from apps.contratos.models import Contrato
 from apps.construccion.models import (
-    ProyectoConstruccion,
-    TorreConstruccion,
-    PataObra,
-    FaseTorre,
-    SocialPredial,
     AmbientalTorre,
+    FaseTorre,
+    PataObra,
+    ProyectoConstruccion,
+    SocialPredial,
+    TorreConstruccion,
 )
+from apps.contratos.models import Contrato
 
 
 @pytest.fixture
