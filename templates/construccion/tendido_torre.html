@@ -196,21 +196,6 @@
       </div>
     </details>
 
-    {# === Cable de guarda + regulación final === #}
-    <details class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Cable de guarda + regulación final + cuadrilla</summary>
-      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t">
-        <label class="flex items-center gap-2">{{ form.tendido_guarda_ok }} <span>{{ form.tendido_guarda_ok.label }}</span></label>
-        <label>{{ form.tendido_guarda_fecha.label }}<br>{{ form.tendido_guarda_fecha }}</label>
-        <label class="flex items-center gap-2">{{ form.regulacion_ok }} <span>{{ form.regulacion_ok.label }}</span></label>
-        <label>{{ form.regulacion_fecha.label }}<br>{{ form.regulacion_fecha }}</label>
-        <label>{{ form.cuadrilla_tendido.label }}<br>{{ form.cuadrilla_tendido }}</label>
-        <label>{{ form.pct_tendido.label }}<br>{{ form.pct_tendido }}</label>
-        <label>{{ form.pct_facturacion.label }}<br>{{ form.pct_facturacion }}</label>
-        <label class="md:col-span-2">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
-      </div>
-    </details>
-
     <div class="flex justify-end space-x-2">
       <a href="{% url 'construccion:tendido_lista' proyecto.id %}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 dark:text-gray-300">Cancelar</a>
       <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar</button>
