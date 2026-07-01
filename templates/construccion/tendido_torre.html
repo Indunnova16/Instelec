@@ -24,84 +24,50 @@
   <form method="post" class="space-y-4">
     {% csrf_token %}
 
-    {# === Vestida + sub-flujo conductor === #}
+    {# === #147 rediseño (mockup 2026-06-29): sección "Tiro" única === #}
+    {# Fusiona: N° de tiro editable + Vestida + sub-flujo conductor (checks,
+       incl. FT-931 nuevo) + Cuadrilla/%Tendido/%Facturación/Observaciones
+       (antes en "Información general" / sección final, ver A5). #}
     <details open class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-      <summary class="px-4 py-3 font-semibold cursor-pointer">Vestida de torres + sub-flujo conductor</summary>
+      <summary class="px-4 py-3 font-semibold cursor-pointer">Tiro</summary>
       <div class="p-4 space-y-3 border-t">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+        <div class="px-3 py-2 bg-blue-50 text-blue-800 text-xs rounded">
+          ℹ️ Cada torre pertenece a un único tiro. Ingresa el N° de tiro y completa los datos del mismo.
+        </div>
+
+        {# N° de tiro + Cuadrilla + Fecha riega de manila + Distancia vano adelante #}
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <label class="text-sm font-semibold">{{ form.numero_tiro.label }}<br>{{ form.numero_tiro }}</label>
+          <label>{{ form.cuadrilla_tendido.label }}<br>{{ form.cuadrilla_tendido }}</label>
+          <label>{{ form.fecha_riega_manila.label }}<br>{{ form.fecha_riega_manila }}</label>
+          <label>{{ form.distancia_vano_adelante_m.label }}<br>{{ form.distancia_vano_adelante_m }}</label>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
           <label class="flex items-center gap-2">{{ form.vestida_torres_ok }} <span>{{ form.vestida_torres_ok.label }}</span></label>
           <label>{{ form.vestida_torres_fecha.label }}<br>{{ form.vestida_torres_fecha }}</label>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 border-t pt-3">
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 border-t pt-3">
           <label class="flex items-center gap-2">{{ form.riega_manila_ok }} <span class="text-xs">{{ form.riega_manila_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.riega_guaya_ok }} <span class="text-xs">{{ form.riega_guaya_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft046_ok }} <span class="text-xs">{{ form.ft046_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft047_ok }} <span class="text-xs">{{ form.ft047_ok.label }}</span></label>
+          <label class="flex items-center gap-2">{{ form.ft931_ok }} <span class="text-xs">{{ form.ft931_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft932_ok }} <span class="text-xs">{{ form.ft932_ok.label }}</span></label>
-          <label class="flex items-center gap-2">{{ form.regulacion_flechado_ok }} <span class="text-xs">{{ form.regulacion_flechado_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.ft918_ok }} <span class="text-xs">{{ form.ft918_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.grapado_ok }} <span class="text-xs">{{ form.grapado_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.accesorios_ok }} <span class="text-xs">{{ form.accesorios_ok.label }}</span></label>
           <label class="flex items-center gap-2">{{ form.placas_senalizacion_ok }} <span class="text-xs">{{ form.placas_senalizacion_ok.label }}</span></label>
-          <label class="md:col-span-2">{{ form.distancia_vano_adelante_m.label }}<br>{{ form.distancia_vano_adelante_m }}</label>
         </div>
 
-        {# === #147 item 10: riega de manila por tiros + F.T === #}
-        <div class="border-t pt-3 space-y-3"
-             x-data="tirosManila('id_tiros_manila-TOTAL_FORMS')">
-          <label class="block text-sm">{{ form.fecha_riega_manila.label }}<br>{{ form.fecha_riega_manila }}</label>
-          <p class="text-xs font-semibold uppercase text-gray-500">Tiros de riega de manila (F.T por tiro)</p>
-          {{ tiros_formset.management_form }}
-          <div data-tiros-manila class="space-y-2">
-            {% for tiro_form in tiros_formset %}
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end border rounded p-2"
-                 data-tiro-row x-data="{ marcadaQuitar: false }"
-                 :class="marcadaQuitar ? 'opacity-40' : ''">
-              {% for hidden in tiro_form.hidden_fields %}{{ hidden }}{% endfor %}
-              <label class="text-xs">N° tiro<br>{{ tiro_form.numero_tiro }}</label>
-              <label class="text-xs">Fecha<br>{{ tiro_form.fecha }}</label>
-              <label class="text-xs">F.T (m)<br>{{ tiro_form.flecha_tendido_m }}</label>
-              <label class="text-xs md:col-span-1">Observaciones<br>{{ tiro_form.observaciones }}</label>
-              {% if tiro_form.instance.pk %}
-              {% comment %}
-                fila guardada: el checkbox DELETE del formset (can_delete=True) va
-                OCULTO; el botón rojo lo togglea y atenúa la fila SIN sacarla del DOM
-                (para que el inlineformset la procese como borrada al guardar).
-              {% endcomment %}
-              <span class="hidden" data-tiro-delete-saved>{{ tiro_form.DELETE }}</span>
-              <button type="button" data-remove-tiro
-                      class="text-xs text-red-600 hover:text-red-800 justify-self-start"
-                      @click="marcadaQuitar = quitarFilaGuardada($event)"
-                      x-text="marcadaQuitar ? 'Deshacer' : 'Quitar'">Quitar</button>
-              {% else %}
-              {# fila nueva sin guardar: remover del DOM + ajustar TOTAL_FORMS #}
-              <button type="button" data-remove-tiro
-                      class="text-xs text-red-600 hover:text-red-800 justify-self-start"
-                      @click="quitarFila($event)">Quitar</button>
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div>
-
-          {# plantilla oculta = empty_form del formset (placeholder __prefix__) #}
-          <template x-ref="tiroTemplate">
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end border rounded p-2" data-tiro-row>
-              {% for hidden in tiros_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-              <label class="text-xs">N° tiro<br>{{ tiros_formset.empty_form.numero_tiro }}</label>
-              <label class="text-xs">Fecha<br>{{ tiros_formset.empty_form.fecha }}</label>
-              <label class="text-xs">F.T (m)<br>{{ tiros_formset.empty_form.flecha_tendido_m }}</label>
-              <label class="text-xs md:col-span-1">Observaciones<br>{{ tiros_formset.empty_form.observaciones }}</label>
-              <button type="button" data-remove-tiro
-                      class="text-xs text-red-600 hover:text-red-800 justify-self-start"
-                      @click="quitarFila($event)">Quitar</button>
-            </div>
-          </template>
-
-          <button type="button" data-add-tiro @click="agregarTiro()"
-                  class="inline-flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700">
-            <span aria-hidden="true">+</span> Agregar tiro
-          </button>
+        {# % Tendido + % Facturación + Observaciones al cierre del tiro #}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
+          <label>{{ form.pct_tendido.label }}<br>{{ form.pct_tendido }}</label>
+          <label>{{ form.pct_facturacion.label }}<br>{{ form.pct_facturacion }}</label>
         </div>
+        <label class="block">{{ form.observaciones.label }}<br>{{ form.observaciones }}</label>
       </div>
     </details>
 
@@ -236,72 +202,4 @@
     </div>
   </form>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-{{ block.super }}
-<script>
-  // #147 item 10 — formset dinámico de "tiros de riega de manila".
-  // Clona el empty_form del formset (placeholder __prefix__) e incrementa
-  // tiros_manila-TOTAL_FORMS. Registrado en alpine:init para evitar la
-  // condición de carrera con el Alpine `defer` de base.html.
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('tirosManila', (totalFormsId) => ({
-      total() {
-        return document.getElementById(totalFormsId);
-      },
-      agregarTiro() {
-        const tpl = this.$refs.tiroTemplate;
-        const cont = this.$root.querySelector('[data-tiros-manila]');
-        if (!tpl || !cont) return;
-        const totalInput = this.total();
-        const idx = parseInt(totalInput.value || '0', 10);
-        const html = tpl.innerHTML.replaceAll('__prefix__', idx);
-        const frag = document.createElement('div');
-        frag.innerHTML = html.trim();
-        const fila = frag.firstElementChild;
-        cont.appendChild(fila);
-        totalInput.value = idx + 1;
-      },
-      quitarFila(ev) {
-        const fila = ev.target.closest('[data-tiro-row]');
-        if (!fila) return;
-        fila.remove();
-        this.reindexar();
-      },
-      quitarFilaGuardada(ev) {
-        // Fila YA guardada: en vez de sacarla del DOM, togglear el checkbox
-        // DELETE oculto del formset para que el inlineformset (can_delete=True)
-        // la procese como borrada al guardar. Devuelve el nuevo estado marcado
-        // para que Alpine atenúe la fila y cambie el texto del botón.
-        const fila = ev.target.closest('[data-tiro-row]');
-        if (!fila) return false;
-        const del = fila.querySelector('[data-tiro-delete-saved] input[type="checkbox"]');
-        if (!del) return false;
-        del.checked = !del.checked;
-        return del.checked;
-      },
-      reindexar() {
-        // Renumera name/id de las filas SIN guardar (no tienen DELETE) para que
-        // sean contiguas 0..N-1 y ajusta TOTAL_FORMS al conteo real de filas.
-        const cont = this.$root.querySelector('[data-tiros-manila]');
-        if (!cont) return;
-        const filas = cont.querySelectorAll('[data-tiro-row]');
-        let i = 0;
-        filas.forEach((fila) => {
-          fila.querySelectorAll('input, select, textarea').forEach((el) => {
-            ['name', 'id'].forEach((attr) => {
-              const v = el.getAttribute(attr);
-              if (v) {
-                el.setAttribute(attr, v.replace(/tiros_manila-\d+-/, 'tiros_manila-' + i + '-'));
-              }
-            });
-          });
-          i += 1;
-        });
-        this.total().value = filas.length;
-      },
-    }));
-  });
-</script>
 {% endblock %}
