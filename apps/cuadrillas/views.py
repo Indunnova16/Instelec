@@ -202,11 +202,24 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
             (m.costo_dia for m in miembros), Decimal('0')
         )
 
-        # Available users for add member form
+        # Available users for add member form (legacy — se mantiene por si
+        # algun template/reporte externo aun lo consume).
         miembros_ids = [m.usuario_id for m in miembros]
         context['usuarios_disponibles'] = Usuario.objects.filter(
             is_active=True
         ).exclude(id__in=miembros_ids).order_by('first_name', 'last_name')
+
+        # Picklist de colaboradores disponibles (issue #176, A4): origen de
+        # datos = PersonalCuadrilla.activo=True, excluyendo los que ya son
+        # miembros activos de esta cuadrilla (match por documento, no por
+        # Usuario -- un PersonalCuadrilla puede no tener Usuario vinculado
+        # aun la primera vez que se asigna).
+        miembros_documentos = {
+            m.usuario.documento for m in miembros if m.usuario and m.usuario.documento
+        }
+        context['personal_disponible'] = PersonalCuadrilla.objects.filter(
+            activo=True
+        ).exclude(documento__in=miembros_documentos).order_by('nombre')
 
         # Choices for form selects
         context['roles_cuadrilla'] = CuadrillaMiembro.RolCuadrilla.choices
@@ -496,29 +509,82 @@ class CuadrillaCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
 
 
 class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
-    """Add a member to a cuadrilla."""
+    """Add a member to a cuadrilla.
+
+    Refactor issue #176 (A4): el origen de datos del picker pasa de
+    `Usuario` a `PersonalCuadrilla` (maestro de Colaboradores). El usuario
+    ingresa el `documento` de un colaborador ACTIVO (autocompletado AJAX
+    vía `PersonalCuadrillaAPIView`); el `rol_cuadrilla` (Cargo) NO es
+    editable en el form -- se toma siempre del maestro `PersonalCuadrilla`,
+    ignorando cualquier valor distinto que venga en el POST. Al hacer
+    submit, se resuelve/crea el `Usuario` correspondiente por
+    documento+nombre (mismo patrón de `apps.cuadrillas.importers._crear_usuario`:
+    email sintético, password no utilizable). `CuadrillaMiembro.usuario`
+    se mantiene como FK a Usuario -- no se toca el modelo de datos (otros
+    flujos como TrackingUbicacion/fotos/reportes dependen de él).
+    """
     model = Cuadrilla
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
-    def post(self, request, *args, **kwargs):
+    @staticmethod
+    def _resolver_o_crear_usuario(personal):
+        """Resuelve el Usuario vinculado a un PersonalCuadrilla por documento,
+        o lo crea si es la primera vez que se asigna (mismo patrón de
+        apps.cuadrillas.importers._crear_usuario para altas masivas S18):
+        email sintético determinístico, is_active=False, sin password
+        utilizable -- es solo un registro de vínculo, no una cuenta operativa.
+        """
         from apps.usuarios.models import Usuario
+
+        usuario = Usuario.objects.filter(documento=personal.documento).first()
+        if usuario:
+            return usuario
+
+        nombre = personal.nombre or f'Colaborador {personal.documento}'
+        partes = nombre.split()
+        first = partes[0] if partes else nombre
+        last = ' '.join(partes[1:]) if len(partes) > 1 else ''
+        email = f'{personal.documento}@instelec-colaborador.local'
+
+        usuario = Usuario.objects.create(
+            email=email,
+            first_name=first[:150],
+            last_name=last[:150],
+            documento=personal.documento,
+            rol='operario_general',
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save(update_fields=['password'])
+        return usuario
+
+    def post(self, request, *args, **kwargs):
         from datetime import date
 
         cuadrilla = self.get_object()
-        usuario_id = request.POST.get('usuario')
-        rol = request.POST.get('rol_cuadrilla', 'LINIERO_I')
-        cargo = request.POST.get('cargo', 'MIEMBRO')
+        documento = (request.POST.get('documento') or '').strip()
         costo_dia = request.POST.get('costo_dia', '0') or '0'
 
-        if not usuario_id:
-            messages.error(request, 'Debe seleccionar un usuario.')
+        if not documento:
+            messages.error(request, 'Debe ingresar el documento de un colaborador.')
             return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
 
-        try:
-            usuario = Usuario.objects.get(pk=usuario_id)
-        except Usuario.DoesNotExist:
-            messages.error(request, 'Usuario no encontrado.')
+        personal = PersonalCuadrilla.objects.filter(documento=documento, activo=True).first()
+        if not personal:
+            messages.error(
+                request,
+                f'No se encontró un colaborador activo con documento "{documento}". '
+                'Verifique el documento o dé de alta el colaborador en el maestro.',
+            )
             return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
+
+        # Cargo (rol_cuadrilla) NO es editable en el form de asignación: se
+        # toma siempre del maestro PersonalCuadrilla, ignorando cualquier
+        # valor distinto que venga en el POST (issue #176, A4).
+        rol = personal.rol_cuadrilla
+        cargo = request.POST.get('cargo', 'MIEMBRO')
+
+        usuario = self._resolver_o_crear_usuario(personal)
 
         if CuadrillaMiembro.objects.filter(
             cuadrilla=cuadrilla, usuario=usuario, activo=True
@@ -530,7 +596,7 @@ class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
             CuadrillaMiembro.objects.create(
                 cuadrilla=cuadrilla,
                 usuario=usuario,
-                rol_cuadrilla=rol if rol in dict(CuadrillaMiembro.RolCuadrilla.choices) else 'LINIERO_I',
+                rol_cuadrilla=rol,
                 cargo=cargo if cargo in dict(CuadrillaMiembro.CargoJerarquico.choices) else 'MIEMBRO',
                 costo_dia=float(costo_dia),
                 fecha_inicio=date.today(),
