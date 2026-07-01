@@ -31,6 +31,11 @@ urlpatterns = [
     path('mapa/', views.MapaCuadrillasView.as_view(), name='mapa'),
     path('mapa/partial/', views.MapaCuadrillasPartialView.as_view(), name='mapa_partial'),
     path('ubicaciones/json/', views.MapaCuadrillasPartialView.as_view(), name='ubicaciones_json'),
+    # Colaboradores — CRUD sobre PersonalCuadrilla (issue #176, A3)
+    path('colaboradores/', views.ColaboradorListView.as_view(), name='colaboradores_lista'),
+    path('colaboradores/crear/', views.ColaboradorCreateView.as_view(), name='colaboradores_crear'),
+    path('colaboradores/<uuid:pk>/editar/', views.ColaboradorEditView.as_view(), name='colaboradores_editar'),
+    path('colaboradores/<uuid:pk>/inactivar/', views.ColaboradorInactivarView.as_view(), name='colaboradores_inactivar'),
 ]
 
 # B3 — Cuadrilla auditoria/reactivar routes. Optional import.

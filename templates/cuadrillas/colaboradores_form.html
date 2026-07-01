@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{% if modo == 'editar' %}Editar{% else %}Nuevo{% endif %} Colaborador - TransMaint{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                {% if modo == 'editar' %}Editar Colaborador{% else %}Nuevo Colaborador{% endif %}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400">Maestro de personal disponible para cuadrillas</p>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-800 dark:bg-red-900 dark:text-red-200" role="alert">
+            {{ form.non_field_errors }}
+        </div>
+        {% endif %}
+
+        <form method="post" class="space-y-4" novalidate>
+            {% csrf_token %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.nombre.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Nombre completo
+                    </label>
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.nombre.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.documento.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Documento
+                    </label>
+                    {{ form.documento }}
+                    {% if form.documento.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.documento.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.rol_cuadrilla.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Cargo
+                    </label>
+                    {{ form.rol_cuadrilla }}
+                    {% if form.rol_cuadrilla.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.rol_cuadrilla.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.salario_base.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Salario base
+                    </label>
+                    {{ form.salario_base }}
+                </div>
+
+                <div>
+                    <label for="{{ form.fecha_ingreso.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Fecha de ingreso
+                    </label>
+                    {{ form.fecha_ingreso }}
+                </div>
+
+                <div>
+                    <label for="{{ form.fecha_salida.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Fecha de salida
+                    </label>
+                    {{ form.fecha_salida }}
+                    <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                        Al registrarla, el colaborador se marca automáticamente como inactivo.
+                    </p>
+                    {% if form.fecha_salida.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.fecha_salida.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4">
+                <a href="{% url 'cuadrillas:colaboradores_lista' %}"
+                   class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    Cancelar
+                </a>
+                <button type="submit"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    {% if modo == 'editar' %}Guardar Cambios{% else %}Crear Colaborador{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

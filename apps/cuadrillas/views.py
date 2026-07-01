@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Asistencia, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
+from .forms_personal import PersonalCuadrillaForm
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -1580,3 +1581,103 @@ class DescargarPlantillaCuadrillasView(LoginRequiredMixin, RoleRequiredMixin, Vi
 
         wb.save(response)
         return response
+
+
+# ---------------------------------------------------------------------------
+# Colaboradores — CRUD sobre PersonalCuadrilla (issue #176, A3)
+# ---------------------------------------------------------------------------
+class ColaboradorListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
+    """Listado del maestro Colaboradores, con activos e inactivos."""
+    model = PersonalCuadrilla
+    template_name = 'cuadrillas/colaboradores_lista.html'
+    context_object_name = 'colaboradores'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_queryset(self):
+        qs = PersonalCuadrilla.objects.all()
+        estado = self.request.GET.get('estado', '').strip()
+        if estado == 'activos':
+            qs = qs.filter(activo=True)
+        elif estado == 'inactivos':
+            qs = qs.filter(activo=False)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['estado_filtro'] = self.request.GET.get('estado', '')
+        context['total_activos'] = PersonalCuadrilla.objects.filter(activo=True).count()
+        context['total_inactivos'] = PersonalCuadrilla.objects.filter(activo=False).count()
+        return context
+
+
+class ColaboradorCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
+    """Crear un nuevo Colaborador (PersonalCuadrilla)."""
+    template_name = 'cuadrillas/colaboradores_form.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', PersonalCuadrillaForm())
+        context['modo'] = 'crear'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = PersonalCuadrillaForm(request.POST)
+        if form.is_valid():
+            colaborador = form.save()
+            messages.success(request, f'Colaborador "{colaborador.nombre}" creado exitosamente.')
+            return redirect('cuadrillas:colaboradores_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class ColaboradorEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
+    """Editar un Colaborador (PersonalCuadrilla) existente."""
+    model = PersonalCuadrilla
+    template_name = 'cuadrillas/colaboradores_form.html'
+    context_object_name = 'colaborador'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', PersonalCuadrillaForm(instance=self.object))
+        context['modo'] = 'editar'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = PersonalCuadrillaForm(request.POST, instance=self.object)
+        if form.is_valid():
+            colaborador = form.save()
+            messages.success(request, f'Colaborador "{colaborador.nombre}" actualizado exitosamente.')
+            return redirect('cuadrillas:colaboradores_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class ColaboradorInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Alterna activo/inactivo de un Colaborador. Nunca borra el registro.
+
+    Al reactivar (de inactivo a activo), limpia fecha_salida (si no,
+    save() la volveria a marcar inactivo inmediatamente — ver A2).
+    """
+    model = PersonalCuadrilla
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        colaborador = self.get_object()
+        if colaborador.activo:
+            from datetime import date
+            colaborador.fecha_salida = date.today()
+            colaborador.save(update_fields=['fecha_salida', 'activo', 'updated_at'])
+            messages.success(
+                request,
+                f'Colaborador "{colaborador.nombre}" inactivado. '
+                'No aparecerá en el picklist de asignación a cuadrillas.',
+            )
+        else:
+            colaborador.fecha_salida = None
+            colaborador.activo = True
+            colaborador.save(update_fields=['fecha_salida', 'activo', 'updated_at'])
+            messages.success(request, f'Colaborador "{colaborador.nombre}" reactivado.')
+        return redirect('cuadrillas:colaboradores_lista')
