@@ -392,6 +392,94 @@ class ReporteDanoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         return super().get_queryset().select_related('usuario', 'linea', 'torre').prefetch_related('fotos')
 
 
+class ReportesDanoMapaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """
+    Mapa de reportes de daño con pines filtrables por línea/severidad/tipo.
+    Agregado: issue #175 (A4).
+
+    Reusa el mismo esquema de permisos y filtros que ReportesDanoListView.
+    """
+    template_name = 'campo/mapa_reportes_dano.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['lineas'] = get_lineas_activas()
+        context['tipos'] = ReporteDano.TipoDano.choices
+        context['severidades'] = ReporteDano.Severidad.choices
+        context['filtros'] = {
+            'linea': self.request.GET.get('linea', ''),
+            'severidad': self.request.GET.get('severidad', ''),
+            'tipo': self.request.GET.get('tipo', ''),
+        }
+        return context
+
+
+class ReportesDanoMapaPartialView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """
+    Endpoint JSON con los reportes de daño geolocalizados, filtrable por
+    línea/severidad/tipo (mismos filtros que ReportesDanoListView).
+    Agregado: issue #175 (A4).
+
+    Excluye reportes sin latitud/longitud (no pineables). Devuelve JSON
+    siempre -- es un endpoint de datos consumido por fetch() desde el mapa,
+    no una vista HTML con partial HTMX.
+    """
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+
+    def get_queryset(self) -> QuerySet[ReporteDano]:
+        qs = (
+            ReporteDano.objects
+            .select_related('usuario', 'linea', 'torre')
+            .prefetch_related('fotos')
+            .exclude(latitud__isnull=True)
+            .exclude(longitud__isnull=True)
+        )
+
+        linea_id = self.request.GET.get('linea')
+        if linea_id:
+            qs = qs.filter(linea_id=linea_id)
+
+        severidad = self.request.GET.get('severidad')
+        if severidad:
+            qs = qs.filter(severidad=severidad)
+
+        tipo = self.request.GET.get('tipo')
+        if tipo:
+            qs = qs.filter(tipo_dano=tipo)
+
+        return qs.order_by('-created_at')
+
+    def get(self, request, *args, **kwargs):
+        from django.http import JsonResponse
+        from django.urls import reverse
+
+        reportes = []
+        for reporte in self.get_queryset():
+            primera_foto = reporte.fotos.first()
+            reportes.append({
+                'id': str(reporte.id),
+                'lat': float(reporte.latitud),
+                'lng': float(reporte.longitud),
+                'severidad': reporte.severidad,
+                'severidad_display': reporte.get_severidad_display(),
+                'tipo_dano': reporte.tipo_dano,
+                'tipo_dano_display': reporte.get_tipo_dano_display(),
+                'descripcion': (
+                    reporte.descripcion[:150] + '...'
+                    if len(reporte.descripcion) > 150
+                    else reporte.descripcion
+                ),
+                'linea_codigo': reporte.linea.codigo if reporte.linea else None,
+                'torre_numero': reporte.torre.numero_display if reporte.torre else None,
+                'foto_url': primera_foto.imagen.url if primera_foto else None,
+                'created_at': reporte.created_at.isoformat(),
+                'detalle_url': reverse('campo:detalle_dano', kwargs={'pk': reporte.pk}),
+            })
+
+        return JsonResponse({'reportes': reportes})
+
+
 class ProcedimientoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     """
     List uploaded procedure documents with search functionality.

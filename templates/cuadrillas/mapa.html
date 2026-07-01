@@ -18,6 +18,24 @@
         height: 24px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     }
+    #map-empty-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        padding: 1.25rem 1.5rem;
+        max-width: 22rem;
+        text-align: center;
+        pointer-events: none;
+    }
+    html.dark #map-empty-overlay {
+        background: rgba(31, 41, 55, 0.95);
+        color: #d1d5db;
+    }
 </style>
 {% endblock %}
 
@@ -48,8 +66,16 @@
     </div>
 
     <!-- Map Container -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden relative">
         <div id="map-cuadrillas"></div>
+        <div id="map-empty-overlay" class="hidden" data-empty-map-overlay>
+            <svg class="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <p class="font-medium text-gray-700 dark:text-gray-200">Ninguna cuadrilla está reportando ubicación GPS en este momento.</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Verificá que la app móvil esté activa y con permisos de ubicación habilitados.</p>
+        </div>
     </div>
 
     <!-- Crew List -->
@@ -121,6 +147,13 @@
 
         if (bounds.length > 0) {
             map.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        // Estado vacio informativo (#175 A3): sin tracking, el mapa no debe
+        // parecer "roto" o mudo -- mostramos overlay explicando la causa.
+        const overlay = document.getElementById('map-empty-overlay');
+        if (overlay) {
+            overlay.classList.toggle('hidden', ubicaciones.length > 0);
         }
     }
 

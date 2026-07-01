@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}Reporte de Daño - TransMaint{% endblock %}
 
@@ -43,8 +44,10 @@
                     {% for foto in reporte.fotos.all %}
                     <div class="relative group">
                         <img src="{{ foto.imagen.url }}" alt="Foto del daño"
+                             data-foto-imagen
                              class="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition"
-                             onclick="window.open(this.src, '_blank')">
+                             onclick="window.open(this.src, '_blank')"
+                             onerror="this.onerror=null; this.removeAttribute('onclick'); this.style.cursor='default'; this.replaceWith(Object.assign(document.createElement('div'), {className: 'w-full h-48 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-400 text-sm', textContent: 'Imagen no disponible'}));">
                         {% if foto.descripcion %}
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ foto.descripcion }}</p>
                         {% endif %}
@@ -111,7 +114,7 @@
                         <p class="text-gray-500 dark:text-gray-400">Longitud</p>
                         <p class="font-medium text-gray-900 dark:text-white font-mono">{{ reporte.longitud }}</p>
                     </div>
-                    <a href="https://www.google.com/maps?q={{ reporte.latitud }},{{ reporte.longitud }}"
+                    <a href="https://www.google.com/maps?q={{ reporte.latitud|unlocalize }},{{ reporte.longitud|unlocalize }}"
                        target="_blank"
                        class="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

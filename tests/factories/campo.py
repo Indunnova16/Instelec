@@ -3,9 +3,10 @@
 import factory
 from datetime import datetime, timedelta
 from decimal import Decimal
+from django.core.files.base import ContentFile
 from django.utils import timezone
 
-from apps.campo.models import RegistroCampo, Evidencia
+from apps.campo.models import RegistroCampo, Evidencia, ReporteDano, FotoDano
 from tests.factories.actividades import ActividadEnCursoFactory
 from tests.factories.usuarios import LinieroFactory
 
@@ -91,3 +92,36 @@ class EvidenciaDespuesFactory(EvidenciaFactory):
     """Factory for DESPUES evidence."""
 
     tipo = "DESPUES"
+
+
+class ReporteDanoFactory(factory.django.DjangoModelFactory):
+    """Factory for ReporteDano model. Agregado: issue #175 (mapa reportes de daño)."""
+
+    class Meta:
+        model = ReporteDano
+
+    usuario = factory.SubFactory(LinieroFactory)
+    linea = None
+    torre = None
+    tipo_dano = "ESTRUCTURAL"
+    severidad = "MEDIA"
+    descripcion = factory.Faker("paragraph", locale="es_CO")
+    latitud = factory.LazyFunction(
+        lambda: Decimal(f"{factory.Faker._get_faker().pyfloat(min_value=4.0, max_value=12.0):.8f}")
+    )
+    longitud = factory.LazyFunction(
+        lambda: Decimal(f"{factory.Faker._get_faker().pyfloat(min_value=-77.0, max_value=-72.0):.8f}")
+    )
+
+
+class FotoDanoFactory(factory.django.DjangoModelFactory):
+    """Factory for FotoDano model. Agregado: issue #175."""
+
+    class Meta:
+        model = FotoDano
+
+    reporte = factory.SubFactory(ReporteDanoFactory)
+    imagen = factory.LazyFunction(
+        lambda: ContentFile(b"fake-image-bytes", name="foto_dano_test.png")
+    )
+    descripcion = ""

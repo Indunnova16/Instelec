@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Mapa de Reportes de Daño - TransMaint{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #map-reportes-dano {
+        height: calc(100vh - 260px);
+        min-height: 500px;
+        width: 100%;
+    }
+    #map-reportes-empty-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        padding: 1.25rem 1.5rem;
+        max-width: 22rem;
+        text-align: center;
+        pointer-events: none;
+    }
+    html.dark #map-reportes-empty-overlay {
+        background: rgba(31, 41, 55, 0.95);
+        color: #d1d5db;
+    }
+    .popup-foto-dano {
+        width: 100%;
+        max-width: 220px;
+        max-height: 140px;
+        object-fit: cover;
+        border-radius: 0.25rem;
+        margin-top: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{% url 'campo:reportes_dano' %}" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Mapa de Reportes de Daño</h1>
+                <p class="text-gray-600 dark:text-gray-400">Ubicación geográfica de los daños reportados en campo</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="filtro-linea" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Línea
+                </label>
+                <select id="filtro-linea"
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">Todas las líneas</option>
+                    {% for linea in lineas %}
+                    <option value="{{ linea.id }}" {% if filtros.linea == linea.id|stringformat:'s' %}selected{% endif %}>
+                        {{ linea.codigo }} - {{ linea.nombre|truncatewords:5 }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filtro-severidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Severidad
+                </label>
+                <select id="filtro-severidad"
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">Todas las severidades</option>
+                    {% for valor, label in severidades %}
+                    <option value="{{ valor }}" {% if filtros.severidad == valor %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filtro-tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Tipo de Daño
+                </label>
+                <select id="filtro-tipo"
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <option value="">Todos los tipos</option>
+                    {% for valor, label in tipos %}
+                    <option value="{{ valor }}" {% if filtros.tipo == valor %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Container -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden relative">
+        <div id="map-reportes-dano"></div>
+        <div id="map-reportes-empty-overlay" class="hidden" data-empty-map-overlay>
+            <svg class="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <p class="font-medium text-gray-700 dark:text-gray-200" data-empty-reportes-mensaje>
+                No hay reportes de daño con coordenadas para los filtros seleccionados.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    let mapReportes;
+    let markersReportes = {};
+
+    const SEVERIDAD_COLOR = {
+        CRITICA: '#DC2626',
+        ALTA: '#EA580C',
+        MEDIA: '#CA8A04',
+        BAJA: '#16A34A',
+    };
+
+    function initMapReportes() {
+        mapReportes = L.map('map-reportes-dano').setView([4.5709, -74.2973], 6);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapReportes);
+
+        loadReportes();
+    }
+
+    function buildQueryString() {
+        const params = new URLSearchParams();
+        const linea = document.getElementById('filtro-linea').value;
+        const severidad = document.getElementById('filtro-severidad').value;
+        const tipo = document.getElementById('filtro-tipo').value;
+        if (linea) params.set('linea', linea);
+        if (severidad) params.set('severidad', severidad);
+        if (tipo) params.set('tipo', tipo);
+        return params.toString();
+    }
+
+    function loadReportes() {
+        const qs = buildQueryString();
+        const url = '{% url "campo:reportes_dano_mapa_data" %}' + (qs ? '?' + qs : '');
+
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(response => response.json())
+            .then(data => updatePinesReportes(data.reportes))
+            .catch(error => {
+                console.error('Error cargando reportes de daño:', error);
+            });
+    }
+
+    function updatePinesReportes(reportes) {
+        Object.values(markersReportes).forEach(marker => mapReportes.removeLayer(marker));
+        markersReportes = {};
+
+        const bounds = [];
+
+        reportes.forEach(rep => {
+            const color = SEVERIDAD_COLOR[rep.severidad] || '#6B7280';
+            const icon = L.divIcon({
+                className: '',
+                html: `<div style="background:${color};border:3px solid #fff;border-radius:50%;width:20px;height:20px;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
+                iconSize: [20, 20],
+            });
+
+            const fotoHtml = rep.foto_url
+                ? `<img class="popup-foto-dano" src="${rep.foto_url}" alt="Foto del daño"
+                       onerror="this.onerror=null; this.replaceWith(Object.assign(document.createElement('div'), {className: 'popup-foto-dano flex items-center justify-center bg-gray-100 text-gray-400 text-xs', textContent: 'Imagen no disponible'}));">`
+                : '';
+
+            const popupHtml = `
+                <strong>${rep.severidad_display}</strong> - ${rep.tipo_dano_display}<br>
+                ${rep.linea_codigo ? rep.linea_codigo : ''}${rep.torre_numero ? ' / ' + rep.torre_numero : ''}<br>
+                <small>${rep.descripcion}</small><br>
+                ${fotoHtml}
+                <br><a href="${rep.detalle_url}" class="text-blue-600 hover:underline">Ver detalle</a>
+            `;
+
+            const marker = L.marker([rep.lat, rep.lng], { icon }).addTo(mapReportes).bindPopup(popupHtml);
+            markersReportes[rep.id] = marker;
+            bounds.push([rep.lat, rep.lng]);
+        });
+
+        if (bounds.length > 0) {
+            mapReportes.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        const overlay = document.getElementById('map-reportes-empty-overlay');
+        if (overlay) {
+            overlay.classList.toggle('hidden', reportes.length > 0);
+        }
+    }
+
+    document.getElementById('filtro-linea').addEventListener('change', loadReportes);
+    document.getElementById('filtro-severidad').addEventListener('change', loadReportes);
+    document.getElementById('filtro-tipo').addEventListener('change', loadReportes);
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const mapContainer = document.getElementById('map-reportes-dano');
+        if (mapContainer) {
+            initMapReportes();
+            setTimeout(function() { if (mapReportes) mapReportes.invalidateSize(); }, 100);
+            setTimeout(function() { if (mapReportes) mapReportes.invalidateSize(); }, 300);
+
+            new ResizeObserver(function() {
+                if (mapReportes) mapReportes.invalidateSize();
+            }).observe(mapContainer);
+        }
+    });
+</script>
+{% endblock %}

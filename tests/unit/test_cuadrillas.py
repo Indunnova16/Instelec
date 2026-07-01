@@ -3,6 +3,7 @@
 import pytest
 from datetime import date, timedelta
 from decimal import Decimal
+from django.urls import reverse
 
 from apps.cuadrillas.models import Vehiculo, Cuadrilla, CuadrillaMiembro, TrackingUbicacion
 
@@ -248,3 +249,71 @@ class TestCuadrillasFactories:
         assert miembro.usuario
         assert miembro.rol_cuadrilla
         assert miembro.fecha_inicio
+
+
+# ==============================================================================
+# Issue #175 — A3: mapa de cuadrillas sin marcadores -> estado vacío informativo
+# ==============================================================================
+
+
+@pytest.mark.django_db
+class TestMapaCuadrillasEstadoVacio:
+    """A3 (#175): con 0 filas en tracking_ubicacion (confirmado en prod), el
+    partial del mapa debe mostrar un mensaje explicativo -- no un mapa mudo
+    ni un texto genérico. No es un bug de código: `MapaCuadrillasPartialView`
+    funciona correctamente, solo no hay dato de tracking que mostrar. NO se
+    implementa fallback de posición-vía-torre (decisión F2, pregunta abierta
+    a Miguel/cliente en el comentario final del issue).
+    """
+
+    def test_sin_tracking_muestra_mensaje_explicativo(self, client, user_password):
+        """Con cuadrillas activas pero sin TrackingUbicacion, debe verse el
+        mensaje explicativo (no el texto genérico anterior)."""
+        from tests.factories import CuadrillaFactory, AdminFactory
+
+        CuadrillaFactory(activa=True)
+        CuadrillaFactory(activa=True)
+
+        admin = AdminFactory()
+        client.login(username=admin.email, password=user_password)
+
+        url = reverse("cuadrillas:mapa_partial")
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "Ninguna cuadrilla está reportando ubicación GPS en este momento." in html
+        assert "app móvil esté activa" in html
+        # El mensaje genérico anterior no debe seguir presente.
+        assert "No hay cuadrillas con ubicacion registrada" not in html
+
+    def test_sin_cuadrillas_activas_tambien_muestra_mensaje(self, client, user_password):
+        """Edge case: sin ninguna cuadrilla activa en absoluto, también debe
+        mostrarse el estado vacío informativo (no una lista rota)."""
+        from tests.factories import AdminFactory
+
+        admin = AdminFactory()
+        client.login(username=admin.email, password=user_password)
+
+        url = reverse("cuadrillas:mapa_partial")
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "Ninguna cuadrilla está reportando ubicación GPS en este momento." in html
+
+    def test_json_response_ubicaciones_vacia(self, client, user_password):
+        """Accept: application/json debe devolver ubicaciones=[] sin romper
+        (el JS del mapa usa esto para decidir si muestra el overlay)."""
+        from tests.factories import CuadrillaFactory, AdminFactory
+
+        CuadrillaFactory(activa=True)
+        admin = AdminFactory()
+        client.login(username=admin.email, password=user_password)
+
+        url = reverse("cuadrillas:mapa_partial")
+        response = client.get(url, HTTP_ACCEPT="application/json")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ubicaciones"] == []
