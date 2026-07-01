@@ -80,14 +80,13 @@ class TestPlantillaHeaderCorregido:
         ws.title = "Programación"
 
         headers = [
-            'Aviso SAP',        # A — FIX: antes era 'AvísoSAP'
-            'Línea',            # B
-            'Torre',            # C
-            'TipoActividad',    # D
-            'Fecha',            # E
-            'Cuadrilla',        # F
-            'Prioridad',        # G
-            'Descripción',      # H
+            'Aviso SAP',            # A — FIX: antes era 'AvísoSAP'
+            'Línea',                # B
+            'Torre',                # C
+            'TipoActividad',        # D
+            'Fecha',                # E
+            'Tipo Consignación',    # F — issue #173: antes 'Cuadrilla'
+            'Descripción',          # G — issue #173: antes en H, 'Prioridad' (G) eliminada
         ]
         for col_num, header in enumerate(headers, 1):
             ws.cell(row=1, column=col_num).value = header
@@ -105,6 +104,15 @@ class TestPlantillaHeaderCorregido:
         )
         assert header_a1 != 'AvísoSAP', (
             "El header CON TILDE 'AvísoSAP' sigue presente — el fix no se aplicó"
+        )
+        assert len(headers) == 7, (
+            f"La plantilla debe tener 7 columnas (sin 'Prioridad'), tiene {len(headers)}"
+        )
+        assert 'Prioridad' not in headers, (
+            "La columna 'Prioridad' debe estar eliminada de la plantilla (issue #173)"
+        )
+        assert 'Tipo Consignación' in headers, (
+            "La columna 'Cuadrilla' debe haberse renombrado a 'Tipo Consignación' (issue #173)"
         )
 
 

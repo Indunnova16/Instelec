@@ -1292,9 +1292,8 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
             'Torre',                    # C
             'TipoActividad',            # D
             'Fecha',                    # E
-            'Cuadrilla',                # F
-            'Prioridad',                # G
-            'Descripción',              # H
+            'Tipo Consignación',        # F
+            'Descripción',              # G
         ]
 
         # Escribir headers
@@ -1313,8 +1312,7 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
             '25',                                   # Torre
             'PODA',                                 # TipoActividad
             date.today().strftime('%Y-%m-%d'),    # Fecha
-            'Cuadrilla 01',                        # Cuadrilla
-            'ALTA',                                 # Prioridad
+            'CC',                                   # Tipo Consignación
             'Poda de vegetación en torre T-25',   # Descripción
         ]
 
@@ -1332,9 +1330,8 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
             'C': 8,     # Torre
             'D': 18,    # TipoActividad
             'E': 12,    # Fecha
-            'F': 16,    # Cuadrilla
-            'G': 12,    # Prioridad
-            'H': 35,    # Descripción
+            'F': 16,    # Tipo Consignación
+            'G': 35,    # Descripción
         }
 
         for col, width in column_widths.items():
@@ -1380,25 +1377,20 @@ class DescargarPlantillaProgramacionView(LoginRequiredMixin, RoleRequiredMixin, 
             "      - Formato: YYYY-MM-DD",
             "      - Ejemplo: 2026-04-15",
             "",
-            "   F. Cuadrilla (Opcional):",
-            "      - Código de la cuadrilla asignada",
-            "      - Ejemplo: Cuadrilla 01, CUA-001",
+            "   F. Tipo Consignación (Opcional):",
+            "      - Valores: CC o CP",
+            "      - Ejemplo: CC",
             "",
-            "   G. Prioridad (Opcional):",
-            "      - Valores: BAJA, NORMAL, ALTA, URGENTE",
-            "      - Default: NORMAL",
-            "",
-            "   H. Descripción (Opcional):",
+            "   G. Descripción (Opcional):",
             "      - Descripción detallada de la actividad",
             "",
             "2. REQUISITOS:",
             "   - La línea DEBE existir en el sistema",
             "   - La torre DEBE existir en la línea especificada",
             "   - El tipo de actividad DEBE existir en el sistema",
-            "   - Si especifica cuadrilla, DEBE existir y estar activa",
             "",
             "3. EJEMPLO DE FILA COMPLETA:",
-            "   4500001234 | L-838 | 25 | PODA | 2026-04-15 | Cuadrilla 01 | ALTA | Poda de vegetación",
+            "   4500001234 | L-838 | 25 | PODA | 2026-04-15 | CC | Poda de vegetación",
             "",
             "4. NOTAS IMPORTANTES:",
             "   - No modifique los nombres de las columnas",
