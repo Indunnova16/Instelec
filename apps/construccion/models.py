@@ -520,7 +520,9 @@ class TorreConstruccion(BaseModel):
         on_delete=models.CASCADE,
         related_name='torres',
     )
-    numero = models.CharField('Número de torre', max_length=20)
+    numero = models.CharField(
+        'Número de torre', max_length=20,
+        help_text='Acepta formato alfanumérico. Ej: T-1, T-1A, T-25B')
     # #160: una torre marcada "No aplica" (ej. saldos 24→26) queda fuera del
     # proyecto: no aparece en etapas/módulos ni cuenta en el % de avance.
     aplica = models.BooleanField(
