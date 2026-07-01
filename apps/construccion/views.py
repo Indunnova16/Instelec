@@ -2304,16 +2304,24 @@ class ResumenMaterialesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         resumen = proyecto.resumen_materiales()
 
-        # Aplanar a filas de valores ALINEADAS con el orden de `columnas`, para
-        # que el template itere sin necesidad de indexar un dict por clave
-        # variable (Django templates no lo permiten sin un filtro custom). Cada
-        # fila: {'torre': label, 'valores': [Decimal, ...]} en el orden de columnas.
-        col_keys = [c['key'] for c in resumen['columnas']]
+        # #154 (O2, QA 29-jun): tabla invertida — 1 fila por MATERIAL (no por
+        # torre), con un valor por torre + columna Total al final de la fila.
+        # Antes: Torre=filas / Material=columnas (~25 columnas, scroll
+        # horizontal excesivo). Ahora: Material=filas / Torre=columnas, mismo
+        # mapeo material↔valor de `resumen`, solo se invierte qué eje es fila
+        # y cuál es columna. `torres_labels` alimenta el header (1 <th> por
+        # torre) y cada fila trae `valores` alineado a ese mismo orden +
+        # `total` = Σ de esa fila (ese material) a través de todas las torres.
+        torres_labels = [f['torre'] for f in resumen['torres']]
         filas_tabla = [
-            {'torre': f['torre'], 'valores': [f[k] for k in col_keys]}
-            for f in resumen['torres']
+            {
+                'material': col['label'],
+                'unidad': col['unidad'],
+                'valores': [f[col['key']] for f in resumen['torres']],
+                'total': resumen['total'][col['key']],
+            }
+            for col in resumen['columnas']
         ]
-        total_valores = [resumen['total'][k] for k in col_keys]
 
         # Serie para Chart.js: labels = torres, datasets = materiales (con datos).
         # Se pasa CRUDO (json.dumps) y se entrega al template vía json_script en el
@@ -2337,7 +2345,7 @@ class ResumenMaterialesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
             'proyecto': proyecto,
             'resumen': resumen,
             'filas_tabla': filas_tabla,
-            'total_valores': total_valores,
+            'torres_labels': torres_labels,
             'resumen_chart': resumen_chart,
             'active_tab': 'resumen-materiales',
         })
