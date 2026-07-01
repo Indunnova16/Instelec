@@ -118,7 +118,6 @@
                         <th colspan="5" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Cable de guarda</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-purple-50 dark:bg-purple-900/30">% C. guarda</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (CG)</th>
-                        <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Detalle</th>
                     </tr>
                     <tr>
                         {% for slug, label in columnas_conductor %}
@@ -150,7 +149,11 @@
                             empalmes_opgw: {% if fila.empalmes_opgw %}true{% else %}false{% endif %}
                         })'
                         class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not fila.torre.aplica %} opacity-50{% endif %}">
-                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">{{ fila.torre.numero_display }}</td>
+                        {# #147: columna Torre clickeable al detalle (circuitos/fases/tandas) — reemplaza la columna Detalle/Editar eliminada #}
+                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">
+                            <a href="{% url 'construccion:tendido_torre' proyecto.id fila.torre.id %}"
+                               class="hover:underline{% if not fila.torre.aplica %} text-red-600{% else %} text-blue-600 dark:text-blue-400{% endif %}">{{ fila.torre.numero_display }}</a>
+                        </td>
                         <td class="px-2 py-1 text-center align-middle">
                             {% include "construccion/_toggle_aplica_torre.html" %}
                         </td>
@@ -180,13 +183,6 @@
                             <input type="text" value="{{ fila.realizo_fibra }}"
                                    @change="actualizarRealizo('fibra', $event.target.value)"
                                    class="w-24 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
-                        </td>
-                        {# #147: link al detalle por torre (circuitos/fases/tandas) — antes la matriz no permitía entrar #}
-                        <td class="px-2 py-1 text-center border-l border-gray-200 dark:border-gray-700">
-                            <a href="{% url 'construccion:tendido_torre' proyecto.id fila.torre.id %}"
-                               class="text-blue-600 hover:underline text-xs font-medium whitespace-nowrap">
-                                <i class="bi bi-pencil-square"></i> Editar
-                            </a>
                         </td>
                     </tr>
                     {% empty %}
