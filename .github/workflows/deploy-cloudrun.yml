@@ -24,7 +24,7 @@ env:
 
 jobs:
   changes:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     outputs:
       should_deploy: ${{ steps.filter.outputs.src }}
     steps:
@@ -46,7 +46,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Build, Migrate & Deploy
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
@@ -78,8 +78,8 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }},${{ env.IMAGE_NAME }}:latest
-          cache-from: type=local,src=/Volumes/Indunnova/buildkit-cache/${{ github.event.repository.name }}
-          cache-to: type=local,dest=/Volumes/Indunnova/buildkit-cache/${{ github.event.repository.name }},mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Create env-vars file
         run: |
