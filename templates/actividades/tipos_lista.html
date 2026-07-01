@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Tipos de Actividad - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Tipos de Actividad</h1>
+            <p class="text-gray-600 dark:text-gray-400">Maestro de tipos de actividad configurables</p>
+        </div>
+        <a href="{% url 'actividades:tipos_crear' %}"
+           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+           aria-label="Crear nuevo tipo de actividad">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nuevo Tipo
+        </a>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Total</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ tipos|length }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Activos</p>
+            <p class="text-2xl font-bold text-green-600">{{ total_activos }}</p>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Inactivos</p>
+            <p class="text-2xl font-bold text-gray-500">{{ total_inactivos }}</p>
+        </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <form method="get" class="flex items-center gap-3">
+            <label for="estado" class="text-sm font-medium text-gray-700 dark:text-gray-300">Estado:</label>
+            <select name="estado" id="estado" onchange="this.form.submit()"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                <option value="" {% if not estado_filtro %}selected{% endif %}>Todos</option>
+                <option value="activos" {% if estado_filtro == 'activos' %}selected{% endif %}>Solo activos</option>
+                <option value="inactivos" {% if estado_filtro == 'inactivos' %}selected{% endif %}>Solo inactivos</option>
+            </select>
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoría</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tiempo Est. (h)</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for tipo in tipos %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-700 dark:text-gray-300">{{ tipo.codigo }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">{{ tipo.nombre }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ tipo.get_categoria_display }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-gray-600 dark:text-gray-400">{{ tipo.tiempo_estimado_horas }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            {% if tipo.activo %}
+                            <span class="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full" role="status">Activo</span>
+                            {% else %}
+                            <span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 rounded-full" role="status">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right">
+                            <div class="flex gap-3 justify-end">
+                                <a href="{% url 'actividades:tipos_editar' tipo.pk %}"
+                                   class="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400">Editar</a>
+                                <form method="post" action="{% url 'actividades:tipos_inactivar' tipo.pk %}" class="inline"
+                                      onsubmit="return confirm('{% if tipo.activo %}¿Inactivar{% else %}¿Reactivar{% endif %} {{ tipo.nombre }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="text-sm {% if tipo.activo %}text-red-600 hover:text-red-800 dark:text-red-400{% else %}text-green-600 hover:text-green-800 dark:text-green-400{% endif %}">
+                                        {% if tipo.activo %}Inactivar{% else %}Reactivar{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                            No hay tipos de actividad {% if estado_filtro %}con este filtro{% endif %}.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

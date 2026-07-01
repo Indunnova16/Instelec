@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{% if modo == 'editar' %}Editar{% else %}Nuevo{% endif %} Tipo de Actividad - TransMaint{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                {% if modo == 'editar' %}Editar Tipo de Actividad{% else %}Nuevo Tipo de Actividad{% endif %}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400">Configuración del maestro de tipos de actividad</p>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-800 dark:bg-red-900 dark:text-red-200" role="alert">
+            {{ form.non_field_errors }}
+        </div>
+        {% endif %}
+
+        <form method="post" class="space-y-4" novalidate>
+            {% csrf_token %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.codigo.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Código
+                    </label>
+                    {{ form.codigo }}
+                    {% if form.codigo.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.codigo.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.nombre.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Nombre
+                    </label>
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.nombre.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.categoria.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Categoría
+                    </label>
+                    {{ form.categoria }}
+                    {% if form.categoria.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.categoria.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.tiempo_estimado_horas.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Tiempo estimado (horas)
+                    </label>
+                    {{ form.tiempo_estimado_horas }}
+                </div>
+
+                <div>
+                    <label for="{{ form.rendimiento_estandar_vanos.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Vanos por día esperados
+                    </label>
+                    {{ form.rendimiento_estandar_vanos }}
+                </div>
+
+                <div>
+                    <label for="{{ form.min_fotos.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Mínimo de fotos
+                    </label>
+                    {{ form.min_fotos }}
+                </div>
+            </div>
+
+            <div>
+                <label for="{{ form.descripcion.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Descripción
+                </label>
+                {{ form.descripcion }}
+            </div>
+
+            <fieldset class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <legend class="text-sm font-medium text-gray-700 dark:text-gray-300 px-1">Requisitos de fotos</legend>
+                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    {{ form.requiere_fotos_antes }} Antes
+                </label>
+                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    {{ form.requiere_fotos_durante }} Durante
+                </label>
+                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    {{ form.requiere_fotos_despues }} Después
+                </label>
+            </fieldset>
+
+            <div>
+                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    {{ form.activo }} Activo (visible en dropdowns de creación de actividad)
+                </label>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4">
+                <a href="{% url 'actividades:tipos_lista' %}"
+                   class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    Cancelar
+                </a>
+                <button type="submit"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    {% if modo == 'editar' %}Guardar Cambios{% else %}Crear Tipo{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
