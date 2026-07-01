@@ -39,6 +39,11 @@
             enctype="multipart/form-data"
             @submit="showMenu = null">
             {% csrf_token %}
+            {# estado va en un hidden seteado por el botón (@click). Con varios <button
+               type=submit name=estado> + hx-encoding=multipart, HTMX 2.0 mandaba solo el
+               submitter y dropeaba observaciones/foto → 200 sin guardar. Patrón de los
+               forms de subida que SÍ funcionan: submitter sin name/value. Refs #177 #}
+            <input type="hidden" name="estado" value="">
 
             <div class="px-2 pt-2 space-y-2">
                 <textarea name="observaciones"
@@ -51,7 +56,8 @@
 
             <div class="space-y-1 p-2">
                 {% for value, label in vano.Estado.choices %}
-                    <button type="submit" name="estado" value="{{ value }}"
+                    <button type="submit"
+                        @click="$el.form.querySelector('input[name=estado]').value = '{{ value }}'"
                         class="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition
                         {% if vano.estado == value %}bg-blue-100 font-semibold{% endif %}">
                         {{ label }}
