@@ -1724,9 +1724,15 @@ class FaseTorre(BaseModel):
     # en el modelo hijo RiegaManilaTiro, related_name='tiros_manila').
     fecha_riega_manila = models.DateField('Fecha riega de manila',
                                           null=True, blank=True)
+    # #147 rediseño (mockup Gabriel Valencia 2026-06-29): 1 torre = 1 tiro.
+    # numero_tiro reemplaza al formset RiegaManilaTiro para el flujo nuevo
+    # (RiegaManilaTiro queda legacy read-only, ver migración 0041).
+    numero_tiro = models.PositiveSmallIntegerField('N° de tiro', null=True, blank=True)
     riega_guaya_ok = models.BooleanField('Riega de guaya', default=False)
     ft046_ok = models.BooleanField('FT-046 Control riega y tendido', default=False)
     ft047_ok = models.BooleanField('FT-047 Control empalmes y terminales', default=False)
+    ft931_ok = models.BooleanField(
+        'FT-931 Control regulación cable de guarda', default=False)
     ft932_ok = models.BooleanField('FT-932 Control regulación conductor', default=False)
     regulacion_flechado_ok = models.BooleanField('Regulación y flechado (general)',
                                                  default=False)
