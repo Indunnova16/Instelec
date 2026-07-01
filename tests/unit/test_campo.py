@@ -1,8 +1,11 @@
 """Unit tests for campo app."""
 
+import re
+
 import pytest
 from datetime import timedelta
 from decimal import Decimal
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.campo.models import RegistroCampo, Evidencia
@@ -266,3 +269,135 @@ class TestCampoFactories:
         assert evidencia.registro_campo
         assert evidencia.url_original
         assert evidencia.fecha_captura
+
+
+# ==============================================================================
+# Issue #175 — A1: link "Ver en Google Maps" con separador decimal correcto
+# ==============================================================================
+
+
+@pytest.mark.django_db
+class TestDetalleDanoLinkGoogleMaps:
+    """A1 (#175): el href del link a Google Maps debe usar punto decimal.
+
+    Root cause: LANGUAGE_CODE='es-co' + USE_I18N=True localiza los
+    DecimalField con coma en templates. Fix: `|unlocalize` solo en el href.
+    """
+
+    HREF_SIN_COMA = re.compile(r'href="https://www\.google\.com/maps\?q=-?\d+\.\d+,-?\d+\.\d+"')
+
+    def test_href_google_maps_usa_punto_no_coma(self, client, user_password):
+        """El href generado debe tener coordenadas con punto decimal, sin coma."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        reporte = ReporteDanoFactory(
+            usuario=usuario,
+            latitud=Decimal("10.99194655"),
+            longitud=Decimal("-74.81943206"),
+        )
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:detalle_dano", kwargs={"pk": reporte.pk})
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+
+        # No debe existir una coma entre los dígitos decimales dentro del href.
+        assert self.HREF_SIN_COMA.search(html), (
+            "El href de Google Maps no matchea el patrón esperado (punto decimal, sin coma)"
+        )
+        assert "10,99194655,-74,81943206" not in html
+        assert "q=10.99194655,-74.81943206" in html
+
+    def test_edge_case_reporte_sin_coordenadas_no_rompe(self, client, user_password):
+        """Reporte sin latitud/longitud no debe mostrar el link ni romper el render."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        reporte = ReporteDanoFactory(usuario=usuario, latitud=None, longitud=None)
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:detalle_dano", kwargs={"pk": reporte.pk})
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "Ubicación no disponible" in html
+        assert "google.com/maps" not in html
+
+
+# ==============================================================================
+# Issue #175 — A2: fotos rotas → placeholder defensivo "Imagen no disponible"
+# ==============================================================================
+
+
+@pytest.mark.django_db
+class TestDetalleDanoFotoDefensiva:
+    """A2 (#175): el <img> de fotos de daño debe tener manejo `onerror`
+    que muestre un placeholder "Imagen no disponible" en vez de un ícono roto.
+
+    Root cause: el único registro FotoDano en prod (FOTO_PRUEBA.png) es un
+    dato de prueba huérfano sin archivo real en GCS — no reparable. El fix
+    de código es defensivo, para cualquier caso futuro de subida fallida.
+    """
+
+    def test_img_tiene_atributo_onerror(self, client, user_password):
+        """El <img> debe incluir el atributo onerror con el placeholder."""
+        from tests.factories import ReporteDanoFactory, FotoDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        reporte = ReporteDanoFactory(usuario=usuario)
+        FotoDanoFactory(reporte=reporte)
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:detalle_dano", kwargs={"pk": reporte.pk})
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "data-foto-imagen" in html
+        assert "onerror=" in html
+        assert "Imagen no disponible" in html
+
+    def test_multiples_fotos_cada_una_maneja_su_error_independiente(self, client, user_password):
+        """Con varias fotos (algunas potencialmente rotas), cada <img> debe
+        tener su propio onerror independiente — no debe compartir estado."""
+        from tests.factories import ReporteDanoFactory, FotoDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        reporte = ReporteDanoFactory(usuario=usuario)
+        FotoDanoFactory(reporte=reporte, descripcion="Foto valida")
+        FotoDanoFactory(reporte=reporte, descripcion="Foto potencialmente rota")
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:detalle_dano", kwargs={"pk": reporte.pk})
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        # Dos <img data-foto-imagen>, cada uno con su propio onerror (no
+        # comparten estado). Se cuentan onerror solo dentro de los <img>
+        # marcados con data-foto-imagen para no contaminar con otros <img
+        # onerror=...> del layout base (ej. avatar de usuario).
+        foto_imgs = re.findall(r"<img[^>]*data-foto-imagen[^>]*>", html)
+        assert len(foto_imgs) == 2
+        assert all("onerror=" in tag for tag in foto_imgs)
+        assert "Foto valida" in html
+        assert "Foto potencialmente rota" in html
+
+    def test_sin_fotos_no_muestra_seccion_fotografias(self, client, user_password):
+        """Reporte sin fotos: la sección de fotografías no debe renderizarse."""
+        from tests.factories import ReporteDanoFactory, LinieroFactory
+
+        usuario = LinieroFactory()
+        reporte = ReporteDanoFactory(usuario=usuario)
+        client.login(username=usuario.email, password=user_password)
+
+        url = reverse("campo:detalle_dano", kwargs={"pk": reporte.pk})
+        response = client.get(url)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "Fotografías" not in html

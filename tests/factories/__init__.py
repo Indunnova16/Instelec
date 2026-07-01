@@ -32,6 +32,8 @@ from tests.factories.campo import (
     EvidenciaAntesFactory,
     EvidenciaDuranteFactory,
     EvidenciaDespuesFactory,
+    ReporteDanoFactory,
+    FotoDanoFactory,
 )
 from tests.factories.ambiental import (
     InformeAmbientalFactory,
@@ -91,6 +93,8 @@ __all__ = [
     "EvidenciaAntesFactory",
     "EvidenciaDuranteFactory",
     "EvidenciaDespuesFactory",
+    "ReporteDanoFactory",
+    "FotoDanoFactory",
     # Ambiental
     "InformeAmbientalFactory",
     "InformeAmbientalAprobadoFactory",
