@@ -602,6 +602,7 @@ class ActividadCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Temp
         from apps.cuadrillas.models import Cuadrilla
         context['lineas'] = Linea.objects.filter(activa=True)
         context['cuadrillas'] = Cuadrilla.objects.filter(activa=True)
+        context['fecha_hoy'] = date.today()
         return context
 
     def post(self, request, *args, **kwargs):
@@ -1050,6 +1051,12 @@ class EventosAPIView(LoginRequiredMixin, View):
                 qs = qs.filter(linea_id=linea_id)
             except ValueError:
                 pass
+
+        # Filter by business unit (GET param > session > all) - align with
+        # ProgramacionListView/CalendarioView so event counts match (issue #174).
+        unidad_negocio = request.GET.get('unidad') or get_unidad_negocio(request)
+        if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
+            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
 
         # Build events list for FullCalendar
         events = []
