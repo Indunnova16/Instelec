@@ -35,7 +35,6 @@ def ordenar_torres_construccion(qs, incluir_no_aplica=False):
 from .forms import (
     ContratoForm, PataObraForm, FaseTorreMontajeForm, FaseTorreTendidoForm,
     SocialPredialForm, AmbientalTorreForm, ObraCivilFechasForm,
-    RiegaManilaTiroFormSet,
 )
 from django.http import HttpResponseRedirect
 from .models import (
@@ -1393,23 +1392,9 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         ctx['fase'] = fase
         ctx['active_tab'] = 'tendido'
         ctx['bloqueada'] = not fase.puede_iniciar_tendido
-        # #147 item 10: formset inline de tiros de riega de manila + F.T.
-        if 'tiros_formset' not in ctx:
-            if self.request.method == 'POST':
-                ctx['tiros_formset'] = RiegaManilaTiroFormSet(
-                    self.request.POST, instance=fase)
-            else:
-                ctx['tiros_formset'] = RiegaManilaTiroFormSet(instance=fase)
         return ctx
 
     def form_valid(self, form):
-        # #147 item 10: validar el formset de tiros ANTES de guardar nada.
-        tiros_formset = RiegaManilaTiroFormSet(
-            self.request.POST, instance=form.instance)
-        if not tiros_formset.is_valid():
-            return self.render_to_response(
-                self.get_context_data(form=form, tiros_formset=tiros_formset))
-
         response = super().form_valid(form)
 
         # #147: las limpiezas se aplican DESPUÉS de super().form_valid() (que llama
@@ -1444,22 +1429,6 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         if cambios:
             self.object.save(update_fields=cambios)
 
-        # numero_tiro autoasignado (max+1) para filas nuevas que lo dejaron vacío.
-        tiros_formset.instance = self.object
-        instancias = tiros_formset.save(commit=False)
-        existentes = list(
-            self.object.tiros_manila.values_list('numero_tiro', flat=True))
-        siguiente = (max(existentes) + 1) if existentes else 1
-        for obj in tiros_formset.deleted_objects:
-            obj.delete()
-        for tiro in instancias:
-            if not tiro.numero_tiro:
-                tiro.numero_tiro = siguiente
-                siguiente += 1
-            else:
-                siguiente = max(siguiente, tiro.numero_tiro + 1)
-            tiro.save()
-        tiros_formset.save_m2m()
         return response
 
     def get_success_url(self):
