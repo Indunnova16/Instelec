@@ -1051,6 +1051,12 @@ class VanoEstadoUpdateView(LoginRequiredMixin, View):
         observaciones = request.POST.get('observaciones', '').strip()
         foto = request.FILES.get('foto')
 
+        import logging as _dbg177
+        _dbg177.getLogger('django').warning(
+            "VANO177_DEBUG ct=%s POST_keys=%s FILES_keys=%s obs_len=%d foto=%s"
+            % (request.content_type, list(request.POST.keys()),
+               list(request.FILES.keys()), len(observaciones), bool(foto)))
+
         if nuevo_estado not in dict(Vano.Estado.choices):
             return HttpResponse('Estado inválido', status=400)
 
