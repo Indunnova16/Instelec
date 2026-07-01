@@ -1147,8 +1147,47 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 
 class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Upload crew personnel from Excel/CSV."""
+    """Upload crew personnel from Excel/CSV.
+
+    Columnas soportadas (issue #176, A5): Nombre | Documento | Cargo |
+    Salario Base | Fecha Ingreso | Fecha Salida. Las 3 columnas nuevas son
+    opcionales (retrocompatible con el formato original de 3 columnas) --
+    si faltan, quedan en su default del modelo (salario_base=0,
+    fecha_ingreso/fecha_salida=None -> activo=True).
+    """
     allowed_roles = ['admin', 'director', 'coordinador']
+
+    @staticmethod
+    def _parse_fecha(valor):
+        """Acepta date/datetime nativos de openpyxl o texto 'YYYY-MM-DD'."""
+        from datetime import date, datetime
+
+        if valor in (None, ''):
+            return None
+        if isinstance(valor, datetime):
+            return valor.date()
+        if isinstance(valor, date):
+            return valor
+        texto = str(valor).strip()
+        if not texto:
+            return None
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+            try:
+                return datetime.strptime(texto, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _parse_decimal(valor):
+        from decimal import Decimal, InvalidOperation
+
+        if valor in (None, ''):
+            return Decimal('0')
+        try:
+            return Decimal(str(valor).replace(',', '').strip() or '0')
+        except InvalidOperation:
+            return Decimal('0')
 
     def post(self, request, *args, **kwargs):
         import openpyxl
@@ -1174,25 +1213,48 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                 if not row or not row[0]:
                     continue
 
-                nombre = str(row[0]).strip()
-                documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
-                rol_raw = str(row[2]).strip().upper() if len(row) > 2 and row[2] else ''
+                try:
+                    nombre = str(row[0]).strip()
+                    documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                    rol_raw = str(row[2]).strip().upper() if len(row) > 2 and row[2] else ''
+                    salario_raw = row[3] if len(row) > 3 else None
+                    fecha_ingreso_raw = row[4] if len(row) > 4 else None
+                    fecha_salida_raw = row[5] if len(row) > 5 else None
 
-                if not nombre or not documento:
-                    errores.append(f'Fila {idx}: nombre o documento vacío')
+                    if not nombre or not documento:
+                        errores.append(f'Fila {idx}: nombre o documento vacío')
+                        continue
+
+                    # Resolve role
+                    rol = rol_raw if rol_raw in roles_validos else roles_por_nombre.get(rol_raw, 'LINIERO_I')
+                    salario_base = self._parse_decimal(salario_raw)
+                    fecha_ingreso = self._parse_fecha(fecha_ingreso_raw)
+                    fecha_salida = self._parse_fecha(fecha_salida_raw)
+
+                    defaults = {
+                        'nombre': nombre,
+                        'rol_cuadrilla': rol,
+                        'salario_base': salario_base,
+                        'fecha_ingreso': fecha_ingreso,
+                        'fecha_salida': fecha_salida,
+                        # activo se resuelve en PersonalCuadrilla.save(): True salvo
+                        # que fecha_salida venga poblada (issue #176, A2).
+                        'activo': True,
+                    }
+
+                    obj, created = PersonalCuadrilla.objects.update_or_create(
+                        documento=documento,
+                        defaults=defaults,
+                    )
+                    if created:
+                        creados += 1
+                    else:
+                        actualizados += 1
+                except Exception as row_exc:
+                    # Documento duplicado intra-archivo u otro error de fila:
+                    # se reporta y se sigue con el resto (no se aborta el lote).
+                    errores.append(f'Fila {idx}: {row_exc}')
                     continue
-
-                # Resolve role
-                rol = rol_raw if rol_raw in roles_validos else roles_por_nombre.get(rol_raw, 'LINIERO_I')
-
-                obj, created = PersonalCuadrilla.objects.update_or_create(
-                    documento=documento,
-                    defaults={'nombre': nombre, 'rol_cuadrilla': rol, 'activo': True},
-                )
-                if created:
-                    creados += 1
-                else:
-                    actualizados += 1
 
             msg = f'Personal cargado: {creados} nuevos, {actualizados} actualizados.'
             if errores:

@@ -20,7 +20,7 @@ from decimal import Decimal
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, PersonalCuadrilla
@@ -200,7 +200,7 @@ class TestA3CRUDColaboradores(TestCase):
         self.assertFalse(persona.activo)
 
     def test_colaborador_inactivo_no_aparece_en_lista_activa(self):
-        activo = PersonalCuadrilla.objects.create(
+        PersonalCuadrilla.objects.create(
             nombre="Activo Uno",
             documento="176-1005",
             rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,

@@ -300,7 +300,8 @@
         </div>
         <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Suba un archivo Excel (.xlsx) con las columnas:<br>
-            <strong>Nombre | Documento | Cargo</strong><br>
+            <strong>Nombre | Documento | Cargo | Salario Base | Fecha Ingreso | Fecha Salida</strong><br>
+            <span class="text-xs text-gray-500">Las 3 &uacute;ltimas columnas son opcionales (issue #176). Formato de fecha: AAAA-MM-DD. Si registra Fecha Salida, el colaborador queda inactivo autom&aacute;ticamente.</span><br>
             <span class="text-xs text-gray-500">Cargos v&aacute;lidos: Supervisor, Liniero I, Liniero II, Ayudante, Conductor, Administrador de Obra, Profesional SST, Ingeniero Residente, Servicio General, Almacenista, Supervisor Forestal, Asistente Forestal</span>
         </p>
         <form method="post" action="{% url 'cuadrillas:personal_upload' %}" enctype="multipart/form-data">
