@@ -1,9 +1,18 @@
 {% load static %}
-<div id="vano-{{ vano.id }}" class="vano-item relative group cursor-pointer rounded-lg border-2 p-4 text-center transition-all hover:shadow-lg
+{# Issue #177 (sub-item A7) — la tarjeta ENTERA es el trigger del modal de #}
+{# historial (pedido explicito del cliente: "clic sobre el vano"). Se quita #}
+{# el boton "Cambiar estado" + dropdown viejo (submit-por-click sin punto de #}
+{# guardado explicito, causa raiz del rebote — ver PLAN.md). #}
+<div id="vano-{{ vano.id }}"
+    x-data="vanoEstadoModal('{{ vano.id }}')"
+    @click="abrir()"
+    class="vano-item relative group cursor-pointer rounded-lg border-2 p-4 text-center transition-all hover:shadow-lg
     {% if vano.estado == 'ejecutado' %}bg-green-50 border-green-300 hover:bg-green-100
     {% elif vano.estado == 'sin_permiso' %}bg-orange-50 border-orange-300 hover:bg-orange-100
     {% elif vano.estado == 'no_ejecutado' %}bg-red-50 border-red-300 hover:bg-red-100
     {% elif vano.estado == 'en_espera' %}bg-yellow-50 border-yellow-300 hover:bg-yellow-100
+    {% elif vano.estado == 'seccionado' %}bg-purple-50 border-purple-300 hover:bg-purple-100
+    {% elif vano.estado == 'especial' %}bg-pink-50 border-pink-300 hover:bg-pink-100
     {% else %}bg-gray-50 border-gray-300 hover:bg-gray-100
     {% endif %}">
 
@@ -12,6 +21,8 @@
         {% elif vano.estado == 'sin_permiso' %}text-orange-700
         {% elif vano.estado == 'no_ejecutado' %}text-red-700
         {% elif vano.estado == 'en_espera' %}text-yellow-700
+        {% elif vano.estado == 'seccionado' %}text-purple-700
+        {% elif vano.estado == 'especial' %}text-pink-700
         {% else %}text-gray-700
         {% endif %}">
         Vano {{ vano.numero }}
@@ -21,46 +32,9 @@
         {{ vano.get_estado_display }}
     </div>
 
-    <button type="button"
-        @click="showMenu = '{{ vano.id }}';"
-        class="w-full text-xs py-1 px-2 rounded bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 transition">
-        Cambiar estado
-    </button>
-
-    <!-- Dropdown menu -->
-    <div x-cloak
-        x-show="showMenu === '{{ vano.id }}'"
-        @click.away="showMenu = null"
-        class="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-48 rounded-lg shadow-lg border border-gray-200 bg-white">
-        <form hx-post="{% url 'campo:vano_estado' vano.id %}"
-            hx-target="#vano-{{ vano.id }}"
-            hx-swap="outerHTML"
-            hx-encoding="multipart/form-data"
-            enctype="multipart/form-data"
-            @submit="showMenu = null">
-            {% csrf_token %}
-            {% comment %}estado va en hidden seteado por @click del boton; submitter sin name/value -> HTMX 2.0 manda el form multipart completo (antes dropeaba observaciones/foto). Refs #177{% endcomment %}
-            <input type="hidden" name="estado" value="">
-
-            <div class="px-2 pt-2 space-y-2">
-                <textarea name="observaciones"
-                    rows="2"
-                    placeholder="Nota (opcional)"
-                    class="w-full text-xs rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
-                <input type="file" name="foto" accept="image/*"
-                    class="w-full text-xs text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200">
-            </div>
-
-            <div class="space-y-1 p-2">
-                {% for value, label in vano.Estado.choices %}
-                    <button type="submit"
-                        @click="$el.form.querySelector('input[name=estado]').value = '{{ value }}'"
-                        class="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition
-                        {% if vano.estado == value %}bg-blue-100 font-semibold{% endif %}">
-                        {{ label }}
-                    </button>
-                {% endfor %}
-            </div>
-        </form>
+    <div class="text-[11px] text-gray-400 group-hover:text-gray-600 transition">
+        Clic para cambiar estado
     </div>
+
+    {% include 'campo/partials/_vano_estado_modal.html' %}
 </div>

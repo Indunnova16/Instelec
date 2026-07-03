@@ -193,6 +193,44 @@ class TestVanoHistorialCreateView:
 
 
 @pytest.mark.django_db
+class TestAvanceRegistrarModalRenderIssue177:
+    """A6/A7 — smoke de renderizado end-to-end: el modal + su contrato de
+    selectores aparecen en el HTML real servido por RegistroAvanceCreateView
+    (no solo en tests aislados de get_context_data, como B1.2)."""
+
+    def test_grid_renderiza_modal_con_contrato_de_selectores(self, admin_client, linea):
+        Vano.objects.create(linea=linea, numero='1')
+        Vano.objects.create(linea=linea, numero='2', estado=Vano.Estado.SECCIONADO)
+
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+
+        assert resp.status_code == 200
+        content = resp.content.decode()
+
+        # Contrato de selectores obligatorio (journey E2E Instelec_177.yaml).
+        assert content.count('data-testid="vano-estado-modal-root"') == 2  # 1 por vano
+        assert 'data-testid="vano-estado-modal-save"' in content
+        assert '<select name="estado"' in content
+        assert '<textarea name="nota"' in content
+        assert 'name="fotos"' in content and 'multiple' in content
+        # La función JS se define UNA sola vez (forloop.first), no 2 veces.
+        assert content.count('function vanoEstadoModal(') == 1
+        # El dropdown/endpoint viejo ya no existe en el HTML servido.
+        assert 'vano_estado' not in content
+        assert 'Cambiar estado' not in content or 'Cambiar estado — Vano' in content
+
+    def test_grid_no_referencia_url_vano_estado_eliminada(self, admin_client, linea):
+        """Regresión directa del riesgo documentado: si vano_cuadro.html
+        quedara con `{% url 'campo:vano_estado' %}` colgante, esto reventaría
+        con NoReverseMatch al renderizar — este test lo hubiera atrapado."""
+        Vano.objects.create(linea=linea, numero='1')
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        assert resp.status_code == 200  # no 500 por NoReverseMatch
+
+
+@pytest.mark.django_db
 class TestVanoHistorialListPartialView:
     """A5 — listado del historial completo de un Vano."""
 

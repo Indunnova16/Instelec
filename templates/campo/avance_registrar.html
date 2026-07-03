@@ -45,7 +45,11 @@
 
     {% else %}
     <!-- Vanos Grid (when line selected) -->
-    <div x-data="{ showMenu: null }" class="space-y-6">
+    {# Issue #177 — x-data="{ showMenu: null }" quitado: era exclusivo del #}
+    {# viejo dropdown "Cambiar estado" (grep confirma que ya no lo usa nadie #}
+    {# tras la reescritura de vano_cuadro.html, A7). Cada tarjeta ahora trae #}
+    {# su propio x-data="vanoEstadoModal(...)" (ver vano_cuadro.html). #}
+    <div class="space-y-6">
         <!-- Back Button -->
         <div class="flex items-center justify-between">
             <div>

@@ -1,0 +1,163 @@
+{# Issue #177 (sub-item A6) — Modal Alpine.js de cambio de estado + historial. #}
+{# Uso: {% include 'campo/partials/_vano_estado_modal.html' %} DENTRO del div #}
+{# raiz existente id="vano-{{ vano.id }}" (ver vano_cuadro.html, A7) — ese div #}
+{# es quien declara x-data="vanoEstadoModal(...)" y @click="abrir()" (todo el #}
+{# card es el trigger, pedido explicito del cliente). Este partial NO declara #}
+{# su propio x-data — hereda el scope del div que lo incluye. #}
+{#                                                                            #}
+{# Patron de guardado calcado de templates/lineas/_vano_semestre_modal.html: #}
+{# fetch()+FormData, UN SOLO boton "Guardar" -> UN SOLO POST. Nunca el patron #}
+{# HTMX-submit-por-boton-de-estado que causo el bug original (ver PLAN.md). #}
+{#                                                                            #}
+{# Panel ANCLADO a la tarjeta (no full-screen fixed backdrop): asi el click #}
+{# repetido sobre id="vano-{{ vano.id }}" (el journey E2E reabre/reusa el #}
+{# mismo modal para un segundo cambio) nunca queda bloqueado por un overlay #}
+{# que cubra toda la pantalla encima de su propio trigger. #}
+<div
+    data-testid="vano-estado-modal-root"
+    x-show="abierto"
+    x-cloak
+    @click.stop
+    class="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-80 max-w-[92vw] rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-left cursor-default"
+>
+    <div class="flex items-center justify-between mb-3">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+            Cambiar estado — Vano {{ vano.numero }}
+        </h4>
+        <button type="button" @click="cerrar()" aria-label="Cerrar"
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 leading-none text-lg">
+            &times;
+        </button>
+    </div>
+
+    <form x-ref="form" @submit.prevent="guardar()" class="space-y-3">
+        <div>
+            <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+            <select name="estado" required
+                class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="">Seleccionar…</option>
+                {% for value, label in vano.Estado.seleccionables %}
+                    <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nota</label>
+            <textarea name="nota" rows="2" placeholder="Nota (opcional)"
+                class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400"></textarea>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Foto(s)</label>
+            <input type="file" name="fotos" multiple accept="image/*"
+                class="w-full text-xs text-gray-600 dark:text-gray-300 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200">
+            <p class="text-[11px] text-gray-400 mt-1">Hasta 5 fotos por cambio.</p>
+        </div>
+
+        <template x-if="error">
+            <div class="bg-red-50 border border-red-200 text-red-700 text-xs rounded p-2" x-text="error"></div>
+        </template>
+        <template x-if="success">
+            <div class="bg-green-50 border border-green-200 text-green-700 text-xs rounded p-2" x-text="success"></div>
+        </template>
+
+        <div class="flex justify-end gap-2 pt-1">
+            <button type="button" @click="cerrar()" :disabled="cargando"
+                class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                Cancelar
+            </button>
+            <button type="submit" :disabled="cargando"
+                data-testid="vano-estado-modal-save"
+                class="px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded disabled:opacity-50">
+                <span x-show="!cargando">Guardar</span>
+                <span x-show="cargando">Guardando…</span>
+            </button>
+        </div>
+    </form>
+
+    <div class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 max-h-64 overflow-y-auto">
+        <h5 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Historial</h5>
+        <div x-html="historialHtml">
+            <div class="text-xs text-gray-400 py-2">Cargando historial…</div>
+        </div>
+    </div>
+</div>
+
+{% if forloop.first %}
+{# La funcion Alpine se define UNA sola vez (primer vano del grid) — se #}
+{# referencia por nombre desde el x-data de CADA tarjeta (vano_cuadro.html, #}
+{# A7). Definir esto N veces (una por vano) es funcionalmente inocuo pero #}
+{# desperdicia bytes/parse en lineas con muchos vanos. #}
+<script>
+function vanoEstadoModal(vanoId) {
+    return {
+        vanoId: vanoId,
+        abierto: false,
+        cargando: false,
+        error: '',
+        success: '',
+        historialHtml: '',
+
+        abrir() {
+            this.abierto = true;
+            this.error = '';
+            this.success = '';
+            this.cargarHistorial();
+        },
+
+        cerrar() {
+            this.abierto = false;
+        },
+
+        _csrf() {
+            const m = document.cookie.match(/csrftoken=([^;]+)/);
+            return m ? m[1] : '';
+        },
+
+        async cargarHistorial() {
+            try {
+                const resp = await fetch(`/campo/vanos/${this.vanoId}/historial/`);
+                if (resp.ok) {
+                    this.historialHtml = await resp.text();
+                } else {
+                    this.historialHtml = '<div class="text-xs text-red-500 py-2">No se pudo cargar el historial.</div>';
+                }
+            } catch (exc) {
+                this.historialHtml = '<div class="text-xs text-red-500 py-2">Error de red cargando el historial.</div>';
+            }
+        },
+
+        async guardar() {
+            this.error = '';
+            this.success = '';
+            this.cargando = true;
+            try {
+                const fd = new FormData(this.$refs.form);
+                const resp = await fetch(`/campo/vanos/${this.vanoId}/historial/crear/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this._csrf() },
+                    body: fd,
+                });
+                let data = {};
+                try {
+                    data = await resp.json();
+                } catch (parseExc) {
+                    // Respuesta no-JSON (error inesperado del servidor) — sigue
+                    // el flujo de error abajo con un mensaje generico.
+                }
+                if (!resp.ok) {
+                    this.error = data.error || `No se pudo guardar (HTTP ${resp.status}).`;
+                } else {
+                    this.success = `Guardado como "${data.estado_display || ''}".`;
+                    this.$refs.form.reset();
+                    await this.cargarHistorial();
+                }
+            } catch (exc) {
+                this.error = 'Error de red: ' + exc.message;
+            } finally {
+                this.cargando = false;
+            }
+        },
+    };
+}
+</script>
+{% endif %}
