@@ -14,7 +14,11 @@ este issue y no colisiona con Instelec#179/#182 del mismo RUN.
 """
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
 import pytest
+from django.apps import apps as django_apps
 
 from apps.lineas.models import Vano, VanoHistorialEstado, VanoHistorialFoto
 
@@ -89,3 +93,72 @@ class TestVanoHistorialModelsIssue177:
         )
         historial.full_clean()  # no debe lanzar ValidationError por choices
         assert historial.estado == 'no_ejecutado'
+
+
+def _cargar_modulo_migracion(nombre_archivo: str):
+    """Carga un módulo de migración por nombre de archivo (no son paquetes
+    importables normalmente por empezar con dígitos)."""
+    ruta = Path(__file__).resolve().parent.parent / 'migrations' / nombre_archivo
+    spec = importlib.util.spec_from_file_location(f'lineas_migration_{ruta.stem}', ruta)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+@pytest.mark.django_db
+class TestVanoHistorialBackfillMigration:
+    """A3 — backfill de historial (migración 0016, RunPython).
+
+    ``--nomigrations`` está activo en pytest (pyproject.toml) así que el
+    RunPython nunca se ejecuta solo por aplicar migraciones en tests: se
+    invoca la función directamente contra el registro de apps real (mismo
+    approach que ``apps.get_model`` usaría dentro de una migración real,
+    con el mismo esquema porque no hubo drift de campos desde 0016).
+    """
+
+    @pytest.fixture
+    def migracion(self):
+        return _cargar_modulo_migracion('0016_vano_historial_backfill.py')
+
+    def test_vano_legacy_no_ejecutado_genera_historial_sin_remapear(self, linea, migracion):
+        vano = Vano.objects.create(
+            linea=linea, numero='300', estado=Vano.Estado.NO_EJECUTADO, observaciones=''
+        )
+
+        migracion.backfill_historial(django_apps, None)
+
+        vano.refresh_from_db()
+        historial = list(vano.historial.all())
+        assert len(historial) == 1
+        assert historial[0].estado == 'no_ejecutado'  # AS-IS, sin remapear
+
+    def test_backfill_no_muta_vano(self, linea, admin_user, migracion):
+        vano = Vano.objects.create(
+            linea=linea,
+            numero='301',
+            estado=Vano.Estado.SIN_PERMISO,
+            observaciones='Predio cerrado.',
+            marcado_por=admin_user,
+        )
+        antes = (vano.estado, vano.observaciones, bool(vano.foto))
+
+        migracion.backfill_historial(django_apps, None)
+
+        vano.refresh_from_db()
+        despues = (vano.estado, vano.observaciones, bool(vano.foto))
+        assert antes == despues
+
+    def test_backfill_es_idempotente(self, linea, migracion):
+        vano = Vano.objects.create(linea=linea, numero='302', estado=Vano.Estado.EJECUTADO)
+
+        migracion.backfill_historial(django_apps, None)
+        migracion.backfill_historial(django_apps, None)  # correr 2 veces
+
+        assert vano.historial.count() == 1
+
+    def test_vano_limpio_no_genera_historial_basura(self, linea, migracion):
+        vano = Vano.objects.create(linea=linea, numero='303')  # pendiente, sin señales
+
+        migracion.backfill_historial(django_apps, None)
+
+        assert vano.historial.count() == 0
