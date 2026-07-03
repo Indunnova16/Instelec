@@ -931,8 +931,15 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         context['vanos_ejecutados'] = stats.get(Vano.Estado.EJECUTADO, 0)
         context['vanos_pendientes'] = stats.get(Vano.Estado.PENDIENTE, 0)
         context['vanos_sin_permiso'] = stats.get(Vano.Estado.SIN_PERMISO, 0)
-        context['vanos_no_ejecutado'] = stats.get(Vano.Estado.NO_EJECUTADO, 0)
         context['vanos_en_espera'] = stats.get(Vano.Estado.EN_ESPERA, 0)
+        # Issue #177 (sub-item A8) — Seccionado/Especial reemplazan a
+        # "No Ejecutado" en el resumen de 6 categorías. El dato legacy
+        # 'no_ejecutado' (1 vano en prod) NO se cuenta en ninguna tarjeta
+        # ni en el donut — se preserva sin migrar (PLAN.md Decisión HITL
+        # #1), simplemente queda fuera del resumen hasta que alguien de
+        # campo lo reclasifique manualmente vía el modal nuevo.
+        context['vanos_seccionados'] = stats.get(Vano.Estado.SECCIONADO, 0)
+        context['vanos_especiales'] = stats.get(Vano.Estado.ESPECIAL, 0)
 
         context['porcentaje'] = (
             round(context['vanos_ejecutados'] / total * 100) if total > 0 else 0

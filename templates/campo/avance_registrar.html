@@ -63,23 +63,37 @@
             </a>
         </div>
 
-        <!-- Stats Row -->
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <!-- Stats Row — Issue #177 (A8): 6 categorías (Seccionado/Especial
+             reemplazan a "No Ejecutado", que queda fuera del resumen — ver
+             PLAN.md Decisión HITL #1) + Total + Avance% -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
                 <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ total_vanos }}</div>
                 <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">Total Vanos</div>
             </div>
-            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-green-600">{{ vanos_ejecutados }}</div>
-                <div class="text-xs text-green-700 dark:text-green-400 mt-1">Ejecutados</div>
-            </div>
             <div class="bg-gray-50 dark:bg-gray-700 rounded-lg shadow p-4 text-center">
                 <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">{{ vanos_pendientes }}</div>
-                <div class="text-xs text-gray-700 dark:text-gray-400 mt-1">Pendientes</div>
+                <div class="text-xs text-gray-700 dark:text-gray-400 mt-1">Pendiente</div>
+            </div>
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-green-600">{{ vanos_ejecutados }}</div>
+                <div class="text-xs text-green-700 dark:text-green-400 mt-1">Ejecutado</div>
             </div>
             <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg shadow p-4 text-center">
                 <div class="text-2xl font-bold text-orange-600">{{ vanos_sin_permiso }}</div>
                 <div class="text-xs text-orange-700 dark:text-orange-400 mt-1">Sin Permiso</div>
+            </div>
+            <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-yellow-600">{{ vanos_en_espera }}</div>
+                <div class="text-xs text-yellow-700 dark:text-yellow-400 mt-1">Parcial</div>
+            </div>
+            <div class="bg-purple-50 dark:bg-purple-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-purple-600">{{ vanos_seccionados }}</div>
+                <div class="text-xs text-purple-700 dark:text-purple-400 mt-1">Seccionado</div>
+            </div>
+            <div class="bg-pink-50 dark:bg-pink-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-pink-600">{{ vanos_especiales }}</div>
+                <div class="text-xs text-pink-700 dark:text-pink-400 mt-1">Especial</div>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
                 <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ porcentaje }}%</div>
@@ -116,12 +130,16 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script>
+        // Issue #177 (A8) — 6 categorías (Seccionado/Especial reemplazan a
+        // "No Ejecutado", que se retira del donut — el dato legacy se
+        // preserva en BD sin migrar, ver PLAN.md Decisión HITL #1).
         const estadoData = {
             'pendiente': {{ vanos_pendientes }},
             'ejecutado': {{ vanos_ejecutados }},
             'sin_permiso': {{ vanos_sin_permiso }},
-            'no_ejecutado': {{ vanos_no_ejecutado }},
             'en_espera': {{ vanos_en_espera }},
+            'seccionado': {{ vanos_seccionados }},
+            'especial': {{ vanos_especiales }},
         };
 
         Chart.register(ChartDataLabels);
@@ -130,21 +148,23 @@
         new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['Pendiente', 'Ejecutado', 'Sin Permiso', 'No Ejecutado', 'Parcial'],
+                labels: ['Pendiente', 'Ejecutado', 'Sin Permiso', 'Parcial', 'Seccionado', 'Especial'],
                 datasets: [{
                     data: [
                         estadoData.pendiente,
                         estadoData.ejecutado,
                         estadoData.sin_permiso,
-                        estadoData.no_ejecutado,
                         estadoData.en_espera,
+                        estadoData.seccionado,
+                        estadoData.especial,
                     ],
                     backgroundColor: [
-                        '#d1d5db',  // gray
-                        '#10b981',  // green
-                        '#f97316',  // orange
-                        '#ef4444',  // red
-                        '#eab308',  // yellow
+                        '#d1d5db',  // gray — pendiente
+                        '#10b981',  // green — ejecutado
+                        '#f97316',  // orange — sin_permiso
+                        '#eab308',  // yellow — en_espera (Parcial)
+                        '#a855f7',  // purple — seccionado (nuevo, #177)
+                        '#ec4899',  // pink — especial (nuevo, #177)
                     ],
                     borderColor: '#fff',
                     borderWidth: 2,

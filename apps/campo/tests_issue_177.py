@@ -306,7 +306,8 @@ class TestEstadoLabelParcialIssue177:
 
 
 class TestAvanceRegistrarDatalabelsIssue177:
-    """Sub-ítem 3: datalabels del doughnut — sanity check del template."""
+    """A8 — Stats Row + donut a 6 categorías. Incluye el sanity check
+    original del datalabels plugin (A10 — Ajuste 3, no se toca su mecánica)."""
 
     def test_template_incluye_plugin_y_registro(self):
         with open('templates/campo/avance_registrar.html', encoding='utf-8') as f:
@@ -317,3 +318,89 @@ class TestAvanceRegistrarDatalabelsIssue177:
         assert 'datalabels:' in contenido
         assert "'Parcial'" in contenido
         assert "'En Espera'" not in contenido
+
+    def test_template_donut_tiene_6_categorias_sin_no_ejecutado(self):
+        """A8: 'Seccionado'/'Especial' presentes en las labels del donut;
+        'No Ejecutado' retirado del RESUMEN (dato legacy no se cuenta,
+        PLAN.md Decisión HITL #1 — la card individual del vano legacy
+        sigue mostrando su propio label, eso no vive en este archivo)."""
+        with open('templates/campo/avance_registrar.html', encoding='utf-8') as f:
+            contenido = f.read()
+
+        assert "'Seccionado'" in contenido
+        assert "'Especial'" in contenido
+        assert "labels: ['Pendiente', 'Ejecutado', 'Sin Permiso', 'Parcial', 'Seccionado', 'Especial']" in contenido
+        assert "'No Ejecutado'" not in contenido
+        assert 'vanos_seccionados' in contenido
+        assert 'vanos_especiales' in contenido
+        assert 'vanos_no_ejecutado' not in contenido
+
+
+@pytest.mark.django_db
+class TestSeedDataVanosIssue177:
+    """A9 — verificación (sin cambio de código esperado): seed_data.py
+    itera Vano.Estado.choices dinámicamente, se adapta solo a las 7
+    choices nuevas. Se ejercita _create_vanos() directo (no el comando
+    completo, que crea usuarios/cuadrillas/etc. fuera de scope de este
+    test) contra un fixture propio con torres reales."""
+
+    def test_create_vanos_no_rompe_con_7_choices(self, linea):
+        from apps.core.management.commands.seed_data import Command
+        from apps.lineas.models import Torre, Vano
+        from tests.factories import TorreFactory
+
+        for _ in range(5):
+            TorreFactory(linea=linea)
+
+        cmd = Command()
+        cmd.stdout = __import__('io').StringIO()
+        cmd.lineas = {linea.codigo: linea}
+        cmd._create_vanos()  # no debe lanzar excepción
+
+        creados = Vano.objects.filter(linea=linea)
+        assert creados.count() == 4  # 5 torres -> 4 vanos consecutivos
+        estados_usados = set(creados.values_list('estado', flat=True))
+        # Todos los estados usados deben ser choices válidas de las 7.
+        assert estados_usados.issubset({v for v, _ in Vano.Estado.choices})
+
+
+@pytest.mark.django_db
+class TestAvanceRegistrarContextoSeccionadoEspecial:
+    """A8: contexto de RegistroAvanceCreateView expone vanos_seccionados /
+    vanos_especiales correctos para una línea con vanos en esos 2 estados."""
+
+    def test_context_vanos_seccionados_y_especiales(self, admin_client, linea):
+        Vano.objects.create(linea=linea, numero='1', estado=Vano.Estado.SECCIONADO)
+        Vano.objects.create(linea=linea, numero='2', estado=Vano.Estado.SECCIONADO)
+        Vano.objects.create(linea=linea, numero='3', estado=Vano.Estado.ESPECIAL)
+        Vano.objects.create(linea=linea, numero='4', estado=Vano.Estado.PENDIENTE)
+
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+
+        assert resp.status_code == 200
+        assert resp.context['vanos_seccionados'] == 2
+        assert resp.context['vanos_especiales'] == 1
+        assert resp.context['total_vanos'] == 4
+
+    def test_vano_legacy_no_ejecutado_no_se_cuenta_en_ninguna_categoria(self, admin_client, linea):
+        """Decisión HITL #1: el vano legacy no aparece en el resumen de 6
+        categorías (no se migra su dato), pero SÍ cuenta en total_vanos."""
+        Vano.objects.create(linea=linea, numero='15', estado=Vano.Estado.NO_EJECUTADO)
+        Vano.objects.create(linea=linea, numero='16', estado=Vano.Estado.PENDIENTE)
+
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+
+        assert resp.status_code == 200
+        assert resp.context['total_vanos'] == 2  # cuenta TODOS los vanos
+        assert resp.context['vanos_pendientes'] == 1
+        suma_6_categorias = (
+            resp.context['vanos_pendientes']
+            + resp.context['vanos_ejecutados']
+            + resp.context['vanos_sin_permiso']
+            + resp.context['vanos_en_espera']
+            + resp.context['vanos_seccionados']
+            + resp.context['vanos_especiales']
+        )
+        assert suma_6_categorias == 1  # el legacy 'no_ejecutado' queda fuera
