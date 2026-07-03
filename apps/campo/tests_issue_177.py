@@ -1,22 +1,41 @@
 """Issue #177 — Tests del endpoint/modal de historial de estado de Vanos.
 
+Reescrito completo (sub-item A11) sobre el archivo original (3 tests de
+``VanoEstadoUpdateView``, ya eliminada) — reconstruido de forma incremental
+a medida que A4..A9 se implementaron en este mismo sprint, no en un único
+paso al final; A11 cierra con esta pasada de coherencia + confirmación
+100% verde.
+
 Cobertura (app `campo` — los tests de modelos/migración de `lineas` viven en
 ``apps/lineas/tests/test_issue_177.py``, ver nota de scope más abajo):
 
-- A4: ``VanoHistorialCreateView`` — root cause fix del bounce (ENTREGABLE #1).
-  Reemplaza al viejo ``VanoEstadoUpdateView`` (eliminado, este archivo era su
-  única otra referencia además del template ya reescrito en A7).
-- A5: ``VanoHistorialListPartialView`` — listado del historial completo.
-- A8: Stats Row + donut a 6 categorías (Seccionado/Especial, sin No Ejecutado).
-- Regresión: rename de label 'En Espera' -> 'Parcial' (issue previo, sigue
-  válido, no se toca en este issue).
+- ``TestVanoHistorialCreateView`` (A4, ENTREGABLE #1 — root cause fix del
+  bounce): reemplaza al viejo ``VanoEstadoUpdateView``. Happy path, escenario
+  EXACTO de los logs (2 POST consecutivos sin pérdida de datos), estado
+  inválido, 'no_ejecutado' rechazado, sin permiso, admin_general OK, tope de
+  5 fotos, vano legacy post-backfill.
+- ``TestAvanceRegistrarModalRenderIssue177`` (A6/A7): smoke de renderizado
+  end-to-end vía ``Client.get`` real (no solo ``get_context_data`` como
+  B1.2) — confirma el contrato de selectores completo en el HTML servido y
+  que no quedó ninguna referencia colgante a la URL 'vano_estado' eliminada.
+- ``TestVanoHistorialListPartialView`` (A5): listado ordenado -fecha, fotos
+  0..N por registro, 403 sin acceso, empty state.
+- ``TestEstadoLabelParcialIssue177``: regresión del rename 'En Espera' ->
+  'Parcial' de un issue previo — sigue válido, no se toca acá.
+- ``TestAvanceRegistrarDatalabelsIssue177`` + ``TestAvanceRegistrarContexto
+  SeccionadoEspecial`` (A8): Stats Row + donut a 6 categorías, contexto de
+  vista correcto, datalabels plugin (Ajuste 3 / A10) intacto.
+- ``TestSeedDataVanosIssue177`` (A9): verificación explícita de que
+  ``seed_data.py`` no rompe con las 7 choices nuevas.
 
 Nota de scope: los tests de ``Vano.Estado`` (7 choices/seleccionables()),
 ``VanoHistorialEstado``/``VanoHistorialFoto`` (creación/orden) y el backfill
 (migración 0016) viven en ``apps/lineas/tests/test_issue_177.py`` — son
 modelos de la app `lineas`, y ese archivo no colisiona con otros issues del
 mismo RUN (Instelec#179 toca `apps/campo`, Instelec#182 toca otros archivos
-de `apps/lineas`).
+de `apps/lineas`). El journey E2E (``SPRINTS/RUN_2026-07-03_0800/journeys/
+Instelec_177.yaml``) ya fue entregado por F2 y no se modifica acá — corre
+vía F5 (``run_e2e_or_die.py``) contra la revisión promovida.
 """
 
 from __future__ import annotations
@@ -216,9 +235,12 @@ class TestAvanceRegistrarModalRenderIssue177:
         assert 'name="fotos"' in content and 'multiple' in content
         # La función JS se define UNA sola vez (forloop.first), no 2 veces.
         assert content.count('function vanoEstadoModal(') == 1
-        # El dropdown/endpoint viejo ya no existe en el HTML servido.
+        # El dropdown/endpoint viejo ya no existe en el HTML servido —
+        # ('Cambiar estado' SÍ aparece, pero como encabezado del modal
+        # nuevo: "Cambiar estado — Vano N", no como el botón viejo).
         assert 'vano_estado' not in content
-        assert 'Cambiar estado' not in content or 'Cambiar estado — Vano' in content
+        assert 'Cambiar estado — Vano' in content
+        assert 'showMenu' not in content
 
     def test_grid_no_referencia_url_vano_estado_eliminada(self, admin_client, linea):
         """Regresión directa del riesgo documentado: si vano_cuadro.html
