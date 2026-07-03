@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.lineas.models import Vano
+from apps.lineas.models import Vano, VanoHistorialEstado, VanoHistorialFoto
 
 
 @pytest.mark.django_db
@@ -43,3 +43,49 @@ class TestVanoEstadoEnumIssue177:
         """Regresión del rename anterior (En Espera -> Parcial, mismo value)."""
         assert Vano.Estado.EN_ESPERA.label == 'Parcial'
         assert Vano.Estado.EN_ESPERA.value == 'en_espera'
+
+
+@pytest.mark.django_db
+class TestVanoHistorialModelsIssue177:
+    """A2 — VanoHistorialEstado / VanoHistorialFoto."""
+
+    def test_crear_historial_sin_fotos(self, linea, admin_user):
+        vano = Vano.objects.create(linea=linea, numero='201')
+        historial = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.EJECUTADO, nota='Listo.'
+        )
+        assert historial.pk is not None
+        assert historial.fotos.count() == 0
+
+    def test_crear_historial_con_n_fotos(self, linea, admin_user):
+        vano = Vano.objects.create(linea=linea, numero='202')
+        historial = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.SECCIONADO, nota='2 fotos.'
+        )
+        VanoHistorialFoto.objects.create(historial=historial, imagen='campo/vanos/historial/a.jpg')
+        VanoHistorialFoto.objects.create(historial=historial, imagen='campo/vanos/historial/b.jpg')
+        assert historial.fotos.count() == 2
+        nombres = sorted(f.imagen.name for f in historial.fotos.all())
+        assert nombres == ['campo/vanos/historial/a.jpg', 'campo/vanos/historial/b.jpg']
+
+    def test_vano_historial_ordenado_desc_por_fecha(self, linea, admin_user):
+        vano = Vano.objects.create(linea=linea, numero='203')
+        h1 = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.PENDIENTE
+        )
+        h2 = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.EJECUTADO
+        )
+        ids = list(vano.historial.values_list('id', flat=True))
+        assert ids == [h2.id, h1.id]
+
+    def test_estado_no_ejecutado_valido_en_modelo_aunque_no_seleccionable(self, linea):
+        """El value legacy 'no_ejecutado' sigue siendo válido a nivel de modelo
+        (el backfill A3 lo necesita para el vano legacy), aunque no aparezca
+        en seleccionables()."""
+        vano = Vano.objects.create(linea=linea, numero='204', estado=Vano.Estado.NO_EJECUTADO)
+        historial = VanoHistorialEstado.objects.create(
+            vano=vano, estado=Vano.Estado.NO_EJECUTADO, nota=''
+        )
+        historial.full_clean()  # no debe lanzar ValidationError por choices
+        assert historial.estado == 'no_ejecutado'

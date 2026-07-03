@@ -703,6 +703,93 @@ class Vano(BaseModel):
         return f"Vano {self.numero} - {self.linea.codigo}"
 
 
+class VanoHistorialEstado(BaseModel):
+    """
+    Registro histórico append-only de cambios de estado de un ``Vano``.
+
+    Issue #177 — reemplaza el modelo "overwrite" anterior (un único
+    ``Vano.estado``/``observaciones``/``foto`` que se sobreescribía en cada
+    cambio) por un historial de trazabilidad: cada cambio de estado crea UNA
+    fila nueva, nunca se edita ni se borra una existente. Patrón calcado de
+    ``FotoDano``/``ReporteDano`` (``apps/campo/models.py``) y
+    ``HistorialIntervencion`` (``apps/actividades/models.py``).
+
+    ``estado`` usa las 7 choices de ``Vano.Estado`` (no solo las 6
+    seleccionables) para que el backfill (sub-item A3) pueda guardar
+    ``'no_ejecutado'`` tal cual para el dato legacy, sin remapearlo.
+    """
+
+    vano = models.ForeignKey(
+        Vano,
+        on_delete=models.CASCADE,
+        related_name='historial',
+        verbose_name='Vano'
+    )
+    usuario = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historial_vanos',
+        verbose_name='Usuario'
+    )
+    fecha = models.DateTimeField(
+        'Fecha',
+        auto_now_add=True
+    )
+    estado = models.CharField(
+        'Estado',
+        max_length=20,
+        choices=Vano.Estado.choices
+    )
+    nota = models.TextField(
+        'Nota',
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'vanos_historial_estado'
+        verbose_name = 'Historial de estado de Vano'
+        verbose_name_plural = 'Historial de estados de Vano'
+        ordering = ['-fecha']
+        indexes = [
+            models.Index(fields=['vano', '-fecha']),
+        ]
+
+    def __str__(self):
+        return f"{self.vano} — {self.get_estado_display()} ({self.fecha:%Y-%m-%d %H:%M})"
+
+
+class VanoHistorialFoto(BaseModel):
+    """
+    Foto(s) asociadas a un registro de ``VanoHistorialEstado`` (0..N).
+
+    Issue #177 — soporta múltiples fotos por cambio de estado (tope técnico
+    de 5, aplicado en la vista de creación, no en el modelo). Patrón calcado
+    de ``FotoDano`` (``apps/campo/models.py``), FK inverso 1:N.
+    """
+
+    historial = models.ForeignKey(
+        VanoHistorialEstado,
+        on_delete=models.CASCADE,
+        related_name='fotos',
+        verbose_name='Historial de estado'
+    )
+    imagen = models.ImageField(
+        'Imagen',
+        upload_to='campo/vanos/historial/'
+    )
+
+    class Meta:
+        db_table = 'vanos_historial_fotos'
+        verbose_name = 'Foto de historial de Vano'
+        verbose_name_plural = 'Fotos de historial de Vano'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Foto — {self.historial}"
+
+
 class PendienteVano(BaseModel):
     """
     Tarea o pendiente asociado a un vano específico.
