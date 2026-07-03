@@ -18,6 +18,154 @@ RE_LINEA_TRANSELCA = re.compile(
 )
 
 
+def _leer_texto_kml(archivo):
+    """Lee el contenido KML como string desde un KMZ (zip) o KML plano.
+
+    Acepta un path (str) o un objeto file-like (UploadedFile/File). Extraída
+    a nivel de módulo (antes vivía solo en KMZImporter._leer_kml_texto())
+    para que la reuse también el fallback manual de kmz_to_geojson() /
+    KMZImporter.importar() (issue #182).
+    """
+    nombre = getattr(archivo, 'name', '') or ''
+    if hasattr(archivo, 'read'):
+        if hasattr(archivo, 'seek'):
+            archivo.seek(0)
+        data = b''.join(archivo.chunks()) if hasattr(archivo, 'chunks') else archivo.read()
+    else:
+        with open(archivo, 'rb') as f:
+            data = f.read()
+
+    if data[:2] == b'PK' or nombre.lower().endswith('.kmz'):
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        kml_name = next((n for n in zf.namelist() if n.lower().endswith('.kml')), None)
+        if not kml_name:
+            raise ValueError(f'KMZ sin .kml dentro: {zf.namelist()}')
+        return zf.read(kml_name).decode('utf-8', errors='replace')
+
+    return data.decode('utf-8', errors='replace')
+
+
+def _parse_coordenadas_kml(texto):
+    """Parsea el contenido de un <coordinates> KML: tuplas 'lon,lat[,alt]'
+    separadas por espacios/saltos de línea (formato estándar KML)."""
+    coords = []
+    for tupla in texto.split():
+        partes = tupla.strip().split(',')
+        if len(partes) < 2:
+            continue
+        try:
+            lon = float(partes[0])
+            lat = float(partes[1])
+            alt = float(partes[2]) if len(partes) > 2 and partes[2] != '' else None
+        except ValueError:
+            continue
+        coords.append((lon, lat, alt))
+    return coords
+
+
+def _parse_kml_manual_features(source):
+    """Parsea un KML/KMZ manualmente con lxml cuando OGR no puede abrirlo.
+
+    Algunas imágenes Docker de GDAL (ej. `ghcr.io/osgeo/gdal:ubuntu-small`,
+    la que corre en prod) no traen compilado el driver LIBKML: `ogr.Open()`
+    devuelve None para KMZs con estructura Document→Style/StyleMap→Folder→
+    Placemarks mixtos (LineString+Point), como los que sube el cliente
+    (issue #182). Este fallback navega el XML directamente, namespace-aware,
+    sin depender de qué drivers OGR trae compilada la imagen base.
+
+    `source` puede ser un path (str) a un .kmz/.kml o un objeto file-like.
+
+    Returns:
+        list[dict]: uno por Placemark reconocido (Point o LineString), con
+        'name', 'description', 'geom_type' ('Point'|'LineString') y
+        'coordinates' (lista de tuplas (lon, lat, alt_o_None); 1 tupla para
+        Point, N para LineString).
+
+    Raises:
+        Exception: si el contenido no es un ZIP/XML válido (KMZ realmente
+        corrupto, no solo "sin LIBKML").
+    """
+    from lxml import etree
+
+    kml_text = _leer_texto_kml(source)
+    root = etree.fromstring(kml_text.encode('utf-8'))
+
+    root_tag = root.tag
+    if isinstance(root_tag, str) and root_tag.startswith('{'):
+        ns_uri = root_tag.split('}')[0][1:]
+
+        def tag(name):
+            return f'{{{ns_uri}}}{name}'
+    else:
+        def tag(name):
+            return name
+
+    features = []
+    for placemark in root.iter(tag('Placemark')):
+        name_el = placemark.find(tag('name'))
+        desc_el = placemark.find(tag('description'))
+        name = (name_el.text or '').strip() if name_el is not None else ''
+        description = (desc_el.text or '').strip() if desc_el is not None else ''
+
+        point_el = placemark.find(f'.//{tag("Point")}')
+        line_el = placemark.find(f'.//{tag("LineString")}')
+
+        geom_type = None
+        coords_el = None
+        if point_el is not None:
+            geom_type = 'Point'
+            coords_el = point_el.find(tag('coordinates'))
+        elif line_el is not None:
+            geom_type = 'LineString'
+            coords_el = line_el.find(tag('coordinates'))
+
+        if coords_el is None or not coords_el.text:
+            continue
+
+        coordinates = _parse_coordenadas_kml(coords_el.text)
+        if not coordinates:
+            continue
+
+        features.append({
+            'name': name,
+            'description': description,
+            'geom_type': geom_type,
+            'coordinates': coordinates,
+        })
+
+    return features
+
+
+def _manual_feature_to_geojson(placemark):
+    """Convierte un dict de _parse_kml_manual_features() a un Feature GeoJSON
+    (mismo contrato de salida que la vía OGR de kmz_to_geojson())."""
+    def _coord(c):
+        lon, lat, alt = c
+        return [lon, lat, alt] if alt is not None else [lon, lat]
+
+    coords = placemark.get('coordinates') or []
+    geom_type = placemark.get('geom_type')
+
+    if geom_type == 'Point' and coords:
+        geometry = {'type': 'Point', 'coordinates': _coord(coords[0])}
+    elif geom_type == 'LineString' and coords:
+        geometry = {'type': 'LineString', 'coordinates': [_coord(c) for c in coords]}
+    else:
+        geometry = None
+
+    properties = {}
+    if placemark.get('name'):
+        properties['Name'] = placemark['name']
+    if placemark.get('description'):
+        properties['Description'] = placemark['description']
+
+    return {
+        'type': 'Feature',
+        'geometry': geometry,
+        'properties': properties,
+    }
+
+
 class KMZImporter:
     """
     Import towers from KMZ/KML files using GDAL/OGR.
@@ -66,9 +214,31 @@ class KMZImporter:
 
             ds = ogr.Open(tmp_path)
             if ds is None:
+                # Fallback: la imagen GDAL de prod (ubuntu-small) no siempre
+                # trae compilado el driver LIBKML -> parseo manual con lxml
+                # (issue #182). Se activa SOLO cuando ogr.Open() falla; cero
+                # cambio de comportamiento cuando LIBKML SI esta disponible.
+                try:
+                    manual_features = _parse_kml_manual_features(tmp_path)
+                except Exception:
+                    manual_features = None
+
+                if not manual_features:
+                    return {
+                        'exito': False,
+                        'error': 'No se pudo leer el archivo. Verifique que sea un KMZ/KML valido.',
+                    }
+
+                with transaction.atomic():
+                    for placemark in manual_features:
+                        self._procesar_feature_manual(placemark, linea, actualizar_existentes)
+
                 return {
-                    'exito': False,
-                    'error': 'No se pudo leer el archivo. Verifique que sea un KMZ/KML valido.',
+                    'exito': True,
+                    'torres_creadas': self.torres_creadas,
+                    'torres_actualizadas': self.torres_actualizadas,
+                    'errores': self.errores,
+                    'advertencias': self.advertencias,
                 }
 
             with transaction.atomic():
@@ -147,6 +317,83 @@ class KMZImporter:
             return
 
         # Create or update Torre
+        try:
+            torre_existente = Torre.objects.filter(linea=linea, numero=numero).first()
+
+            if torre_existente:
+                if actualizar_existentes:
+                    torre_existente.latitud = lat
+                    torre_existente.longitud = lon
+                    if alt is not None:
+                        torre_existente.altitud = alt
+                    torre_existente.save()
+                    self.torres_actualizadas += 1
+                else:
+                    self.advertencias.append(
+                        f'Torre {numero} ya existe en {linea.codigo}. Use "actualizar existentes" para sobrescribir.'
+                    )
+            else:
+                Torre.objects.create(
+                    linea=linea,
+                    numero=numero,
+                    latitud=lat,
+                    longitud=lon,
+                    altitud=alt if alt is not None else 0,
+                    tipo=Torre.TipoTorre.SUSPENSION,  # Default type
+                    estado=Torre.EstadoTorre.BUENO,  # Default state
+                )
+                self.torres_creadas += 1
+
+        except Exception as e:
+            self.errores.append(f'Error al crear torre {numero}: {str(e)}')
+
+    def _procesar_feature_manual(self, placemark, linea, actualizar_existentes):
+        """Fallback de _procesar_feature() para Placemarks parseados
+        manualmente con lxml (ver _parse_kml_manual_features()) cuando
+        ogr.Open() no pudo abrir el archivo (driver LIBKML ausente, #182).
+
+        `placemark` es un dict con 'name', 'description', 'geom_type' y
+        'coordinates' (lista de tuplas (lon, lat, alt_o_None)). Replica el
+        comportamiento de _procesar_feature(): por cada Placemark (incluidas
+        geometrías no-Point) se intenta crear/actualizar una Torre.
+        """
+        from apps.lineas.models import Torre
+
+        coords = placemark.get('coordinates') or []
+        if not coords:
+            return
+
+        if placemark.get('geom_type') == 'Point':
+            lon, lat, alt = coords[0]
+        else:
+            # Geometria no-Point (ej. LineString): centroide simple
+            # (promedio de vertices), sustituto liviano de geom.Centroid()
+            # de OGR — preserva el comportamiento actual de _procesar_feature.
+            lon = sum(c[0] for c in coords) / len(coords)
+            lat = sum(c[1] for c in coords) / len(coords)
+            alts = [c[2] for c in coords if c[2] is not None]
+            alt = sum(alts) / len(alts) if alts else None
+
+        # Validate coordinates are within reasonable range for Colombia
+        if not (-5.0 <= lat <= 13.0 and -82.0 <= lon <= -66.0):
+            nombre_adv = placemark.get('name') or 'Sin nombre'
+            self.advertencias.append(
+                f'Coordenadas fuera de rango para Colombia: {nombre_adv} ({lat}, {lon})'
+            )
+            # Still process it - user might have valid out-of-range coords
+
+        nombre = placemark.get('name') or ''
+        descripcion = placemark.get('description') or ''
+
+        numero = self._extraer_numero_torre(nombre)
+        if not numero:
+            numero = self._extraer_numero_torre(descripcion)
+        if not numero:
+            numero = nombre.strip()
+        if not numero:
+            self.advertencias.append(f'Placemark sin nombre en ({lat}, {lon}), omitido.')
+            return
+
         try:
             torre_existente = Torre.objects.filter(linea=linea, numero=numero).first()
 
@@ -364,23 +611,7 @@ class KMZImporter:
 
     def _leer_kml_texto(self, archivo):
         """Lee el contenido KML como string desde un KMZ (zip) o KML plano."""
-        # Detectar tipo por nombre y/o magic bytes
-        nombre = getattr(archivo, 'name', '') or ''
-        if hasattr(archivo, 'read'):
-            archivo.seek(0) if hasattr(archivo, 'seek') else None
-            data = archivo.read() if not hasattr(archivo, 'chunks') else b''.join(archivo.chunks())
-        else:
-            with open(archivo, 'rb') as f:
-                data = f.read()
-
-        if data[:2] == b'PK' or nombre.lower().endswith('.kmz'):
-            zf = zipfile.ZipFile(io.BytesIO(data))
-            kml_name = next((n for n in zf.namelist() if n.lower().endswith('.kml')), None)
-            if not kml_name:
-                raise ValueError(f'KMZ sin .kml dentro: {zf.namelist()}')
-            return zf.read(kml_name).decode('utf-8', errors='replace')
-
-        return data.decode('utf-8', errors='replace')
+        return _leer_texto_kml(archivo)
 
     def _extraer_numero_torre(self, texto):
         """Extract tower number from a text string."""
@@ -430,7 +661,25 @@ def kmz_to_geojson(archivo):
 
         ds = ogr.Open(tmp_path)
         if ds is None:
-            raise ValueError('No se pudo leer el archivo. Verifique que sea un KMZ/KML válido.')
+            # Fallback: la imagen GDAL de prod (ubuntu-small) no siempre trae
+            # compilado el driver LIBKML -> parseo manual con lxml (#182).
+            # Se activa SOLO cuando ogr.Open() falla; cero cambio de
+            # comportamiento cuando LIBKML SI esta disponible.
+            try:
+                manual_features = _parse_kml_manual_features(tmp_path)
+            except Exception:
+                manual_features = None
+
+            if not manual_features:
+                raise ValueError('No se pudo leer el archivo. Verifique que sea un KMZ/KML válido.')
+
+            return {
+                'type': 'FeatureCollection',
+                'features': [
+                    _manual_feature_to_geojson(pf) for pf in manual_features
+                    if pf.get('geom_type') in ('Point', 'LineString')
+                ],
+            }
 
         features = []
         target_srs = osr.SpatialReference()

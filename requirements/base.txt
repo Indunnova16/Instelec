@@ -11,6 +11,10 @@ django-widget-tweaks>=1.5
 # GeoDjango - version must match system libgdal (Debian Bookworm has 3.8.x)
 GDAL==3.8.5
 
+# KMZ/KML fallback parsing cuando el driver LIBKML no esta compilado en la
+# imagen GDAL (ej. ubuntu-small en prod) — ver apps/lineas/importers.py (#182)
+lxml>=5.0
+
 # REST API
 djangorestframework>=3.15
 django-ninja>=1.0
