@@ -1,23 +1,35 @@
-"""Issue #177 — Tests para 3 ajustes del módulo de Avance de Vanos.
+"""Issue #177 — Tests del endpoint/modal de historial de estado de Vanos.
 
-Cobertura:
-1. VanoEstadoUpdateView.post persiste `observaciones` (ya existía, sigue
-   funcionando) y ahora también `foto` cuando viene en request.FILES.
-2. Vano.Estado.EN_ESPERA y AvanceVano.Estado.EN_ESPERA exponen el label
-   'Parcial' (manteniendo el value interno 'en_espera' sin tocar datos
-   legacy ya guardados con ese value).
-3. Sanity check: el datalabels plugin de Chart.js está cableado en el
-   template de avance_registrar (CDN + Chart.register + options.plugins).
+Cobertura (app `campo` — los tests de modelos/migración de `lineas` viven en
+``apps/lineas/tests/test_issue_177.py``, ver nota de scope más abajo):
+
+- A4: ``VanoHistorialCreateView`` — root cause fix del bounce (ENTREGABLE #1).
+  Reemplaza al viejo ``VanoEstadoUpdateView`` (eliminado, este archivo era su
+  única otra referencia además del template ya reescrito en A7).
+- A5: ``VanoHistorialListPartialView`` — listado del historial completo.
+- A8: Stats Row + donut a 6 categorías (Seccionado/Especial, sin No Ejecutado).
+- Regresión: rename de label 'En Espera' -> 'Parcial' (issue previo, sigue
+  válido, no se toca en este issue).
+
+Nota de scope: los tests de ``Vano.Estado`` (7 choices/seleccionables()),
+``VanoHistorialEstado``/``VanoHistorialFoto`` (creación/orden) y el backfill
+(migración 0016) viven en ``apps/lineas/tests/test_issue_177.py`` — son
+modelos de la app `lineas`, y ese archivo no colisiona con otros issues del
+mismo RUN (Instelec#179 toca `apps/campo`, Instelec#182 toca otros archivos
+de `apps/lineas`).
 """
 
 from __future__ import annotations
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.campo.models import AvanceVano
-from apps.lineas.models import Linea, Vano
+from apps.lineas.models import Vano, VanoHistorialEstado
+
+User = get_user_model()
 
 
 PNG_BYTES = (
@@ -40,65 +52,200 @@ def vano(linea):
 
 
 @pytest.mark.django_db
-class TestVanoEstadoUpdateViewIssue177:
-    """Sub-ítem 1: nota + foto opcional al cambiar estado de un Vano."""
+class TestVanoHistorialCreateView:
+    """A4 — root cause fix del bounce (ENTREGABLE #1 del DoD).
 
-    def test_persiste_observaciones_sin_foto(self, admin_client, admin_user, vano):
-        """Ya funcionaba antes del fix — debe seguir pasando (no regresión)."""
-        url = reverse('campo:vano_estado', kwargs={'pk': vano.pk})
+    Reemplaza VanoEstadoUpdateView. Cada POST crea una fila NUEVA de
+    historial (append-only) — nunca sobreescribe una anterior.
+    """
+
+    def test_happy_path_estado_nota_2_fotos(self, admin_client, admin_user, vano):
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
+        foto1 = SimpleUploadedFile('f1.png', PNG_BYTES, content_type='image/png')
+        foto2 = SimpleUploadedFile('f2.png', PNG_BYTES, content_type='image/png')
+
         resp = admin_client.post(url, {
-            'estado': Vano.Estado.SIN_PERMISO,
-            'observaciones': 'Acceso restringido por el predio.',
+            'estado': Vano.Estado.EJECUTADO,
+            'nota': 'Trabajo terminado.',
+            'fotos': [foto1, foto2],
         })
 
-        assert resp.status_code == 200
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data['ok'] is True
+        assert data['fotos_guardadas'] == 2
+
         vano.refresh_from_db()
-        assert vano.estado == Vano.Estado.SIN_PERMISO
-        assert vano.observaciones == 'Acceso restringido por el predio.'
+        assert vano.estado == Vano.Estado.EJECUTADO
         assert vano.marcado_por_id == admin_user.id
 
-    def test_persiste_foto_cuando_viene_en_files(self, admin_client, vano):
-        """Nuevo: si se envía un archivo `foto`, se guarda en Vano.foto."""
-        foto = SimpleUploadedFile('vano12.png', PNG_BYTES, content_type='image/png')
-        url = reverse('campo:vano_estado', kwargs={'pk': vano.pk})
+        historial = vano.historial.get()
+        assert historial.nota == 'Trabajo terminado.'
+        assert historial.fotos.count() == 2
+
+    def test_escenario_exacto_logs_2_posts_consecutivos_ninguno_se_pierde(self, admin_client, vano):
+        """Reproduce el escenario EXACTO confirmado por logs Cloud Run
+        (gcloud logging read, ventana 2026-07-01T13:38-13:39Z): 2 POST sobre
+        el mismo vano en <10s, cada uno con su propia nota. El bug original
+        perdía la nota del primer intento al reabrir el dropdown — acá
+        ambos deben quedar en el historial, ninguno sobreescribe al otro."""
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
+        foto = SimpleUploadedFile('primero.png', PNG_BYTES, content_type='image/png')
+
+        resp1 = admin_client.post(url, {
+            'estado': Vano.Estado.SIN_PERMISO,
+            'nota': 'Primer intento — con foto.',
+            'fotos': [foto],
+        })
+        assert resp1.status_code == 201
+
+        resp2 = admin_client.post(url, {
+            'estado': Vano.Estado.EJECUTADO,
+            'nota': '',
+        })
+        assert resp2.status_code == 201
+
+        vano.refresh_from_db()
+        historial = list(vano.historial.order_by('fecha'))
+        assert len(historial) == 2
+        assert historial[0].estado == Vano.Estado.SIN_PERMISO
+        assert historial[0].nota == 'Primer intento — con foto.'
+        assert historial[0].fotos.count() == 1  # el primero SIGUE con su foto
+        assert historial[1].estado == Vano.Estado.EJECUTADO
+        assert historial[1].nota == ''
+        # El estado "actual" denormalizado refleja el ÚLTIMO cambio.
+        assert vano.estado == Vano.Estado.EJECUTADO
+
+    def test_estado_invalido_400(self, admin_client, vano):
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
+        resp = admin_client.post(url, {'estado': 'no-existe', 'nota': ''})
+        assert resp.status_code == 400
+        assert vano.historial.count() == 0
+
+    def test_no_ejecutado_ya_no_es_seleccionable_400(self, admin_client, vano):
+        """'no_ejecutado' sigue siendo un choice válido del modelo (dato
+        legacy) pero ya NO es seleccionable desde el modal nuevo."""
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
+        resp = admin_client.post(url, {'estado': Vano.Estado.NO_EJECUTADO, 'nota': ''})
+        assert resp.status_code == 400
+        assert vano.historial.count() == 0
+
+    def test_sin_permiso_403(self, client, liniero_user, user_password, vano):
+        """Usuario de campo sin membresía en una cuadrilla de la línea del vano."""
+        client.login(username=liniero_user.email, password=user_password)
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
+        resp = client.post(url, {'estado': Vano.Estado.EJECUTADO, 'nota': ''})
+        assert resp.status_code == 403
+        assert vano.historial.count() == 0
+
+    def test_admin_general_si_tiene_acceso(self, client, user_password, vano):
+        """Regresión del bug latente: admin_general (RBAC v2 #44) SÍ puede
+        acceder — el VanoEstadoUpdateView original NO lo permitía."""
+        admin_general = User.objects.create_user(
+            email='admingeneral@test.com',
+            password=user_password,
+            first_name='Admin',
+            last_name='General',
+            rol='admin_general',
+        )
+        client.login(username=admin_general.email, password=user_password)
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
+        resp = client.post(url, {'estado': Vano.Estado.EJECUTADO, 'nota': ''})
+        assert resp.status_code == 201
+
+    def test_tope_5_fotos_de_6_enviadas(self, admin_client, vano):
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
+        fotos = [
+            SimpleUploadedFile(f'f{i}.png', PNG_BYTES, content_type='image/png')
+            for i in range(6)
+        ]
         resp = admin_client.post(url, {
-            'estado': Vano.Estado.NO_EJECUTADO,
-            'observaciones': 'No se pudo ejecutar por clima.',
-            'foto': foto,
+            'estado': Vano.Estado.EJECUTADO,
+            'nota': '',
+            'fotos': fotos,
+        })
+        assert resp.status_code == 201
+        assert resp.json()['fotos_guardadas'] == 5
+        assert vano.historial.get().fotos.count() == 5
+
+    def test_vano_legacy_post_backfill_acepta_nuevo_cambio(self, admin_client, linea):
+        """Vano legacy con 1 fila de historial "backfill" (simulada) — un
+        cambio nuevo vía el endpoint no rompe ni sobreescribe el backfill."""
+        vano_legacy = Vano.objects.create(
+            linea=linea, numero='999', estado=Vano.Estado.NO_EJECUTADO
+        )
+        backfill_row = VanoHistorialEstado.objects.create(
+            vano=vano_legacy, estado=Vano.Estado.NO_EJECUTADO, nota=''
+        )
+
+        url = reverse('campo:vano_historial_crear', kwargs={'pk': vano_legacy.pk})
+        resp = admin_client.post(url, {
+            'estado': Vano.Estado.PENDIENTE,
+            'nota': 'Reclasificado por campo.',
         })
 
-        assert resp.status_code == 200
-        vano.refresh_from_db()
-        assert vano.estado == Vano.Estado.NO_EJECUTADO
-        assert vano.observaciones == 'No se pudo ejecutar por clima.'
-        assert bool(vano.foto)
-        assert vano.foto.name.startswith('campo/vanos/')
+        assert resp.status_code == 201
+        vano_legacy.refresh_from_db()
+        assert vano_legacy.estado == Vano.Estado.PENDIENTE
+        assert vano_legacy.historial.count() == 2
+        backfill_row.refresh_from_db()
+        assert backfill_row.estado == 'no_ejecutado'  # el backfill sigue intacto
 
-    def test_sin_foto_no_borra_foto_existente(self, admin_client, vano):
-        """Si no llega `foto` en el POST, no se debe tocar el campo (no error)."""
-        vano.foto = SimpleUploadedFile('previa.png', PNG_BYTES, content_type='image/png')
-        vano.save()
-        nombre_previo = vano.foto.name
 
-        url = reverse('campo:vano_estado', kwargs={'pk': vano.pk})
-        resp = admin_client.post(url, {'estado': Vano.Estado.EJECUTADO})
+@pytest.mark.django_db
+class TestVanoHistorialListPartialView:
+    """A5 — listado del historial completo de un Vano."""
 
-        assert resp.status_code == 200
-        vano.refresh_from_db()
-        assert vano.foto.name == nombre_previo
+    def test_get_devuelve_historial_ordenado_desc_por_fecha(self, admin_client, admin_user, vano):
+        h1 = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.PENDIENTE, nota='Primero.'
+        )
+        h2 = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.EJECUTADO, nota='Segundo.'
+        )
 
-    def test_registro_legacy_sin_foto_ni_observaciones_sigue_funcionando(self, admin_client, vano):
-        """Vano pre-existente (sin foto/observaciones, como en datos reales) —
-        cambiar su estado sin enviar los campos opcionales no debe romper."""
-        assert not vano.foto
-        assert vano.observaciones == ''
-
-        url = reverse('campo:vano_estado', kwargs={'pk': vano.pk})
-        resp = admin_client.post(url, {'estado': Vano.Estado.EN_ESPERA})
+        url = reverse('campo:vano_historial_lista', kwargs={'pk': vano.pk})
+        resp = admin_client.get(url)
 
         assert resp.status_code == 200
-        vano.refresh_from_db()
-        assert vano.estado == 'en_espera'
+        content = resp.content.decode()
+        assert 'data-testid="vano-historial-list"' in content
+        # El más reciente (h2) aparece antes que el más viejo (h1) en el HTML.
+        assert content.index('Segundo.') < content.index('Primero.')
+        assert str(h1.id) or str(h2.id)  # sanity — ids existen
+
+    def test_incluye_fotos_de_cada_registro_no_solo_la_primera(self, admin_client, admin_user, vano):
+        h1 = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.SIN_PERMISO, nota=''
+        )
+        from apps.lineas.models import VanoHistorialFoto
+
+        VanoHistorialFoto.objects.create(historial=h1, imagen='campo/vanos/historial/x1.jpg')
+        h2 = VanoHistorialEstado.objects.create(
+            vano=vano, usuario=admin_user, estado=Vano.Estado.EJECUTADO, nota=''
+        )
+        VanoHistorialFoto.objects.create(historial=h2, imagen='campo/vanos/historial/y1.jpg')
+        VanoHistorialFoto.objects.create(historial=h2, imagen='campo/vanos/historial/y2.jpg')
+
+        url = reverse('campo:vano_historial_lista', kwargs={'pk': vano.pk})
+        resp = admin_client.get(url)
+
+        content = resp.content.decode()
+        assert 'x1.jpg' in content
+        assert 'y1.jpg' in content
+        assert 'y2.jpg' in content  # 0..N fotos, no solo la primera de cada registro
+
+    def test_403_para_usuario_sin_acceso_a_la_linea(self, client, liniero_user, user_password, vano):
+        client.login(username=liniero_user.email, password=user_password)
+        url = reverse('campo:vano_historial_lista', kwargs={'pk': vano.pk})
+        resp = client.get(url)
+        assert resp.status_code == 403
+
+    def test_vano_sin_historial_muestra_empty_state(self, admin_client, vano):
+        url = reverse('campo:vano_historial_lista', kwargs={'pk': vano.pk})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        assert 'Aún no hay cambios de estado' in resp.content.decode()
 
 
 @pytest.mark.django_db

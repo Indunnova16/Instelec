@@ -1107,53 +1107,131 @@ class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
         return context
 
 
-class VanoEstadoUpdateView(LoginRequiredMixin, View):
-    """Update estado of a Vano via HTMX."""
+def _vano_usuario_tiene_acceso(usuario, vano):
+    """Autorización compartida por los endpoints de historial de Vano
+    (issue #177 — VanoHistorialCreateView / VanoHistorialListPartialView).
+
+    Incluye ``admin_general`` en los roles nivel-admin: bug latente
+    corregido — el ``VanoEstadoUpdateView`` original (reemplazado por este
+    issue) no lo tenía, inconsistente con ``RegistroAvanceCreateView.
+    _build_context`` que ya lo requiere por RBAC v2 desde #44.
+    """
+    es_admin = usuario.rol in [
+        'admin', 'admin_general', 'director', 'coordinador', 'ing_residente', 'supervisor'
+    ]
+    if es_admin:
+        return True
+    from apps.cuadrillas.models import CuadrillaMiembro
+    return CuadrillaMiembro.objects.filter(
+        usuario=usuario,
+        activo=True,
+        cuadrilla__linea_asignada=vano.linea,
+        cuadrilla__activa=True,
+    ).exists()
+
+
+class VanoHistorialCreateView(LoginRequiredMixin, View):
+    """Crea un registro de historial de estado para un Vano (issue #177).
+
+    Reemplaza ``VanoEstadoUpdateView`` — root cause fix del bounce de este
+    issue: un único punto de guardado explícito vía ``fetch()+FormData``
+    (modal ``_vano_estado_modal.html``, sub-item A6), en vez del patrón
+    HTMX-submit-por-click del dropdown viejo que perdía datos entre
+    reaperturas (causa raíz confirmada con logs Cloud Run reales — ver
+    ``Instelec/SPRINTS/PLAN_2026-07-03_vanos_historial_modal.md``).
+
+    Cada POST crea SIEMPRE una fila NUEVA de ``VanoHistorialEstado``
+    (append-only) — nunca sobreescribe un registro anterior, sin importar
+    cuántos POST consecutivos lleguen sobre el mismo vano en segundos.
+    """
+
+    MAX_FOTOS = 5
 
     def post(self, request, pk):
-        from apps.lineas.models import Vano
+        from django.db import transaction
+        from django.http import JsonResponse
         from django.utils import timezone
-        from django.http import HttpResponse
+
+        from apps.lineas.models import Vano, VanoHistorialEstado, VanoHistorialFoto
 
         try:
-            vano = Vano.objects.select_related('linea', 'marcado_por').get(pk=pk)
+            vano = Vano.objects.select_related('linea').get(pk=pk)
+        except Vano.DoesNotExist:
+            return JsonResponse({'error': 'Vano no encontrado'}, status=404)
+
+        usuario = request.user
+        if not _vano_usuario_tiene_acceso(usuario, vano):
+            return JsonResponse(
+                {'error': 'No tienes permiso para modificar este vano'}, status=403
+            )
+
+        estado = (request.POST.get('estado') or '').strip()
+        seleccionables = dict(Vano.Estado.seleccionables())
+        if estado not in seleccionables:
+            # Defensa en profundidad: 'no_ejecutado' es un choice válido del
+            # modelo (dato legacy) pero NO es seleccionable desde el modal.
+            return JsonResponse({'error': 'Estado inválido'}, status=400)
+
+        nota = (request.POST.get('nota') or '').strip()
+        fotos = request.FILES.getlist('fotos')[: self.MAX_FOTOS]
+
+        with transaction.atomic():
+            historial = VanoHistorialEstado.objects.create(
+                vano=vano,
+                usuario=usuario,
+                estado=estado,
+                nota=nota,
+            )
+            for foto in fotos:
+                VanoHistorialFoto.objects.create(historial=historial, imagen=foto)
+
+            # Solo se actualizan los campos "estado actual" denormalizados
+            # de Vano — vano.observaciones / vano.foto quedan CONGELADOS,
+            # el historial es la fuente de verdad de la trazabilidad desde
+            # este issue (append-only, nunca overwrite).
+            vano.estado = estado
+            vano.marcado_por = usuario
+            vano.fecha_marcado = timezone.now()
+            vano.save(update_fields=['estado', 'marcado_por', 'fecha_marcado', 'updated_at'])
+
+        return JsonResponse(
+            {
+                'ok': True,
+                'historial_id': str(historial.id),
+                'estado': historial.estado,
+                'estado_display': historial.get_estado_display(),
+                'fotos_guardadas': len(fotos),
+            },
+            status=201,
+        )
+
+
+class VanoHistorialListPartialView(LoginRequiredMixin, View):
+    """Lista el historial completo (append-only) de un Vano — issue #177,
+    sub-item A5. Usado por el modal (A6) al abrir y tras cada guardado
+    exitoso (refetch), sin recargar el resto de la tarjeta."""
+
+    def get(self, request, pk):
+        from django.http import HttpResponse
+        from django.template.loader import render_to_string
+
+        from apps.lineas.models import Vano
+
+        try:
+            vano = Vano.objects.select_related('linea').get(pk=pk)
         except Vano.DoesNotExist:
             return HttpResponse('Vano no encontrado', status=404)
 
-        # Authorization: check if user is part of a cuadrilla assigned to this line or is admin
         usuario = request.user
-        es_admin = usuario.rol in ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+        if not _vano_usuario_tiene_acceso(usuario, vano):
+            return HttpResponse('No tienes permiso', status=403)
 
-        if not es_admin:
-            from apps.cuadrillas.models import CuadrillaMiembro
-            tiene_acceso = CuadrillaMiembro.objects.filter(
-                usuario=usuario,
-                activo=True,
-                cuadrilla__linea_asignada=vano.linea,
-                cuadrilla__activa=True,
-            ).exists()
-            if not tiene_acceso:
-                return HttpResponse('No tienes permiso', status=403)
+        historial = vano.historial.select_related('usuario').prefetch_related('fotos').all()
 
-        nuevo_estado = request.POST.get('estado', '').strip()
-        observaciones = request.POST.get('observaciones', '').strip()
-        foto = request.FILES.get('foto')
-
-        if nuevo_estado not in dict(Vano.Estado.choices):
-            return HttpResponse('Estado inválido', status=400)
-
-        vano.estado = nuevo_estado
-        vano.marcado_por = usuario
-        vano.fecha_marcado = timezone.now()
-        if observaciones:
-            vano.observaciones = observaciones
-        if foto:
-            vano.foto = foto
-        vano.save()
-
-        # Return updated vano partial
-        from django.template.loader import render_to_string
-        html = render_to_string('campo/partials/vano_cuadro.html', {'vano': vano})
+        html = render_to_string(
+            'campo/partials/_vano_historial_list.html',
+            {'vano': vano, 'historial': historial},
+        )
         return HttpResponse(html)
 
 

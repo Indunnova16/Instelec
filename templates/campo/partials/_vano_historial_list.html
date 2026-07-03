@@ -1,0 +1,53 @@
+{# Issue #177 (sub-item A5) — Historial completo (append-only) de un Vano. #}
+{# Uso: incluido dentro de _vano_estado_modal.html (A6), y renderizado #}
+{# standalone por VanoHistorialListPartialView (GET al abrir el modal + #}
+{# refetch tras cada guardado exitoso). Espera `vano` y `historial` #}
+{# (queryset ya ordenado -fecha, con usuario/fotos prefetched). #}
+<div data-testid="vano-historial-list" class="space-y-3">
+    {% for registro in historial %}
+        <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm">
+            <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold text-gray-900 dark:text-white">
+                    {% if registro.usuario %}
+                        {{ registro.usuario.get_full_name|default:registro.usuario.email }}
+                    {% else %}
+                        Usuario no disponible
+                    {% endif %}
+                </span>
+                <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    {{ registro.fecha|date:"d/m/Y H:i" }}
+                </span>
+            </div>
+            <div class="mt-1">
+                <span class="inline-block px-2 py-0.5 rounded text-xs font-medium
+                    {% if registro.estado == 'ejecutado' %}bg-green-100 text-green-800
+                    {% elif registro.estado == 'sin_permiso' %}bg-orange-100 text-orange-800
+                    {% elif registro.estado == 'no_ejecutado' %}bg-red-100 text-red-800
+                    {% elif registro.estado == 'en_espera' %}bg-yellow-100 text-yellow-800
+                    {% elif registro.estado == 'seccionado' %}bg-purple-100 text-purple-800
+                    {% elif registro.estado == 'especial' %}bg-pink-100 text-pink-800
+                    {% else %}bg-gray-100 text-gray-800
+                    {% endif %}">
+                    {{ registro.get_estado_display }}
+                </span>
+            </div>
+            {% if registro.nota %}
+                <p class="mt-2 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ registro.nota }}</p>
+            {% endif %}
+            {% if registro.fotos.all %}
+                <div class="mt-2 flex flex-wrap gap-2">
+                    {% for foto in registro.fotos.all %}
+                        <a href="{{ foto.imagen.url }}" target="_blank" rel="noopener">
+                            <img src="{{ foto.imagen.url }}" alt="Foto del cambio de estado"
+                                class="h-16 w-16 object-cover rounded border border-gray-200 dark:border-gray-600">
+                        </a>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    {% empty %}
+        <div class="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
+            Aún no hay cambios de estado registrados para este vano.
+        </div>
+    {% endfor %}
+</div>
