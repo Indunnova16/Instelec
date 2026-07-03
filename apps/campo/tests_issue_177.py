@@ -70,7 +70,7 @@ class TestVanoHistorialCreateView:
             'fotos': [foto1, foto2],
         })
 
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         data = resp.json()
         assert data['ok'] is True
         assert data['fotos_guardadas'] == 2
@@ -97,13 +97,13 @@ class TestVanoHistorialCreateView:
             'nota': 'Primer intento — con foto.',
             'fotos': [foto],
         })
-        assert resp1.status_code == 201
+        assert resp1.status_code == 200
 
         resp2 = admin_client.post(url, {
             'estado': Vano.Estado.EJECUTADO,
             'nota': '',
         })
-        assert resp2.status_code == 201
+        assert resp2.status_code == 200
 
         vano.refresh_from_db()
         historial = list(vano.historial.order_by('fecha'))
@@ -151,7 +151,7 @@ class TestVanoHistorialCreateView:
         client.login(username=admin_general.email, password=user_password)
         url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
         resp = client.post(url, {'estado': Vano.Estado.EJECUTADO, 'nota': ''})
-        assert resp.status_code == 201
+        assert resp.status_code == 200
 
     def test_tope_5_fotos_de_6_enviadas(self, admin_client, vano):
         url = reverse('campo:vano_historial_crear', kwargs={'pk': vano.pk})
@@ -164,7 +164,7 @@ class TestVanoHistorialCreateView:
             'nota': '',
             'fotos': fotos,
         })
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         assert resp.json()['fotos_guardadas'] == 5
         assert vano.historial.get().fotos.count() == 5
 
@@ -184,7 +184,7 @@ class TestVanoHistorialCreateView:
             'nota': 'Reclasificado por campo.',
         })
 
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         vano_legacy.refresh_from_db()
         assert vano_legacy.estado == Vano.Estado.PENDIENTE
         assert vano_legacy.historial.count() == 2

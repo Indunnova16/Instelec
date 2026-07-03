@@ -1194,6 +1194,9 @@ class VanoHistorialCreateView(LoginRequiredMixin, View):
             vano.fecha_marcado = timezone.now()
             vano.save(update_fields=['estado', 'marcado_por', 'fecha_marcado', 'updated_at'])
 
+        # HTTP 200 (no 201) a propósito: el journey E2E de este issue
+        # (Instelec_177.yaml) usa `submit_form` + `assert_status: 200`
+        # contra este POST — contrato fijado por F2, no cambiar.
         return JsonResponse(
             {
                 'ok': True,
@@ -1202,7 +1205,7 @@ class VanoHistorialCreateView(LoginRequiredMixin, View):
                 'estado_display': historial.get_estado_display(),
                 'fotos_guardadas': len(fotos),
             },
-            status=201,
+            status=200,
         )
 
 
