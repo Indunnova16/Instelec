@@ -617,6 +617,23 @@ class Vano(BaseModel):
         SIN_PERMISO = 'sin_permiso', 'Sin Permiso'
         NO_EJECUTADO = 'no_ejecutado', 'No Ejecutado'
         EN_ESPERA = 'en_espera', 'Parcial'
+        SECCIONADO = 'seccionado', 'Seccionado'
+        ESPECIAL = 'especial', 'Especial'
+
+        @classmethod
+        def seleccionables(cls):
+            """6 valores válidos para NUEVAS selecciones (modal issue #177).
+
+            Excluye ``NO_EJECUTADO``: se conserva como choice válido del
+            modelo (dato legacy, 1 fila en prod) pero el cliente pidió
+            explícitamente que no sea seleccionable en el flujo nuevo del
+            modal de historial. Ver
+            ``Instelec/SPRINTS/PLAN_2026-07-03_vanos_historial_modal.md``,
+            Decisión HITL #1 (no se migra/reescribe el dato legacy).
+            """
+            return tuple(
+                (value, label) for value, label in cls.choices if value != cls.NO_EJECUTADO
+            )
 
     linea = models.ForeignKey(
         Linea,
