@@ -72,10 +72,11 @@ class TestProcedimientoUploadMime:
             {"titulo": "Foto JPG", "descripcion": "", "archivo": archivo},
         )
         assert resp.status_code == 200
-        assert b"Solo se aceptan archivos PDF, XLS o XLSX" in resp.content
+        assert b"Solo se aceptan archivos PDF, XLS, XLSX o DOCX" in resp.content
         assert not Procedimiento.objects.filter(titulo="Foto JPG").exists()
 
-    def test_upload_docx_rechazado(self, admin_client, upload_url):
+    def test_upload_docx_aceptado(self, admin_client, upload_url):
+        """Issue #179: .docx con MIME oficial debe aceptarse (antes se rechazaba)."""
         archivo = SimpleUploadedFile(
             "doc.docx",
             b"PKtest docx",
@@ -85,8 +86,8 @@ class TestProcedimientoUploadMime:
             upload_url,
             {"titulo": "DOCX", "descripcion": "", "archivo": archivo},
         )
-        assert resp.status_code == 200
-        assert not Procedimiento.objects.filter(titulo="DOCX").exists()
+        assert resp.status_code == 302
+        assert Procedimiento.objects.filter(titulo="DOCX").exists()
 
     def test_upload_pdf_con_mime_spoofeado_rechazado(self, admin_client, upload_url):
         """Extensión .pdf pero MIME image/jpeg → rechaza por MIME whitelist."""
@@ -99,6 +100,20 @@ class TestProcedimientoUploadMime:
         )
         assert resp.status_code == 200
         assert not Procedimiento.objects.filter(titulo="Fake PDF").exists()
+
+    def test_upload_docx_con_mime_spoofeado_rechazado(self, admin_client, upload_url):
+        """Issue #179: extensión .docx pero MIME image/jpeg → sigue rechazando
+        (agregar .docx a la whitelist de extensión no debe debilitar el chequeo
+        de MIME real; mismo patrón que test_upload_pdf_con_mime_spoofeado_rechazado)."""
+        archivo = SimpleUploadedFile(
+            "fake.docx", JPG_BYTES, content_type="image/jpeg"
+        )
+        resp = admin_client.post(
+            upload_url,
+            {"titulo": "Fake DOCX", "descripcion": "", "archivo": archivo},
+        )
+        assert resp.status_code == 200
+        assert not Procedimiento.objects.filter(titulo="Fake DOCX").exists()
 
 
 @pytest.mark.django_db
