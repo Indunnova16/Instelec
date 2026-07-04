@@ -927,6 +927,10 @@ class ProgramacionSemanalImporter:
         self.programaciones_tocadas = set()  # set[(anio, mes, linea_id)]
         self.resumen_por_hoja = {}
         self.column_indices = {}
+        # Issue #178 (A2): filas de la sección NOVEDADES, independientes de
+        # cualquier actividad — ver `_guardar_novedad`.
+        self.novedades_pendientes = []
+        self.novedades_creadas = 0
 
     def importar(self, archivo_excel, opciones=None):
         """
@@ -961,7 +965,8 @@ class ProgramacionSemanalImporter:
                 logger.info(f"Hoja '{sheet_name}' omitida (no es semana válida)")
                 continue
             try:
-                resumen_hoja = self._procesar_hoja(workbook[sheet_name], opciones)
+                semana = self._numero_semana(sheet_name)
+                resumen_hoja = self._procesar_hoja(workbook[sheet_name], opciones, semana)
                 self.resumen_por_hoja[sheet_name] = resumen_hoja
                 sheets_procesadas.append(sheet_name)
             except Exception as e:
@@ -986,6 +991,7 @@ class ProgramacionSemanalImporter:
             'sheets_procesadas': sheets_procesadas,
             'actividades_creadas': len(self.actividades_creadas),
             'actividades_actualizadas': len(self.actividades_actualizadas),
+            'novedades_creadas': self.novedades_creadas,
             'errores': self.errores,
             'advertencias': self.advertencias,
             'resumen_por_hoja': self.resumen_por_hoja,
@@ -1063,9 +1069,19 @@ class ProgramacionSemanalImporter:
             'error': mensaje,
             'actividades_creadas': 0,
             'actividades_actualizadas': 0,
+            'novedades_creadas': 0,
             'errores': self.errores,
             'advertencias': self.advertencias,
         }
+
+    @staticmethod
+    def _numero_semana(sheet_name):
+        """Extrae el número de semana del nombre de la hoja (issue #178, A2)
+        — usado para persistir NovedadPersonalSemana con el contexto
+        correcto. Devuelve 0 si el nombre no trae dígitos (p.ej. 'vc')."""
+        import re
+        m = re.search(r'\d+', sheet_name)
+        return int(m.group()) if m else 0
 
     def _detectar_columnas(self, header_row):
         self.column_indices = {}
@@ -1142,7 +1158,7 @@ class ProgramacionSemanalImporter:
         partes = [p.strip() for p in re.split(r'[\n/;,]+', texto) if p.strip()]
         return partes or []
 
-    def _procesar_hoja(self, sheet, opciones):
+    def _procesar_hoja(self, sheet, opciones, semana=0):
         from .models import Actividad, ProgramacionMensual, TipoActividad
         from apps.lineas.models import Linea
 
@@ -1197,6 +1213,12 @@ class ProgramacionSemanalImporter:
         omitidas = 0
         actividades_cuadrilla_pendiente = []  # [(actividad_obj, [cedulas])]
         current_actividad_idx = None  # idx en actividades_cuadrilla_pendiente
+        # Issue #178 (A2): al entrar a NOVEDADES se cierra la actividad activa
+        # y las filas de personal que siguen se persisten como registro
+        # INDEPENDIENTE (no como miembro/cédula de la última actividad).
+        en_novedades = False
+        ultimo_anio = None
+        novedades_hoja = 0
 
         for row_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
             numero = self._get_cell(row, 'numero')
@@ -1204,9 +1226,14 @@ class ProgramacionSemanalImporter:
 
             numero_str = '' if numero is None else str(numero).strip()
 
-            # B5 fix: filas con '#' no-numérico ('-', 'NOVEDADES', notas)
-            # NO son actividades ni miembros; ignorarlas silenciosamente
-            # sin avanzar current_actividad_idx ni contarlas como omitidas.
+            if numero_str.strip().upper() == 'NOVEDADES':
+                current_actividad_idx = None
+                en_novedades = True
+                continue
+
+            # B5 fix: filas con '#' no-numérico ('-', notas sueltas) NO son
+            # actividades ni miembros; ignorarlas silenciosamente sin alterar
+            # el modo NOVEDADES ni current_actividad_idx.
             if numero_str and not self._es_numero_actividad(numero_str):
                 continue
 
@@ -1215,12 +1242,18 @@ class ProgramacionSemanalImporter:
             )
 
             if es_continuacion:
-                # Fila de personal — agregar cédula a actividad anterior
-                if current_actividad_idx is not None and cedula:
+                if en_novedades:
+                    novedad = self._parsear_novedad(row, row_idx, semana, ultimo_anio, sheet.title)
+                    if novedad:
+                        self._guardar_novedad(novedad)
+                        novedades_hoja += 1
+                elif current_actividad_idx is not None and cedula:
+                    # Fila de personal — agregar cédula a actividad anterior
                     actividades_cuadrilla_pendiente[current_actividad_idx][1].append(cedula)
                 continue
 
-            # Es fila de ACTIVIDAD
+            # Es fila de ACTIVIDAD → sale de NOVEDADES (si estaba).
+            en_novedades = False
             tipo_actividad_raw = self._get_cell(row, 'tipo_actividad')
             avisos_raw = self._get_cell(row, 'avisos')
             lineas_raw = self._get_cell(row, 'linea')
@@ -1273,6 +1306,7 @@ class ProgramacionSemanalImporter:
 
             # Fecha inicio para calcular mes
             anio_act, mes_act = self._extraer_anio_mes(fecha_inicio)
+            ultimo_anio = anio_act  # issue #178 (A2): contexto de año para NOVEDADES
             programacion = self._get_or_create_programacion(linea_obj, anio_act, mes_act)
             self.programaciones_tocadas.add((anio_act, mes_act, linea_obj.id))
 
@@ -1327,7 +1361,55 @@ class ProgramacionSemanalImporter:
         # Resolver cuadrillas via cédulas acumuladas
         self._asignar_cuadrillas(actividades_cuadrilla_pendiente)
 
-        return {'creadas': creadas, 'actualizadas': actualizadas, 'omitidas': omitidas}
+        return {
+            'creadas': creadas,
+            'actualizadas': actualizadas,
+            'omitidas': omitidas,
+            'novedades': novedades_hoja,
+        }
+
+    def _parsear_novedad(self, row, row_idx, semana, anio, hoja_origen):
+        """Fila de personal dentro de la sección NOVEDADES (issue #178, A2).
+
+        La nota (p.ej. "Vacaciones", "Incapacidad") viene en la columna
+        AVISOS de la fila, NO en una columna dedicada (confirmado contra el
+        Excel real del cliente).
+        """
+        nombre = self._get_cell(row, 'personal')
+        cedula = self._get_cell(row, 'cedula')
+        nombre = str(nombre).strip() if nombre else ''
+        cedula = str(cedula).strip() if cedula else ''
+        if not nombre and not cedula:
+            return None
+        return {
+            'nombre': nombre,
+            'cedula': cedula,
+            'cargo': self._get_cell(row, 'cargo') or '',
+            'nota': ', '.join(self._split_multi(self._get_cell(row, 'avisos'))),
+            'semana': semana,
+            'anio': anio or date.today().year,
+            'hoja_origen': hoja_origen,
+        }
+
+    def _guardar_novedad(self, novedad):
+        """Persiste una fila de NOVEDADES como registro independiente
+        (issue #178, A2) — sin FK a Actividad/Cuadrilla. get_or_create sobre
+        (cedula, semana, anio, nota) para que un re-import no duplique."""
+        from apps.cuadrillas.models import NovedadPersonalSemana
+
+        _, creado = NovedadPersonalSemana.objects.get_or_create(
+            cedula=novedad['cedula'],
+            semana=novedad['semana'],
+            anio=novedad['anio'],
+            nota=novedad['nota'],
+            defaults={
+                'nombre': novedad['nombre'],
+                'cargo': str(novedad['cargo']).strip(),
+                'hoja_origen': novedad['hoja_origen'],
+            },
+        )
+        if creado:
+            self.novedades_creadas += 1
 
     def _buscar_linea(self, codigos):
         from apps.lineas.models import Linea

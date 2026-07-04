@@ -591,6 +591,10 @@ class ProgramacionS18CuadrillaImporter:
         self.usuarios_creados = 0
         self.column_indices = {}
         self.sheets_procesadas = []
+        # Issue #178 (A2): filas de la sección NOVEDADES, independientes de
+        # cualquier bloque/actividad — ver `_guardar_novedad`.
+        self.novedades_pendientes = []
+        self.novedades_creadas = 0
 
     # ---------- API pública ----------
 
@@ -633,7 +637,9 @@ class ProgramacionS18CuadrillaImporter:
         except Exception:
             pass
 
-        if not bloques:
+        # Issue #178 (A2): una hoja puede traer SOLO novedades (sin ninguna
+        # actividad real) — no es un error, sigue siendo un import válido.
+        if not bloques and not self.novedades_pendientes:
             return self._resultado_error(
                 'No se encontraron cuadrillas en el archivo (¿formato Programación S18?)'
             )
@@ -643,6 +649,8 @@ class ProgramacionS18CuadrillaImporter:
             with transaction.atomic():
                 for bloque in bloques:
                     self._guardar_bloque(bloque, actualizar, crear_usuarios)
+                for novedad in self.novedades_pendientes:
+                    self._guardar_novedad(novedad)
                 if self.errores:
                     raise _RollbackImport(f'{len(self.errores)} errores fatales')
         except _RollbackImport:
@@ -658,6 +666,7 @@ class ProgramacionS18CuadrillaImporter:
                 'miembros_agregados': 0,
                 'encargados_asignados': 0,
                 'usuarios_creados': 0,
+                'novedades_creadas': 0,
                 'advertencias': self.advertencias,
                 'errores': self.errores,
                 'sheets_procesadas': self.sheets_procesadas,
@@ -684,6 +693,7 @@ class ProgramacionS18CuadrillaImporter:
             'miembros_agregados': self.miembros_agregados,
             'encargados_asignados': self.encargados_asignados,
             'usuarios_creados': self.usuarios_creados,
+            'novedades_creadas': self.novedades_creadas,
             'advertencias': self.advertencias,
             'errores': self.errores,
             'sheets_procesadas': self.sheets_procesadas,
@@ -732,12 +742,25 @@ class ProgramacionS18CuadrillaImporter:
 
         bloques = []
         actual = None
+        # Issue #178 (A2): al entrar a la sección NOVEDADES se cierra el
+        # bloque activo y las filas de personal que siguen se persisten como
+        # registro INDEPENDIENTE (no como miembro de la última actividad).
+        en_novedades = False
+        ultimo_anio = None
 
         for row_idx, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
             numero = self._get_cell(row, 'numero')
             numero_str = '' if numero is None else str(numero).strip()
 
-            # Filas de ruido ('-', 'NOVEDADES', notas) → ignorar.
+            if numero_str.strip().upper() == 'NOVEDADES':
+                if actual is not None:
+                    bloques.append(actual)
+                    actual = None
+                en_novedades = True
+                continue
+
+            # Filas de ruido ('-', notas sueltas) → ignorar sin alterar el
+            # modo NOVEDADES ni el bloque activo.
             if numero_str and not self._es_numero_actividad(numero_str):
                 continue
 
@@ -746,14 +769,20 @@ class ProgramacionS18CuadrillaImporter:
             )
 
             if es_continuacion:
-                # Miembro adicional de la actividad en curso.
-                if actual is not None:
+                if en_novedades:
+                    novedad = self._parsear_novedad(row, row_idx, semana, ultimo_anio, sheet.title)
+                    if novedad:
+                        self.novedades_pendientes.append(novedad)
+                elif actual is not None:
+                    # Miembro adicional de la actividad en curso.
                     miembro = self._parsear_miembro(row, row_idx)
                     if miembro:
                         actual['miembros'].append(miembro)
                 continue
 
-            # Encabezado de nueva actividad → cerrar la anterior.
+            # Encabezado de nueva actividad → sale de NOVEDADES (si estaba) y
+            # cierra el bloque anterior.
+            en_novedades = False
             if actual is not None:
                 bloques.append(actual)
 
@@ -762,6 +791,7 @@ class ProgramacionS18CuadrillaImporter:
             fecha_inicio = self._normalizar_fecha(self._get_cell(row, 'fecha_inicio'))
             fecha_fin = self._normalizar_fecha(self._get_cell(row, 'fecha_fin'))
             anio = fecha_inicio.year if fecha_inicio else date.today().year
+            ultimo_anio = anio  # issue #178 (A2): contexto de año para NOVEDADES
 
             actual = {
                 'semana': semana,
@@ -804,6 +834,28 @@ class ProgramacionS18CuadrillaImporter:
             'rol_raw': self._str(self._get_cell(row, 'rol')),
             'placa': self._str(self._get_cell(row, 'placa')),
             'es_jt': self._es_jt(self._get_cell(row, 'rol')),
+            'row_num': row_idx,
+        }
+
+    def _parsear_novedad(self, row, row_idx, semana, anio, hoja_origen):
+        """Fila de personal dentro de la sección NOVEDADES (issue #178, A2).
+
+        La nota (p.ej. "Vacaciones", "Incapacidad") viene en la columna
+        AVISOS de la fila, NO en una columna dedicada (confirmado contra el
+        Excel real del cliente).
+        """
+        nombre = self._str(self._get_cell(row, 'personal'))
+        cedula = self._str(self._get_cell(row, 'cedula'))
+        if not nombre and not cedula:
+            return None
+        return {
+            'nombre': nombre,
+            'cedula': cedula,
+            'cargo': self._str(self._get_cell(row, 'cargo')),
+            'nota': self._join_multi(self._get_cell(row, 'avisos')),
+            'semana': semana,
+            'anio': anio or date.today().year,
+            'hoja_origen': hoja_origen,
             'row_num': row_idx,
         }
 
@@ -986,6 +1038,26 @@ class ProgramacionS18CuadrillaImporter:
                 f'(cédula {cedula}): {e}'
             )
             return None
+
+    def _guardar_novedad(self, novedad):
+        """Persiste una fila de NOVEDADES como registro independiente
+        (issue #178, A2) — sin FK a Cuadrilla/Actividad. get_or_create sobre
+        (cedula, semana, anio, nota) para que un re-import no duplique."""
+        from apps.cuadrillas.models import NovedadPersonalSemana
+
+        _, creado = NovedadPersonalSemana.objects.get_or_create(
+            cedula=novedad['cedula'],
+            semana=novedad['semana'],
+            anio=novedad['anio'],
+            nota=novedad['nota'],
+            defaults={
+                'nombre': novedad['nombre'],
+                'cargo': novedad['cargo'],
+                'hoja_origen': novedad['hoja_origen'],
+            },
+        )
+        if creado:
+            self.novedades_creadas += 1
 
     # ---------- helpers ----------
 
@@ -1200,6 +1272,7 @@ class ProgramacionS18CuadrillaImporter:
             'miembros_agregados': 0,
             'encargados_asignados': 0,
             'usuarios_creados': 0,
+            'novedades_creadas': 0,
             'advertencias': self.advertencias,
             'errores': self.errores,
             'sheets_procesadas': self.sheets_procesadas,

@@ -34,7 +34,7 @@ from openpyxl import Workbook
 from apps.actividades.importers import ProgramacionSemanalImporter
 from apps.actividades.models import Actividad
 from apps.cuadrillas.importers import ProgramacionS18CuadrillaImporter
-from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro
+from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana
 from apps.cuadrillas.tests_s18 import S18_HEADERS, _act, _crear_linea, _crear_usuario, _miembro
 
 # ---------------------------------------------------------------------------
@@ -65,12 +65,27 @@ def _build_merged_excel(bloques, sheet_name='27', banner=True):
             ws.append(fila)
             fila_actual += 1
         fin = fila_actual - 1
-        if fin > inicio:
+        # La sección NOVEDADES real NUNCA trae columna A combinada (verificado
+        # contra el Excel del cliente: el marcador 'NOVEDADES' y sus filas de
+        # personal quedan sueltos, sin merge) — no generar merge para ella.
+        primera_celda_a = str(bloque[0][0] or '').strip().upper() if bloque else ''
+        if fin > inicio and primera_celda_a != 'NOVEDADES':
             ws.merge_cells(start_row=inicio, start_column=1, end_row=fin, end_column=1)
     out = BytesIO()
     wb.save(out)
     out.seek(0)
     return out
+
+
+def _novedades_marker():
+    """Fila encabezado de la sección NOVEDADES ('#'='NOVEDADES', resto None)."""
+    return ['NOVEDADES'] + [None] * (len(S18_HEADERS) - 1)
+
+
+def _novedad_fila(nombre, cedula, cargo='', nota=''):
+    """Fila de personal dentro de NOVEDADES — la nota va en AVISOS (col M),
+    igual que en el Excel real del cliente."""
+    return [None, None, None, None, None, None, nombre, cedula, '', cargo, None, None, nota, '', '', '']
 
 
 def _crear_cuadrilla_con_miembro(usuario, codigo_cuadrilla):
@@ -272,6 +287,156 @@ class TestA1BloquePorMergeActividades:
         assert res['exito'] is True
         assert res['actividades_creadas'] == 1
         assert Actividad.objects.filter(aviso_sap='5730001').exists()
+
+
+# ---------------------------------------------------------------------------
+# A2 — Fix NOVEDADES (ProgramacionS18CuadrillaImporter)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestA2NovedadesCuadrillas:
+    """Sub-item A2 (cuadrillas/importers.py::ProgramacionS18CuadrillaImporter).
+
+    Bug real confirmado por F1: al detectar NOVEDADES el importer NO
+    reseteaba el bloque activo, así que el personal en vacaciones/incapacidad
+    quedaba mezclado como miembro de la ÚLTIMA actividad real de la hoja.
+    """
+
+    def test_happy_novedades_no_se_atribuye_a_ultima_actividad(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+        ]
+        novedades = [
+            _novedades_marker(),
+            _novedad_fila('IVAN CRUZATE', '73266972', 'LINIERO I', 'Vacaciones'),
+            _novedad_fila('YESID BARRIOS', '72135975', 'LINIERO II', 'Vacaciones'),
+        ]
+        excel = _build_merged_excel([bloque, novedades])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        assert res['cuadrillas_creadas'] == 1
+        # Las 2 personas de NOVEDADES NO quedaron como miembro de la cuadrilla.
+        assert res['miembros_agregados'] == 1
+        assert res['novedades_creadas'] == 2
+        cuad = Cuadrilla.objects.get()
+        assert cuad.miembros.count() == 1
+        assert not cuad.miembros.filter(usuario__documento__in=['73266972', '72135975']).exists()
+        # Las novedades quedan persistidas como registro independiente.
+        n1 = NovedadPersonalSemana.objects.get(cedula='73266972')
+        assert n1.nombre == 'IVAN CRUZATE'
+        assert n1.nota == 'Vacaciones'
+        assert n1.semana == 27
+
+    def test_edge_hoja_sin_novedades_no_rompe_import(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        assert res['cuadrillas_creadas'] == 1
+        assert res['novedades_creadas'] == 0
+        assert NovedadPersonalSemana.objects.count() == 0
+
+    def test_edge_misma_cedula_en_actividad_y_novedades_ambos_persisten(self):
+        """Reincorporación a mitad de semana: la misma cédula puede aparecer
+        como miembro de una actividad Y en NOVEDADES — no debe haber
+        deduplicación indebida entre ambos registros."""
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        _crear_usuario('1004487321', 'KEINER SERRANO')
+
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('KEINER SERRANO', '1004487321', 'LINIERO II'),
+        ]
+        novedades = [
+            _novedades_marker(),
+            _novedad_fila('KEINER SERRANO', '1004487321', 'LINIERO II', 'Incapacidad parcial'),
+        ]
+        excel = _build_merged_excel([bloque, novedades])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        assert res['miembros_agregados'] == 2
+        assert res['novedades_creadas'] == 1
+        cuad = Cuadrilla.objects.get()
+        assert cuad.miembros.filter(usuario__documento='1004487321').exists()
+        assert NovedadPersonalSemana.objects.filter(cedula='1004487321').exists()
+
+
+# ---------------------------------------------------------------------------
+# A2 — Fix NOVEDADES (ProgramacionSemanalImporter)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestA2NovedadesActividades:
+    """Sub-item A2 (actividades/importers.py::ProgramacionSemanalImporter)."""
+
+    def test_happy_novedades_no_se_atribuye_a_ultima_actividad(self):
+        _crear_linea_con_torre('LN817')
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA', avisos='5740001'),
+        ]
+        novedades = [
+            _novedades_marker(),
+            _novedad_fila('IVAN CRUZATE', '73266972', 'LINIERO I', 'Vacaciones'),
+        ]
+        excel = _build_merged_excel([bloque, novedades])
+        res = ProgramacionSemanalImporter().importar(excel)
+
+        assert res['exito'] is True
+        assert res['actividades_creadas'] == 1
+        assert res['novedades_creadas'] == 1
+        n1 = NovedadPersonalSemana.objects.get(cedula='73266972')
+        assert n1.nota == 'Vacaciones'
+        assert n1.semana == 27
+
+    def test_edge_hoja_sin_novedades_no_rompe_import(self):
+        _crear_linea_con_torre('LN817')
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA', avisos='5740002'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionSemanalImporter().importar(excel)
+
+        assert res['exito'] is True
+        assert res['actividades_creadas'] == 1
+        assert res['novedades_creadas'] == 0
+
+    def test_edge_misma_cedula_en_actividad_y_novedades_ambos_persisten(self):
+        _crear_linea_con_torre('LN817')
+        u1 = _crear_usuario('1004487321', 'KEINER SERRANO')
+        _crear_cuadrilla_con_miembro(u1, 'CUA-REINCORPORA')
+
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA', avisos='5740003'),
+            _miembro('KEINER SERRANO', '1004487321', 'LINIERO II'),
+        ]
+        novedades = [
+            _novedades_marker(),
+            _novedad_fila('KEINER SERRANO', '1004487321', 'LINIERO II', 'Incapacidad parcial'),
+        ]
+        excel = _build_merged_excel([bloque, novedades])
+        res = ProgramacionSemanalImporter().importar(excel)
+
+        assert res['exito'] is True
+        act = Actividad.objects.get(aviso_sap='5740003')
+        assert act.cuadrillas.filter(codigo='CUA-REINCORPORA').exists()
+        assert NovedadPersonalSemana.objects.filter(cedula='1004487321').exists()
 
 
 def _crear_linea_con_torre(codigo):
