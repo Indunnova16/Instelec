@@ -273,7 +273,7 @@ class CuadrillaImporter:
         }
 
     def _guardar_cuadrilla(self, cuadrilla_data, miembros, actualizar, row_num):
-        from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, Vehiculo
+        from apps.cuadrillas.models import Cuadrilla, Vehiculo
         from apps.lineas.models import Linea
         from apps.usuarios.models import Usuario
 
@@ -390,6 +390,7 @@ class CuadrillaImporter:
 
         # Schema con B3: insertar via raw SQL completando audit fields vacíos.
         import uuid
+
         from django.utils import timezone
 
         new_id = uuid.uuid4()
@@ -576,7 +577,10 @@ class ProgramacionS18CuadrillaImporter:
         'observaciones': ['comentarios', 'observaciones', 'obs', 'notas'],
     }
 
-    SHEETS_EXCLUIR = {'vc', 'hoja1', 'sheet1', 'resumen', 'instrucciones'}
+    # Issue #178 (A3): 'vc' se removió de aquí — es una semana VÁLIDA real
+    # del cliente (confirmado: contiene datos de actividad reales), antes se
+    # excluía por error. Se valida como caso especial en `_es_hoja_semanal`.
+    SHEETS_EXCLUIR = {'hoja1', 'sheet1', 'resumen', 'instrucciones'}
 
     def __init__(self):
         self.errores = []
@@ -1204,11 +1208,22 @@ class ProgramacionS18CuadrillaImporter:
 
     @staticmethod
     def _es_hoja_semanal(sheet_name):
+        """Issue #178 (A3): además de 'NN'/'semana NN'/'NN (n)', acepta
+        variantes con un prefijo alfabético corto (≤2 letras, ej. 'C12',
+        'C16' — copias de una semana con prefijo de letra) SIN hardcodear
+        nombres uno por uno. 'vc' es un caso especial real (sin dígitos, no
+        matchea el patrón numérico) confirmado como semana válida por el
+        cliente. Las hojas catálogo (pt-corredores, Hoja1, Hoja2, Hoja5...)
+        siguen excluidas naturalmente porque su prefijo no matchea ('hoja'
+        tiene 4 letras, por encima del límite de 2) o no traen dígitos.
+        """
         import re
         nombre = sheet_name.strip().lower()
         if nombre in ProgramacionS18CuadrillaImporter.SHEETS_EXCLUIR:
             return False
-        return bool(re.fullmatch(r's?(emana)?[\s_]*\d+(\s*\(\d+\))?', nombre))
+        if nombre == 'vc':
+            return True
+        return bool(re.fullmatch(r'(s(emana)?|[a-z]{1,2})?[\s_]*\d+(\s*\(\d+\))?', nombre))
 
     @staticmethod
     def _numero_semana(sheet_name):

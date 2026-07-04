@@ -439,6 +439,32 @@ class TestA2NovedadesActividades:
         assert NovedadPersonalSemana.objects.filter(cedula='1004487321').exists()
 
 
+# ---------------------------------------------------------------------------
+# A3 — Soporte hojas vc/C12/C16/'12 (2)' (ambos importers comparten la misma
+# lógica _es_hoja_semanal/SHEETS_EXCLUIR — un solo test cubre ambas clases).
+# ---------------------------------------------------------------------------
+
+class TestA3SoporteHojasVcC12C16:
+    """Sub-item A3. `_es_hoja_semanal`/`SHEETS_EXCLUIR` de
+    `ProgramacionS18CuadrillaImporter` (cuadrillas) y
+    `ProgramacionSemanalImporter` (actividades)."""
+
+    @pytest.mark.parametrize('importer_cls', [ProgramacionS18CuadrillaImporter, ProgramacionSemanalImporter])
+    def test_happy_vc_c12_c16_parentesis_matchean(self, importer_cls):
+        assert importer_cls._es_hoja_semanal('vc') is True
+        assert importer_cls._es_hoja_semanal('C12') is True
+        assert importer_cls._es_hoja_semanal('C16') is True
+        assert importer_cls._es_hoja_semanal('12 (2)') is True
+        # Casos ya soportados antes de A3, no deben regresionar.
+        assert importer_cls._es_hoja_semanal('18') is True
+        assert importer_cls._es_hoja_semanal('Semana 5') is True
+
+    @pytest.mark.parametrize('importer_cls', [ProgramacionS18CuadrillaImporter, ProgramacionSemanalImporter])
+    def test_edge_catalogos_siguen_excluidos(self, importer_cls):
+        for nombre in ['pt-corredores', 'Hoja1', 'Hoja2', 'Hoja5', 'Sheet1', 'Resumen', 'Instrucciones']:
+            assert importer_cls._es_hoja_semanal(nombre) is False, nombre
+
+
 def _crear_linea_con_torre(codigo):
     """Linea + Torre real (con lat/lon) para el importer de actividades, que
     necesita `linea.torres` para no crear un placeholder T-AUTO."""

@@ -25,12 +25,12 @@ Tests:
 - legacy preservado: archivo `Programación S06.xlsx` sigue creando
   actividades (no rompimos el path original).
 """
-import pytest
 from pathlib import Path
+
+import pytest
 
 from apps.actividades.importers import ProgramacionSemanalImporter
 from apps.lineas.models import Linea, Torre
-
 
 FIXTURES = Path(__file__).resolve().parent.parent.parent / 'tests' / 'fixtures'
 DOCUMENTACION = Path(__file__).resolve().parent.parent.parent / 'Documentacion'
@@ -97,8 +97,20 @@ class TestEsHojaSemanal:
         assert ProgramacionSemanalImporter._es_hoja_semanal('18 (1)') is True
         assert ProgramacionSemanalImporter._es_hoja_semanal('S18 (3)') is True
 
+    def test_acepta_vc_y_prefijo_letra_issue_178(self):
+        """Issue #178 (A3): 'vc' es una semana VÁLIDA real del cliente
+        (confirmado: contiene datos de actividad reales) — antes se excluía
+        por error. 'C12'/'C16' (copias con prefijo de letra) también deben
+        aceptarse sin hardcodear cada nombre."""
+        assert ProgramacionSemanalImporter._es_hoja_semanal('vc') is True
+        assert ProgramacionSemanalImporter._es_hoja_semanal('C12') is True
+        assert ProgramacionSemanalImporter._es_hoja_semanal('C16') is True
+
     def test_rechaza_excluidas(self):
-        for nombre in ['vc', 'Hoja1', 'Sheet1', 'Resumen', 'Instrucciones']:
+        for nombre in ['Hoja1', 'Sheet1', 'Resumen', 'Instrucciones']:
+            assert ProgramacionSemanalImporter._es_hoja_semanal(nombre) is False
+        # Hojas catálogo reales del cliente sin dígitos ni prefijo válido.
+        for nombre in ['pt-corredores', 'Hoja2', 'Hoja5']:
             assert ProgramacionSemanalImporter._es_hoja_semanal(nombre) is False
 
     def test_rechaza_texto_libre(self):
@@ -286,7 +298,12 @@ class TestB5LegacyS06Preservado:
         )
 
     def test_b5_legacy_hojas_excluidas_siguen_excluyendose(self):
-        """Hojas como 'vc', 'Hoja1' deben seguir siendo ignoradas."""
+        """Hojas catálogo como 'Hoja1' deben seguir siendo ignoradas.
+
+        Issue #178 (A3): 'vc' YA NO se excluye — es una semana válida real
+        (confirmado dato-por-dato: la hoja 'vc' de este mismo archivo legacy
+        trae actividades reales, p.ej. fila 3 'Servidumbre Completa'/'811,
+        812') que antes se perdían en silencio."""
         if not S06_PATH.exists():
             pytest.skip(f'Archivo legacy {S06_PATH} no presente en worktree')
 
@@ -298,5 +315,5 @@ class TestB5LegacyS06Preservado:
             resultado = importer.importar(f, opciones={})
 
         sheets = resultado.get('sheets_procesadas', [])
-        assert 'vc' not in sheets
+        assert 'vc' in sheets
         assert 'Hoja1' not in [s.lower() for s in sheets]

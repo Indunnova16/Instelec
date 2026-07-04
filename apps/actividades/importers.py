@@ -432,8 +432,9 @@ class AvisosTranselcaImporter:
         Returns:
             Dict with import summary
         """
-        from apps.lineas.models import Linea
         from datetime import date
+
+        from apps.lineas.models import Linea
 
         from .models import TipoActividad
 
@@ -917,7 +918,10 @@ class ProgramacionSemanalImporter:
         'observaciones':  ['comentarios', 'observaciones', 'obs', 'notas'],
     }
 
-    SHEETS_EXCLUIR = {'vc', 'hoja1', 'sheet1', 'resumen', 'instrucciones'}
+    # Issue #178 (A3): 'vc' se removió de aquí — es una semana VÁLIDA real
+    # del cliente (confirmado: contiene datos de actividad reales), antes se
+    # excluía por error. Se valida como caso especial en `_es_hoja_semanal`.
+    SHEETS_EXCLUIR = {'hoja1', 'sheet1', 'resumen', 'instrucciones'}
 
     def __init__(self):
         self.errores = []
@@ -1001,15 +1005,27 @@ class ProgramacionSemanalImporter:
 
     @staticmethod
     def _es_hoja_semanal(sheet_name):
+        """Aceptar '02', '18', 'S18', 'Semana 18', 'semana_05', '12 (2)',
+        '18 (1)'. B5 fix: las copias de hojas que Excel nombra '12 (2)' SON
+        válidas (mismo formato de programación). Antes el regex las excluía
+        silenciosamente y se perdían filas de avisos.
+
+        Issue #178 (A3): además acepta variantes con un prefijo alfabético
+        corto (≤2 letras, ej. 'C12', 'C16' — copias de una semana con
+        prefijo de letra) SIN hardcodear nombres uno por uno. 'vc' es un
+        caso especial real (sin dígitos, no matchea el patrón numérico)
+        confirmado como semana válida por el cliente. Las hojas catálogo
+        (pt-corredores, Hoja1, Hoja2, Hoja5...) siguen excluidas
+        naturalmente porque su prefijo no matchea ('hoja' tiene 4 letras,
+        por encima del límite de 2) o no traen dígitos.
+        """
         import re
         nombre = sheet_name.strip().lower()
         if nombre in ProgramacionSemanalImporter.SHEETS_EXCLUIR:
             return False
-        # Aceptar '02', '18', 'S18', 'Semana 18', 'semana_05', '12 (2)', '18 (1)'
-        # B5 fix: las copias de hojas que Excel nombra '12 (2)' SON
-        # válidas (mismo formato de programación). Antes el regex las
-        # excluía silenciosamente y se perdían filas de avisos.
-        return bool(re.fullmatch(r's?(emana)?[\s_]*\d+(\s*\(\d+\))?', nombre))
+        if nombre == 'vc':
+            return True
+        return bool(re.fullmatch(r'(s(emana)?|[a-z]{1,2})?[\s_]*\d+(\s*\(\d+\))?', nombre))
 
     @staticmethod
     def _mapa_bloques_por_merge(sheet, col_numero, col_alt=None):
@@ -1159,8 +1175,8 @@ class ProgramacionSemanalImporter:
         return partes or []
 
     def _procesar_hoja(self, sheet, opciones, semana=0):
-        from .models import Actividad, ProgramacionMensual, TipoActividad
-        from apps.lineas.models import Linea
+
+        from .models import Actividad
 
         actualizar_existentes = opciones.get('actualizar_existentes', False)
 
