@@ -896,11 +896,18 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         # redundante con el filtro pero hace explícita la relación 1-1 y
         # evita un round-trip al renderizar. ``pendientes__responsable`` es
         # válido — PendienteVano sí tiene FK ``responsable`` a Usuario.
+        # Issue #177 (bounce=2) — Count('historial') anotado a nivel de
+        # queryset (evita N+1: sin esto, ``vano.historial.count()`` en el
+        # template dispararia 1 query extra POR VANO, hasta 204 vanos segun
+        # att_04). No requiere ``distinct=True``: el ``prefetch_related`` de
+        # abajo corre como queries separadas (no JOIN), asi que esta
+        # anotacion es el unico JOIN/GROUP BY sobre esta queryset.
         vanos = (
             Vano.objects
             .filter(linea=linea)
             .select_related('linea', 'torre_inicio', 'torre_fin')
             .prefetch_related('pendientes', 'pendientes__responsable')
+            .annotate(num_novedades=Count('historial'))
             .order_by('numero')
         )
 

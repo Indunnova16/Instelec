@@ -426,3 +426,229 @@ class TestAvanceRegistrarContextoSeccionadoEspecial:
             + resp.context['vanos_especiales']
         )
         assert suma_6_categorias == 1  # el legacy 'no_ejecutado' queda fuera
+
+
+# ==============================================================================
+# Bounce=2 (SIN_VALIDAR) — F2/F3 2026-07-04
+# ==============================================================================
+#
+# El cierre 2026-07-03T17:29:01Z declaro los 6 estados "correctos" validando
+# SOLO los nombres pedidos, sin tener todavia el Excel de control de color
+# del cliente (att_04) como oraculo — el cliente lo compartio recien 35 min
+# despues, en el propio comentario de bounce (2026-07-03T18:02:41Z), citando
+# 2 imagenes (att_06=dropdown actual, att_04=Excel RESUMEN de referencia).
+# Los NOMBRES de los 6 estados ya eran correctos (no se tocan aca); el gap
+# real era de COLOR: Sin Permiso/Parcial/Seccionado/Especial no coincidian
+# con la convencion operativa del cliente. Se agrega tambien: (a) swatch de
+# color en el <select> nativo del modal (b) contador de "novedades" por
+# tarjeta — pedido NUEVO, no reproceso (att_05).
+
+import re
+
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
+
+def _clases_tarjeta_vano(content: str, vano_id) -> str:
+    """Extrae el valor del atributo ``class`` del div raiz de una tarjeta de
+    Vano (``id="vano-<uuid>"``), sin depender de una ventana de caracteres
+    fija — el bloque de atributos (x-data/@click) tiene longitud variable."""
+    patron = re.compile(
+        rf'id="vano-{re.escape(str(vano_id))}".*?class="([^"]*)"', re.DOTALL
+    )
+    match = patron.search(content)
+    assert match, f'no se encontro la tarjeta de vano {vano_id} en el HTML'
+    return match.group(1)
+
+
+def _conteo_novedades_tarjeta(content: str, vano_id) -> int:
+    """Extrae el numero mostrado en el span
+    ``data-testid="vano-novedades-count"`` de un vano especifico."""
+    patron = re.compile(
+        rf'data-testid="vano-novedades-count" data-vano="{re.escape(str(vano_id))}"'
+        r'[^>]*>(\d+)</span>',
+        re.DOTALL,
+    )
+    match = patron.search(content)
+    assert match, f'no se encontro el contador de novedades para vano {vano_id}'
+    return int(match.group(1))
+
+
+@pytest.mark.django_db
+class TestColoresEstadoConvencionClienteIssue177Bounce2:
+    """Recoloreado de Sin Permiso(rojo)/Parcial(verde-claro/lime)/
+    Seccionado(naranja-dorado/amber)/Especial(azul) segun la convencion del
+    Excel de control del cliente (att_04). Ejecutado(verde)/Pendiente(gris)
+    sin cambio — ya coincidian. Cubre los 3 lugares donde el color esta
+    hardcoded (F2: no hay COLOR_MAP central): donut, stats row, tarjetas."""
+
+    def test_donut_backgroundcolor_usa_hex_convencion_cliente(self, admin_client, linea):
+        Vano.objects.create(linea=linea, numero='1', estado=Vano.Estado.SIN_PERMISO)
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        content = resp.content.decode()
+
+        assert '#ef4444' in content  # red — sin_permiso (convencion cliente)
+        assert '#84cc16' in content  # lime — en_espera (Parcial, verde-claro)
+        assert '#f59e0b' in content  # amber — seccionado (naranja/dorado)
+        assert '#3b82f6' in content  # blue — especial
+        # Los hex del bounce=1 (arbitrarios, sin oraculo de color) ya NO
+        # deben aparecer.
+        assert '#f97316' not in content  # orange viejo (sin_permiso)
+        assert '#eab308' not in content  # yellow viejo (en_espera)
+        assert '#a855f7' not in content  # purple viejo (seccionado)
+        assert '#ec4899' not in content  # pink viejo (especial)
+        # Sin cambio — ya coincidian con la convencion del cliente.
+        assert '#d1d5db' in content  # gray — pendiente
+        assert '#10b981' in content  # green — ejecutado
+
+    def test_stats_row_usa_clases_tailwind_convencion_cliente(self, admin_client, linea):
+        Vano.objects.create(linea=linea, numero='1', estado=Vano.Estado.SIN_PERMISO)
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        content = resp.content.decode()
+
+        assert 'bg-red-50' in content and 'text-red-600' in content  # Sin Permiso
+        assert 'bg-lime-50' in content and 'text-lime-600' in content  # Parcial
+        assert 'bg-amber-50' in content and 'text-amber-600' in content  # Seccionado
+        assert 'bg-blue-50' in content and 'text-blue-600' in content  # Especial
+
+    def test_tarjeta_sin_permiso_usa_border_red_300(self, admin_client, linea):
+        """Selector EXACTO que asserta el journey E2E (Instelec_177.yaml):
+        ``#vano-<id>.border-red-300``."""
+        vano = Vano.objects.create(linea=linea, numero='15', estado=Vano.Estado.SIN_PERMISO)
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        content = resp.content.decode()
+
+        assert f'id="vano-{vano.id}"' in content
+        clases = _clases_tarjeta_vano(content, vano.id)
+        assert 'border-red-300' in clases
+        assert 'bg-red-50' in clases
+
+    def test_tarjeta_no_ejecutado_legacy_usa_tono_distinguible_de_sin_permiso(
+        self, admin_client, linea
+    ):
+        """Riesgo documentado por F2 (riesgos_adicionales_detectados): el
+        estado legacy 'no_ejecutado' (retirado de seleccionables, 1 vano en
+        prod) YA usaba rojo — si Sin Permiso tambien usara el mismo tono
+        quedarian visualmente identicos. Se usa 'rose' (no 'red') para
+         'no_ejecutado' y se deja 'red' exclusivo para Sin Permiso."""
+        vano = Vano.objects.create(linea=linea, numero='999', estado=Vano.Estado.NO_EJECUTADO)
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        content = resp.content.decode()
+
+        clases = _clases_tarjeta_vano(content, vano.id)
+        assert 'border-rose-300' in clases
+        assert 'border-red-300' not in clases
+
+    def test_modal_select_tiene_swatch_color_indicador(self, admin_client, linea):
+        """A6 ampliado (bounce=2): el <select> nativo no traia ningun
+        indicador de color (agrava la percepcion de discrepancia en una
+        convencion 100% color-driven para el cliente) — se agrega un swatch
+        sincronizado via Alpine x-model + estadoColor(), SIN reemplazar el
+        widget nativo (F2 descarto el listbox custom por scope mayor)."""
+        Vano.objects.create(linea=linea, numero='1')
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        content = resp.content.decode()
+
+        assert 'data-testid="vano-estado-select-swatch"' in content
+        assert 'estadoColor(estadoSeleccionado)' in content
+        assert 'x-model="estadoSeleccionado"' in content
+        assert '<select name="estado"' in content  # contrato previo intacto
+
+
+@pytest.mark.django_db
+class TestContadorNovedadesPorTarjetaIssue177:
+    """Pedido NUEVO (no reproceso) del comentario de bounce (att_05, junto a
+    la tarjeta "Vano 15 / No Ejecutado" sin contador): "poner un conteo de
+    novedades para saber cuantas tiene cada vano". Anotado via
+    ``Count('historial')`` a nivel de queryset (``apps/campo/views.py``,
+    ``_build_context``) — NO ``vano.historial.count()`` en el template
+    (dispararia 1 query extra POR VANO)."""
+
+    def test_vano_sin_historial_muestra_contador_cero(self, admin_client, linea):
+        vano = Vano.objects.create(linea=linea, numero='1')
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        content = resp.content.decode()
+
+        assert _conteo_novedades_tarjeta(content, vano.id) == 0
+
+    def test_vano_con_n_registros_historial_cuenta_exacto(self, admin_client, linea):
+        vano = Vano.objects.create(linea=linea, numero='2', estado=Vano.Estado.SIN_PERMISO)
+        for _ in range(3):
+            VanoHistorialEstado.objects.create(vano=vano, estado=Vano.Estado.SIN_PERMISO, nota='')
+
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+        content = resp.content.decode()
+
+        assert _conteo_novedades_tarjeta(content, vano.id) == 3
+
+    def test_context_vanos_expone_num_novedades_anotado(self, admin_client, linea):
+        """La anotacion vive en el queryset (``context['vanos']``), no en un
+        loop Python adicional sobre ``vano.historial.all()``."""
+        vano = Vano.objects.create(linea=linea, numero='3')
+        VanoHistorialEstado.objects.create(vano=vano, estado=Vano.Estado.PENDIENTE, nota='')
+        VanoHistorialEstado.objects.create(vano=vano, estado=Vano.Estado.EJECUTADO, nota='')
+
+        url = reverse('campo:avance_registrar')
+        resp = admin_client.get(url, {'linea_id': str(linea.id)})
+
+        assert resp.status_code == 200
+        vanos_ctx = list(resp.context['vanos'])
+        assert len(vanos_ctx) == 1
+        assert vanos_ctx[0].num_novedades == 2
+
+    def test_conteo_novedades_no_dispara_n_mas_1(self, admin_user, linea, rf):
+        """Prueba comparativa (no un numero magico hardcodeado): si
+        ``vano.historial.count()`` se llamara en el template, la cantidad de
+        queries crecería proporcional al numero de vanos. Con la anotacion
+        ``Count('historial')`` en el queryset (``_build_context``), la
+        cantidad de queries debe ser IGUAL con 1 vano que con 6 vanos (todos
+        con historial), porque el conteo viaja en la misma fila del SELECT
+        principal — no hay round-trip adicional por vano.
+
+        Se invoca ``get_context_data()`` directamente (no ``Client.get`` +
+        render de pagina completa) para aislar la queryset de esta vista de
+        un N+1 PRE-EXISTENTE y NO relacionado en la seccion "Pendientes de la
+        Línea" del template (``{% for vano in linea.vanos.all %}{% for
+        pendiente in vano.pendientes.all %}`` — esa seccion re-consulta
+        ``linea.vanos.all`` SIN prefetch y esta fuera de scope de este
+        issue/bounce; no se toca aca)."""
+        from apps.campo.views import RegistroAvanceCreateView
+
+        def _construir_contexto(n_vanos):
+            request = rf.get('/campo/avance/registrar/', {'linea_id': str(linea.id)})
+            request.user = admin_user
+            view = RegistroAvanceCreateView()
+            view.request = request
+            view.args = ()
+            view.kwargs = {}
+            with CaptureQueriesContext(connection) as ctx:
+                context = view.get_context_data()
+                conteos = [v.num_novedades for v in context['vanos']]
+            assert context['total_vanos'] == n_vanos
+            assert conteos == [2] * n_vanos
+            return len(ctx.captured_queries)
+
+        vano_unico = Vano.objects.create(linea=linea, numero='1', estado=Vano.Estado.SIN_PERMISO)
+        VanoHistorialEstado.objects.create(vano=vano_unico, estado=Vano.Estado.SIN_PERMISO, nota='')
+        VanoHistorialEstado.objects.create(vano=vano_unico, estado=Vano.Estado.EJECUTADO, nota='')
+        queries_1_vano = _construir_contexto(1)
+
+        for i in range(2, 7):
+            v = Vano.objects.create(linea=linea, numero=str(i), estado=Vano.Estado.SIN_PERMISO)
+            VanoHistorialEstado.objects.create(vano=v, estado=Vano.Estado.SIN_PERMISO, nota='')
+            VanoHistorialEstado.objects.create(vano=v, estado=Vano.Estado.EJECUTADO, nota='')
+        queries_6_vanos = _construir_contexto(6)
+
+        assert queries_6_vanos == queries_1_vano, (
+            f'N+1 detectado: {queries_1_vano} queries con 1 vano vs '
+            f'{queries_6_vanos} con 6 vanos (deberian ser iguales — el '
+            "conteo de historial va anotado en el SELECT principal, no en "
+            'un loop por vano)'
+        )

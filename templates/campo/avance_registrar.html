@@ -79,21 +79,24 @@
                 <div class="text-2xl font-bold text-green-600">{{ vanos_ejecutados }}</div>
                 <div class="text-xs text-green-700 dark:text-green-400 mt-1">Ejecutado</div>
             </div>
-            <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-orange-600">{{ vanos_sin_permiso }}</div>
-                <div class="text-xs text-orange-700 dark:text-orange-400 mt-1">Sin Permiso</div>
+            {# Issue #177 (bounce=2) — colores segun convencion del Excel de #}
+            {# control del cliente (att_04): Sin Permiso=rojo, Parcial=verde #}
+            {# claro/lime, Seccionado=naranja-dorado/amber, Especial=azul. #}
+            <div class="bg-red-50 dark:bg-red-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-red-600">{{ vanos_sin_permiso }}</div>
+                <div class="text-xs text-red-700 dark:text-red-400 mt-1">Sin Permiso</div>
             </div>
-            <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-yellow-600">{{ vanos_en_espera }}</div>
-                <div class="text-xs text-yellow-700 dark:text-yellow-400 mt-1">Parcial</div>
+            <div class="bg-lime-50 dark:bg-lime-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-lime-600">{{ vanos_en_espera }}</div>
+                <div class="text-xs text-lime-700 dark:text-lime-400 mt-1">Parcial</div>
             </div>
-            <div class="bg-purple-50 dark:bg-purple-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-purple-600">{{ vanos_seccionados }}</div>
-                <div class="text-xs text-purple-700 dark:text-purple-400 mt-1">Seccionado</div>
+            <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-amber-600">{{ vanos_seccionados }}</div>
+                <div class="text-xs text-amber-700 dark:text-amber-400 mt-1">Seccionado</div>
             </div>
-            <div class="bg-pink-50 dark:bg-pink-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-pink-600">{{ vanos_especiales }}</div>
-                <div class="text-xs text-pink-700 dark:text-pink-400 mt-1">Especial</div>
+            <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg shadow p-4 text-center">
+                <div class="text-2xl font-bold text-blue-600">{{ vanos_especiales }}</div>
+                <div class="text-xs text-blue-700 dark:text-blue-400 mt-1">Especial</div>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
                 <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ porcentaje }}%</div>
@@ -158,13 +161,17 @@
                         estadoData.seccionado,
                         estadoData.especial,
                     ],
+                    // Issue #177 (bounce=2) — recoloreado segun convencion del
+                    // Excel de control del cliente (att_04): Sin Permiso=rojo,
+                    // Parcial=verde-claro/lime, Seccionado=naranja-dorado/amber,
+                    // Especial=azul. Ejecutado/Pendiente sin cambio (ya coincidian).
                     backgroundColor: [
                         '#d1d5db',  // gray — pendiente
                         '#10b981',  // green — ejecutado
-                        '#f97316',  // orange — sin_permiso
-                        '#eab308',  // yellow — en_espera (Parcial)
-                        '#a855f7',  // purple — seccionado (nuevo, #177)
-                        '#ec4899',  // pink — especial (nuevo, #177)
+                        '#ef4444',  // red — sin_permiso (convencion cliente)
+                        '#84cc16',  // lime — en_espera (Parcial, verde-claro)
+                        '#f59e0b',  // amber — seccionado (naranja/dorado)
+                        '#3b82f6',  // blue — especial
                     ],
                     borderColor: '#fff',
                     borderWidth: 2,
