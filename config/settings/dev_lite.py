@@ -42,7 +42,17 @@ if not _has_gdal:
 
     class _MockGeometry:
         def __init__(self, *args, **kwargs):
-            pass
+            # Issue #178: `django.contrib.gis.db.models.proxy.SpatialProxy.__set__`
+            # lee `value.srid` incondicionalmente cuando el valor asignado es
+            # instancia de `self._klass` (que en este mock ES `_MockGeometry`,
+            # ver `Point`/`GEOSGeometry` en `_shared` abajo). Sin este atributo,
+            # CUALQUIER `Torre.save()` con latitud/longitud reales (no cero)
+            # revienta con `AttributeError: '_MockGeometry' object has no
+            # attribute 'srid'` — rompía en silencio decenas de tests pytest
+            # del repo (tests_b5, tests_b4, tests_issue_174, etc.) en este
+            # entorno sin GDAL real.
+            self.srid = kwargs.get('srid')
+            self._args = args
         def __bool__(self):
             return False
 
