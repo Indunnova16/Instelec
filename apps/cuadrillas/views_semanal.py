@@ -55,9 +55,12 @@ def _prefijo(anio, semana):
 
 
 def _bloques_qs(anio, semana):
-    """Cuadrillas (bloques de actividad) de una semana, con miembros precargados."""
+    """Cuadrillas (bloques de actividad) ACTIVAS de una semana, con miembros
+    precargados. Se filtra ``activa=True`` igual que ``CuadrillaListView`` — un
+    bloque dado de baja (soft-delete) no debe reaparecer en la programación
+    semanal ni duplicarse."""
     return (
-        Cuadrilla.objects.filter(codigo__startswith=_prefijo(anio, semana))
+        Cuadrilla.objects.filter(codigo__startswith=_prefijo(anio, semana), activa=True)
         .select_related("linea_asignada", "vehiculo", "supervisor")
         .prefetch_related("miembros__usuario")
         .order_by("codigo")
@@ -179,9 +182,9 @@ class ProgramacionSemanalIndexView(LoginRequiredMixin, RoleRequiredMixin, View):
     allowed_roles = ROLES_CUADRILLAS
 
     def get(self, request):
-        codigos = Cuadrilla.objects.filter(codigo__regex=r"^[0-9]{2}-[0-9]{4}-").values_list(
-            "codigo", flat=True
-        )
+        codigos = Cuadrilla.objects.filter(
+            codigo__regex=r"^[0-9]{2}-[0-9]{4}-", activa=True
+        ).values_list("codigo", flat=True)
         mejor = None
         for codigo in codigos:
             partes = codigo.split("-")

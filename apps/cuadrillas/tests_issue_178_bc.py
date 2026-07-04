@@ -245,3 +245,28 @@ class TestC1GridSemanal(TestCase):
         self.client.logout()
         resp = self.client.get(reverse("cuadrillas:semanal_grid", args=[2026, 12]))
         self.assertIn(resp.status_code, (302, 301))
+
+    def test_bloque_inactivo_excluido_del_grid_y_del_duplicado(self):
+        """Un bloque dado de baja (activa=False) no aparece en el grid ni se
+        duplica — consistente con CuadrillaListView (activa=True)."""
+        jt = _crear_usuario("111", "PEDRO PEREZ")
+        activo = _crear_bloque("12-2026-0001-MAN", date(2026, 3, 16), [(jt, "JT_CTA", "LINIERO_I")])
+        inactivo = _crear_bloque(
+            "12-2026-0009-OLD",
+            date(2026, 3, 16),
+            [(jt, "MIEMBRO", "AYUDANTE")],
+            nombre="BLOQUE BAJA",
+        )
+        inactivo.activa = False
+        inactivo.save(update_fields=["activa"])
+
+        # Grid: solo el bloque activo
+        resp = self.client.get(reverse("cuadrillas:semanal_grid", args=[2026, 12]))
+        html = resp.content.decode()
+        self.assertIn(activo.codigo, html)
+        self.assertNotIn("BLOQUE BAJA", html)
+
+        # Duplicar 12→13: solo copia el activo
+        self.client.post(reverse("cuadrillas:semanal_duplicar", args=[2026, 13]))
+        self.assertTrue(Cuadrilla.objects.filter(codigo="13-2026-0001-MAN").exists())
+        self.assertFalse(Cuadrilla.objects.filter(codigo="13-2026-0009-OLD").exists())
