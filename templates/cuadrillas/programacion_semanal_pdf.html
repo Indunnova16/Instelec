@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Programación semana {{ semana }} - {{ anio }}</title>
+<style>
+    @page {
+        size: A4 landscape;
+        margin: 1.2cm 1cm;
+        @bottom-center {
+            content: "Programación semanal cuadrillas — Instelec SAS — página " counter(page) " de " counter(pages);
+            font-size: 7pt;
+            color: #666;
+        }
+    }
+    * { box-sizing: border-box; }
+    body {
+        font-family: "Helvetica Neue", Arial, sans-serif;
+        font-size: 9pt;
+        color: #222;
+        margin: 0;
+    }
+    .header {
+        border-bottom: 2px solid #1B4F72;
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+    }
+    .header h1 { font-size: 15pt; margin: 0; color: #1B4F72; }
+    .header .sub { font-size: 9pt; color: #555; margin-top: 2px; }
+    .header .meta { font-size: 8pt; color: #777; margin-top: 2px; }
+    .block { margin-bottom: 12px; page-break-inside: avoid; }
+    .block-head {
+        background: #1B4F72;
+        color: #fff;
+        padding: 4px 8px;
+        font-size: 9.5pt;
+        font-weight: bold;
+        border-radius: 3px 3px 0 0;
+    }
+    .block-head .chips { float: right; font-weight: normal; font-size: 8pt; }
+    .block-obs { font-size: 7.5pt; color: #555; padding: 3px 8px; background: #f3f6f9; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+        border: 0.5pt solid #cbd5e1;
+        padding: 3px 6px;
+        text-align: left;
+        vertical-align: top;
+    }
+    thead th {
+        background: #e6edf4;
+        font-size: 8pt;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: #334155;
+    }
+    tbody td { font-size: 8.5pt; }
+    .jt { background: #fde68a; color: #7c5700; font-size: 6.5pt; padding: 0 3px; border-radius: 2px; }
+    .novedades-title { font-size: 11pt; color: #1B4F72; margin: 14px 0 4px; border-top: 1px solid #cbd5e1; padding-top: 8px; }
+    .empty { text-align: center; color: #888; padding: 30px; font-style: italic; }
+    .col-ced { width: 12%; }
+    .col-cargo { width: 16%; }
+    .col-rol { width: 16%; }
+</style>
+</head>
+<body>
+    <div class="header">
+        <h1>Programación semanal &middot; Semana {{ semana }} de {{ anio }}</h1>
+        {% if lunes and domingo %}
+        <div class="sub">{{ lunes|date:"d/m/Y" }} — {{ domingo|date:"d/m/Y" }}</div>
+        {% endif %}
+        <div class="meta">
+            {{ total_bloques }} bloque(s) &middot; {{ total_miembros }} asignación(es)
+            {% if total_novedades %}&middot; {{ total_novedades }} novedad(es){% endif %}
+            &middot; Generado {{ generado|date:"d/m/Y H:i" }}
+        </div>
+    </div>
+
+    {% if not tiene_datos %}
+    <p class="empty">No hay programación cargada para la semana {{ semana }} de {{ anio }}.</p>
+    {% endif %}
+
+    {% for b in bloques %}
+    <div class="block">
+        <div class="block-head">
+            {{ b.nombre }}
+            <span class="chips">
+                {{ b.codigo }}{% if b.linea %} &middot; Línea {{ b.linea }}{% endif %}{% if b.vehiculo %} &middot; {{ b.vehiculo }}{% endif %}{% if b.fecha %} &middot; {{ b.fecha|date:"d/m/Y" }}{% endif %}
+            </span>
+        </div>
+        {% if b.observaciones %}<div class="block-obs">{{ b.observaciones }}</div>{% endif %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Personal</th>
+                    <th class="col-ced">Cédula</th>
+                    <th class="col-cargo">Cargo</th>
+                    <th class="col-rol">Rol</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in b.miembros %}
+                <tr>
+                    <td>{{ m.nombre }}{% if m.es_jt %} <span class="jt">JT</span>{% endif %}</td>
+                    <td class="col-ced">{{ m.documento|default:"—" }}</td>
+                    <td class="col-cargo">{{ m.cargo }}</td>
+                    <td class="col-rol">{{ m.rol }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" style="color:#888;">Sin personal asignado.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+
+    {% if novedades %}
+    <div class="novedades-title">Novedades ({{ total_novedades }})</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Personal</th>
+                <th class="col-ced">Cédula</th>
+                <th class="col-cargo">Cargo</th>
+                <th>Novedad</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for n in novedades %}
+            <tr>
+                <td>{{ n.nombre|default:"—" }}</td>
+                <td class="col-ced">{{ n.cedula|default:"—" }}</td>
+                <td class="col-cargo">{{ n.cargo|default:"—" }}</td>
+                <td>{{ n.nota|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</body>
+</html>
