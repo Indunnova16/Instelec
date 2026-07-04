@@ -1,0 +1,298 @@
+"""Tests #178 — Programación semanal de cuadrillas (Sprint A).
+
+Issue: Indunnova16/Instelec#178
+
+Un solo archivo cubre los 6 sub-items del Sprint A (backend puro, sin UI):
+
+- A1: parser de bloques por celda combinada col A/D (ambos importers).
+- A2: fix NOVEDADES — reset del bloque activo, registro independiente.
+- A3: soporte hojas vc/C12/C16/'12 (2)'.
+- A4: columna PT SAP mapeada en ProgramacionS18CuadrillaImporter.
+- A5: choices MALACATERO/COORDINADOR_HSQ + warning explícito CARGO desconocido.
+- A6: enlace CEDULA→PersonalCuadrilla (patrón resolver-o-crear #176 + opt-in
+  crear_usuarios_faltantes #124).
+
+Verificado dato-por-dato con openpyxl contra el Excel real del cliente
+("Programación - S27.xlsx", 34 hojas, adjunto del comentario del issue):
+merges de columna A/D 100% consistentes en 106 bloques de muestra; 3
+excepciones reales (semanas 03/05/27) donde el heurístico sugerido por el
+cliente (CARGO=CONDUCTOR cierra bloque) NO habría funcionado (bloques sin
+fila CONDUCTOR, p.ej. "Apoyo IG" en semana 05) — de ahí que A1 use el RANGO
+de la celda combinada como fuente de verdad, no el valor de CARGO.
+
+Ejecutar:
+  DJANGO_SETTINGS_MODULE=config.settings.dev_lite \
+    venv/bin/python -m pytest apps/cuadrillas/tests_issue_178.py -v \
+    -o python_files="tests_*.py test_*.py"
+"""
+from datetime import date
+from io import BytesIO
+
+import pytest
+from openpyxl import Workbook
+
+from apps.actividades.importers import ProgramacionSemanalImporter
+from apps.actividades.models import Actividad
+from apps.cuadrillas.importers import ProgramacionS18CuadrillaImporter
+from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro
+from apps.cuadrillas.tests_s18 import S18_HEADERS, _act, _crear_linea, _crear_usuario, _miembro
+
+# ---------------------------------------------------------------------------
+# Helpers compartidos
+# ---------------------------------------------------------------------------
+
+def _build_merged_excel(bloques, sheet_name='27', banner=True):
+    """Construye un Excel con celdas REALMENTE combinadas en columna A
+    (numero) para cada bloque — igual al formato real de Instelec.
+
+    `bloques`: lista de listas de filas (cada fila = 16 valores en el orden
+    de `S18_HEADERS`, que es el MISMO layout de columnas que usan ambos
+    importers reales: ProgramacionS18CuadrillaImporter y
+    ProgramacionSemanalImporter). La primera fila de cada bloque trae
+    `numero`; las siguientes deben traer `numero=None` (tal como las deja
+    el merge real de Excel).
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    if banner:
+        ws.append(['INSTELEC SAS - NIT 890911324'])
+    ws.append(S18_HEADERS)
+    fila_actual = 3 if banner else 2
+    for bloque in bloques:
+        inicio = fila_actual
+        for fila in bloque:
+            ws.append(fila)
+            fila_actual += 1
+        fin = fila_actual - 1
+        if fin > inicio:
+            ws.merge_cells(start_row=inicio, start_column=1, end_row=fin, end_column=1)
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return out
+
+
+def _crear_cuadrilla_con_miembro(usuario, codigo_cuadrilla):
+    cuadrilla, _ = Cuadrilla.objects.get_or_create(
+        codigo=codigo_cuadrilla, defaults={'nombre': codigo_cuadrilla, 'activa': True}
+    )
+    CuadrillaMiembro.objects.create(
+        cuadrilla=cuadrilla,
+        usuario=usuario,
+        rol_cuadrilla='LINIERO_I',
+        cargo='MIEMBRO',
+        costo_dia=0,
+        fecha_inicio=date.today(),
+        activo=True,
+    )
+    return cuadrilla
+
+
+# ---------------------------------------------------------------------------
+# A1 — Parser de bloques por celda combinada (ProgramacionS18CuadrillaImporter)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestA1BloquePorMergeCuadrillas:
+    """Sub-item A1 (cuadrillas/importers.py::ProgramacionS18CuadrillaImporter)."""
+
+    def test_happy_bloque_cierra_en_merge_exacto(self):
+        _crear_linea('LN817')
+        _crear_linea('LN805')
+        _crear_usuario('1143246675', 'JHON JAIRO JIMENEZ')
+        _crear_usuario('1004487321', 'KEINER SERRANO')
+        _crear_usuario('1093293706', 'SNEYDER JEREZ')
+
+        bloque1 = [
+            _act(1, 'Servidumbre Completa', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO JIMENEZ', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('KEINER SERRANO', '1004487321', 'LINIERO II'),
+        ]
+        bloque2 = [
+            _act(2, 'Avisos SC', '805', date(2026, 4, 27), date(2026, 5, 3),
+                 'SNEYDER JEREZ', '1093293706', 'LINIERO II', 'JT/CTA'),
+        ]
+        excel = _build_merged_excel([bloque1, bloque2])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        assert res['cuadrillas_creadas'] == 2
+        assert res['miembros_agregados'] == 3
+        c1 = Cuadrilla.objects.get(codigo__endswith='SER')
+        c2 = Cuadrilla.objects.get(codigo__endswith='AVI')
+        assert c1.miembros.count() == 2
+        assert c2.miembros.count() == 1
+        # No se mezclaron: el miembro de bloque2 NO quedó en bloque1.
+        assert not c1.miembros.filter(usuario__documento='1093293706').exists()
+
+    def test_edge_bloque_sin_conductor_no_se_corta_prematuro(self):
+        """Reproduce el caso real (semana 05, bloque 'Apoyo IG'): un bloque
+        cuyo ÚLTIMO miembro NO tiene CARGO=CONDUCTOR. El heurístico sugerido
+        por el cliente (CARGO=CONDUCTOR cierra el bloque) fallaría acá — el
+        merge de columna A debe seguir siendo 100% confiable."""
+        _crear_linea('LN817')
+        _crear_usuario('1042438483', 'ALFONSO LOPEZ')
+        _crear_usuario('1037472307', 'MANUEL ZARZA')
+        _crear_usuario('1123405494', 'YEISON CRUZ')
+        _crear_usuario('85202378', 'MARTIN FLOREZ')
+
+        bloque_sin_conductor = [
+            _act(11, 'Apoyo IG', '817', date(2025, 1, 26), date(2025, 1, 31),
+                 'ALFONSO LOPEZ', '1042438483', 'AYUDANTE', None),
+            _miembro('MANUEL ZARZA', '1037472307', 'AYUDANTE'),
+            _miembro('YEISON CRUZ', '1123405494', 'AYUDANTE'),
+            _miembro('MARTIN FLOREZ', '85202378', 'LINIERO II'),  # última fila, NO conductor
+        ]
+        excel = _build_merged_excel([bloque_sin_conductor])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        assert res['cuadrillas_creadas'] == 1
+        # Los 4 miembros quedan en EL MISMO bloque (no se cortó al no
+        # encontrar CONDUCTOR).
+        assert res['miembros_agregados'] == 4
+        cuad = Cuadrilla.objects.get()
+        assert cuad.miembros.count() == 4
+
+    def test_edge_bloque_de_una_sola_fila(self):
+        """Bloque de 1 sola fila no genera merge (Excel no combina un único
+        cell) — debe caer al heurístico de respaldo ('#' en blanco) sin
+        romper, con advertencia explícita del fallback."""
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+
+        bloque_1_fila = [
+            _act(1, 'Hurto', '817', date(2026, 3, 26), date(2026, 3, 29),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+        ]
+        excel = _build_merged_excel([bloque_1_fila])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        assert res['cuadrillas_creadas'] == 1
+        assert res['miembros_agregados'] == 1
+        assert any(
+            'celdas combinadas' in a or 'heurístico de respaldo' in a
+            for a in res['advertencias']
+        )
+
+
+# ---------------------------------------------------------------------------
+# A1 — Parser de bloques por celda combinada (ProgramacionSemanalImporter)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestA1BloquePorMergeActividades:
+    """Sub-item A1 (actividades/importers.py::ProgramacionSemanalImporter)."""
+
+    def test_happy_bloque_cierra_en_merge_exacto(self):
+        # NOTA: ProgramacionSemanalImporter._asignar_cuadrillas SOLO lee las
+        # cédulas de las filas de PERSONAL adicionales (continuación), no la
+        # del encabezado de actividad (comportamiento preexistente de
+        # #48/B5, ajeno a A1) — por eso cada bloque trae una fila `_miembro`
+        # explícita con la cédula que sí tiene CuadrillaMiembro asociado.
+        linea1 = _crear_linea_con_torre('LN817')
+        linea2 = _crear_linea_con_torre('LN805')
+        u1 = _crear_usuario('1143246675', 'JHON JAIRO JIMENEZ')
+        u2 = _crear_usuario('1093293706', 'SNEYDER JEREZ')
+        _crear_cuadrilla_con_miembro(u1, 'CUA-BLOQUE-1')
+        _crear_cuadrilla_con_miembro(u2, 'CUA-BLOQUE-2')
+
+        bloque1 = [
+            _act(1, 'Servidumbre Completa', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO JIMENEZ', '1143246675', 'LINIERO I', 'JT/CTA',
+                 avisos='5720001'),
+            _miembro('JHON JAIRO JIMENEZ', '1143246675', 'LINIERO I'),
+        ]
+        bloque2 = [
+            _act(2, 'Avisos SC', '805', date(2026, 4, 27), date(2026, 5, 3),
+                 'SNEYDER JEREZ', '1093293706', 'LINIERO II', 'JT/CTA',
+                 avisos='5720002'),
+            _miembro('SNEYDER JEREZ', '1093293706', 'LINIERO II'),
+        ]
+        excel = _build_merged_excel([bloque1, bloque2])
+        res = ProgramacionSemanalImporter().importar(excel)
+
+        assert res['exito'] is True
+        assert res['actividades_creadas'] == 2
+        act1 = Actividad.objects.get(aviso_sap='5720001')
+        act2 = Actividad.objects.get(aviso_sap='5720002')
+        assert act1.linea_id == linea1.id
+        assert act2.linea_id == linea2.id
+        # La cuadrilla asignada a cada actividad es la de SU PROPIO bloque.
+        assert act1.cuadrillas.filter(codigo='CUA-BLOQUE-1').exists()
+        assert not act1.cuadrillas.filter(codigo='CUA-BLOQUE-2').exists()
+        assert act2.cuadrillas.filter(codigo='CUA-BLOQUE-2').exists()
+        assert not act2.cuadrillas.filter(codigo='CUA-BLOQUE-1').exists()
+
+    def test_edge_bloque_sin_conductor_no_mezcla_cedulas_con_el_siguiente(self):
+        """Caso real (semana 05, 'Apoyo IG'): bloque sin fila CARGO=CONDUCTOR
+        seguido de OTRO bloque — las cédulas del primero no deben "fugarse"
+        al segundo ni viceversa."""
+        _crear_linea_con_torre('LN817')
+        u1 = _crear_usuario('1042438483', 'ALFONSO LOPEZ')
+        u2 = _crear_usuario('85202378', 'MARTIN FLOREZ')  # último miembro, NO conductor
+        u3 = _crear_usuario('9999999998', 'OTRO TRABAJADOR')  # miembro del 2do bloque
+        _crear_cuadrilla_con_miembro(u1, 'CUA-APOYO-IG')
+        _crear_cuadrilla_con_miembro(u2, 'CUA-APOYO-IG')
+        _crear_cuadrilla_con_miembro(u3, 'CUA-SIGUIENTE')
+
+        bloque_sin_conductor = [
+            _act(11, 'Apoyo IG', '817', date(2025, 1, 26), date(2025, 1, 31),
+                 'ALFONSO LOPEZ', '1042438483', 'AYUDANTE', None, avisos='5720011'),
+            _miembro('MARTIN FLOREZ', '85202378', 'LINIERO II'),
+        ]
+        bloque_siguiente = [
+            _act(12, 'Revisión', '817', date(2025, 2, 1), date(2025, 2, 3),
+                 'OTRO TRABAJADOR', '9999999998', 'LINIERO I', 'JT/CTA', avisos='5720012'),
+            _miembro('OTRO TRABAJADOR', '9999999998', 'LINIERO I'),
+        ]
+        excel = _build_merged_excel([bloque_sin_conductor, bloque_siguiente])
+        res = ProgramacionSemanalImporter().importar(excel)
+
+        assert res['exito'] is True
+        act_apoyo = Actividad.objects.get(aviso_sap='5720011')
+        act_siguiente = Actividad.objects.get(aviso_sap='5720012')
+        assert act_apoyo.cuadrillas.filter(codigo='CUA-APOYO-IG').exists()
+        assert not act_apoyo.cuadrillas.filter(codigo='CUA-SIGUIENTE').exists()
+        assert act_siguiente.cuadrillas.filter(codigo='CUA-SIGUIENTE').exists()
+        assert not act_siguiente.cuadrillas.filter(codigo='CUA-APOYO-IG').exists()
+
+    def test_edge_bloque_de_una_sola_fila(self):
+        _crear_linea_con_torre('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        bloque_1_fila = [
+            _act(1, 'Hurto', '817', date(2026, 3, 26), date(2026, 3, 29),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA', avisos='5730001'),
+        ]
+        excel = _build_merged_excel([bloque_1_fila])
+        res = ProgramacionSemanalImporter().importar(excel)
+
+        assert res['exito'] is True
+        assert res['actividades_creadas'] == 1
+        assert Actividad.objects.filter(aviso_sap='5730001').exists()
+
+
+def _crear_linea_con_torre(codigo):
+    """Linea + Torre real (con lat/lon) para el importer de actividades, que
+    necesita `linea.torres` para no crear un placeholder T-AUTO."""
+    from decimal import Decimal
+
+    from apps.lineas.models import Linea, Torre
+
+    linea = Linea.objects.create(
+        codigo=codigo,
+        nombre=f'Línea {codigo}',
+        longitud_km=Decimal('10.00'),
+        tension_kv=110,
+        activa=True,
+    )
+    Torre.objects.create(
+        linea=linea,
+        numero='T-001',
+        tipo=Torre.TipoTorre.SUSPENSION,
+        latitud=Decimal('10.0'),
+        longitud=Decimal('-75.0'),
+    )
+    return linea

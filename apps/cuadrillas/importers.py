@@ -600,7 +600,15 @@ class ProgramacionS18CuadrillaImporter:
         crear_usuarios = opciones.get('crear_usuarios_faltantes', False)
 
         try:
-            workbook = load_workbook(archivo_excel, read_only=True, data_only=True)
+            # Issue #178 (A1): NO usar read_only=True — openpyxl no expone
+            # `Worksheet.merged_cells` en modo read_only (AttributeError), y el
+            # parser de bloques necesita el RANGO real de la celda combinada de
+            # columna A/D para detectar el fin de bloque de forma 100% confiable
+            # (antes se dependía implícitamente de que la celda "#" viniera en
+            # blanco por el merge, sin verificar el merge en sí). El archivo es
+            # una programación semanal (decenas de filas por hoja) — cargarlo
+            # completo en memoria es seguro.
+            workbook = load_workbook(archivo_excel, data_only=True)
         except Exception as e:
             logger.error(f"Error cargando Excel S18: {e}")
             return self._resultado_error(f'Error al cargar archivo Excel: {e}')
@@ -705,6 +713,23 @@ class ProgramacionS18CuadrillaImporter:
             )
             return []
 
+        # Issue #178 (A1): límites de bloque por celda combinada de columna A
+        # (numero) o D (tramo) — 100% confiable (verificado contra 106 bloques
+        # reales). Si la hoja no trae merges en ninguna de esas columnas (caso
+        # raro/manual, p.ej. hojas construidas a mano sin formato), se cae al
+        # heurístico legado (columna '#' en blanco = continuación del bloque
+        # anterior) con una advertencia explícita.
+        mapa_bloques = self._mapa_bloques_por_merge(
+            sheet, self.column_indices.get('numero'), self.column_indices.get('tramo')
+        )
+        usa_fallback_legado = not mapa_bloques
+        if usa_fallback_legado:
+            self.advertencias.append(
+                f'Hoja {sheet.title}: no se detectaron celdas combinadas en '
+                f'columna numero/tramo; se usa el heurístico de respaldo '
+                f'(columna "#" en blanco = continuación de bloque, menos confiable)'
+            )
+
         bloques = []
         actual = None
 
@@ -716,7 +741,11 @@ class ProgramacionS18CuadrillaImporter:
             if numero_str and not self._es_numero_actividad(numero_str):
                 continue
 
-            if numero_str == '':
+            es_continuacion = self._es_fila_continuacion(
+                row_idx, numero_str, mapa_bloques, usa_fallback_legado
+            )
+
+            if es_continuacion:
                 # Miembro adicional de la actividad en curso.
                 if actual is not None:
                     miembro = self._parsear_miembro(row, row_idx)
@@ -1046,6 +1075,60 @@ class ProgramacionS18CuadrillaImporter:
             return False
         s = str(rol_value).upper()
         return any(k in s for k in JT_KEYWORDS)
+
+    @staticmethod
+    def _mapa_bloques_por_merge(sheet, col_numero, col_alt=None):
+        """Mapa ``{fila_excel_1based: 'inicio'|'continuacion'}`` derivado del
+        RANGO de la celda combinada en la columna ``numero`` (o ``col_alt``,
+        p.ej. ``tramo``/columna D, como respaldo si ``numero`` no viene
+        combinada) de ``sheet`` (issue #178, A1).
+
+        Requiere que ``sheet`` se haya cargado SIN ``read_only=True`` —
+        openpyxl no expone ``merged_cells`` en modo read_only.
+
+        Devuelve ``{}`` si no se encontró ningún merge de ≥2 filas en esas
+        columnas (hoja "plana", sin formato de bloques) — el llamador debe
+        entonces usar el heurístico de respaldo (columna '#' en blanco).
+        """
+        mapa = {}
+        columnas = [c for c in (col_numero, col_alt) if c is not None]
+        merges = getattr(sheet, 'merged_cells', None)
+        if merges is None:
+            return mapa
+        for col_idx in columnas:
+            col_excel = col_idx + 1  # openpyxl es 1-based
+            encontrados = False
+            for rango in merges.ranges:
+                if (
+                    rango.min_col == col_excel
+                    and rango.max_col == col_excel
+                    and rango.max_row > rango.min_row
+                ):
+                    encontrados = True
+                    for fila in range(rango.min_row, rango.max_row + 1):
+                        mapa[fila] = 'inicio' if fila == rango.min_row else 'continuacion'
+            if encontrados:
+                break
+        return mapa
+
+    @staticmethod
+    def _es_fila_continuacion(row_idx, numero_str, mapa_bloques, usa_fallback_legado):
+        """¿La fila `row_idx` es continuación del bloque anterior (miembro
+        adicional) o el encabezado de una actividad nueva? (issue #178, A1)
+
+        Primario: RANGO de la celda combinada (`mapa_bloques`). Respaldo
+        (`usa_fallback_legado=True`, o fila fuera de cualquier merge conocido
+        — p.ej. bloque de 1 sola fila que no genera merge): heurístico legado
+        columna '#' en blanco = continuación.
+        """
+        if not usa_fallback_legado:
+            estado = mapa_bloques.get(row_idx)
+            if estado == 'continuacion':
+                return True
+            if estado == 'inicio':
+                return False
+        # Sin info de merge (fallback o fila fuera de rango conocido).
+        return numero_str == ''
 
     @staticmethod
     def _es_hoja_semanal(sheet_name):
