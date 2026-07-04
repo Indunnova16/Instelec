@@ -3,26 +3,36 @@
 {# historial (pedido explicito del cliente: "clic sobre el vano"). Se quita #}
 {# el boton "Cambiar estado" + dropdown viejo (submit-por-click sin punto de #}
 {# guardado explicito, causa raiz del rebote — ver PLAN.md). #}
+{# Issue #177 (bounce=2) — colores segun convencion del Excel de control del #}
+{# cliente (att_04): Sin Permiso=rojo, Parcial=verde-claro/lime, #}
+{# Seccionado=naranja-dorado/amber, Especial=azul. El legacy 'no_ejecutado' #}
+{# se deja en 'rose' (no 'red') para no quedar visualmente identico a Sin #}
+{# Permiso — riesgo documentado por F2, mitigado con un tono distinguible. #}
 <div id="vano-{{ vano.id }}"
     x-data="vanoEstadoModal('{{ vano.id }}')"
     @click="abrir()"
     class="vano-item relative group cursor-pointer rounded-lg border-2 p-4 text-center transition-all hover:shadow-lg
     {% if vano.estado == 'ejecutado' %}bg-green-50 border-green-300 hover:bg-green-100
-    {% elif vano.estado == 'sin_permiso' %}bg-orange-50 border-orange-300 hover:bg-orange-100
-    {% elif vano.estado == 'no_ejecutado' %}bg-red-50 border-red-300 hover:bg-red-100
-    {% elif vano.estado == 'en_espera' %}bg-yellow-50 border-yellow-300 hover:bg-yellow-100
-    {% elif vano.estado == 'seccionado' %}bg-purple-50 border-purple-300 hover:bg-purple-100
-    {% elif vano.estado == 'especial' %}bg-pink-50 border-pink-300 hover:bg-pink-100
+    {% elif vano.estado == 'sin_permiso' %}bg-red-50 border-red-300 hover:bg-red-100
+    {% elif vano.estado == 'no_ejecutado' %}bg-rose-50 border-rose-300 hover:bg-rose-100
+    {% elif vano.estado == 'en_espera' %}bg-lime-50 border-lime-300 hover:bg-lime-100
+    {% elif vano.estado == 'seccionado' %}bg-amber-50 border-amber-300 hover:bg-amber-100
+    {% elif vano.estado == 'especial' %}bg-blue-50 border-blue-300 hover:bg-blue-100
     {% else %}bg-gray-50 border-gray-300 hover:bg-gray-100
     {% endif %}">
 
+    <span data-testid="vano-novedades-count" data-vano="{{ vano.id }}"
+        class="absolute top-1 right-1 inline-flex items-center justify-center min-w-[1.4rem] h-5 px-1
+        rounded-full bg-gray-700 text-white text-[10px] font-semibold leading-none"
+        title="Novedades registradas (cambios de historial)">{{ vano.num_novedades|default:0 }}</span>
+
     <div class="text-2xl font-bold mb-2
         {% if vano.estado == 'ejecutado' %}text-green-700
-        {% elif vano.estado == 'sin_permiso' %}text-orange-700
-        {% elif vano.estado == 'no_ejecutado' %}text-red-700
-        {% elif vano.estado == 'en_espera' %}text-yellow-700
-        {% elif vano.estado == 'seccionado' %}text-purple-700
-        {% elif vano.estado == 'especial' %}text-pink-700
+        {% elif vano.estado == 'sin_permiso' %}text-red-700
+        {% elif vano.estado == 'no_ejecutado' %}text-rose-700
+        {% elif vano.estado == 'en_espera' %}text-lime-700
+        {% elif vano.estado == 'seccionado' %}text-amber-700
+        {% elif vano.estado == 'especial' %}text-blue-700
         {% else %}text-gray-700
         {% endif %}">
         Vano {{ vano.numero }}
