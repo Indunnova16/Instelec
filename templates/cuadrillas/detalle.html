@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}{{ cuadrilla.codigo }} - TransMaint{% endblock %}
 
@@ -114,7 +115,7 @@
                 </div>
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">Costo Diario Total</dt>
-                    <dd class="font-medium text-green-600 dark:text-green-400">${{ costo_total_dia|floatformat:0 }}</dd>
+                    <dd class="font-medium text-green-600 dark:text-green-400">${{ costo_total_dia|floatformat:0|intcomma }}</dd>
                 </div>
             </dl>
         </div>
@@ -178,7 +179,7 @@
     <!-- Upload Members Excel -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" x-data="{ showUpload: false }">
         <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Agregar Miembro</h2>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Subir Excel de Cargos</h2>
             <button @click="showUpload = !showUpload"
                     class="px-3 py-1.5 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -215,6 +216,11 @@
                 </div>
             </form>
         </div>
+    </div>
+
+    <!-- Add Member -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Agregar Miembro</h2>
         <form method="post" action="{% url 'cuadrillas:miembro_agregar' cuadrilla.pk %}" class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
             {% csrf_token %}
             <div class="relative">
@@ -329,7 +335,7 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-gray-900 dark:text-white">
-                            ${{ miembro.costo_dia|floatformat:0 }}
+                            ${{ miembro.costo_dia|floatformat:0|intcomma }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">
                             {{ miembro.fecha_inicio|date:"d/m/Y" }}
@@ -362,7 +368,7 @@
                             Total Costo Diario
                         </td>
                         <td class="px-6 py-3 text-right text-sm font-bold text-green-600 dark:text-green-400">
-                            ${{ costo_total_dia|floatformat:0 }}
+                            ${{ costo_total_dia|floatformat:0|intcomma }}
                         </td>
                         <td colspan="2"></td>
                     </tr>

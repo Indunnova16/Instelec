@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Colaboradores - TransMaint{% endblock %}
 
@@ -70,7 +71,7 @@
                         <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">{{ colaborador.nombre }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.documento }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.get_rol_cuadrilla_display }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-gray-600 dark:text-gray-400">${{ colaborador.salario_base|floatformat:0 }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-gray-600 dark:text-gray-400">${{ colaborador.salario_base|floatformat:0|intcomma }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.fecha_ingreso|date:"d/m/Y"|default:"-" }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-center">
                             {% if colaborador.activo %}

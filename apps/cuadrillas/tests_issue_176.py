@@ -433,3 +433,89 @@ class TestA4RefactorAsignacionCuadrilla(TestCase):
         self.assertEqual(resp.status_code, 200)
         nombres = [m.usuario.get_full_name() for m in resp.context["miembros"]]
         self.assertIn("Legacy Miembro", nombres)
+
+
+# ---------------------------------------------------------------------------
+# Reproceso bounce=1 (FIX_INCOMPLETO) — navbar Parametrizacion sin los 2
+# maestros nuevos, formato de moneda sin intcomma y boton "Subir Excel de
+# Cargos" mezclado con el card "Agregar Miembro".
+# ---------------------------------------------------------------------------
+class TestReprocesoNavbarFormatoBoton(TestCase):
+    """QA #176 bounce=1: reporto que los maestros de A1/A3 no eran
+    descubribles por navegacion normal (solo por URL directa), que los
+    montos monetarios de Colaboradores no tenian separador de miles, y que
+    el boton de carga masiva de Excel quedo dentro del card de alta
+    individual de miembro."""
+
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_sidebar_incluye_links_a_tipos_actividad_y_colaboradores(self):
+        url = reverse("cuadrillas:colaboradores_lista")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, reverse("actividades:tipos_lista"))
+        self.assertContains(resp, reverse("cuadrillas:colaboradores_lista"))
+
+    def test_salario_base_se_muestra_con_separador_de_miles(self):
+        PersonalCuadrilla.objects.create(
+            nombre="Colaborador Moneda",
+            documento="176-4001",
+            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            salario_base=Decimal("3176095"),
+            activo=True,
+        )
+        url = reverse("cuadrillas:colaboradores_lista")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "3.176.095")
+
+    def test_costo_dia_miembro_se_muestra_con_separador_de_miles(self):
+        cuadrilla = Cuadrilla.objects.create(
+            codigo="02-2026-TST",
+            nombre="Cuadrilla Moneda 176",
+            activa=True,
+        )
+        usuario = Usuario.objects.create_user(
+            email="miembro176moneda@test.com",
+            password="testpass123!",
+            first_name="Roberto",
+            last_name="Moneda",
+            rol="liniero",
+            documento="176-4002",
+        )
+        CuadrillaMiembro.objects.create(
+            cuadrilla=cuadrilla,
+            usuario=usuario,
+            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            costo_dia=Decimal("3176095"),
+            fecha_inicio=date.today(),
+            activo=True,
+        )
+        url = reverse("cuadrillas:detalle", args=[cuadrilla.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "3.176.095")
+
+    def test_boton_subir_excel_cargos_queda_en_card_propio(self):
+        """El boton + form colapsable de carga masiva debe quedar en su
+        propio card, cerrado ANTES de que abra el card 'Agregar Miembro'
+        (antes de este fix compartian el mismo div)."""
+        cuadrilla = Cuadrilla.objects.create(
+            codigo="03-2026-TST",
+            nombre="Cuadrilla Reubicacion 176",
+            activa=True,
+        )
+        url = reverse("cuadrillas:detalle", args=[cuadrilla.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        idx_subir = content.index("Subir Excel de Cargos")
+        idx_agregar = content.index("Agregar Miembro")
+        idx_cierre_form_upload = content.index("</form>", idx_subir)
+        self.assertLess(idx_subir, idx_agregar)
+        # El form de upload (dentro de su propio card) debe cerrarse antes
+        # de que empiece el texto "Agregar Miembro" del card siguiente.
+        self.assertLess(idx_cierre_form_upload, idx_agregar)
