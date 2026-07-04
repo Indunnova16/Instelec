@@ -465,6 +465,56 @@ class TestA3SoporteHojasVcC12C16:
             assert importer_cls._es_hoja_semanal(nombre) is False, nombre
 
 
+# ---------------------------------------------------------------------------
+# A4 — Mapear columna PT SAP (ProgramacionS18CuadrillaImporter)
+# ---------------------------------------------------------------------------
+
+def _act_con_pt_sap(numero, actividad, linea, inicio, fin, personal, cedula, cargo,
+                     rol=None, placa=None, pt_sap=''):
+    """Fila S18 con PT SAP (columna O) explícito — `_act` de tests_s18 no
+    expone ese campo porque no existía mapeo antes de A4."""
+    return [numero, actividad, linea, '', inicio, fin, personal, cedula,
+            '', cargo, rol, placa, '', '', pt_sap, '']
+
+
+@pytest.mark.django_db
+class TestA4PTSAPCuadrillas:
+    """Sub-item A4 (cuadrillas/importers.py::ProgramacionS18CuadrillaImporter).
+
+    Hoy PT SAP no está mapeado en absoluto — se agrega al COLUMN_MAPPINGS
+    reusando el patrón _split_multi/_join_multi ya usado por AVISOS/ORDEN.
+    """
+
+    def test_happy_pt_sap_multivalor_persiste_y_reserializa_igual(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        bloque = [
+            _act_con_pt_sap(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                             'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA',
+                             pt_sap='30001234\n30005678'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        cuad = Cuadrilla.objects.get()
+        assert 'PT SAP: 30001234, 30005678' in cuad.observaciones
+
+    def test_edge_pt_sap_vacio_no_rompe_import(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        bloque = [
+            _act_con_pt_sap(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                             'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA', pt_sap=''),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        cuad = Cuadrilla.objects.get()
+        assert 'PT SAP:' not in cuad.observaciones
+
+
 def _crear_linea_con_torre(codigo):
     """Linea + Torre real (con lat/lon) para el importer de actividades, que
     necesita `linea.torres` para no crear un placeholder T-AUTO."""

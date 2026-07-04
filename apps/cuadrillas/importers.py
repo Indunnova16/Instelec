@@ -574,6 +574,10 @@ class ProgramacionS18CuadrillaImporter:
         # Cuadrilla no tiene campos para ellas → se anteponen a observaciones.
         'avisos':       ['avisos', 'aviso'],
         'orden':        ['orden', 'ordenes', 'órdenes'],
+        # Issue #178 (A4): columna PT SAP (col O del Excel real) — hoy no
+        # estaba mapeada en absoluto. Mismo patrón que avisos/orden
+        # (_split_multi/_join_multi, multivalor con salto de línea).
+        'pt_sap':       ['pt sap', 'pt', 'puesto trabajo', 'puesto de trabajo'],
         'observaciones': ['comentarios', 'observaciones', 'obs', 'notas'],
     }
 
@@ -812,6 +816,8 @@ class ProgramacionS18CuadrillaImporter:
                 # normalizan con _split_multi y se unen con ", ".
                 'avisos': self._join_multi(self._get_cell(row, 'avisos')),
                 'orden': self._join_multi(self._get_cell(row, 'orden')),
+                # Issue #178 (A4): mismo patrón multivalor para PT SAP.
+                'pt_sap': self._join_multi(self._get_cell(row, 'pt_sap')),
                 'row_num': row_idx,
                 'miembros': [],
             }
@@ -1085,17 +1091,20 @@ class ProgramacionS18CuadrillaImporter:
 
     @staticmethod
     def _construir_observaciones(bloque):
-        """Antepone AVISOS/ORDEN a las observaciones (issue #105).
+        """Antepone AVISOS/ORDEN/PT SAP a las observaciones (issue #105, #178).
 
-        El modelo Cuadrilla no tiene campos para avisos/orden, así que se
-        preservan como prefijo legible en ``observaciones`` (text NOT NULL):
-        ``"Avisos: 5720754, 5720792 | Orden: 1, 2 | <obs original>"``.
+        El modelo Cuadrilla no tiene campos para avisos/orden/pt_sap, así que
+        se preservan como prefijo legible en ``observaciones`` (text NOT
+        NULL): ``"Avisos: 5720754, 5720792 | Orden: 1, 2 | PT SAP: 123 |
+        <obs original>"``.
         """
         partes = []
         if bloque.get('avisos'):
             partes.append(f'Avisos: {bloque["avisos"]}')
         if bloque.get('orden'):
             partes.append(f'Orden: {bloque["orden"]}')
+        if bloque.get('pt_sap'):
+            partes.append(f'PT SAP: {bloque["pt_sap"]}')
         obs = bloque.get('observaciones') or ''
         if obs:
             partes.append(obs)
