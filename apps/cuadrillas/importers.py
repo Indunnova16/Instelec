@@ -602,6 +602,9 @@ class ProgramacionS18CuadrillaImporter:
         self.miembros_agregados = 0
         self.encargados_asignados = 0
         self.usuarios_creados = 0
+        # Issue #178 (A6): colaboradores nuevos dados de alta en el maestro
+        # PersonalCuadrilla (opt-in crear_usuarios_faltantes).
+        self.personal_creados = 0
         self.column_indices = {}
         self.sheets_procesadas = []
         # Issue #178 (A2): filas de la sección NOVEDADES, independientes de
@@ -679,6 +682,7 @@ class ProgramacionS18CuadrillaImporter:
                 'miembros_agregados': 0,
                 'encargados_asignados': 0,
                 'usuarios_creados': 0,
+                'personal_creados': 0,
                 'novedades_creadas': 0,
                 'advertencias': self.advertencias,
                 'errores': self.errores,
@@ -706,6 +710,7 @@ class ProgramacionS18CuadrillaImporter:
             'miembros_agregados': self.miembros_agregados,
             'encargados_asignados': self.encargados_asignados,
             'usuarios_creados': self.usuarios_creados,
+            'personal_creados': self.personal_creados,
             'novedades_creadas': self.novedades_creadas,
             'advertencias': self.advertencias,
             'errores': self.errores,
@@ -967,7 +972,7 @@ class ProgramacionS18CuadrillaImporter:
             cuadrilla.save(update_fields=['supervisor', 'updated_at'])
 
     def _agregar_miembro(self, cuadrilla, miembro, bloque, crear_usuarios):
-        from apps.cuadrillas.models import CuadrillaMiembro
+        from apps.cuadrillas.models import CuadrillaMiembro, PersonalCuadrilla
         from apps.usuarios.models import Usuario
 
         cedula = miembro['cedula']
@@ -976,32 +981,62 @@ class ProgramacionS18CuadrillaImporter:
             self.advertencias.append(f'Fila {row_num}: miembro sin cédula, omitido')
             return None
 
-        usuario = Usuario.objects.filter(documento=cedula).first()
-        if usuario is None:
-            if crear_usuarios:
-                usuario = self._crear_usuario(miembro)
-                if usuario is None:
-                    return None
-            else:
-                self.advertencias.append(
-                    f'Fila {row_num}: usuario con cédula "{cedula}" '
-                    f'({miembro["nombre"]}) no existe, miembro omitido'
-                )
-                return None
+        # Issue #178 (A6): CEDULA enlaza PRIMERO al maestro de Colaboradores
+        # (PersonalCuadrilla, #176) — fuente de verdad moderna del rol, en
+        # vez de re-parsear el CARGO del Excel cada vez. Si el colaborador
+        # YA existe como Usuario "legacy" (creado antes de #176, o por una
+        # carga S18 anterior a esa migración) SIN estar aún en el maestro,
+        # se preserva el comportamiento histórico de #124 para NO romper
+        # cuadrillas ya en producción: se sigue clasificando por el CARGO
+        # del Excel (A5). Solo para una cédula TOTALMENTE nueva (ni Usuario
+        # ni PersonalCuadrilla) aplica el flag opt-in crear_usuarios_faltantes
+        # (#124, default OFF): OFF = advertencia + se omite la fila; ON = se
+        # da de alta en PersonalCuadrilla (y su Usuario vinculado, patrón de
+        # #176 CuadrillaMiembroAddView._resolver_o_crear_usuario).
+        personal = PersonalCuadrilla.objects.filter(documento=cedula, activo=True).first()
+        rol_choice = None
 
-        # Issue #178 (A5): antes el CARGO desconocido caía en fallback
-        # silencioso a LINIERO_I sin dejar rastro. Ahora se avisa
-        # explícitamente para que un cargo nuevo no se pierda sin notar.
-        cargo_raw = miembro['cargo']
-        rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
+        if personal is not None:
+            usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
+            if usuario is None:
+                return None
+            rol_choice = personal.rol_cuadrilla
+        else:
+            usuario = Usuario.objects.filter(documento=cedula).first()
+            if usuario is None:
+                if crear_usuarios:
+                    personal = self._crear_personal_cuadrilla(miembro)
+                    if personal is None:
+                        return None
+                    usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
+                    if usuario is None:
+                        return None
+                    rol_choice = personal.rol_cuadrilla
+                else:
+                    self.advertencias.append(
+                        f'Fila {row_num}: cédula "{cedula}" ({miembro["nombre"]}) no '
+                        f'está en el maestro de Colaboradores (PersonalCuadrilla) ni '
+                        f'existe como usuario; miembro omitido (activa "crear '
+                        f'faltantes" para darlo de alta)'
+                    )
+                    return None
+
         if rol_choice is None:
-            rol_choice = 'LINIERO_I'
-            if cargo_raw:
-                self.advertencias.append(
-                    f'Fila {row_num}: CARGO "{cargo_raw}" no reconocido, '
-                    f'clasificado como LINIERO_I por defecto (agregar a '
-                    f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
-                )
+            # Usuario legacy sin PersonalCuadrilla — clasificar por CARGO
+            # (issue #178, A5). Antes el CARGO desconocido caía en fallback
+            # silencioso a LINIERO_I sin dejar rastro; ahora se avisa
+            # explícitamente para que un cargo nuevo no se pierda sin notar.
+            cargo_raw = miembro['cargo']
+            rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
+            if rol_choice is None:
+                rol_choice = 'LINIERO_I'
+                if cargo_raw:
+                    self.advertencias.append(
+                        f'Fila {row_num}: CARGO "{cargo_raw}" no reconocido, '
+                        f'clasificado como LINIERO_I por defecto (agregar a '
+                        f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
+                    )
+
         cargo_jerarquico = 'JT_CTA' if miembro['es_jt'] else 'MIEMBRO'
         fecha_inicio = bloque['fecha_inicio'] or date.today()
 
@@ -1027,15 +1062,64 @@ class ProgramacionS18CuadrillaImporter:
             self.encargados_asignados += 1
         return usuario
 
-    def _crear_usuario(self, miembro):
-        from apps.usuarios.models import Usuario
+    def _crear_personal_cuadrilla(self, miembro):
+        """Da de alta un colaborador NUEVO en el maestro PersonalCuadrilla
+        (issue #178, A6) — opt-in vía crear_usuarios_faltantes (mismo flag
+        de #124). Clasifica el rol con el mismo ROL_TEXTO_A_CHOICE de A5."""
+        from apps.cuadrillas.models import PersonalCuadrilla
 
         cedula = miembro['cedula']
-        nombre = miembro['nombre'] or f'Usuario {cedula}'
+        nombre = miembro['nombre'] or f'Colaborador {cedula}'
+        cargo_raw = miembro['cargo']
+        rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
+        if rol_choice is None:
+            rol_choice = 'LINIERO_I'
+            if cargo_raw:
+                self.advertencias.append(
+                    f'Fila {miembro["row_num"]}: CARGO "{cargo_raw}" no reconocido, '
+                    f'clasificado como LINIERO_I por defecto (agregar a '
+                    f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
+                )
+        try:
+            # Savepoint anidado (mismo patrón #124) para que una colisión
+            # UNIQUE (documento ya existente por carrera) no envenene la
+            # transacción externa.
+            with transaction.atomic():
+                personal = PersonalCuadrilla.objects.create(
+                    nombre=nombre,
+                    documento=cedula,
+                    rol_cuadrilla=rol_choice,
+                    activo=True,
+                )
+            self.personal_creados += 1
+            self.advertencias.append(
+                f'Fila {miembro["row_num"]}: colaborador {nombre} (cédula {cedula}) '
+                f'creado automáticamente en el maestro de Colaboradores (PersonalCuadrilla)'
+            )
+            return personal
+        except Exception as e:
+            self.advertencias.append(
+                f'Fila {miembro["row_num"]}: no se pudo crear el colaborador {nombre} '
+                f'(cédula {cedula}) en PersonalCuadrilla: {e}'
+            )
+            return None
+
+    def _resolver_o_crear_usuario_desde_personal(self, personal, miembro):
+        """Reusa el patrón resolver-o-crear Usuario de #176
+        (``CuadrillaMiembroAddView._resolver_o_crear_usuario``): el Usuario
+        es un registro de vínculo derivado del maestro PersonalCuadrilla,
+        NO la fuente de verdad (issue #178, A6)."""
+        from apps.usuarios.models import Usuario
+
+        usuario = Usuario.objects.filter(documento=personal.documento).first()
+        if usuario:
+            return usuario
+
+        nombre = personal.nombre or f'Usuario {personal.documento}'
         partes = nombre.split()
         first = partes[0] if partes else nombre
         last = ' '.join(partes[1:]) if len(partes) > 1 else ''
-        email = f'{cedula}@instelec-import.local'
+        email = f'{personal.documento}@instelec-import.local'
         try:
             # Issue #124: savepoint anidado para que una colisión UNIQUE
             # (email/documento ya existente por carrera) NO envenene la txn del
@@ -1046,8 +1130,8 @@ class ProgramacionS18CuadrillaImporter:
                     email=email,
                     first_name=first[:150],
                     last_name=last[:150],
-                    documento=cedula,
-                    telefono=miembro['celular'][:20],
+                    documento=personal.documento,
+                    telefono=(miembro.get('celular') or '')[:20],
                     rol='operario_general',
                     is_active=True,
                 )
@@ -1055,14 +1139,14 @@ class ProgramacionS18CuadrillaImporter:
                 usuario.save(update_fields=['password'])
             self.usuarios_creados += 1
             self.advertencias.append(
-                f'Fila {miembro["row_num"]}: usuario {nombre} (cédula {cedula}) '
-                f'creado automáticamente con email {email}'
+                f'Fila {miembro["row_num"]}: usuario {nombre} (cédula '
+                f'{personal.documento}) creado automáticamente con email {email}'
             )
             return usuario
         except Exception as e:
             self.advertencias.append(
                 f'Fila {miembro["row_num"]}: no se pudo crear usuario {nombre} '
-                f'(cédula {cedula}): {e}'
+                f'(cédula {personal.documento}): {e}'
             )
             return None
 
@@ -1313,6 +1397,7 @@ class ProgramacionS18CuadrillaImporter:
             'miembros_agregados': 0,
             'encargados_asignados': 0,
             'usuarios_creados': 0,
+            'personal_creados': 0,
             'novedades_creadas': 0,
             'advertencias': self.advertencias,
             'errores': self.errores,

@@ -34,7 +34,12 @@ from openpyxl import Workbook
 from apps.actividades.importers import ProgramacionSemanalImporter
 from apps.actividades.models import Actividad
 from apps.cuadrillas.importers import ProgramacionS18CuadrillaImporter
-from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana
+from apps.cuadrillas.models import (
+    Cuadrilla,
+    CuadrillaMiembro,
+    NovedadPersonalSemana,
+    PersonalCuadrilla,
+)
 from apps.cuadrillas.tests_s18 import S18_HEADERS, _act, _crear_linea, _crear_usuario, _miembro
 
 # ---------------------------------------------------------------------------
@@ -570,6 +575,106 @@ class TestA5RolesNuevosCuadrillas:
             'TOPOGRAFO JEFE' in a and 'no reconocido' in a
             for a in res['advertencias']
         )
+
+
+# ---------------------------------------------------------------------------
+# A6 — Enlace CEDULA→PersonalCuadrilla (ProgramacionS18CuadrillaImporter)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestA6EnlacePersonalCuadrilla:
+    """Sub-item A6. La cédula del Excel enlaza al maestro de Colaboradores
+    (PersonalCuadrilla, #176) — el rol_cuadrilla viene del maestro, no se
+    re-parsea el CARGO. Cédulas legacy (Usuario sin PersonalCuadrilla, de
+    antes de #176) preservan el comportamiento histórico de #124 para no
+    romper cuadrillas ya en producción."""
+
+    def test_happy_cedula_existente_en_personal_cuadrilla_enlaza(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        PersonalCuadrilla.objects.create(
+            nombre='CASIMIRO PALOMINO ARMESTO', documento='72015917',
+            rol_cuadrilla='SUPERVISOR', activo=True,
+        )
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            # CARGO del Excel dice 'AYUDANTE', pero el maestro dice SUPERVISOR
+            # — debe ganar el maestro (fuente de verdad, patrón #176 A4).
+            _miembro('CASIMIRO PALOMINO ARMESTO', '72015917', 'AYUDANTE'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        miembro = CuadrillaMiembro.objects.get(usuario__documento='72015917')
+        assert miembro.rol_cuadrilla == 'SUPERVISOR'
+        assert res['personal_creados'] == 0
+
+    def test_edge_cedula_no_encontrada_flag_off_advertencia_y_omite(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('DESCONOCIDO TOTAL', '11122233', 'LINIERO I'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        assert not PersonalCuadrilla.objects.filter(documento='11122233').exists()
+        assert not CuadrillaMiembro.objects.filter(usuario__documento='11122233').exists()
+        assert any(
+            '11122233' in a and 'omitido' in a
+            for a in res['advertencias']
+        )
+        assert res['personal_creados'] == 0
+
+    def test_edge_cedula_no_encontrada_flag_on_crea_personal_cuadrilla(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('NUEVO INGRESO', '11122234', 'MALACATERO'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(
+            excel, {'crear_usuarios_faltantes': True}
+        )
+
+        assert res['exito'] is True, res.get('error')
+        assert res['personal_creados'] == 1
+        personal = PersonalCuadrilla.objects.get(documento='11122234')
+        assert personal.rol_cuadrilla == 'MALACATERO'
+        assert personal.activo is True
+        miembro = CuadrillaMiembro.objects.get(usuario__documento='11122234')
+        assert miembro.rol_cuadrilla == 'MALACATERO'
+
+    def test_legacy_usuario_sin_personal_cuadrilla_preserva_comportamiento_124(self):
+        """No-regresión CRÍTICA: una cédula que YA existe como Usuario (creada
+        antes de que #176 introdujera PersonalCuadrilla) pero que NUNCA se
+        migró al maestro debe seguir vinculándose y clasificándose por CARGO,
+        exactamente como funcionaba en #124 — A6 NO debe romper cuadrillas ya
+        en producción."""
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        _crear_usuario('8646508', 'OMAR ZAMBRANO')  # legacy: Usuario SIN PersonalCuadrilla
+
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('OMAR ZAMBRANO', '8646508', 'CONDUCTOR'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        miembro = CuadrillaMiembro.objects.get(usuario__documento='8646508')
+        assert miembro.rol_cuadrilla == 'CONDUCTOR'
+        assert res['personal_creados'] == 0
+        assert not PersonalCuadrilla.objects.filter(documento='8646508').exists()
 
 
 def _crear_linea_con_torre(codigo):

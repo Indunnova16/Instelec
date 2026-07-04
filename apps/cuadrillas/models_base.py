@@ -90,6 +90,11 @@ class PersonalCuadrilla(BaseModel):
         ALMACENISTA = 'ALMACENISTA', 'Almacenista'
         SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
         ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
+        # Issue #178 (A6): en sincronía con CuadrillaMiembro.RolCuadrilla —
+        # un PersonalCuadrilla nuevo dado de alta por el importer (A6) puede
+        # clasificarse con cualquiera de estos cargos reales (A5).
+        MALACATERO = 'MALACATERO', 'Malacatero'
+        COORDINADOR_HSQ = 'COORDINADOR_HSQ', 'Coordinador HSQ'
 
     nombre = models.CharField('Nombre completo', max_length=200)
     documento = models.CharField('Documento', max_length=30, unique=True)
