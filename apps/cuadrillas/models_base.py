@@ -232,6 +232,11 @@ class CuadrillaMiembro(BaseModel):
         ALMACENISTA = 'ALMACENISTA', 'Almacenista'
         SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
         ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
+        # Issue #178 (A5): cargos reales confirmados en el Excel del cliente
+        # (1 ocurrencia c/u de 1541 filas de personal) que hoy caían en
+        # fallback silencioso a LINIERO_I.
+        MALACATERO = 'MALACATERO', 'Malacatero'
+        COORDINADOR_HSQ = 'COORDINADOR_HSQ', 'Coordinador HSQ'
 
     class CargoJerarquico(models.TextChoices):
         JT_CTA = 'JT_CTA', 'Jefe de Trabajo / Capacitado'

@@ -515,6 +515,63 @@ class TestA4PTSAPCuadrillas:
         assert 'PT SAP:' not in cuad.observaciones
 
 
+# ---------------------------------------------------------------------------
+# A5 — Choices MALACATERO/COORDINADOR HSQ (ProgramacionS18CuadrillaImporter)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestA5RolesNuevosCuadrillas:
+    """Sub-item A5. Hoy MALACATERO/COORDINADOR HSQ caían en fallback
+    silencioso a LINIERO_I; ahora clasifican correcto y un CARGO
+    desconocido nuevo genera advertencia explícita (no más fallback mudo)."""
+
+    def test_happy_malacatero_y_coordinador_hsq_clasifican_correcto(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        _crear_usuario('72015917', 'CASIMIRO PALOMINO')
+        _crear_usuario('99988877', 'PEDRO COORDINADOR')
+
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('CASIMIRO PALOMINO', '72015917', 'MALACATERO'),
+            _miembro('PEDRO COORDINADOR', '99988877', 'COORDINADOR HSQ'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        m1 = CuadrillaMiembro.objects.get(usuario__documento='72015917')
+        m2 = CuadrillaMiembro.objects.get(usuario__documento='99988877')
+        assert m1.rol_cuadrilla == 'MALACATERO'
+        assert m2.rol_cuadrilla == 'COORDINADOR_HSQ'
+        # No cayeron al fallback silencioso.
+        assert not any('no reconocido' in a for a in res['advertencias'])
+
+    def test_edge_cargo_desconocido_genera_advertencia_explicita(self):
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        _crear_usuario('55544433', 'NUEVO CARGO PERSONA')
+
+        bloque = [
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('NUEVO CARGO PERSONA', '55544433', 'TOPOGRAFO JEFE'),
+        ]
+        excel = _build_merged_excel([bloque])
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True, res.get('error')
+        miembro = CuadrillaMiembro.objects.get(usuario__documento='55544433')
+        # No falla silenciosamente: clasifica a LINIERO_I por defecto...
+        assert miembro.rol_cuadrilla == 'LINIERO_I'
+        # ...pero deja advertencia explícita (no más fallback mudo).
+        assert any(
+            'TOPOGRAFO JEFE' in a and 'no reconocido' in a
+            for a in res['advertencias']
+        )
+
+
 def _crear_linea_con_torre(codigo):
     """Linea + Torre real (con lat/lon) para el importer de actividades, que
     necesita `linea.torres` para no crear un placeholder T-AUTO."""

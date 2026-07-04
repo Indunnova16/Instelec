@@ -59,6 +59,11 @@ ROL_TEXTO_A_CHOICE = {
     'almacenista': 'ALMACENISTA',
     'supervisor forestal': 'SUPERVISOR_FOREST',
     'asistente forestal': 'ASISTENTE_FOREST',
+    # Issue #178 (A5): cargos reales confirmados en el Excel del cliente que
+    # hoy caían en fallback silencioso a LINIERO_I.
+    'malacatero': 'MALACATERO',
+    'coordinador hsq': 'COORDINADOR_HSQ',
+    'coordinador hsqe': 'COORDINADOR_HSQ',
 }
 
 
@@ -984,7 +989,19 @@ class ProgramacionS18CuadrillaImporter:
                 )
                 return None
 
-        rol_choice = ROL_TEXTO_A_CHOICE.get(miembro['cargo'].lower(), 'LINIERO_I')
+        # Issue #178 (A5): antes el CARGO desconocido caía en fallback
+        # silencioso a LINIERO_I sin dejar rastro. Ahora se avisa
+        # explícitamente para que un cargo nuevo no se pierda sin notar.
+        cargo_raw = miembro['cargo']
+        rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
+        if rol_choice is None:
+            rol_choice = 'LINIERO_I'
+            if cargo_raw:
+                self.advertencias.append(
+                    f'Fila {row_num}: CARGO "{cargo_raw}" no reconocido, '
+                    f'clasificado como LINIERO_I por defecto (agregar a '
+                    f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
+                )
         cargo_jerarquico = 'JT_CTA' if miembro['es_jt'] else 'MIEMBRO'
         fecha_inicio = bloque['fecha_inicio'] or date.today()
 
