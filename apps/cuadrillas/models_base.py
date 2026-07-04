@@ -90,6 +90,11 @@ class PersonalCuadrilla(BaseModel):
         ALMACENISTA = 'ALMACENISTA', 'Almacenista'
         SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
         ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
+        # Issue #178 (A6): en sincronía con CuadrillaMiembro.RolCuadrilla —
+        # un PersonalCuadrilla nuevo dado de alta por el importer (A6) puede
+        # clasificarse con cualquiera de estos cargos reales (A5).
+        MALACATERO = 'MALACATERO', 'Malacatero'
+        COORDINADOR_HSQ = 'COORDINADOR_HSQ', 'Coordinador HSQ'
 
     nombre = models.CharField('Nombre completo', max_length=200)
     documento = models.CharField('Documento', max_length=30, unique=True)
@@ -232,6 +237,11 @@ class CuadrillaMiembro(BaseModel):
         ALMACENISTA = 'ALMACENISTA', 'Almacenista'
         SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
         ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
+        # Issue #178 (A5): cargos reales confirmados en el Excel del cliente
+        # (1 ocurrencia c/u de 1541 filas de personal) que hoy caían en
+        # fallback silencioso a LINIERO_I.
+        MALACATERO = 'MALACATERO', 'Malacatero'
+        COORDINADOR_HSQ = 'COORDINADOR_HSQ', 'Coordinador HSQ'
 
     class CargoJerarquico(models.TextChoices):
         JT_CTA = 'JT_CTA', 'Jefe de Trabajo / Capacitado'
@@ -537,3 +547,48 @@ class Asistencia(BaseModel):
             delta = salida - entrada
             return round(delta.total_seconds() / 3600, 2)
         return None
+
+
+class NovedadPersonalSemana(BaseModel):
+    """Registro INDEPENDIENTE de personal en sección NOVEDADES de una semana
+    de programación (issue #178, A2).
+
+    Las filas del Excel real bajo el encabezado 'NOVEDADES' (vacaciones,
+    incapacidad, nuevo ingreso, reincorporación...) NO pertenecen a ninguna
+    actividad/cuadrilla. Antes del fix, ambos importers (S18 y
+    ProgramacionSemanalImporter) NO reseteaban el bloque/actividad activa al
+    detectar 'NOVEDADES', así que esas personas quedaban mezcladas
+    silenciosamente como miembro de la ÚLTIMA actividad real de la hoja.
+
+    Deliberadamente NO tiene FK a Cuadrilla/Actividad/PersonalCuadrilla:
+    estos registros son independientes por diseño (persona + semana + nota),
+    y la misma cédula puede aparecer AQUÍ y también como miembro real de una
+    actividad en la misma semana (p.ej. reincorporación a mitad de semana) —
+    ambos registros deben coexistir sin deduplicación entre sí.
+    """
+
+    cedula = models.CharField('Cédula', max_length=20)
+    nombre = models.CharField('Nombre', max_length=200, blank=True, default='')
+    cargo = models.CharField('Cargo', max_length=100, blank=True, default='')
+    semana = models.PositiveSmallIntegerField('Semana ISO')
+    anio = models.PositiveSmallIntegerField('Año')
+    nota = models.CharField(
+        'Nota',
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Texto de la columna AVISOS en la fila de NOVEDADES (ej. "Vacaciones", "Incapacidad").'
+    )
+    hoja_origen = models.CharField('Hoja de origen', max_length=50, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Novedad de personal (semana)'
+        verbose_name_plural = 'Novedades de personal (semana)'
+        ordering = ['-anio', '-semana', 'nombre']
+        indexes = [
+            models.Index(fields=['anio', 'semana']),
+            models.Index(fields=['cedula']),
+        ]
+
+    def __str__(self):
+        return f'{self.nombre or self.cedula} — semana {self.semana}/{self.anio} ({self.nota or "sin nota"})'

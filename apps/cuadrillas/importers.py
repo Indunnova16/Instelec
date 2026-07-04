@@ -59,6 +59,11 @@ ROL_TEXTO_A_CHOICE = {
     'almacenista': 'ALMACENISTA',
     'supervisor forestal': 'SUPERVISOR_FOREST',
     'asistente forestal': 'ASISTENTE_FOREST',
+    # Issue #178 (A5): cargos reales confirmados en el Excel del cliente que
+    # hoy caían en fallback silencioso a LINIERO_I.
+    'malacatero': 'MALACATERO',
+    'coordinador hsq': 'COORDINADOR_HSQ',
+    'coordinador hsqe': 'COORDINADOR_HSQ',
 }
 
 
@@ -273,7 +278,7 @@ class CuadrillaImporter:
         }
 
     def _guardar_cuadrilla(self, cuadrilla_data, miembros, actualizar, row_num):
-        from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, Vehiculo
+        from apps.cuadrillas.models import Cuadrilla, Vehiculo
         from apps.lineas.models import Linea
         from apps.usuarios.models import Usuario
 
@@ -390,6 +395,7 @@ class CuadrillaImporter:
 
         # Schema con B3: insertar via raw SQL completando audit fields vacíos.
         import uuid
+
         from django.utils import timezone
 
         new_id = uuid.uuid4()
@@ -573,10 +579,17 @@ class ProgramacionS18CuadrillaImporter:
         # Cuadrilla no tiene campos para ellas → se anteponen a observaciones.
         'avisos':       ['avisos', 'aviso'],
         'orden':        ['orden', 'ordenes', 'órdenes'],
+        # Issue #178 (A4): columna PT SAP (col O del Excel real) — hoy no
+        # estaba mapeada en absoluto. Mismo patrón que avisos/orden
+        # (_split_multi/_join_multi, multivalor con salto de línea).
+        'pt_sap':       ['pt sap', 'pt', 'puesto trabajo', 'puesto de trabajo'],
         'observaciones': ['comentarios', 'observaciones', 'obs', 'notas'],
     }
 
-    SHEETS_EXCLUIR = {'vc', 'hoja1', 'sheet1', 'resumen', 'instrucciones'}
+    # Issue #178 (A3): 'vc' se removió de aquí — es una semana VÁLIDA real
+    # del cliente (confirmado: contiene datos de actividad reales), antes se
+    # excluía por error. Se valida como caso especial en `_es_hoja_semanal`.
+    SHEETS_EXCLUIR = {'hoja1', 'sheet1', 'resumen', 'instrucciones'}
 
     def __init__(self):
         self.errores = []
@@ -589,8 +602,15 @@ class ProgramacionS18CuadrillaImporter:
         self.miembros_agregados = 0
         self.encargados_asignados = 0
         self.usuarios_creados = 0
+        # Issue #178 (A6): colaboradores nuevos dados de alta en el maestro
+        # PersonalCuadrilla (opt-in crear_usuarios_faltantes).
+        self.personal_creados = 0
         self.column_indices = {}
         self.sheets_procesadas = []
+        # Issue #178 (A2): filas de la sección NOVEDADES, independientes de
+        # cualquier bloque/actividad — ver `_guardar_novedad`.
+        self.novedades_pendientes = []
+        self.novedades_creadas = 0
 
     # ---------- API pública ----------
 
@@ -600,7 +620,15 @@ class ProgramacionS18CuadrillaImporter:
         crear_usuarios = opciones.get('crear_usuarios_faltantes', False)
 
         try:
-            workbook = load_workbook(archivo_excel, read_only=True, data_only=True)
+            # Issue #178 (A1): NO usar read_only=True — openpyxl no expone
+            # `Worksheet.merged_cells` en modo read_only (AttributeError), y el
+            # parser de bloques necesita el RANGO real de la celda combinada de
+            # columna A/D para detectar el fin de bloque de forma 100% confiable
+            # (antes se dependía implícitamente de que la celda "#" viniera en
+            # blanco por el merge, sin verificar el merge en sí). El archivo es
+            # una programación semanal (decenas de filas por hoja) — cargarlo
+            # completo en memoria es seguro.
+            workbook = load_workbook(archivo_excel, data_only=True)
         except Exception as e:
             logger.error(f"Error cargando Excel S18: {e}")
             return self._resultado_error(f'Error al cargar archivo Excel: {e}')
@@ -625,7 +653,9 @@ class ProgramacionS18CuadrillaImporter:
         except Exception:
             pass
 
-        if not bloques:
+        # Issue #178 (A2): una hoja puede traer SOLO novedades (sin ninguna
+        # actividad real) — no es un error, sigue siendo un import válido.
+        if not bloques and not self.novedades_pendientes:
             return self._resultado_error(
                 'No se encontraron cuadrillas en el archivo (¿formato Programación S18?)'
             )
@@ -635,6 +665,8 @@ class ProgramacionS18CuadrillaImporter:
             with transaction.atomic():
                 for bloque in bloques:
                     self._guardar_bloque(bloque, actualizar, crear_usuarios)
+                for novedad in self.novedades_pendientes:
+                    self._guardar_novedad(novedad)
                 if self.errores:
                     raise _RollbackImport(f'{len(self.errores)} errores fatales')
         except _RollbackImport:
@@ -650,6 +682,8 @@ class ProgramacionS18CuadrillaImporter:
                 'miembros_agregados': 0,
                 'encargados_asignados': 0,
                 'usuarios_creados': 0,
+                'personal_creados': 0,
+                'novedades_creadas': 0,
                 'advertencias': self.advertencias,
                 'errores': self.errores,
                 'sheets_procesadas': self.sheets_procesadas,
@@ -676,6 +710,8 @@ class ProgramacionS18CuadrillaImporter:
             'miembros_agregados': self.miembros_agregados,
             'encargados_asignados': self.encargados_asignados,
             'usuarios_creados': self.usuarios_creados,
+            'personal_creados': self.personal_creados,
+            'novedades_creadas': self.novedades_creadas,
             'advertencias': self.advertencias,
             'errores': self.errores,
             'sheets_procesadas': self.sheets_procesadas,
@@ -705,26 +741,66 @@ class ProgramacionS18CuadrillaImporter:
             )
             return []
 
+        # Issue #178 (A1): límites de bloque por celda combinada de columna A
+        # (numero) o D (tramo) — 100% confiable (verificado contra 106 bloques
+        # reales). Si la hoja no trae merges en ninguna de esas columnas (caso
+        # raro/manual, p.ej. hojas construidas a mano sin formato), se cae al
+        # heurístico legado (columna '#' en blanco = continuación del bloque
+        # anterior) con una advertencia explícita.
+        mapa_bloques = self._mapa_bloques_por_merge(
+            sheet, self.column_indices.get('numero'), self.column_indices.get('tramo')
+        )
+        usa_fallback_legado = not mapa_bloques
+        if usa_fallback_legado:
+            self.advertencias.append(
+                f'Hoja {sheet.title}: no se detectaron celdas combinadas en '
+                f'columna numero/tramo; se usa el heurístico de respaldo '
+                f'(columna "#" en blanco = continuación de bloque, menos confiable)'
+            )
+
         bloques = []
         actual = None
+        # Issue #178 (A2): al entrar a la sección NOVEDADES se cierra el
+        # bloque activo y las filas de personal que siguen se persisten como
+        # registro INDEPENDIENTE (no como miembro de la última actividad).
+        en_novedades = False
+        ultimo_anio = None
 
         for row_idx, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
             numero = self._get_cell(row, 'numero')
             numero_str = '' if numero is None else str(numero).strip()
 
-            # Filas de ruido ('-', 'NOVEDADES', notas) → ignorar.
+            if numero_str.strip().upper() == 'NOVEDADES':
+                if actual is not None:
+                    bloques.append(actual)
+                    actual = None
+                en_novedades = True
+                continue
+
+            # Filas de ruido ('-', notas sueltas) → ignorar sin alterar el
+            # modo NOVEDADES ni el bloque activo.
             if numero_str and not self._es_numero_actividad(numero_str):
                 continue
 
-            if numero_str == '':
-                # Miembro adicional de la actividad en curso.
-                if actual is not None:
+            es_continuacion = self._es_fila_continuacion(
+                row_idx, numero_str, mapa_bloques, usa_fallback_legado
+            )
+
+            if es_continuacion:
+                if en_novedades:
+                    novedad = self._parsear_novedad(row, row_idx, semana, ultimo_anio, sheet.title)
+                    if novedad:
+                        self.novedades_pendientes.append(novedad)
+                elif actual is not None:
+                    # Miembro adicional de la actividad en curso.
                     miembro = self._parsear_miembro(row, row_idx)
                     if miembro:
                         actual['miembros'].append(miembro)
                 continue
 
-            # Encabezado de nueva actividad → cerrar la anterior.
+            # Encabezado de nueva actividad → sale de NOVEDADES (si estaba) y
+            # cierra el bloque anterior.
+            en_novedades = False
             if actual is not None:
                 bloques.append(actual)
 
@@ -733,6 +809,7 @@ class ProgramacionS18CuadrillaImporter:
             fecha_inicio = self._normalizar_fecha(self._get_cell(row, 'fecha_inicio'))
             fecha_fin = self._normalizar_fecha(self._get_cell(row, 'fecha_fin'))
             anio = fecha_inicio.year if fecha_inicio else date.today().year
+            ultimo_anio = anio  # issue #178 (A2): contexto de año para NOVEDADES
 
             actual = {
                 'semana': semana,
@@ -749,6 +826,8 @@ class ProgramacionS18CuadrillaImporter:
                 # normalizan con _split_multi y se unen con ", ".
                 'avisos': self._join_multi(self._get_cell(row, 'avisos')),
                 'orden': self._join_multi(self._get_cell(row, 'orden')),
+                # Issue #178 (A4): mismo patrón multivalor para PT SAP.
+                'pt_sap': self._join_multi(self._get_cell(row, 'pt_sap')),
                 'row_num': row_idx,
                 'miembros': [],
             }
@@ -775,6 +854,28 @@ class ProgramacionS18CuadrillaImporter:
             'rol_raw': self._str(self._get_cell(row, 'rol')),
             'placa': self._str(self._get_cell(row, 'placa')),
             'es_jt': self._es_jt(self._get_cell(row, 'rol')),
+            'row_num': row_idx,
+        }
+
+    def _parsear_novedad(self, row, row_idx, semana, anio, hoja_origen):
+        """Fila de personal dentro de la sección NOVEDADES (issue #178, A2).
+
+        La nota (p.ej. "Vacaciones", "Incapacidad") viene en la columna
+        AVISOS de la fila, NO en una columna dedicada (confirmado contra el
+        Excel real del cliente).
+        """
+        nombre = self._str(self._get_cell(row, 'personal'))
+        cedula = self._str(self._get_cell(row, 'cedula'))
+        if not nombre and not cedula:
+            return None
+        return {
+            'nombre': nombre,
+            'cedula': cedula,
+            'cargo': self._str(self._get_cell(row, 'cargo')),
+            'nota': self._join_multi(self._get_cell(row, 'avisos')),
+            'semana': semana,
+            'anio': anio or date.today().year,
+            'hoja_origen': hoja_origen,
             'row_num': row_idx,
         }
 
@@ -871,7 +972,7 @@ class ProgramacionS18CuadrillaImporter:
             cuadrilla.save(update_fields=['supervisor', 'updated_at'])
 
     def _agregar_miembro(self, cuadrilla, miembro, bloque, crear_usuarios):
-        from apps.cuadrillas.models import CuadrillaMiembro
+        from apps.cuadrillas.models import CuadrillaMiembro, PersonalCuadrilla
         from apps.usuarios.models import Usuario
 
         cedula = miembro['cedula']
@@ -880,20 +981,62 @@ class ProgramacionS18CuadrillaImporter:
             self.advertencias.append(f'Fila {row_num}: miembro sin cédula, omitido')
             return None
 
-        usuario = Usuario.objects.filter(documento=cedula).first()
-        if usuario is None:
-            if crear_usuarios:
-                usuario = self._crear_usuario(miembro)
-                if usuario is None:
-                    return None
-            else:
-                self.advertencias.append(
-                    f'Fila {row_num}: usuario con cédula "{cedula}" '
-                    f'({miembro["nombre"]}) no existe, miembro omitido'
-                )
-                return None
+        # Issue #178 (A6): CEDULA enlaza PRIMERO al maestro de Colaboradores
+        # (PersonalCuadrilla, #176) — fuente de verdad moderna del rol, en
+        # vez de re-parsear el CARGO del Excel cada vez. Si el colaborador
+        # YA existe como Usuario "legacy" (creado antes de #176, o por una
+        # carga S18 anterior a esa migración) SIN estar aún en el maestro,
+        # se preserva el comportamiento histórico de #124 para NO romper
+        # cuadrillas ya en producción: se sigue clasificando por el CARGO
+        # del Excel (A5). Solo para una cédula TOTALMENTE nueva (ni Usuario
+        # ni PersonalCuadrilla) aplica el flag opt-in crear_usuarios_faltantes
+        # (#124, default OFF): OFF = advertencia + se omite la fila; ON = se
+        # da de alta en PersonalCuadrilla (y su Usuario vinculado, patrón de
+        # #176 CuadrillaMiembroAddView._resolver_o_crear_usuario).
+        personal = PersonalCuadrilla.objects.filter(documento=cedula, activo=True).first()
+        rol_choice = None
 
-        rol_choice = ROL_TEXTO_A_CHOICE.get(miembro['cargo'].lower(), 'LINIERO_I')
+        if personal is not None:
+            usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
+            if usuario is None:
+                return None
+            rol_choice = personal.rol_cuadrilla
+        else:
+            usuario = Usuario.objects.filter(documento=cedula).first()
+            if usuario is None:
+                if crear_usuarios:
+                    personal = self._crear_personal_cuadrilla(miembro)
+                    if personal is None:
+                        return None
+                    usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
+                    if usuario is None:
+                        return None
+                    rol_choice = personal.rol_cuadrilla
+                else:
+                    self.advertencias.append(
+                        f'Fila {row_num}: cédula "{cedula}" ({miembro["nombre"]}) no '
+                        f'está en el maestro de Colaboradores (PersonalCuadrilla) ni '
+                        f'existe como usuario; miembro omitido (activa "crear '
+                        f'faltantes" para darlo de alta)'
+                    )
+                    return None
+
+        if rol_choice is None:
+            # Usuario legacy sin PersonalCuadrilla — clasificar por CARGO
+            # (issue #178, A5). Antes el CARGO desconocido caía en fallback
+            # silencioso a LINIERO_I sin dejar rastro; ahora se avisa
+            # explícitamente para que un cargo nuevo no se pierda sin notar.
+            cargo_raw = miembro['cargo']
+            rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
+            if rol_choice is None:
+                rol_choice = 'LINIERO_I'
+                if cargo_raw:
+                    self.advertencias.append(
+                        f'Fila {row_num}: CARGO "{cargo_raw}" no reconocido, '
+                        f'clasificado como LINIERO_I por defecto (agregar a '
+                        f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
+                    )
+
         cargo_jerarquico = 'JT_CTA' if miembro['es_jt'] else 'MIEMBRO'
         fecha_inicio = bloque['fecha_inicio'] or date.today()
 
@@ -919,15 +1062,64 @@ class ProgramacionS18CuadrillaImporter:
             self.encargados_asignados += 1
         return usuario
 
-    def _crear_usuario(self, miembro):
-        from apps.usuarios.models import Usuario
+    def _crear_personal_cuadrilla(self, miembro):
+        """Da de alta un colaborador NUEVO en el maestro PersonalCuadrilla
+        (issue #178, A6) — opt-in vía crear_usuarios_faltantes (mismo flag
+        de #124). Clasifica el rol con el mismo ROL_TEXTO_A_CHOICE de A5."""
+        from apps.cuadrillas.models import PersonalCuadrilla
 
         cedula = miembro['cedula']
-        nombre = miembro['nombre'] or f'Usuario {cedula}'
+        nombre = miembro['nombre'] or f'Colaborador {cedula}'
+        cargo_raw = miembro['cargo']
+        rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
+        if rol_choice is None:
+            rol_choice = 'LINIERO_I'
+            if cargo_raw:
+                self.advertencias.append(
+                    f'Fila {miembro["row_num"]}: CARGO "{cargo_raw}" no reconocido, '
+                    f'clasificado como LINIERO_I por defecto (agregar a '
+                    f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
+                )
+        try:
+            # Savepoint anidado (mismo patrón #124) para que una colisión
+            # UNIQUE (documento ya existente por carrera) no envenene la
+            # transacción externa.
+            with transaction.atomic():
+                personal = PersonalCuadrilla.objects.create(
+                    nombre=nombre,
+                    documento=cedula,
+                    rol_cuadrilla=rol_choice,
+                    activo=True,
+                )
+            self.personal_creados += 1
+            self.advertencias.append(
+                f'Fila {miembro["row_num"]}: colaborador {nombre} (cédula {cedula}) '
+                f'creado automáticamente en el maestro de Colaboradores (PersonalCuadrilla)'
+            )
+            return personal
+        except Exception as e:
+            self.advertencias.append(
+                f'Fila {miembro["row_num"]}: no se pudo crear el colaborador {nombre} '
+                f'(cédula {cedula}) en PersonalCuadrilla: {e}'
+            )
+            return None
+
+    def _resolver_o_crear_usuario_desde_personal(self, personal, miembro):
+        """Reusa el patrón resolver-o-crear Usuario de #176
+        (``CuadrillaMiembroAddView._resolver_o_crear_usuario``): el Usuario
+        es un registro de vínculo derivado del maestro PersonalCuadrilla,
+        NO la fuente de verdad (issue #178, A6)."""
+        from apps.usuarios.models import Usuario
+
+        usuario = Usuario.objects.filter(documento=personal.documento).first()
+        if usuario:
+            return usuario
+
+        nombre = personal.nombre or f'Usuario {personal.documento}'
         partes = nombre.split()
         first = partes[0] if partes else nombre
         last = ' '.join(partes[1:]) if len(partes) > 1 else ''
-        email = f'{cedula}@instelec-import.local'
+        email = f'{personal.documento}@instelec-import.local'
         try:
             # Issue #124: savepoint anidado para que una colisión UNIQUE
             # (email/documento ya existente por carrera) NO envenene la txn del
@@ -938,8 +1130,8 @@ class ProgramacionS18CuadrillaImporter:
                     email=email,
                     first_name=first[:150],
                     last_name=last[:150],
-                    documento=cedula,
-                    telefono=miembro['celular'][:20],
+                    documento=personal.documento,
+                    telefono=(miembro.get('celular') or '')[:20],
                     rol='operario_general',
                     is_active=True,
                 )
@@ -947,16 +1139,36 @@ class ProgramacionS18CuadrillaImporter:
                 usuario.save(update_fields=['password'])
             self.usuarios_creados += 1
             self.advertencias.append(
-                f'Fila {miembro["row_num"]}: usuario {nombre} (cédula {cedula}) '
-                f'creado automáticamente con email {email}'
+                f'Fila {miembro["row_num"]}: usuario {nombre} (cédula '
+                f'{personal.documento}) creado automáticamente con email {email}'
             )
             return usuario
         except Exception as e:
             self.advertencias.append(
                 f'Fila {miembro["row_num"]}: no se pudo crear usuario {nombre} '
-                f'(cédula {cedula}): {e}'
+                f'(cédula {personal.documento}): {e}'
             )
             return None
+
+    def _guardar_novedad(self, novedad):
+        """Persiste una fila de NOVEDADES como registro independiente
+        (issue #178, A2) — sin FK a Cuadrilla/Actividad. get_or_create sobre
+        (cedula, semana, anio, nota) para que un re-import no duplique."""
+        from apps.cuadrillas.models import NovedadPersonalSemana
+
+        _, creado = NovedadPersonalSemana.objects.get_or_create(
+            cedula=novedad['cedula'],
+            semana=novedad['semana'],
+            anio=novedad['anio'],
+            nota=novedad['nota'],
+            defaults={
+                'nombre': novedad['nombre'],
+                'cargo': novedad['cargo'],
+                'hoja_origen': novedad['hoja_origen'],
+            },
+        )
+        if creado:
+            self.novedades_creadas += 1
 
     # ---------- helpers ----------
 
@@ -980,17 +1192,20 @@ class ProgramacionS18CuadrillaImporter:
 
     @staticmethod
     def _construir_observaciones(bloque):
-        """Antepone AVISOS/ORDEN a las observaciones (issue #105).
+        """Antepone AVISOS/ORDEN/PT SAP a las observaciones (issue #105, #178).
 
-        El modelo Cuadrilla no tiene campos para avisos/orden, así que se
-        preservan como prefijo legible en ``observaciones`` (text NOT NULL):
-        ``"Avisos: 5720754, 5720792 | Orden: 1, 2 | <obs original>"``.
+        El modelo Cuadrilla no tiene campos para avisos/orden/pt_sap, así que
+        se preservan como prefijo legible en ``observaciones`` (text NOT
+        NULL): ``"Avisos: 5720754, 5720792 | Orden: 1, 2 | PT SAP: 123 |
+        <obs original>"``.
         """
         partes = []
         if bloque.get('avisos'):
             partes.append(f'Avisos: {bloque["avisos"]}')
         if bloque.get('orden'):
             partes.append(f'Orden: {bloque["orden"]}')
+        if bloque.get('pt_sap'):
+            partes.append(f'PT SAP: {bloque["pt_sap"]}')
         obs = bloque.get('observaciones') or ''
         if obs:
             partes.append(obs)
@@ -1048,12 +1263,77 @@ class ProgramacionS18CuadrillaImporter:
         return any(k in s for k in JT_KEYWORDS)
 
     @staticmethod
+    def _mapa_bloques_por_merge(sheet, col_numero, col_alt=None):
+        """Mapa ``{fila_excel_1based: 'inicio'|'continuacion'}`` derivado del
+        RANGO de la celda combinada en la columna ``numero`` (o ``col_alt``,
+        p.ej. ``tramo``/columna D, como respaldo si ``numero`` no viene
+        combinada) de ``sheet`` (issue #178, A1).
+
+        Requiere que ``sheet`` se haya cargado SIN ``read_only=True`` —
+        openpyxl no expone ``merged_cells`` en modo read_only.
+
+        Devuelve ``{}`` si no se encontró ningún merge de ≥2 filas en esas
+        columnas (hoja "plana", sin formato de bloques) — el llamador debe
+        entonces usar el heurístico de respaldo (columna '#' en blanco).
+        """
+        mapa = {}
+        columnas = [c for c in (col_numero, col_alt) if c is not None]
+        merges = getattr(sheet, 'merged_cells', None)
+        if merges is None:
+            return mapa
+        for col_idx in columnas:
+            col_excel = col_idx + 1  # openpyxl es 1-based
+            encontrados = False
+            for rango in merges.ranges:
+                if (
+                    rango.min_col == col_excel
+                    and rango.max_col == col_excel
+                    and rango.max_row > rango.min_row
+                ):
+                    encontrados = True
+                    for fila in range(rango.min_row, rango.max_row + 1):
+                        mapa[fila] = 'inicio' if fila == rango.min_row else 'continuacion'
+            if encontrados:
+                break
+        return mapa
+
+    @staticmethod
+    def _es_fila_continuacion(row_idx, numero_str, mapa_bloques, usa_fallback_legado):
+        """¿La fila `row_idx` es continuación del bloque anterior (miembro
+        adicional) o el encabezado de una actividad nueva? (issue #178, A1)
+
+        Primario: RANGO de la celda combinada (`mapa_bloques`). Respaldo
+        (`usa_fallback_legado=True`, o fila fuera de cualquier merge conocido
+        — p.ej. bloque de 1 sola fila que no genera merge): heurístico legado
+        columna '#' en blanco = continuación.
+        """
+        if not usa_fallback_legado:
+            estado = mapa_bloques.get(row_idx)
+            if estado == 'continuacion':
+                return True
+            if estado == 'inicio':
+                return False
+        # Sin info de merge (fallback o fila fuera de rango conocido).
+        return numero_str == ''
+
+    @staticmethod
     def _es_hoja_semanal(sheet_name):
+        """Issue #178 (A3): además de 'NN'/'semana NN'/'NN (n)', acepta
+        variantes con un prefijo alfabético corto (≤2 letras, ej. 'C12',
+        'C16' — copias de una semana con prefijo de letra) SIN hardcodear
+        nombres uno por uno. 'vc' es un caso especial real (sin dígitos, no
+        matchea el patrón numérico) confirmado como semana válida por el
+        cliente. Las hojas catálogo (pt-corredores, Hoja1, Hoja2, Hoja5...)
+        siguen excluidas naturalmente porque su prefijo no matchea ('hoja'
+        tiene 4 letras, por encima del límite de 2) o no traen dígitos.
+        """
         import re
         nombre = sheet_name.strip().lower()
         if nombre in ProgramacionS18CuadrillaImporter.SHEETS_EXCLUIR:
             return False
-        return bool(re.fullmatch(r's?(emana)?[\s_]*\d+(\s*\(\d+\))?', nombre))
+        if nombre == 'vc':
+            return True
+        return bool(re.fullmatch(r'(s(emana)?|[a-z]{1,2})?[\s_]*\d+(\s*\(\d+\))?', nombre))
 
     @staticmethod
     def _numero_semana(sheet_name):
@@ -1117,6 +1397,8 @@ class ProgramacionS18CuadrillaImporter:
             'miembros_agregados': 0,
             'encargados_asignados': 0,
             'usuarios_creados': 0,
+            'personal_creados': 0,
+            'novedades_creadas': 0,
             'advertencias': self.advertencias,
             'errores': self.errores,
             'sheets_procesadas': self.sheets_procesadas,

@@ -432,8 +432,9 @@ class AvisosTranselcaImporter:
         Returns:
             Dict with import summary
         """
-        from apps.lineas.models import Linea
         from datetime import date
+
+        from apps.lineas.models import Linea
 
         from .models import TipoActividad
 
@@ -917,7 +918,10 @@ class ProgramacionSemanalImporter:
         'observaciones':  ['comentarios', 'observaciones', 'obs', 'notas'],
     }
 
-    SHEETS_EXCLUIR = {'vc', 'hoja1', 'sheet1', 'resumen', 'instrucciones'}
+    # Issue #178 (A3): 'vc' se removió de aquí — es una semana VÁLIDA real
+    # del cliente (confirmado: contiene datos de actividad reales), antes se
+    # excluía por error. Se valida como caso especial en `_es_hoja_semanal`.
+    SHEETS_EXCLUIR = {'hoja1', 'sheet1', 'resumen', 'instrucciones'}
 
     def __init__(self):
         self.errores = []
@@ -927,6 +931,10 @@ class ProgramacionSemanalImporter:
         self.programaciones_tocadas = set()  # set[(anio, mes, linea_id)]
         self.resumen_por_hoja = {}
         self.column_indices = {}
+        # Issue #178 (A2): filas de la sección NOVEDADES, independientes de
+        # cualquier actividad — ver `_guardar_novedad`.
+        self.novedades_pendientes = []
+        self.novedades_creadas = 0
 
     def importar(self, archivo_excel, opciones=None):
         """
@@ -944,7 +952,13 @@ class ProgramacionSemanalImporter:
         opciones = opciones or {}
 
         try:
-            workbook = load_workbook(archivo_excel, read_only=True, data_only=True)
+            # Issue #178 (A1): NO usar read_only=True — openpyxl no expone
+            # `Worksheet.merged_cells` en modo read_only (AttributeError), y el
+            # parser de bloques necesita el RANGO real de la celda combinada de
+            # columna A/D para detectar el fin de bloque de forma 100% confiable
+            # (antes se dependía implícitamente de que la celda "#" viniera en
+            # blanco por el merge, sin verificar el merge en sí).
+            workbook = load_workbook(archivo_excel, data_only=True)
         except Exception as e:
             logger.error(f"Error loading Excel file: {e}")
             return self._resultado_error(f'Error al cargar archivo Excel: {e}')
@@ -955,7 +969,8 @@ class ProgramacionSemanalImporter:
                 logger.info(f"Hoja '{sheet_name}' omitida (no es semana válida)")
                 continue
             try:
-                resumen_hoja = self._procesar_hoja(workbook[sheet_name], opciones)
+                semana = self._numero_semana(sheet_name)
+                resumen_hoja = self._procesar_hoja(workbook[sheet_name], opciones, semana)
                 self.resumen_por_hoja[sheet_name] = resumen_hoja
                 sheets_procesadas.append(sheet_name)
             except Exception as e:
@@ -980,6 +995,7 @@ class ProgramacionSemanalImporter:
             'sheets_procesadas': sheets_procesadas,
             'actividades_creadas': len(self.actividades_creadas),
             'actividades_actualizadas': len(self.actividades_actualizadas),
+            'novedades_creadas': self.novedades_creadas,
             'errores': self.errores,
             'advertencias': self.advertencias,
             'resumen_por_hoja': self.resumen_por_hoja,
@@ -989,15 +1005,79 @@ class ProgramacionSemanalImporter:
 
     @staticmethod
     def _es_hoja_semanal(sheet_name):
+        """Aceptar '02', '18', 'S18', 'Semana 18', 'semana_05', '12 (2)',
+        '18 (1)'. B5 fix: las copias de hojas que Excel nombra '12 (2)' SON
+        válidas (mismo formato de programación). Antes el regex las excluía
+        silenciosamente y se perdían filas de avisos.
+
+        Issue #178 (A3): además acepta variantes con un prefijo alfabético
+        corto (≤2 letras, ej. 'C12', 'C16' — copias de una semana con
+        prefijo de letra) SIN hardcodear nombres uno por uno. 'vc' es un
+        caso especial real (sin dígitos, no matchea el patrón numérico)
+        confirmado como semana válida por el cliente. Las hojas catálogo
+        (pt-corredores, Hoja1, Hoja2, Hoja5...) siguen excluidas
+        naturalmente porque su prefijo no matchea ('hoja' tiene 4 letras,
+        por encima del límite de 2) o no traen dígitos.
+        """
         import re
         nombre = sheet_name.strip().lower()
         if nombre in ProgramacionSemanalImporter.SHEETS_EXCLUIR:
             return False
-        # Aceptar '02', '18', 'S18', 'Semana 18', 'semana_05', '12 (2)', '18 (1)'
-        # B5 fix: las copias de hojas que Excel nombra '12 (2)' SON
-        # válidas (mismo formato de programación). Antes el regex las
-        # excluía silenciosamente y se perdían filas de avisos.
-        return bool(re.fullmatch(r's?(emana)?[\s_]*\d+(\s*\(\d+\))?', nombre))
+        if nombre == 'vc':
+            return True
+        return bool(re.fullmatch(r'(s(emana)?|[a-z]{1,2})?[\s_]*\d+(\s*\(\d+\))?', nombre))
+
+    @staticmethod
+    def _mapa_bloques_por_merge(sheet, col_numero, col_alt=None):
+        """Mapa ``{fila_excel_1based: 'inicio'|'continuacion'}`` derivado del
+        RANGO de la celda combinada en la columna ``numero`` (o ``col_alt``,
+        p.ej. ``tramo``/columna D, como respaldo) de ``sheet`` (issue #178, A1).
+
+        Requiere que ``sheet`` se haya cargado SIN ``read_only=True`` —
+        openpyxl no expone ``merged_cells`` en modo read_only.
+
+        Devuelve ``{}`` si no se encontró ningún merge de ≥2 filas en esas
+        columnas (hoja "plana", sin formato de bloques) — el llamador debe
+        entonces usar el heurístico de respaldo (columna '#' en blanco).
+        """
+        mapa = {}
+        columnas = [c for c in (col_numero, col_alt) if c is not None]
+        merges = getattr(sheet, 'merged_cells', None)
+        if merges is None:
+            return mapa
+        for col_idx in columnas:
+            col_excel = col_idx + 1  # openpyxl es 1-based
+            encontrados = False
+            for rango in merges.ranges:
+                if (
+                    rango.min_col == col_excel
+                    and rango.max_col == col_excel
+                    and rango.max_row > rango.min_row
+                ):
+                    encontrados = True
+                    for fila in range(rango.min_row, rango.max_row + 1):
+                        mapa[fila] = 'inicio' if fila == rango.min_row else 'continuacion'
+            if encontrados:
+                break
+        return mapa
+
+    @staticmethod
+    def _es_fila_continuacion(row_idx, numero_str, mapa_bloques, usa_fallback_legado):
+        """¿La fila `row_idx` es continuación del bloque anterior (miembro
+        adicional) o el encabezado de una actividad nueva? (issue #178, A1)
+
+        Primario: RANGO de la celda combinada (`mapa_bloques`). Respaldo
+        (`usa_fallback_legado=True`, o fila fuera de cualquier merge conocido
+        — p.ej. bloque de 1 sola fila que no genera merge): heurístico legado
+        columna '#' en blanco = continuación.
+        """
+        if not usa_fallback_legado:
+            estado = mapa_bloques.get(row_idx)
+            if estado == 'continuacion':
+                return True
+            if estado == 'inicio':
+                return False
+        return numero_str == ''
 
     def _resultado_error(self, mensaje):
         return {
@@ -1005,9 +1085,19 @@ class ProgramacionSemanalImporter:
             'error': mensaje,
             'actividades_creadas': 0,
             'actividades_actualizadas': 0,
+            'novedades_creadas': 0,
             'errores': self.errores,
             'advertencias': self.advertencias,
         }
+
+    @staticmethod
+    def _numero_semana(sheet_name):
+        """Extrae el número de semana del nombre de la hoja (issue #178, A2)
+        — usado para persistir NovedadPersonalSemana con el contexto
+        correcto. Devuelve 0 si el nombre no trae dígitos (p.ej. 'vc')."""
+        import re
+        m = re.search(r'\d+', sheet_name)
+        return int(m.group()) if m else 0
 
     def _detectar_columnas(self, header_row):
         self.column_indices = {}
@@ -1084,9 +1174,9 @@ class ProgramacionSemanalImporter:
         partes = [p.strip() for p in re.split(r'[\n/;,]+', texto) if p.strip()]
         return partes or []
 
-    def _procesar_hoja(self, sheet, opciones):
-        from .models import Actividad, ProgramacionMensual, TipoActividad
-        from apps.lineas.models import Linea
+    def _procesar_hoja(self, sheet, opciones, semana=0):
+
+        from .models import Actividad
 
         actualizar_existentes = opciones.get('actualizar_existentes', False)
 
@@ -1115,11 +1205,36 @@ class ProgramacionSemanalImporter:
             })
             return {'creadas': 0, 'actualizadas': 0, 'omitidas': 0, 'nota': 'columnas faltantes'}
 
+        # Issue #178 (A1): límites de bloque por celda combinada de columna A
+        # (numero) o D (tramo) — 100% confiable (verificado contra 106 bloques
+        # reales, vs 97% del heurístico '#' en blanco que dependía de que el
+        # merge dejara la celda vacía sin verificar el merge en sí). Si la
+        # hoja no trae merges en ninguna columna (caso raro/manual) se cae al
+        # heurístico legado con advertencia explícita.
+        mapa_bloques = self._mapa_bloques_por_merge(
+            sheet, self.column_indices.get('numero'), self.column_indices.get('tramo')
+        )
+        usa_fallback_legado = not mapa_bloques
+        if usa_fallback_legado:
+            self.advertencias.append({
+                'hoja': sheet.title,
+                'mensaje': 'no se detectaron celdas combinadas en columna '
+                           'numero/tramo; se usa el heurístico de respaldo '
+                           '(columna "#" en blanco = continuación de bloque, '
+                           'menos confiable)',
+            })
+
         creadas = 0
         actualizadas = 0
         omitidas = 0
         actividades_cuadrilla_pendiente = []  # [(actividad_obj, [cedulas])]
         current_actividad_idx = None  # idx en actividades_cuadrilla_pendiente
+        # Issue #178 (A2): al entrar a NOVEDADES se cierra la actividad activa
+        # y las filas de personal que siguen se persisten como registro
+        # INDEPENDIENTE (no como miembro/cédula de la última actividad).
+        en_novedades = False
+        ultimo_anio = None
+        novedades_hoja = 0
 
         for row_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
             numero = self._get_cell(row, 'numero')
@@ -1127,19 +1242,34 @@ class ProgramacionSemanalImporter:
 
             numero_str = '' if numero is None else str(numero).strip()
 
-            # B5 fix: filas con '#' no-numérico ('-', 'NOVEDADES', notas)
-            # NO son actividades ni miembros; ignorarlas silenciosamente
-            # sin avanzar current_actividad_idx ni contarlas como omitidas.
+            if numero_str.strip().upper() == 'NOVEDADES':
+                current_actividad_idx = None
+                en_novedades = True
+                continue
+
+            # B5 fix: filas con '#' no-numérico ('-', notas sueltas) NO son
+            # actividades ni miembros; ignorarlas silenciosamente sin alterar
+            # el modo NOVEDADES ni current_actividad_idx.
             if numero_str and not self._es_numero_actividad(numero_str):
                 continue
 
-            if numero_str == '':
-                # Fila de personal — agregar cédula a actividad anterior
-                if current_actividad_idx is not None and cedula:
+            es_continuacion = self._es_fila_continuacion(
+                row_idx, numero_str, mapa_bloques, usa_fallback_legado
+            )
+
+            if es_continuacion:
+                if en_novedades:
+                    novedad = self._parsear_novedad(row, row_idx, semana, ultimo_anio, sheet.title)
+                    if novedad:
+                        self._guardar_novedad(novedad)
+                        novedades_hoja += 1
+                elif current_actividad_idx is not None and cedula:
+                    # Fila de personal — agregar cédula a actividad anterior
                     actividades_cuadrilla_pendiente[current_actividad_idx][1].append(cedula)
                 continue
 
-            # Es fila de ACTIVIDAD
+            # Es fila de ACTIVIDAD → sale de NOVEDADES (si estaba).
+            en_novedades = False
             tipo_actividad_raw = self._get_cell(row, 'tipo_actividad')
             avisos_raw = self._get_cell(row, 'avisos')
             lineas_raw = self._get_cell(row, 'linea')
@@ -1192,6 +1322,7 @@ class ProgramacionSemanalImporter:
 
             # Fecha inicio para calcular mes
             anio_act, mes_act = self._extraer_anio_mes(fecha_inicio)
+            ultimo_anio = anio_act  # issue #178 (A2): contexto de año para NOVEDADES
             programacion = self._get_or_create_programacion(linea_obj, anio_act, mes_act)
             self.programaciones_tocadas.add((anio_act, mes_act, linea_obj.id))
 
@@ -1246,7 +1377,55 @@ class ProgramacionSemanalImporter:
         # Resolver cuadrillas via cédulas acumuladas
         self._asignar_cuadrillas(actividades_cuadrilla_pendiente)
 
-        return {'creadas': creadas, 'actualizadas': actualizadas, 'omitidas': omitidas}
+        return {
+            'creadas': creadas,
+            'actualizadas': actualizadas,
+            'omitidas': omitidas,
+            'novedades': novedades_hoja,
+        }
+
+    def _parsear_novedad(self, row, row_idx, semana, anio, hoja_origen):
+        """Fila de personal dentro de la sección NOVEDADES (issue #178, A2).
+
+        La nota (p.ej. "Vacaciones", "Incapacidad") viene en la columna
+        AVISOS de la fila, NO en una columna dedicada (confirmado contra el
+        Excel real del cliente).
+        """
+        nombre = self._get_cell(row, 'personal')
+        cedula = self._get_cell(row, 'cedula')
+        nombre = str(nombre).strip() if nombre else ''
+        cedula = str(cedula).strip() if cedula else ''
+        if not nombre and not cedula:
+            return None
+        return {
+            'nombre': nombre,
+            'cedula': cedula,
+            'cargo': self._get_cell(row, 'cargo') or '',
+            'nota': ', '.join(self._split_multi(self._get_cell(row, 'avisos'))),
+            'semana': semana,
+            'anio': anio or date.today().year,
+            'hoja_origen': hoja_origen,
+        }
+
+    def _guardar_novedad(self, novedad):
+        """Persiste una fila de NOVEDADES como registro independiente
+        (issue #178, A2) — sin FK a Actividad/Cuadrilla. get_or_create sobre
+        (cedula, semana, anio, nota) para que un re-import no duplique."""
+        from apps.cuadrillas.models import NovedadPersonalSemana
+
+        _, creado = NovedadPersonalSemana.objects.get_or_create(
+            cedula=novedad['cedula'],
+            semana=novedad['semana'],
+            anio=novedad['anio'],
+            nota=novedad['nota'],
+            defaults={
+                'nombre': novedad['nombre'],
+                'cargo': str(novedad['cargo']).strip(),
+                'hoja_origen': novedad['hoja_origen'],
+            },
+        )
+        if creado:
+            self.novedades_creadas += 1
 
     def _buscar_linea(self, codigos):
         from apps.lineas.models import Linea
