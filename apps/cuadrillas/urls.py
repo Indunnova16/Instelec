@@ -51,3 +51,10 @@ try:
     urlpatterns += views_b4.urlpatterns
 except ImportError:
     pass
+
+# #178 Sprint C — Programación semanal (grid + duplicar + export PDF). Optional import.
+try:
+    from . import views_semanal  # noqa: F401
+    urlpatterns += views_semanal.urlpatterns
+except ImportError:
+    pass
