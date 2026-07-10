@@ -103,10 +103,12 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-xs">
-                {# #147 Cambio 4 (Bloque 2): freeze-header vertical — thead completo
+                {% comment %}
+                #147 Cambio 4 (Bloque 2): freeze-header vertical — thead completo
                 sticky (2 filas con rowspan/colspan, no por-th individual). NO se
                 toca el sticky left-0 ya existente de la columna Torre (líneas
-                abajo) — sigue funcionando sin regresión (esquina congelada). #}
+                abajo) — sigue funcionando sin regresión (esquina congelada).
+                {% endcomment %}
                 <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0 z-20">
                     <tr>
                         <th rowspan="2" class="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">Torre</th>
