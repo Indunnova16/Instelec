@@ -109,6 +109,14 @@ class _DashboardCurvaSBase(_DashboardCurvaSBaseLegacy):
             # B1 promueve estas series a la Curva S principal de OC.
             ctx['curva_real_json'] = self.build_curva_real(proyecto, fase)
             ctx['fase_backbone'] = fase
+            # #150 B3 — la línea "Planeado" de la Curva S depende de que
+            # ProgramacionFase tenga fecha_inicio/fecha_fin_planeada + peso_pct
+            # cargados en /cronograma/ (serie_planeado() YA arma la serie sola
+            # cuando el dato existe — confirmado contra BD prod, gap de DATO no
+            # de CAMPO). Esta bandera solo controla un hint de estado vacío en
+            # el template (_dashboard_fase_base.html); no cambia el cálculo.
+            planeado = ctx['curva_real_json'].get('planeado') or {}
+            ctx['curva_planeado_disponible'] = bool(planeado.get('planeado'))
         return ctx
 
 
