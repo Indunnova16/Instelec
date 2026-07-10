@@ -5,6 +5,8 @@ from django.db import models
 
 from apps.core.models import BaseModel
 
+from .models_cargo import Cargo
+
 
 class Vehiculo(BaseModel):
     """
@@ -75,34 +77,27 @@ class Vehiculo(BaseModel):
 class PersonalCuadrilla(BaseModel):
     """
     Catálogo de personal disponible para cuadrillas, con su cargo predeterminado.
-    """
 
-    class RolCuadrilla(models.TextChoices):
-        SUPERVISOR = 'SUPERVISOR', 'Supervisor'
-        LINIERO_I = 'LINIERO_I', 'Liniero I'
-        LINIERO_II = 'LINIERO_II', 'Liniero II'
-        AYUDANTE = 'AYUDANTE', 'Ayudante'
-        CONDUCTOR = 'CONDUCTOR', 'Conductor'
-        ADMINISTRADOR_OBRA = 'ADMINISTRADOR_OBRA', 'Administrador de Obra'
-        PROFESIONAL_SST = 'PROFESIONAL_SST', 'Profesional SST'
-        INGENIERO_RESIDENTE = 'ING_RESIDENTE', 'Ingeniero Residente'
-        SERVICIO_GENERAL = 'SERVICIO_GENERAL', 'Servicio General'
-        ALMACENISTA = 'ALMACENISTA', 'Almacenista'
-        SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
-        ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
-        # Issue #178 (A6): en sincronía con CuadrillaMiembro.RolCuadrilla —
-        # un PersonalCuadrilla nuevo dado de alta por el importer (A6) puede
-        # clasificarse con cualquiera de estos cargos reales (A5).
-        MALACATERO = 'MALACATERO', 'Malacatero'
-        COORDINADOR_HSQ = 'COORDINADOR_HSQ', 'Coordinador HSQ'
+    Issue #176 (Maestro 3, A3): `rol_cuadrilla` pasó de CharField+choices
+    (TextChoices `RolCuadrilla`, ahora eliminado) a FK contra el catálogo
+    editable `Cargo` (apps/cuadrillas/models_cargo.py). `to_field='codigo'`
+    + `db_column='rol_cuadrilla'` preservan el nombre y tipo físico de la
+    columna (varchar(20)) — es aditivo a nivel de constraint, no reescribe
+    valores existentes. `instance.rol_cuadrilla_id` sigue siendo el string
+    del código exactamente como antes; `instance.rol_cuadrilla` (sin `_id`)
+    es ahora el objeto `Cargo` completo.
+    """
 
     nombre = models.CharField('Nombre completo', max_length=200)
     documento = models.CharField('Documento', max_length=30, unique=True)
-    rol_cuadrilla = models.CharField(
-        'Cargo / Rol',
-        max_length=20,
-        choices=RolCuadrilla.choices,
-        default=RolCuadrilla.LINIERO_I,
+    rol_cuadrilla = models.ForeignKey(
+        Cargo,
+        to_field='codigo',
+        db_column='rol_cuadrilla',
+        on_delete=models.PROTECT,
+        default='LINIERO_I',
+        related_name='personal_cuadrilla',
+        verbose_name='Cargo / Rol',
     )
     activo = models.BooleanField('Activo', default=True)
     salario_base = models.DecimalField(
@@ -132,6 +127,14 @@ class PersonalCuadrilla(BaseModel):
 
     def __str__(self):
         return f"{self.nombre} - {self.get_rol_cuadrilla_display()}"
+
+    def get_rol_cuadrilla_display(self):
+        """Shim manual (issue #176 A3): con `rol_cuadrilla` convertido a FK,
+        Django ya NO auto-genera `get_<field>_display()` (solo lo hace para
+        campos con `choices=`). Este método reemplaza ese auto-generado
+        para que los ~10 call sites que lo invocan (templates, reports,
+        exporters) sigan funcionando sin cambios."""
+        return self.rol_cuadrilla.nombre if self.rol_cuadrilla_id else ''
 
     def save(self, *args, **kwargs):
         """
@@ -222,26 +225,15 @@ class Cuadrilla(BaseModel):
 class CuadrillaMiembro(BaseModel):
     """
     Crew member assignment.
-    """
 
-    class RolCuadrilla(models.TextChoices):
-        SUPERVISOR = 'SUPERVISOR', 'Supervisor'
-        LINIERO_I = 'LINIERO_I', 'Liniero I'
-        LINIERO_II = 'LINIERO_II', 'Liniero II'
-        AYUDANTE = 'AYUDANTE', 'Ayudante'
-        CONDUCTOR = 'CONDUCTOR', 'Conductor'
-        ADMINISTRADOR_OBRA = 'ADMINISTRADOR_OBRA', 'Administrador de Obra'
-        PROFESIONAL_SST = 'PROFESIONAL_SST', 'Profesional SST'
-        INGENIERO_RESIDENTE = 'ING_RESIDENTE', 'Ingeniero Residente'
-        SERVICIO_GENERAL = 'SERVICIO_GENERAL', 'Servicio General'
-        ALMACENISTA = 'ALMACENISTA', 'Almacenista'
-        SUPERVISOR_FORESTAL = 'SUPERVISOR_FOREST', 'Supervisor Forestal'
-        ASISTENTE_FORESTAL = 'ASISTENTE_FOREST', 'Asistente Forestal'
-        # Issue #178 (A5): cargos reales confirmados en el Excel del cliente
-        # (1 ocurrencia c/u de 1541 filas de personal) que hoy caían en
-        # fallback silencioso a LINIERO_I.
-        MALACATERO = 'MALACATERO', 'Malacatero'
-        COORDINADOR_HSQ = 'COORDINADOR_HSQ', 'Coordinador HSQ'
+    Issue #176 (Maestro 3, A3): `rol_cuadrilla` pasó de CharField+choices
+    (TextChoices `RolCuadrilla`, ahora eliminado — unificado con el mismo
+    catálogo `Cargo` que usa `PersonalCuadrilla.rol_cuadrilla`, ver
+    models_cargo.py) a FK contra `Cargo`. NO CONFUNDIR con `cargo`
+    (`CargoJerarquico`: JT_CTA/MIEMBRO) — ese es un concepto distinto,
+    la jerarquía del miembro DENTRO de la cuadrilla, no tocado por este
+    maestro.
+    """
 
     class CargoJerarquico(models.TextChoices):
         JT_CTA = 'JT_CTA', 'Jefe de Trabajo / Capacitado'
@@ -259,11 +251,14 @@ class CuadrillaMiembro(BaseModel):
         related_name='asignaciones_cuadrilla',
         verbose_name='Usuario'
     )
-    rol_cuadrilla = models.CharField(
-        'Rol en cuadrilla',
-        max_length=20,
-        choices=RolCuadrilla.choices,
-        default=RolCuadrilla.LINIERO_I
+    rol_cuadrilla = models.ForeignKey(
+        Cargo,
+        to_field='codigo',
+        db_column='rol_cuadrilla',
+        on_delete=models.PROTECT,
+        default='LINIERO_I',
+        related_name='cuadrilla_miembros',
+        verbose_name='Rol en cuadrilla',
     )
     cargo = models.CharField(
         'Cargo jerárquico',
@@ -306,6 +301,10 @@ class CuadrillaMiembro(BaseModel):
 
     def __str__(self):
         return f"{self.usuario.get_full_name()} - {self.cuadrilla.codigo}"
+
+    def get_rol_cuadrilla_display(self):
+        """Shim manual (issue #176 A3) — ver PersonalCuadrilla.get_rol_cuadrilla_display."""
+        return self.rol_cuadrilla.nombre if self.rol_cuadrilla_id else ''
 
 
 class TrackingUbicacion(BaseModel):

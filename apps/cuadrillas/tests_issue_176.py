@@ -669,3 +669,124 @@ class TestMaestro3A2CRUDCargo(TestCase):
         codigos = {c.codigo for c in resp.context["cargos"]}
         self.assertIn("ACTIVO_X", codigos)
         self.assertNotIn("INACTIVO_X", codigos)
+
+
+# ---------------------------------------------------------------------------
+# Maestro 3: Cargos (issue #176, bounce 2) — A3: FK rol_cuadrilla -> Cargo
+# ---------------------------------------------------------------------------
+class TestMaestro3A3FKRolCuadrilla(TestCase):
+    """A3: PersonalCuadrilla/CuadrillaMiembro.rol_cuadrilla convertido a
+    FK(Cargo, to_field='codigo'). Cubre el contrato documentado en el plan:
+    `instance.rol_cuadrilla_id` sigue siendo el string del código,
+    `instance.rol_cuadrilla` es el objeto Cargo, get_rol_cuadrilla_display()
+    es un shim manual, y filtros __in/values/order_by contra strings siguen
+    funcionando sin joins explícitos (riesgo #3 del plan, línea
+    financiero/views.py:1692-1694)."""
+
+    def setUp(self):
+        # Sembrar el catalogo completo (14 codigos) — la FK real exige que
+        # el codigo referenciado exista en `cargos` antes de poder crear
+        # PersonalCuadrilla/CuadrillaMiembro con ese rol_cuadrilla_id.
+        _SEED_MODULE.seed_cargos(django_apps, None)
+
+    def test_rol_cuadrilla_id_sigue_siendo_el_string_del_codigo(self):
+        persona = PersonalCuadrilla.objects.create(
+            nombre="FK Test",
+            documento="176-fk-001",
+            rol_cuadrilla_id="SUPERVISOR",
+        )
+        persona.refresh_from_db()
+        self.assertEqual(persona.rol_cuadrilla_id, "SUPERVISOR")
+        self.assertIsInstance(persona.rol_cuadrilla_id, str)
+
+    def test_rol_cuadrilla_sin_id_es_el_objeto_cargo_completo(self):
+        persona = PersonalCuadrilla.objects.create(
+            nombre="FK Test 2",
+            documento="176-fk-002",
+            rol_cuadrilla_id="LINIERO_I",
+        )
+        persona.refresh_from_db()
+        self.assertIsInstance(persona.rol_cuadrilla, Cargo)
+        self.assertEqual(persona.rol_cuadrilla.codigo, "LINIERO_I")
+
+    def test_get_rol_cuadrilla_display_shim_personal_cuadrilla(self):
+        persona = PersonalCuadrilla.objects.create(
+            nombre="FK Test 3",
+            documento="176-fk-003",
+            rol_cuadrilla_id="AYUDANTE",
+        )
+        self.assertEqual(persona.get_rol_cuadrilla_display(), "Ayudante")
+
+    def test_get_rol_cuadrilla_display_shim_cuadrilla_miembro(self):
+        cuadrilla = Cuadrilla.objects.create(codigo="FK-TEST-001", nombre="Cuadrilla FK Test")
+        usuario = Usuario.objects.create_user(
+            email="fkmiembro176@test.com",
+            password="testpass123!",
+            first_name="FK",
+            last_name="Miembro",
+            rol="liniero",
+            documento="176-fk-004",
+        )
+        miembro = CuadrillaMiembro.objects.create(
+            cuadrilla=cuadrilla,
+            usuario=usuario,
+            rol_cuadrilla_id="CONDUCTOR",
+            fecha_inicio=date.today(),
+        )
+        self.assertEqual(miembro.get_rol_cuadrilla_display(), "Conductor")
+
+    def test_default_sigue_siendo_liniero_i(self):
+        persona = PersonalCuadrilla.objects.create(nombre="FK Default", documento="176-fk-005")
+        self.assertEqual(persona.rol_cuadrilla_id, "LINIERO_I")
+
+    def test_filter_in_por_string_sigue_funcionando_sin_joins_explicitos(self):
+        """Riesgo #3 del plan: financiero/views.py usa
+        rol_cuadrilla__in=[...] / order_by('rol_cuadrilla') / values(...,
+        'rol_cuadrilla') contra strings — Django debe resolver esto
+        directo contra el string con to_field='codigo', sin requerir
+        .rol_cuadrilla__codigo__in=[...]."""
+        PersonalCuadrilla.objects.create(nombre="A", documento="176-fk-006", rol_cuadrilla_id="SUPERVISOR")
+        PersonalCuadrilla.objects.create(nombre="B", documento="176-fk-007", rol_cuadrilla_id="LINIERO_I")
+        PersonalCuadrilla.objects.create(nombre="C", documento="176-fk-008", rol_cuadrilla_id="AYUDANTE")
+        qs = PersonalCuadrilla.objects.filter(rol_cuadrilla__in=["SUPERVISOR", "LINIERO_I"])
+        self.assertEqual(qs.count(), 2)
+        valores = list(
+            PersonalCuadrilla.objects.filter(documento="176-fk-006").values("rol_cuadrilla")
+        )
+        self.assertEqual(valores[0]["rol_cuadrilla"], "SUPERVISOR")
+
+    def test_on_delete_protect_bloquea_borrar_cargo_referenciado(self):
+        from django.db import transaction
+        from django.db.models import ProtectedError
+
+        persona = PersonalCuadrilla.objects.create(
+            nombre="FK Protect", documento="176-fk-009", rol_cuadrilla_id="ALMACENISTA"
+        )
+        cargo_referenciado = Cargo.objects.get(codigo="ALMACENISTA")
+        with self.assertRaises(ProtectedError), transaction.atomic():
+            cargo_referenciado.delete()
+        # Confirma que sigue existiendo (PROTECT bloqueo el delete).
+        self.assertTrue(PersonalCuadrilla.objects.filter(pk=persona.pk).exists())
+        self.assertTrue(Cargo.objects.filter(codigo="ALMACENISTA").exists())
+
+    def test_codigo_jerarquico_cargo_no_se_confunde_con_rol_cuadrilla(self):
+        """CuadrillaMiembro.cargo (CargoJerarquico: JT_CTA/MIEMBRO) es un
+        campo DISTINTO de rol_cuadrilla — no debe verse afectado por A3."""
+        cuadrilla = Cuadrilla.objects.create(codigo="FK-TEST-002", nombre="Cuadrilla FK Test 2")
+        usuario = Usuario.objects.create_user(
+            email="fkjerarquico176@test.com",
+            password="testpass123!",
+            first_name="FK",
+            last_name="Jerarquico",
+            rol="liniero",
+            documento="176-fk-010",
+        )
+        miembro = CuadrillaMiembro.objects.create(
+            cuadrilla=cuadrilla,
+            usuario=usuario,
+            rol_cuadrilla_id="SUPERVISOR",
+            cargo=CuadrillaMiembro.CargoJerarquico.JT_CTA,
+            fecha_inicio=date.today(),
+        )
+        self.assertEqual(miembro.cargo, "JT_CTA")
+        self.assertEqual(miembro.rol_cuadrilla_id, "SUPERVISOR")
