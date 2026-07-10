@@ -319,6 +319,81 @@ class TestAplicaObrasProteccion:
 
 
 @pytest.mark.django_db
+class TestTrinchosListaHiloB166:
+    """#166 Hilo B: quitar columna Acciones + Torre clickeable (UX, sin BD)."""
+
+    def test_thead_sin_columna_acciones(self, admin_client, proyecto, torres,
+                                         sqlite_regexp_replace):
+        url = reverse("construccion:trinchos_cunetas",
+                       kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        thead = content.split("<thead", 1)[1].split("</thead>", 1)[0]
+        assert "Acciones" not in thead
+
+    def test_torre_clickeable_presente(self, admin_client, proyecto, torres,
+                                        sqlite_regexp_replace):
+        url = reverse("construccion:trinchos_cunetas",
+                       kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "data-torre-clickable=" in content
+        for t in torres:
+            assert f'data-torre-clickable="{t.id}"' in content
+
+    def test_torre_clickeable_con_obra_dispara_editar(self, admin_client,
+                                                       proyecto, torres,
+                                                       sqlite_regexp_replace):
+        TrinchoCuneta.objects.create(
+            proyecto=proyecto, torre=torres[0],
+            medida_manejo=TrinchoCuneta.TipoObra.CUNETA,
+            metros_cunetas=Decimal("15"), cuadrilla="Mec",
+        )
+        url = reverse("construccion:trinchos_cunetas",
+                       kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        content = resp.content.decode()
+        assert f'data-torre-clickable="{torres[0].id}"' in content
+        assert "@click=\"editar(" in content
+
+    def test_torre_clickeable_sin_obra_dispara_capturar(self, admin_client,
+                                                         proyecto, torres,
+                                                         sqlite_regexp_replace):
+        url = reverse("construccion:trinchos_cunetas",
+                       kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        content = resp.content.decode()
+        assert f"@click=\"capturar('{torres[0].id}')\"" in content
+
+    def test_fila_vacia_colspan_7(self, admin_client, sqlite_regexp_replace):
+        contrato = Contrato.objects.create(
+            unidad_negocio=Contrato.UnidadNegocio.CONSTRUCCION,
+            codigo="CT-TRC-166-VACIO", nombre="TrinchosVacio", cliente="C",
+            estado=Contrato.Estado.ACTIVO,
+        )
+        proyecto_vacio = ProyectoConstruccion.objects.create(
+            contrato=contrato, nombre="TrinchosVacio", estado="EJECUCION",
+        )
+        url = reverse("construccion:trinchos_cunetas",
+                       kwargs={"proyecto_id": proyecto_vacio.id})
+        resp = admin_client.get(url)
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert 'colspan="7"' in content
+        assert 'colspan="8"' not in content
+
+    def test_modal_data_testid_presente(self, admin_client, proyecto, torres,
+                                         sqlite_regexp_replace):
+        url = reverse("construccion:trinchos_cunetas",
+                       kwargs={"proyecto_id": proyecto.id})
+        resp = admin_client.get(url)
+        content = resp.content.decode()
+        assert 'data-testid="trinchos-form-modal"' in content
+
+
+@pytest.mark.django_db
 class TestObrasProteccionFiltro149:
     """#149 (bounce=5, HITL): el listado de Obras de Protección lista TODAS las
     torres aplicables (gobernadas por torre.aplica), sin el filtro por-torre."""

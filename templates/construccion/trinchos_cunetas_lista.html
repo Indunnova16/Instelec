@@ -30,7 +30,7 @@
     </div>
 
     <!-- Form modal (inline) -->
-    <div x-show="formAbierto" x-transition class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4" style="display:none">
+    <div x-show="formAbierto" x-transition data-testid="trinchos-form-modal" class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4" style="display:none">
         <form @submit.prevent="guardar($event.target)" class="space-y-4">
             <h2 class="text-lg font-semibold" x-text="editando ? 'Editar obra' : 'Nueva obra'">Nueva obra</h2>
             <!-- Información general -->
@@ -118,7 +118,6 @@
                         <th class="px-3 py-2 text-left font-semibold">Notas</th>
                         <th class="px-3 py-2 text-left font-semibold">Cuadrilla</th>
                         <th class="px-3 py-2 text-center font-semibold">Estado</th>
-                        <th class="px-3 py-2 text-center font-semibold">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -127,7 +126,33 @@
                     {% for f in filas %}
                     {% with o=f.obra t=f.torre %}
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not o %} bg-amber-50/40 dark:bg-amber-900/10{% endif %}">
-                        <td class="px-3 py-2 font-medium">{{ t.numero_display }}</td>
+                        <td class="px-3 py-2 font-medium">
+                            {% if o %}
+                            <span data-torre-clickable="{{ t.id }}"
+                                  @click="editar({
+                                      id: '{{ o.id }}',
+                                      torre_id: '{{ t.id }}',
+                                      medida_manejo: '{{ o.medida_manejo }}',
+                                      metros_trinchos: '{{ o.metros_trinchos|default_if_none:""|unlocalize }}',
+                                      metros_cunetas: '{{ o.metros_cunetas|default_if_none:""|unlocalize }}',
+                                      notas: '{{ o.notas|escapejs }}',
+                                      tubo_metalico: '{{ o.tubo_metalico|unlocalize }}',
+                                      malla_eslabonada: '{{ o.malla_eslabonada|unlocalize }}',
+                                      alambre_galvanizado: '{{ o.alambre_galvanizado|unlocalize }}',
+                                      geotextil: '{{ o.geotextil|unlocalize }}',
+                                      cemento: '{{ o.cemento|unlocalize }}',
+                                      arena: '{{ o.arena|unlocalize }}',
+                                      grava: '{{ o.grava|unlocalize }}',
+                                      cuadrilla: '{{ o.cuadrilla|escapejs }}',
+                                      completado: {% if o.completado %}true{% else %}false{% endif %}
+                                  })"
+                                  class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">{{ t.numero_display }}</span>
+                            {% else %}
+                            <span data-torre-clickable="{{ t.id }}"
+                                  @click="capturar('{{ t.id }}')"
+                                  class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">{{ t.numero_display }}</span>
+                            {% endif %}
+                        </td>
                         {% if o %}
                         <td class="px-3 py-2 text-center">{{ o.get_medida_manejo_display }}</td>
                         <td class="px-3 py-2 text-right">{{ o.metros_trinchos|default:"—" }}</td>
@@ -137,25 +162,6 @@
                         <td class="px-3 py-2 text-center">
                             {% if o.completado %}<span class="text-green-600 dark:text-green-400">✓ Completo</span>{% else %}<span class="text-gray-500">Incompleto</span>{% endif %}
                         </td>
-                        <td class="px-3 py-2 text-center">
-                            <button @click="editar({
-                                id: '{{ o.id }}',
-                                torre_id: '{{ t.id }}',
-                                medida_manejo: '{{ o.medida_manejo }}',
-                                metros_trinchos: '{{ o.metros_trinchos|default_if_none:""|unlocalize }}',
-                                metros_cunetas: '{{ o.metros_cunetas|default_if_none:""|unlocalize }}',
-                                notas: '{{ o.notas|escapejs }}',
-                                tubo_metalico: '{{ o.tubo_metalico|unlocalize }}',
-                                malla_eslabonada: '{{ o.malla_eslabonada|unlocalize }}',
-                                alambre_galvanizado: '{{ o.alambre_galvanizado|unlocalize }}',
-                                geotextil: '{{ o.geotextil|unlocalize }}',
-                                cemento: '{{ o.cemento|unlocalize }}',
-                                arena: '{{ o.arena|unlocalize }}',
-                                grava: '{{ o.grava|unlocalize }}',
-                                cuadrilla: '{{ o.cuadrilla|escapejs }}',
-                                completado: {% if o.completado %}true{% else %}false{% endif %}
-                            })" class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Editar</button>
-                        </td>
                         {% else %}
                         <td class="px-3 py-2 text-center text-gray-400">—</td>
                         <td class="px-3 py-2 text-right text-gray-400">—</td>
@@ -163,15 +169,11 @@
                         <td class="px-3 py-2 text-gray-400">—</td>
                         <td class="px-3 py-2 text-gray-400">—</td>
                         <td class="px-3 py-2 text-center"><span class="text-amber-600 dark:text-amber-400">Pendiente · Capturar</span></td>
-                        <td class="px-3 py-2 text-center">
-                            <button @click="capturar('{{ t.id }}')"
-                                    class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Capturar</button>
-                        </td>
                         {% endif %}
                     </tr>
                     {% endwith %}
                     {% empty %}
-                    <tr><td colspan="8" class="px-3 py-8 text-center text-gray-500">No hay torres que apliquen a Obras de Protección todavía.</td></tr>
+                    <tr><td colspan="7" class="px-3 py-8 text-center text-gray-500">No hay torres que apliquen a Obras de Protección todavía.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
