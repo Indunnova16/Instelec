@@ -37,8 +37,8 @@ SIDEBAR_NUEVOS_MODULOS = [
     ("construccion:montaje_lista", "Montaje"),
     ("construccion:dashboard_montaje", "Dashboard Montaje"),
     ("construccion:spt_pintura", "SPT y Pintura"),
-    ("construccion:tendido_lista", "CANT Tendido"),
-    # #166: Dashboard Tendido debe aparecer en el sidebar junto a CANT Tendido
+    ("construccion:tendido_lista", "Tendido"),
+    # #166: Dashboard Tendido debe aparecer en el sidebar junto a Tendido
     ("construccion:dashboard_tendido", "Dashboard Tendido"),
     # #149 renombró el display de "Trinchos y Cunetas" → "Obras de Protección"
     # (validado por el cliente); el url_name `trinchos_cunetas` se conserva.

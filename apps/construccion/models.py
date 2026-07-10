@@ -1793,6 +1793,20 @@ class FaseTorre(BaseModel):
         'Tendido conductor Circuito 2 Fase C', default=False)
     tendido_conductor_c2_c_fecha = models.DateField(null=True, blank=True)
 
+    # #147 Cambio 1 (Bloque 2, PLAN_2026-07-09): Circuito 2 gana sus propios
+    # checks (vestida + 4) ANTES de sus 3 fases — antes vivían solo en la
+    # sección "Tiro" compartida; el cliente pidió que C2 tenga su propia
+    # copia, igual que ya tiene su propia regulación/flechado (c2_ok arriba).
+    # Se limpian en TendidoTorreView.form_valid cuando circuito_2_aplica=False
+    # (mismo patrón que regulacion_flechado_c2_* / tendido_conductor_c2_*).
+    c2_vestida_ok = models.BooleanField('Vestida de torres — Circuito 2', default=False)
+    c2_vestida_fecha = models.DateField(null=True, blank=True)
+    c2_riega_manila_ok = models.BooleanField('Riega de manila — Circuito 2', default=False)
+    c2_riega_guaya_ok = models.BooleanField('Riega de guaya — Circuito 2', default=False)
+    c2_grapado_ok = models.BooleanField('Grapado / amarre final — Circuito 2', default=False)
+    c2_accesorios_ok = models.BooleanField(
+        'Accesorios instalados — Circuito 2', default=False)
+
     # Cable de guarda
     tendido_guarda_ok = models.BooleanField('Tendido cable de guarda', default=False)
     tendido_guarda_fecha = models.DateField(null=True, blank=True)
