@@ -1413,11 +1413,21 @@ class TendidoTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
             # #147 item 11: si C2 no aplica, limpiar también su regulación/flechado.
             self.object.regulacion_flechado_c2_ok = False
             self.object.regulacion_flechado_c2_fecha = None
+            # #147 Cambio 1: si C2 no aplica, limpiar también sus checks propios
+            # (vestida + 4), mismo patrón que el resto de campos c2_*.
+            self.object.c2_vestida_ok = False
+            self.object.c2_vestida_fecha = None
+            self.object.c2_riega_manila_ok = False
+            self.object.c2_riega_guaya_ok = False
+            self.object.c2_grapado_ok = False
+            self.object.c2_accesorios_ok = False
             cambios += [
                 'tendido_conductor_c2_a_ok', 'tendido_conductor_c2_b_ok',
                 'tendido_conductor_c2_c_ok', 'tendido_conductor_c2_a_fecha',
                 'tendido_conductor_c2_b_fecha', 'tendido_conductor_c2_c_fecha',
                 'regulacion_flechado_c2_ok', 'regulacion_flechado_c2_fecha',
+                'c2_vestida_ok', 'c2_vestida_fecha', 'c2_riega_manila_ok',
+                'c2_riega_guaya_ok', 'c2_grapado_ok', 'c2_accesorios_ok',
             ]
 
         # #147 item 9: "No aplica" gana sobre "instaladas" (mutuamente excluyentes).

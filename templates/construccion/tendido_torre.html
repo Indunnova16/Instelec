@@ -143,6 +143,27 @@
           <span>Circuito 2 aplica</span>
           <span class="text-xs text-gray-500" x-show="!aplica">— marcado como "No aplica"</span>
         </label>
+
+        {% comment %}
+        #147 Cambio 1 (Bloque 2, PLAN_2026-07-09): CONDUCTOR — Circuito 2
+        gana sus propios checks (vestida + 4) ANTES de las 3 fases, igual
+        que ya tiene su propia regulación/flechado más abajo.
+        {% endcomment %}
+        <div class="border rounded p-3 mb-3 bg-gray-50 dark:bg-gray-700/40"
+             x-show="aplica" :class="aplica ? '' : 'opacity-40 pointer-events-none'">
+          <p class="text-xs font-semibold uppercase text-purple-600 mb-2">CONDUCTOR — Circuito 2</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label class="flex items-center gap-2">{{ form.c2_vestida_ok }} <span>{{ form.c2_vestida_ok.label }}</span></label>
+            <label>{{ form.c2_vestida_fecha.label|default:"Fecha" }}<br>{{ form.c2_vestida_fecha }}</label>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 border-t pt-3 mt-3">
+            <label class="flex items-center gap-2">{{ form.c2_riega_manila_ok }} <span class="text-xs">{{ form.c2_riega_manila_ok.label }}</span></label>
+            <label class="flex items-center gap-2">{{ form.c2_riega_guaya_ok }} <span class="text-xs">{{ form.c2_riega_guaya_ok.label }}</span></label>
+            <label class="flex items-center gap-2">{{ form.c2_grapado_ok }} <span class="text-xs">{{ form.c2_grapado_ok.label }}</span></label>
+            <label class="flex items-center gap-2">{{ form.c2_accesorios_ok }} <span class="text-xs">{{ form.c2_accesorios_ok.label }}</span></label>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3"
              x-show="aplica" :class="aplica ? '' : 'opacity-40 pointer-events-none'">
           <div class="space-y-2 border rounded p-3">

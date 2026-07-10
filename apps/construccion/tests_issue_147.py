@@ -139,9 +139,7 @@ def test_backfill_numero_tiro_desde_legacy_toma_el_minimo(torre_i147):
     torre_sin_tiros = TorreConstruccion.objects.create(
         proyecto=torre_i147.proyecto, numero="43", tipo="D6"
     )
-    fase_sin_tiros = FaseTorre.objects.create(
-        torre=torre_sin_tiros, proyecto=torre_i147.proyecto
-    )
+    fase_sin_tiros = FaseTorre.objects.create(torre=torre_sin_tiros, proyecto=torre_i147.proyecto)
 
     backfill(real_apps, None)
 
@@ -524,3 +522,166 @@ def test_matriz_columna_aplica_solo_checkbox(authenticated_client, proyecto_i147
     assert 'data-toggle-aplica="aplica"' in body
     # sin texto "Aplica"/"No aplica" repetido dentro de cada fila (solo el <th>)
     assert body.count(">Aplica<") <= 1, "el texto 'Aplica' solo debe aparecer en el encabezado"
+
+
+# ===========================================================================
+# 6. #147 Bloque 2 (PLAN_2026-07-09_tendido_bloque2.md) — Cambios 1-4
+# ===========================================================================
+#
+# Nota de validación manual (Cambio 1): el proyecto QA real (Puerta de Oro,
+# ec2a68aa-47fe-4772-89bc-2cd2b1c8b5c7) vive en Cloud SQL prod; los tests de
+# este repo corren contra sqlite (config.settings.dev_lite), por lo que NO es
+# factible conectarlos directamente al dato legacy. Se validó por fuera del
+# test suite (read-only vía cloud-sql-proxy :5434, DB instelec_db):
+#   - construccion_fases_torres tiene 65 filas con circuito_2_aplica NOT NULL,
+#     ninguna columna c2_vestida_*/c2_riega_*/c2_grapado_ok/c2_accesorios_ok
+#     existe aún (confirma que la migración 0042 es puramente additive).
+#   - Torre legacy de referencia: fase id b4e52c69-d6a2-44d3-9d34-b6c27de7f412
+#     (torre_id 3cf707c8-306d-4e33-948c-bcf8cc220ef6, el mismo UUID que usa el
+#     journey QA i147_tendido_entra_al_detalle) tiene circuito_2_aplica=True,
+#     por lo que al aplicar 0042 en prod sus 6 campos nuevos nacerán en su
+#     default (False/NULL) sin romper nada — smoke post-deploy debe abrir esa
+#     torre y marcar/desmarcar los 4 checks + vestida C2 para cerrar el loop.
+
+
+@pytest.mark.django_db
+def test_circuito2_checks_propios_persisten(authenticated_client, proyecto_i147, torre_i147):
+    """Cambio 1: los 6 campos nuevos (vestida C2 + 4 checks) se guardan al
+    marcar (POST) y se conservan al recargar (GET)."""
+    from apps.construccion.models import FaseTorre
+
+    url = _tendido_url(proyecto_i147, torre_i147)
+    data = _base_post()
+    data.update(
+        {
+            "c2_vestida_ok": "on",
+            "c2_vestida_fecha": "2026-07-05",
+            "c2_riega_manila_ok": "on",
+            "c2_riega_guaya_ok": "on",
+            "c2_grapado_ok": "on",
+            "c2_accesorios_ok": "on",
+        }
+    )
+    resp = authenticated_client.post(url, data)
+    assert resp.status_code in (200, 302), resp.content[:600]
+
+    fase = FaseTorre.objects.get(torre=torre_i147)
+    assert fase.circuito_2_aplica is True
+    assert fase.c2_vestida_ok is True
+    assert fase.c2_vestida_fecha == date(2026, 7, 5)
+    assert fase.c2_riega_manila_ok is True
+    assert fase.c2_riega_guaya_ok is True
+    assert fase.c2_grapado_ok is True
+    assert fase.c2_accesorios_ok is True
+
+    # GET recarga: los 6 campos vienen marcados/con valor en el form renderizado
+    resp_get = authenticated_client.get(url)
+    assert resp_get.status_code == 200
+    body = resp_get.content.decode()
+    for needle in (
+        'name="c2_vestida_ok"',
+        'name="c2_vestida_fecha"',
+        'name="c2_riega_manila_ok"',
+        'name="c2_riega_guaya_ok"',
+        'name="c2_grapado_ok"',
+        'name="c2_accesorios_ok"',
+    ):
+        assert needle in body, f"falta {needle} en el render tras recargar"
+    assert "CONDUCTOR — Circuito 2" in body
+
+
+@pytest.mark.django_db
+def test_circuito2_checks_se_limpian_si_no_aplica(authenticated_client, proyecto_i147, torre_i147):
+    """Cambio 1: si circuito_2_aplica=False, los 6 campos nuevos se limpian
+    (mismo patrón ya existente para tendido_conductor_c2_*/regulacion_flechado_c2_*)."""
+    from apps.construccion.models import FaseTorre
+
+    url = _tendido_url(proyecto_i147, torre_i147)
+
+    # Primero se marcan con C2 aplicando.
+    data_on = _base_post()
+    data_on.update(
+        {
+            "c2_vestida_ok": "on",
+            "c2_vestida_fecha": "2026-07-05",
+            "c2_riega_manila_ok": "on",
+            "c2_riega_guaya_ok": "on",
+            "c2_grapado_ok": "on",
+            "c2_accesorios_ok": "on",
+        }
+    )
+    resp_on = authenticated_client.post(url, data_on)
+    assert resp_on.status_code in (200, 302)
+
+    # Luego se desmarca "Circuito 2 aplica" -> los 6 campos deben limpiarse.
+    data_off = _base_post()
+    data_off.pop("circuito_2_aplica")
+    resp_off = authenticated_client.post(url, data_off)
+    assert resp_off.status_code in (200, 302), resp_off.content[:600]
+
+    fase = FaseTorre.objects.get(torre=torre_i147)
+    assert fase.circuito_2_aplica is False
+    assert fase.c2_vestida_ok is False, "C2 no aplica → limpiar vestida C2"
+    assert fase.c2_vestida_fecha is None
+    assert fase.c2_riega_manila_ok is False
+    assert fase.c2_riega_guaya_ok is False
+    assert fase.c2_grapado_ok is False
+    assert fase.c2_accesorios_ok is False
+
+
+@pytest.mark.django_db
+def test_circuito1_muestra_cuadrilla_informativa_readonly(
+    authenticated_client, proyecto_i147, torre_i147
+):
+    """Cambio 2: la sección Circuito 1 muestra un párrafo read-only con
+    fase.cuadrilla_tendido (el mismo valor ya guardado desde la sección Tiro),
+    y en todo el HTML solo existe 1 input editable name="cuadrilla_tendido"."""
+    from apps.construccion.models import FaseTorre
+
+    fase = FaseTorre.objects.get(torre=torre_i147)
+    fase.cuadrilla_tendido = "Cuadrilla Alpha"
+    fase.save(update_fields=["cuadrilla_tendido"])
+
+    url = _tendido_url(proyecto_i147, torre_i147)
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+
+    assert "Cuadrilla Alpha" in body, "el valor de cuadrilla_tendido debe aparecer en Circuito 1"
+    assert "Cuadrilla tendido (informativo — desde Tiro)" in body
+    # Solo 1 input editable (el de la sección Tiro); el de Circuito 1 es texto plano.
+    assert body.count('name="cuadrilla_tendido"') == 1, (
+        "debe existir un único input editable name=cuadrilla_tendido en todo el HTML"
+    )
+
+
+@pytest.mark.django_db
+def test_matriz_titulo_y_h1_dicen_tendido_no_cant_tendido(authenticated_client, proyecto_i147):
+    """Cambio 3: <title> y <h1> de la matriz dicen 'Tendido', no 'CANT TENDIDO'."""
+    url = _matriz_url(proyecto_i147)
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+    assert "<title>Tendido" in body or ">Tendido<" in body or "⚡ Tendido" in body
+    assert "CANT TENDIDO" not in body, "el rename debe eliminar 'CANT TENDIDO' del título/h1"
+
+
+@pytest.mark.django_db
+def test_matriz_thead_sticky_top_sin_regresion_columna_torre(
+    authenticated_client, proyecto_i147, torre_i147
+):
+    """Cambio 4: el <thead> completo lleva 'sticky top-0 z-20' (freeze-header
+    vertical); el sticky left-0 ya existente de la columna Torre (header +
+    celda de cuerpo) NO se toca — debe seguir intacto (esquina congelada)."""
+    url = _matriz_url(proyecto_i147)
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200, resp.content[:600]
+    body = resp.content.decode()
+    assert '<thead class="bg-gray-50 dark:bg-gray-900 sticky top-0 z-20">' in body
+    # sin regresión: la columna Torre conserva su sticky left-0 (header y celda)
+    assert "sticky left-0 bg-gray-50 dark:bg-gray-900 z-10" in body, (
+        "el header de la columna Torre debe conservar su sticky left-0 (sin regresión)"
+    )
+    assert "sticky left-0 bg-white dark:bg-gray-800 z-10" in body, (
+        "la celda de la columna Torre debe conservar su sticky left-0 (sin regresión)"
+    )

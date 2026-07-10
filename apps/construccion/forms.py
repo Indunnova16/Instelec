@@ -221,6 +221,10 @@ class FaseTorreTendidoForm(forms.ModelForm):
             'tendido_opgw_der_ok', 'tendido_opgw_der_fecha',
             # Circuito 2
             'circuito_2_aplica',
+            # #147 Cambio 1: checks propios de C2 (vestida + 4), antes de las 3 fases
+            'c2_vestida_ok', 'c2_vestida_fecha',
+            'c2_riega_manila_ok', 'c2_riega_guaya_ok',
+            'c2_grapado_ok', 'c2_accesorios_ok',
             'tendido_conductor_c2_a_ok', 'tendido_conductor_c2_a_fecha',
             'tendido_conductor_c2_b_ok', 'tendido_conductor_c2_b_fecha',
             'tendido_conductor_c2_c_ok', 'tendido_conductor_c2_c_fecha',
