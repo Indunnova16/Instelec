@@ -38,7 +38,9 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
         # Filter by business unit (GET param > session > all).
         unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
-            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
+            qs = qs.filter(
+                Q(linea__contrato__isnull=True) | Q(linea__contrato__unidad_negocio=unidad_negocio)
+            )
 
         # Search by aviso SAP
         buscar_aviso = self.request.GET.get('buscar_aviso', '').strip()
@@ -177,10 +179,12 @@ class CalendarioView(LoginRequiredMixin, TemplateView):
             fecha_programada__month=mes
         ).select_related('linea', 'torre', 'tipo_actividad', 'cuadrilla')
 
-        # Filter by business unit
-        unidad_negocio = self.request.GET.get('unidad')
+        # Filter by business unit (GET param > session > all).
+        unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
-            actividades = actividades.filter(linea__contrato__unidad_negocio=unidad_negocio)
+            actividades = actividades.filter(
+                Q(linea__contrato__isnull=True) | Q(linea__contrato__unidad_negocio=unidad_negocio)
+            )
 
         # Group by date
         from collections import defaultdict
@@ -218,7 +222,9 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         # Filter by business unit (GET param > session > all).
         unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
-            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
+            qs = qs.filter(
+                Q(linea__contrato__isnull=True) | Q(linea__contrato__unidad_negocio=unidad_negocio)
+            )
 
         # Default to current month/year
         hoy = date.today()
@@ -1055,9 +1061,14 @@ class EventosAPIView(LoginRequiredMixin, View):
 
         # Filter by business unit (GET param > session > all) - align with
         # ProgramacionListView/CalendarioView so event counts match (issue #174).
+        # Activities whose linea has no contrato (contrato_id=NULL) must NOT be
+        # excluded by this filter - an INNER JOIN semantics here previously hid
+        # 100% of prod activities (issue #174 bounce).
         unidad_negocio = request.GET.get('unidad') or get_unidad_negocio(request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
-            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
+            qs = qs.filter(
+                Q(linea__contrato__isnull=True) | Q(linea__contrato__unidad_negocio=unidad_negocio)
+            )
 
         # Build events list for FullCalendar
         events = []
@@ -1193,7 +1204,9 @@ class ListaOperativaView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
         # Filter by business unit (GET param > session > all).
         unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
         if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
-            qs = qs.filter(linea__contrato__unidad_negocio=unidad_negocio)
+            qs = qs.filter(
+                Q(linea__contrato__isnull=True) | Q(linea__contrato__unidad_negocio=unidad_negocio)
+            )
 
         # Filtro por línea
         linea_id = self.request.GET.get('linea')
