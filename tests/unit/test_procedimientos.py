@@ -150,6 +150,17 @@ class TestProcedimientoModelProperties:
         assert p.es_pdf is False
         assert p.es_excel is False
 
+    def test_es_word_docx(self, admin_user):
+        """Issue #179: model expone es_word para extensión .docx."""
+        p = self._crear("procedimiento.docx", admin_user)
+        assert p.es_word is True
+        assert p.es_pdf is False
+        assert p.es_excel is False
+
+    def test_otros_formatos_no_son_word(self, admin_user):
+        p = self._crear("foto.jpg", admin_user)
+        assert p.es_word is False
+
 
 @pytest.mark.django_db
 class TestProcedimientoViewerContext:
@@ -195,3 +206,32 @@ class TestProcedimientoViewerContext:
         assert resp.context["es_excel"] is True
         # El template debe inyectar SheetJS para Excel.
         assert b"sheetjs" in resp.content.lower() or b"xlsx.full.min.js" in resp.content
+
+    def test_viewer_docx_context_carga_mammoth(self, admin_client, admin_user):
+        """Issue #179: viewer debe exponer es_word=True y renderizar preview
+        real del .docx (mammoth.js), no solo el fallback de descarga."""
+        archivo = SimpleUploadedFile(
+            "manual.docx",
+            b"PKtest docx payload",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        p = Procedimiento.objects.create(
+            titulo="Manual DOCX",
+            archivo=archivo,
+            nombre_original="manual.docx",
+            tipo_archivo="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            tamanio=len(b"PKtest docx payload"),
+            subido_por=admin_user,
+        )
+        resp = admin_client.get(
+            reverse("campo:procedimiento_viewer", kwargs={"pk": p.pk})
+        )
+        assert resp.status_code == 200
+        assert resp.context["es_pdf"] is False
+        assert resp.context["es_excel"] is False
+        assert resp.context["es_word"] is True
+        # El template debe inyectar mammoth.js y el contenedor esperado por el
+        # journey E2E (#docx-html-container), no el fallback genérico.
+        assert b"mammoth" in resp.content.lower()
+        assert b"docx-html-container" in resp.content
+        assert b"Vista previa no disponible" not in resp.content

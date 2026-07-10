@@ -600,6 +600,7 @@ class ProcedimientoViewerView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
 
         context['es_pdf'] = procedimiento.es_pdf
         context['es_excel'] = procedimiento.es_excel
+        context['es_word'] = procedimiento.es_word
         context['url_archivo'] = procedimiento.archivo.url if procedimiento.archivo else None
         context['url_proxy'] = reverse_lazy('campo:procedimiento_proxy', kwargs={'pk': procedimiento.pk})
 
