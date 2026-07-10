@@ -146,6 +146,67 @@
                     };
                 }
             </script>
+        {% elif es_word %}
+            <!-- Word Viewer via mammoth.js (usa proxy Django para evitar CORS GCS) -->
+            <div id="docx-viewer"
+                 x-data="docxViewer('{% url 'campo:procedimiento_download' procedimiento.pk %}')"
+                 x-init="cargar()"
+                 class="relative">
+                <div x-show="estado === 'cargando'" class="p-12 text-center text-gray-600 dark:text-gray-400">
+                    <svg class="animate-spin mx-auto h-10 w-10 text-blue-600 mb-3" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                    </svg>
+                    Cargando vista previa del documento Word...
+                </div>
+
+                <div x-show="estado === 'error'" class="p-12 text-center">
+                    <svg class="mx-auto h-16 w-16 text-amber-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                        No se pudo previsualizar el documento
+                    </h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-4" x-text="errorMsg"></p>
+                    <a :href="url" download
+                       class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition gap-2">
+                        Descargar archivo
+                    </a>
+                </div>
+
+                <div x-show="estado === 'listo'" class="p-2">
+                    <div class="overflow-auto max-h-[70vh] border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div id="docx-html-container"
+                             class="docx-preview text-sm p-6 prose dark:prose-invert max-w-none"></div>
+                    </div>
+                </div>
+            </div>
+
+            <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+            <script>
+                function docxViewer(url) {
+                    return {
+                        url: url,
+                        estado: 'cargando',
+                        errorMsg: '',
+                        async cargar() {
+                            try {
+                                const resp = await fetch(this.url);
+                                if (!resp.ok) {
+                                    throw new Error('No se pudo descargar el archivo (HTTP ' + resp.status + ').');
+                                }
+                                const blob = await resp.arrayBuffer();
+                                const resultado = await mammoth.convertToHtml({ arrayBuffer: blob });
+                                document.getElementById('docx-html-container').innerHTML = resultado.value;
+                                this.estado = 'listo';
+                            } catch (err) {
+                                this.errorMsg = err.message || 'Error inesperado.';
+                                this.estado = 'error';
+                            }
+                        },
+                    };
+                }
+            </script>
         {% else %}
             <!-- Fallback: tipo no soportado -->
             <div class="p-12 text-center">
@@ -195,6 +256,19 @@
             </svg>
             <div class="text-sm text-blue-700 dark:text-blue-300">
                 <strong>Tip:</strong> Use los botones de las hojas para navegar entre pestañas del libro Excel. La vista previa se renderiza en su navegador; para conservar formato avanzado descargue el archivo original.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if es_word %}
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div class="flex">
+            <svg class="h-5 w-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="text-sm text-blue-700 dark:text-blue-300">
+                <strong>Tip:</strong> La vista previa del documento Word se renderiza en su navegador (texto, encabezados y tablas simples); para conservar formato avanzado descargue el archivo original.
             </div>
         </div>
     </div>

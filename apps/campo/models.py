@@ -509,6 +509,10 @@ class Procedimiento(BaseModel):
         return self.extension in ('.xls', '.xlsx')
 
     @property
+    def es_word(self):
+        return self.extension == '.docx'
+
+    @property
     def tamanio_legible(self):
         if self.tamanio < 1024:
             return f"{self.tamanio} B"
