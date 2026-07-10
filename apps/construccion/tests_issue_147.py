@@ -638,9 +638,9 @@ def test_circuito1_muestra_cuadrilla_informativa_readonly(
     y en todo el HTML solo existe 1 input editable name="cuadrilla_tendido"."""
     from apps.construccion.models import FaseTorre
 
-    fase = FaseTorre.objects.get(torre=torre_i147)
-    fase.cuadrilla_tendido = "Cuadrilla Alpha"
-    fase.save(update_fields=["cuadrilla_tendido"])
+    FaseTorre.objects.create(
+        torre=torre_i147, proyecto=torre_i147.proyecto, cuadrilla_tendido="Cuadrilla Alpha"
+    )
 
     url = _tendido_url(proyecto_i147, torre_i147)
     resp = authenticated_client.get(url)
