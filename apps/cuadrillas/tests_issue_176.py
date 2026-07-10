@@ -561,17 +561,35 @@ class TestMaestro3A1CargoModeloYSeed(TestCase):
             Cargo.objects.create(codigo="SUPERVISOR", nombre="Otro Nombre")
 
     def test_seed_crea_los_14_codigos_de_la_union_de_ambos_enums(self):
+        """Los 14 códigos vienen de la unión de PersonalCuadrilla.RolCuadrilla
+        / CuadrillaMiembro.RolCuadrilla (idénticos, confirmado en F2) — ese
+        TextChoices se ELIMINÓ en A3 (la FK a Cargo lo reemplaza), así que
+        acá se verifica contra la copia congelada de esos 14 códigos (ya
+        no hay un enum vivo en el código contra el cual comparar)."""
         _SEED_MODULE.seed_cargos(django_apps, None)
         self.assertEqual(Cargo.objects.count(), 14)
+        codigos_esperados = {
+            "SUPERVISOR",
+            "LINIERO_I",
+            "LINIERO_II",
+            "AYUDANTE",
+            "CONDUCTOR",
+            "ADMINISTRADOR_OBRA",
+            "PROFESIONAL_SST",
+            "ING_RESIDENTE",
+            "SERVICIO_GENERAL",
+            "ALMACENISTA",
+            "SUPERVISOR_FOREST",
+            "ASISTENTE_FOREST",
+            "MALACATERO",
+            "COORDINADOR_HSQ",
+        }
         codigos_sembrados = set(Cargo.objects.values_list("codigo", flat=True))
-        codigos_personal = {c for c, _ in PersonalCuadrilla.RolCuadrilla.choices}
-        codigos_miembro = {c for c, _ in CuadrillaMiembro.RolCuadrilla.choices}
-        self.assertEqual(codigos_personal, codigos_miembro)  # union == cada uno (idénticos)
-        self.assertEqual(codigos_sembrados, codigos_personal)
+        self.assertEqual(codigos_sembrados, codigos_esperados)
 
-    def test_seed_labels_coinciden_con_rolcuadrilla_choices(self):
+    def test_seed_labels_coinciden_con_cargos_data_de_la_migracion(self):
         _SEED_MODULE.seed_cargos(django_apps, None)
-        labels_esperados = dict(PersonalCuadrilla.RolCuadrilla.choices)
+        labels_esperados = dict(_SEED_MODULE.CARGOS)
         for cargo in Cargo.objects.all():
             self.assertEqual(cargo.nombre, labels_esperados[cargo.codigo])
 
@@ -617,7 +635,9 @@ class TestMaestro3A2CRUDCargo(TestCase):
     def test_codigo_duplicado_rechazado_con_mensaje_dominio(self):
         Cargo.objects.create(codigo="TECNICO", nombre="Técnico")
         url = reverse("cuadrillas:cargos_crear")
-        resp = self.client.post(url, {"codigo": "TECNICO", "nombre": "Otro Técnico", "activo": "on"})
+        resp = self.client.post(
+            url, {"codigo": "TECNICO", "nombre": "Otro Técnico", "activo": "on"}
+        )
         # No debe lanzar IntegrityError (500); debe re-renderizar el form con error.
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(Cargo.objects.filter(codigo="TECNICO").count(), 1)
@@ -653,7 +673,9 @@ class TestMaestro3A2CRUDCargo(TestCase):
         self.assertTrue(Cargo.objects.filter(pk=cargo.pk).exists())
 
     def test_reactivar_cargo_previamente_inactivo(self):
-        cargo = Cargo.objects.create(codigo="AUXILIAR_TEMP2", nombre="Auxiliar Temporal 2", activo=False)
+        cargo = Cargo.objects.create(
+            codigo="AUXILIAR_TEMP2", nombre="Auxiliar Temporal 2", activo=False
+        )
         url = reverse("cuadrillas:cargos_inactivar", args=[cargo.pk])
         resp = self.client.post(url)
         self.assertIn(resp.status_code, (200, 302))
@@ -745,9 +767,15 @@ class TestMaestro3A3FKRolCuadrilla(TestCase):
         'rol_cuadrilla') contra strings — Django debe resolver esto
         directo contra el string con to_field='codigo', sin requerir
         .rol_cuadrilla__codigo__in=[...]."""
-        PersonalCuadrilla.objects.create(nombre="A", documento="176-fk-006", rol_cuadrilla_id="SUPERVISOR")
-        PersonalCuadrilla.objects.create(nombre="B", documento="176-fk-007", rol_cuadrilla_id="LINIERO_I")
-        PersonalCuadrilla.objects.create(nombre="C", documento="176-fk-008", rol_cuadrilla_id="AYUDANTE")
+        PersonalCuadrilla.objects.create(
+            nombre="A", documento="176-fk-006", rol_cuadrilla_id="SUPERVISOR"
+        )
+        PersonalCuadrilla.objects.create(
+            nombre="B", documento="176-fk-007", rol_cuadrilla_id="LINIERO_I"
+        )
+        PersonalCuadrilla.objects.create(
+            nombre="C", documento="176-fk-008", rol_cuadrilla_id="AYUDANTE"
+        )
         qs = PersonalCuadrilla.objects.filter(rol_cuadrilla__in=["SUPERVISOR", "LINIERO_I"])
         self.assertEqual(qs.count(), 2)
         valores = list(
@@ -790,3 +818,184 @@ class TestMaestro3A3FKRolCuadrilla(TestCase):
         )
         self.assertEqual(miembro.cargo, "JT_CTA")
         self.assertEqual(miembro.rol_cuadrilla_id, "SUPERVISOR")
+
+
+# ---------------------------------------------------------------------------
+# Maestro 3: Cargos (issue #176, bounce 2) — A4: retrofit de call sites
+# ---------------------------------------------------------------------------
+class TestMaestro3A4RetrofitCallSites(TestCase):
+    """A4: cubre el Retrofit Ledger del plan -- JSON APIs no serializan el
+    objeto Cargo (TypeError), carga masiva Excel (2 vistas) resuelve roles
+    via Cargo dinamico, autocompletado AJAX, nomina/detalle template badges
+    (comparacion == 'STRING' contra .codigo), y seed_data sin IntegrityError."""
+
+    def setUp(self):
+        _SEED_MODULE.seed_cargos(django_apps, None)
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_personal_detalle_api_serializa_rol_como_string(self):
+        PersonalCuadrilla.objects.create(
+            nombre="API Test", documento="176-a4-001", rol_cuadrilla_id="SUPERVISOR"
+        )
+        url = reverse("cuadrillas:personal_detalle_api")
+        resp = self.client.get(url, {"documento": "176-a4-001"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["rol_cuadrilla"], "SUPERVISOR")
+        self.assertIsInstance(data["rol_cuadrilla"], str)
+
+    def test_personal_list_api_serializa_rol_como_string(self):
+        PersonalCuadrilla.objects.create(
+            nombre="API List Test", documento="176-a4-002", rol_cuadrilla_id="AYUDANTE"
+        )
+        url = reverse("cuadrillas:personal_list_api")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        encontrado = next(p for p in data if p["documento"] == "176-a4-002")
+        self.assertEqual(encontrado["rol_cuadrilla"], "AYUDANTE")
+
+    def test_ninja_api_cuadrilla_detalle_no_revienta_serializando_cargo(self):
+        cuadrilla = Cuadrilla.objects.create(codigo="A4-API-001", nombre="Cuadrilla API")
+        usuario = Usuario.objects.create_user(
+            email="a4api176@test.com",
+            password="testpass123!",
+            first_name="A4",
+            last_name="Api",
+            rol="liniero",
+            documento="176-a4-003",
+        )
+        CuadrillaMiembro.objects.create(
+            cuadrilla=cuadrilla,
+            usuario=usuario,
+            rol_cuadrilla_id="LINIERO_I",
+            fecha_inicio=date.today(),
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        access_token = str(RefreshToken.for_user(self.admin).access_token)
+        resp = self.client.get(
+            f"/api/cuadrillas/cuadrillas/{cuadrilla.pk}",
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["miembros"][0]["rol_cuadrilla"], "LINIERO_I")
+
+    def test_bulk_upload_personal_excel_resuelve_rol_desde_catalogo_dinamico(self):
+        """PersonalCuadrillaUploadView (masivo, /cuadrillas/personal/subir/)."""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Nombre", "Documento", "Cargo"])
+        ws.append(["Excel Bulk Persona", "176-a4-004", "SUPERVISOR"])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "personal.xlsx"
+
+        url = reverse("cuadrillas:personal_upload")
+        resp = self.client.post(url, {"archivo": buf})
+        self.assertIn(resp.status_code, (200, 302))
+        creado = PersonalCuadrilla.objects.get(documento="176-a4-004")
+        self.assertEqual(creado.rol_cuadrilla_id, "SUPERVISOR")
+
+    def test_bulk_upload_miembros_cuadrilla_excel_resuelve_rol_desde_catalogo(self):
+        """CuadrillaMiembroUploadView (/cuadrillas/<uuid>/miembros/subir/)."""
+        import openpyxl
+
+        cuadrilla = Cuadrilla.objects.create(codigo="A4-BULK-001", nombre="Cuadrilla Bulk")
+        usuario = Usuario.objects.create_user(
+            email="a4bulk176@test.com",
+            password="testpass123!",
+            first_name="Bulk",
+            last_name="Miembro",
+            rol="liniero",
+            documento="176-a4-005",
+        )
+        miembro = CuadrillaMiembro.objects.create(
+            cuadrilla=cuadrilla,
+            usuario=usuario,
+            rol_cuadrilla_id="LINIERO_I",
+            fecha_inicio=date.today(),
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Nombre", "Cargo", "Documento"])
+        ws.append(["Bulk Miembro", "SUPERVISOR", "176-a4-005"])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "miembros.xlsx"
+
+        url = reverse("cuadrillas:miembros_upload", args=[cuadrilla.pk])
+        resp = self.client.post(url, {"archivo": buf})
+        self.assertIn(resp.status_code, (200, 302))
+        miembro.refresh_from_db()
+        self.assertEqual(miembro.rol_cuadrilla_id, "SUPERVISOR")
+
+    def test_detalle_cuadrilla_badge_supervisor_correcto_no_cae_siempre_gris(self):
+        """Riesgo #2 del plan: comparacion == 'STRING' contra objeto Cargo
+        siempre caia al else (badge gris). Verifica que con .codigo el
+        badge morado de Supervisor SI aparece."""
+        cuadrilla = Cuadrilla.objects.create(codigo="A4-BADGE-001", nombre="Cuadrilla Badge")
+        usuario = Usuario.objects.create_user(
+            email="a4badge176@test.com",
+            password="testpass123!",
+            first_name="Badge",
+            last_name="Supervisor",
+            rol="liniero",
+            documento="176-a4-006",
+        )
+        CuadrillaMiembro.objects.create(
+            cuadrilla=cuadrilla,
+            usuario=usuario,
+            rol_cuadrilla_id="SUPERVISOR",
+            fecha_inicio=date.today(),
+        )
+        url = reverse("cuadrillas:detalle", args=[cuadrilla.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        # El badge morado de Supervisor debe aparecer (no siempre gris).
+        self.assertIn("bg-purple-100 text-purple-800", content)
+        self.assertIn("Supervisor", content)
+
+    def test_roles_cuadrilla_context_es_iterable_value_label(self):
+        """context['roles_cuadrilla'] pasa de RolCuadrilla.choices a una
+        lista de tuplas (codigo, nombre) desde Cargo -- el template hace
+        `{% for value, label in roles_cuadrilla %}` (JS ROL_CUADRILLA_LABELS)."""
+        cuadrilla = Cuadrilla.objects.create(codigo="A4-CTX-001", nombre="Cuadrilla Ctx")
+        url = reverse("cuadrillas:detalle", args=[cuadrilla.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        roles = resp.context["roles_cuadrilla"]
+        self.assertGreater(len(roles), 0)
+        primer_codigo, primer_label = roles[0]
+        self.assertIsInstance(primer_codigo, str)
+        self.assertIsInstance(primer_label, str)
+
+    def test_seed_data_create_cuadrillas_sin_integrity_error(self):
+        """Issue #176 (A4): seed_data.py tenia strings invalidos
+        preexistentes ('supervisor'/'liniero' minuscula) que CharField+
+        choices toleraba silenciosamente -- con la FK real, un codigo
+        invalido revienta con IntegrityError. Se corrigio a los codigos
+        reales (SUPERVISOR/LINIERO_I); este test corre exactamente los
+        3 metodos del comando relacionados (_create_users/_vehiculos/
+        _cuadrillas) y confirma que no truena."""
+        from apps.core.management.commands.seed_data import Command
+
+        cmd = Command()
+        cmd.stdout = type("_N", (), {"write": lambda self, *a, **k: None})()
+        cmd.style = type("_S", (), {"SUCCESS": lambda self, x: x})()
+        cmd._create_users()
+        cmd._create_vehiculos()
+        cmd._create_cuadrillas()  # no debe lanzar IntegrityError
+
+        miembros_supervisor = CuadrillaMiembro.objects.filter(rol_cuadrilla_id="SUPERVISOR")
+        miembros_liniero = CuadrillaMiembro.objects.filter(rol_cuadrilla_id="LINIERO_I")
+        self.assertTrue(miembros_supervisor.exists() or miembros_liniero.exists())

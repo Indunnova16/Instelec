@@ -9,6 +9,7 @@ módulo es de `ProgramacionSemanalCuadrilla` (otro submódulo, #155).
 from django import forms
 
 from .models_base import PersonalCuadrilla
+from .models_cargo import Cargo
 
 # Clase Tailwind compartida (espeja apps/actividades/forms.py::INPUT_CLS).
 INPUT_CLS = (
@@ -66,6 +67,21 @@ class PersonalCuadrillaForm(forms.ModelForm):
                 }
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        """Issue #176 (A4): `rol_cuadrilla` pasó de Select sobre choices
+        estático a ModelChoiceField automático (Django lo infiere del FK).
+        Acotar el queryset a cargos activos — si no, el dropdown de
+        "nuevo colaborador" mostraría cargos inactivados. Se incluye
+        también el cargo YA asignado a esta instancia aunque esté
+        inactivo (edge case: alguien inactivó un cargo después de que un
+        colaborador ya lo tuviera asignado — el edit no debe romperse)."""
+        super().__init__(*args, **kwargs)
+        qs = Cargo.objects.filter(activo=True)
+        codigo_actual = self.instance.rol_cuadrilla_id if self.instance else None
+        if codigo_actual:
+            qs = qs | Cargo.objects.filter(codigo=codigo_actual)
+        self.fields["rol_cuadrilla"].queryset = qs.distinct()
 
     def clean_documento(self):
         """Edge case: mensaje de dominio claro en vez del IntegrityError

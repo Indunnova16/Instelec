@@ -177,7 +177,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                 ).first()
                 if existing:
                     existing.activo = True
-                    existing.rol_cuadrilla = 'SUPERVISOR'
+                    existing.rol_cuadrilla_id = 'SUPERVISOR'
                     existing.cargo = 'JT_CTA'
                     existing.save(update_fields=['activo', 'rol_cuadrilla', 'cargo', 'updated_at'])
                     miembros.insert(0, existing)
@@ -186,7 +186,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                         miembro = CuadrillaMiembro.objects.create(
                             cuadrilla=self.object,
                             usuario=supervisor,
-                            rol_cuadrilla='SUPERVISOR',
+                            rol_cuadrilla_id='SUPERVISOR',
                             cargo='JT_CTA',
                             costo_dia=0,
                             fecha_inicio=date.today(),
@@ -223,7 +223,11 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
         ).exclude(documento__in=miembros_documentos).order_by('nombre')
 
         # Choices for form selects
-        context['roles_cuadrilla'] = CuadrillaMiembro.RolCuadrilla.choices
+        # Issue #176 (A4): RolCuadrilla (TextChoices) eliminado, catalogo
+        # ahora es Cargo. Solo activos -- coincide con el picklist real.
+        context['roles_cuadrilla'] = list(
+            Cargo.objects.filter(activo=True).values_list('codigo', 'nombre')
+        )
         context['cargos_jerarquicos'] = CuadrillaMiembro.CargoJerarquico.choices
 
         # Last known location
@@ -581,8 +585,9 @@ class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
 
         # Cargo (rol_cuadrilla) NO es editable en el form de asignación: se
         # toma siempre del maestro PersonalCuadrilla, ignorando cualquier
-        # valor distinto que venga en el POST (issue #176, A4).
-        rol = personal.rol_cuadrilla
+        # valor distinto que venga en el POST (issue #176, A4). rol_id es
+        # el string del codigo (Cargo.codigo), NO el objeto Cargo.
+        rol_id = personal.rol_cuadrilla_id
         cargo = request.POST.get('cargo', 'MIEMBRO')
 
         usuario = self._resolver_o_crear_usuario(personal)
@@ -597,7 +602,7 @@ class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
             CuadrillaMiembro.objects.create(
                 cuadrilla=cuadrilla,
                 usuario=usuario,
-                rol_cuadrilla=rol,
+                rol_cuadrilla_id=rol_id,
                 cargo=cargo if cargo in dict(CuadrillaMiembro.CargoJerarquico.choices) else 'MIEMBRO',
                 costo_dia=float(costo_dia),
                 fecha_inicio=date.today(),
@@ -939,7 +944,9 @@ class CuadrillaMiembroUploadView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
             messages.error(request, 'Debe seleccionar un archivo.')
             return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
 
-        roles_validos = dict(CuadrillaMiembro.RolCuadrilla.choices)
+        # Issue #176 (A4): RolCuadrilla (TextChoices) eliminado, catalogo
+        # ahora es Cargo (dinamico, editable via /cuadrillas/cargos/).
+        roles_validos = dict(Cargo.objects.filter(activo=True).values_list('codigo', 'nombre'))
         roles_por_nombre = {v.upper(): k for k, v in roles_validos.items()}
 
         # Costos fijos por rol
@@ -987,7 +994,7 @@ class CuadrillaMiembroUploadView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
                 miembro = miembros_por_nombre.get(nombre_norm)
 
                 if miembro:
-                    miembro.rol_cuadrilla = rol_code
+                    miembro.rol_cuadrilla_id = rol_code
                     miembro.costo_dia = costos.get(rol_code, 0)
                     miembro.save(update_fields=['rol_cuadrilla', 'costo_dia', 'updated_at'])
                     actualizados += 1
@@ -999,7 +1006,7 @@ class CuadrillaMiembroUploadView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
                 if documento:
                     PersonalCuadrilla.objects.update_or_create(
                         documento=documento,
-                        defaults={'nombre': nombre, 'rol_cuadrilla': rol_code, 'activo': True},
+                        defaults={'nombre': nombre, 'rol_cuadrilla_id': rol_code, 'activo': True},
                     )
 
             msg = f'{actualizados} miembro(s) actualizado(s).'
@@ -1265,7 +1272,9 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
             messages.error(request, 'Debe seleccionar un archivo.')
             return redirect('cuadrillas:lista')
 
-        roles_validos = dict(PersonalCuadrilla.RolCuadrilla.choices)
+        # Issue #176 (A4): RolCuadrilla (TextChoices) eliminado, catalogo
+        # ahora es Cargo (dinamico, editable via /cuadrillas/cargos/).
+        roles_validos = dict(Cargo.objects.filter(activo=True).values_list('codigo', 'nombre'))
         # Also build reverse map: display name -> key
         roles_por_nombre = {v.upper(): k for k, v in roles_validos.items()}
 
@@ -1300,7 +1309,7 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
 
                     defaults = {
                         'nombre': nombre,
-                        'rol_cuadrilla': rol,
+                        'rol_cuadrilla_id': rol,
                         'salario_base': salario_base,
                         'fecha_ingreso': fecha_ingreso,
                         'fecha_salida': fecha_salida,
@@ -1351,7 +1360,7 @@ class PersonalCuadrillaAPIView(LoginRequiredMixin, View):
             return JsonResponse({
                 'nombre': personal.nombre,
                 'documento': personal.documento,
-                'rol_cuadrilla': personal.rol_cuadrilla,
+                'rol_cuadrilla': personal.rol_cuadrilla_id,
             })
         return JsonResponse({}, status=404)
 
@@ -1366,7 +1375,7 @@ class PersonalCuadrillaListAPIView(LoginRequiredMixin, View):
                 'id': str(p.id),
                 'nombre': p.nombre,
                 'documento': p.documento,
-                'rol_cuadrilla': p.rol_cuadrilla,
+                'rol_cuadrilla': p.rol_cuadrilla_id,
             }
             for p in personal
         ]
@@ -1537,7 +1546,12 @@ class CuadrillaMasivaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
                         if personal:
                             # Find corresponding Usuario
                             usuario = Usuario.objects.filter(documento=personal.documento).first()
-                            rol = personal.rol_cuadrilla
+                            # Issue #176 (A4): normalizar a rol_cuadrilla_id
+                            # (string) -- antes mezclaba objeto Cargo (esta
+                            # rama) con string (rama else), lo que hacia que
+                            # self.COSTOS.get(rol, 0) matcheara silenciosamente
+                            # a 0 cuando rol era un objeto.
+                            rol = personal.rol_cuadrilla_id
                         else:
                             # Try direct user lookup
                             usuario = Usuario.objects.filter(
@@ -1553,7 +1567,7 @@ class CuadrillaMasivaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
                                 usuario=usuario,
                                 activo=True,
                                 defaults={
-                                    'rol_cuadrilla': rol,
+                                    'rol_cuadrilla_id': rol,
                                     'cargo': 'MIEMBRO',
                                     'costo_dia': self.COSTOS.get(rol, 0),
                                     'fecha_inicio': fecha or date.today(),

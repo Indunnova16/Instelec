@@ -86,7 +86,7 @@ def obtener_cuadrilla(request: HttpRequest, cuadrilla_id: UUID) -> CuadrillaDeta
             id=m.id,
             usuario_id=m.usuario.id,
             usuario_nombre=m.usuario.get_full_name(),
-            rol_cuadrilla=m.rol_cuadrilla,
+            rol_cuadrilla=m.rol_cuadrilla_id,
             activo=m.activo,
         )
         for m in cuadrilla.miembros.filter(activo=True).select_related('usuario')

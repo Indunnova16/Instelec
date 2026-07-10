@@ -322,11 +322,17 @@ class CuadroCostosGenerator:
                     'liniero': Decimal('100000'),
                     'auxiliar': Decimal('70000'),
                 }
-                valor_dia = valores_dia.get(miembro.rol_cuadrilla, Decimal('80000'))
+                # Issue #176 (A4): rol_cuadrilla ahora es FK — usar
+                # rol_cuadrilla_id (string del codigo) para preservar el
+                # comportamiento EXACTO de antes, incluido el bug
+                # preexistente de que valores_dia usa keys lowercase que
+                # nunca matchean los codigos uppercase reales (fuera de
+                # scope de este issue corregirlo).
+                valor_dia = valores_dia.get(miembro.rol_cuadrilla_id, Decimal('80000'))
                 subtotal = valor_dia * dias
 
                 detalle.append({
-                    'cargo': miembro.rol_cuadrilla.title(),
+                    'cargo': miembro.rol_cuadrilla_id.title(),
                     'nombre': miembro.usuario.get_full_name(),
                     'cuadrilla': cuadrilla.nombre,
                     'dias': dias,

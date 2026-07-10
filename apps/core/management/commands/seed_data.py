@@ -301,11 +301,17 @@ class Command(BaseCommand):
             self.cuadrillas[data["codigo"]] = cuadrilla
 
             # Add supervisor as crew member
+            # Issue #176 (A4): rol_cuadrilla ahora es FK(Cargo,
+            # to_field='codigo') -- "supervisor" (minuscula) era YA un
+            # codigo invalido antes de este cambio (el enum real usaba
+            # 'SUPERVISOR' en mayuscula); CharField+choices no lo validaba
+            # en .create(). La FK real si lo bloquearia (IntegrityError),
+            # asi que se corrige al codigo real de una vez.
             from datetime import date
             CuadrillaMiembro.objects.get_or_create(
                 cuadrilla=cuadrilla,
                 usuario=supervisor,
-                defaults={"rol_cuadrilla": "supervisor", "fecha_inicio": date.today()}
+                defaults={"rol_cuadrilla_id": "SUPERVISOR", "fecha_inicio": date.today()}
             )
 
         # Distribute linieros across crews evenly
@@ -316,7 +322,7 @@ class Command(BaseCommand):
             CuadrillaMiembro.objects.get_or_create(
                 cuadrilla=cuadrilla,
                 usuario=liniero,
-                defaults={"rol_cuadrilla": "liniero", "fecha_inicio": date.today()}
+                defaults={"rol_cuadrilla_id": "LINIERO_I", "fecha_inicio": date.today()}
             )
 
         self.stdout.write(f"    Created {len(CUADRILLAS_DATA)} work crews")

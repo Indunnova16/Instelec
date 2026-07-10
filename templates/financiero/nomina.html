@@ -367,8 +367,8 @@
                                 <td class="px-4 py-2 text-gray-900 dark:text-white font-medium">{{ m.usuario.get_full_name }}</td>
                                 <td class="px-4 py-2">
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                                        {% if m.rol_cuadrilla == 'SUPERVISOR' %}bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300
-                                        {% elif m.rol_cuadrilla == 'CONDUCTOR' %}bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300
+                                        {% if m.rol_cuadrilla.codigo == 'SUPERVISOR' %}bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300
+                                        {% elif m.rol_cuadrilla.codigo == 'CONDUCTOR' %}bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300
                                         {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
                                         {{ m.get_rol_cuadrilla_display }}
                                     </span>
