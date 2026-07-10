@@ -36,6 +36,11 @@ urlpatterns = [
     path('colaboradores/crear/', views.ColaboradorCreateView.as_view(), name='colaboradores_crear'),
     path('colaboradores/<uuid:pk>/editar/', views.ColaboradorEditView.as_view(), name='colaboradores_editar'),
     path('colaboradores/<uuid:pk>/inactivar/', views.ColaboradorInactivarView.as_view(), name='colaboradores_inactivar'),
+    # Cargos — CRUD sobre Cargo, Maestro 3 (issue #176, bounce 2)
+    path('cargos/', views.CargoListView.as_view(), name='cargos_lista'),
+    path('cargos/crear/', views.CargoCreateView.as_view(), name='cargos_crear'),
+    path('cargos/<uuid:pk>/editar/', views.CargoEditView.as_view(), name='cargos_editar'),
+    path('cargos/<uuid:pk>/inactivar/', views.CargoInactivarView.as_view(), name='cargos_inactivar'),
 ]
 
 # B3 — Cuadrilla auditoria/reactivar routes. Optional import.

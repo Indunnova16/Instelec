@@ -9,8 +9,9 @@ from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
-from .models import Asistencia, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
+from .models import Asistencia, Cargo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
 from .forms_personal import PersonalCuadrillaForm
+from .forms_cargo import CargoForm
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -1809,3 +1810,97 @@ class ColaboradorInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView
             colaborador.save(update_fields=['fecha_salida', 'activo', 'updated_at'])
             messages.success(request, f'Colaborador "{colaborador.nombre}" reactivado.')
         return redirect('cuadrillas:colaboradores_lista')
+
+
+# ---------------------------------------------------------------------------
+# Cargos — CRUD sobre Cargo, Maestro 3 (issue #176, bounce 2)
+# ---------------------------------------------------------------------------
+class CargoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
+    """Listado del maestro Cargos, con activos e inactivos."""
+    model = Cargo
+    template_name = 'cuadrillas/cargos_lista.html'
+    context_object_name = 'cargos'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_queryset(self):
+        qs = Cargo.objects.all()
+        estado = self.request.GET.get('estado', '').strip()
+        if estado == 'activos':
+            qs = qs.filter(activo=True)
+        elif estado == 'inactivos':
+            qs = qs.filter(activo=False)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['estado_filtro'] = self.request.GET.get('estado', '')
+        context['total_activos'] = Cargo.objects.filter(activo=True).count()
+        context['total_inactivos'] = Cargo.objects.filter(activo=False).count()
+        return context
+
+
+class CargoCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateView):
+    """Crear un nuevo Cargo."""
+    template_name = 'cuadrillas/cargos_form.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', CargoForm())
+        context['modo'] = 'crear'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = CargoForm(request.POST)
+        if form.is_valid():
+            cargo = form.save()
+            messages.success(request, f'Cargo "{cargo.nombre}" creado exitosamente.')
+            return redirect('cuadrillas:cargos_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class CargoEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView):
+    """Editar un Cargo existente. `codigo` queda de solo lectura (ver CargoForm)."""
+    model = Cargo
+    template_name = 'cuadrillas/cargos_form.html'
+    context_object_name = 'cargo'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', CargoForm(instance=self.object))
+        context['modo'] = 'editar'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = CargoForm(request.POST, instance=self.object)
+        if form.is_valid():
+            cargo = form.save()
+            messages.success(request, f'Cargo "{cargo.nombre}" actualizado exitosamente.')
+            return redirect('cuadrillas:cargos_lista')
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class CargoInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Alterna activo/inactivo de un Cargo. Nunca borra el registro
+    (no hay delete duro — Cargo puede estar referenciado por
+    PersonalCuadrilla/CuadrillaMiembro via FK PROTECT, ver A3)."""
+    model = Cargo
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        cargo = self.get_object()
+        cargo.activo = not cargo.activo
+        cargo.save(update_fields=['activo', 'updated_at'])
+        if cargo.activo:
+            messages.success(request, f'Cargo "{cargo.nombre}" reactivado.')
+        else:
+            messages.success(
+                request,
+                f'Cargo "{cargo.nombre}" inactivado. '
+                'No aparecerá en el picklist de asignación de Colaboradores/Miembros.',
+            )
+        return redirect('cuadrillas:cargos_lista')

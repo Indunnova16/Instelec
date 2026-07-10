@@ -592,3 +592,80 @@ class TestMaestro3A1CargoModeloYSeed(TestCase):
         cargo.refresh_from_db()
         self.assertFalse(cargo.activo)
         self.assertEqual(Cargo.objects.count(), 14)
+
+
+# ---------------------------------------------------------------------------
+# Maestro 3: Cargos (issue #176, bounce 2) — A2: CRUD Cargo
+# ---------------------------------------------------------------------------
+class TestMaestro3A2CRUDCargo(TestCase):
+    """A2: crear/editar/inactivar sobre Cargo + codigo read-only en edicion."""
+
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_crear_cargo_persiste(self):
+        url = reverse("cuadrillas:cargos_crear")
+        resp = self.client.post(url, {"codigo": "SOLDADOR", "nombre": "Soldador", "activo": "on"})
+        self.assertIn(resp.status_code, (200, 302))
+        self.assertTrue(Cargo.objects.filter(codigo="SOLDADOR").exists())
+        creado = Cargo.objects.get(codigo="SOLDADOR")
+        self.assertEqual(creado.nombre, "Soldador")
+        self.assertTrue(creado.activo)
+
+    def test_codigo_duplicado_rechazado_con_mensaje_dominio(self):
+        Cargo.objects.create(codigo="TECNICO", nombre="Técnico")
+        url = reverse("cuadrillas:cargos_crear")
+        resp = self.client.post(url, {"codigo": "TECNICO", "nombre": "Otro Técnico", "activo": "on"})
+        # No debe lanzar IntegrityError (500); debe re-renderizar el form con error.
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Cargo.objects.filter(codigo="TECNICO").count(), 1)
+        form = resp.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("codigo", form.errors)
+
+    def test_editar_cargo_actualiza_nombre_pero_codigo_es_readonly(self):
+        cargo = Cargo.objects.create(codigo="AYUDANTE_ESP", nombre="Ayudante Especial")
+        url = reverse("cuadrillas:cargos_editar", args=[cargo.pk])
+        # GET: el widget de codigo debe estar deshabilitado en el form renderizado.
+        resp_get = self.client.get(url)
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertTrue(resp_get.context["form"].fields["codigo"].disabled)
+        # POST intentando cambiar el codigo: al estar disabled, Django ignora
+        # el valor del POST y conserva el original.
+        resp = self.client.post(
+            url,
+            {"codigo": "OTRO_CODIGO", "nombre": "Ayudante Especial Actualizado", "activo": "on"},
+        )
+        self.assertIn(resp.status_code, (200, 302))
+        cargo.refresh_from_db()
+        self.assertEqual(cargo.codigo, "AYUDANTE_ESP")
+        self.assertEqual(cargo.nombre, "Ayudante Especial Actualizado")
+
+    def test_inactivar_cargo_no_borra_el_registro(self):
+        cargo = Cargo.objects.create(codigo="AUXILIAR_TEMP", nombre="Auxiliar Temporal")
+        url = reverse("cuadrillas:cargos_inactivar", args=[cargo.pk])
+        resp = self.client.post(url)
+        self.assertIn(resp.status_code, (200, 302))
+        cargo.refresh_from_db()
+        self.assertFalse(cargo.activo)
+        self.assertTrue(Cargo.objects.filter(pk=cargo.pk).exists())
+
+    def test_reactivar_cargo_previamente_inactivo(self):
+        cargo = Cargo.objects.create(codigo="AUXILIAR_TEMP2", nombre="Auxiliar Temporal 2", activo=False)
+        url = reverse("cuadrillas:cargos_inactivar", args=[cargo.pk])
+        resp = self.client.post(url)
+        self.assertIn(resp.status_code, (200, 302))
+        cargo.refresh_from_db()
+        self.assertTrue(cargo.activo)
+
+    def test_cargo_inactivo_no_aparece_en_filtro_activos(self):
+        Cargo.objects.create(codigo="ACTIVO_X", nombre="Cargo Activo X", activo=True)
+        Cargo.objects.create(codigo="INACTIVO_X", nombre="Cargo Inactivo X", activo=False)
+        url = reverse("cuadrillas:cargos_lista")
+        resp = self.client.get(url, {"estado": "activos"})
+        self.assertEqual(resp.status_code, 200)
+        codigos = {c.codigo for c in resp.context["cargos"]}
+        self.assertIn("ACTIVO_X", codigos)
+        self.assertNotIn("INACTIVO_X", codigos)
