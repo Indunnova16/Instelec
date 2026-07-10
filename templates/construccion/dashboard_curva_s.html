@@ -472,24 +472,34 @@ function dashboardCurvaS(cfg) {
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return;
                 if (this.chartDesviacion[chartKey]) { try { this.chartDesviacion[chartKey].destroy(); } catch (e) {} this.chartDesviacion[chartKey] = null; }
+                // #150 B2: Agua/Arena/Grava (m³, 1 dígito) quedaban aplastadas
+                // contra Cemento (kg, cientos) en un eje lineal crudo compartido
+                // — renderizaban a 1-2px, indistinguible de "sin barra" (QA
+                // Report 2026-06-29: Agua 29.83%/20.83% y Grava 216.93% en rojo,
+                // invisibles). Fix: normalizar a % de Calculado (Calculado=100
+                // fijo, Real=100+desv_pct) reusando `desv_pct` que YA calcula el
+                // backend (calculators.py: desviacion_material_pct = (real-calc)/
+                // calc*100) — sin tocar backend. Math.max(0, ...) evita una barra
+                // negativa si algún material saliera con real=0 (desv_pct=-100).
                 this.chartDesviacion[chartKey] = new Chart(ctx, {
                     type: 'bar',
                     data: {
                         labels: materiales.map(m => m.label),
                         datasets: [
-                            { label: 'Calculado', data: materiales.map(m => m.calc), backgroundColor: '#93c5fd' },
-                            { label: 'Real', data: materiales.map(m => m.real),
+                            { label: 'Calculado (=100%)', data: materiales.map(m => 100), backgroundColor: '#93c5fd' },
+                            { label: 'Real (% de Calculado)',
+                              data: materiales.map(m => m.desv_pct != null ? Math.max(0, 100 + m.desv_pct) : null),
                               backgroundColor: materiales.map(m => m.semaforo === 'rojo' ? '#ef4444' : (m.semaforo === 'amarillo' ? '#f59e0b' : '#10b981')) },
                         ],
                     },
                     options: {
                         responsive: true, maintainAspectRatio: false,
-                        scales: { y: { beginAtZero: true } },
+                        scales: { y: { beginAtZero: true, title: { display: true, text: '% de Calculado' }, ticks: { callback: v => v + '%' } } },
                         plugins: {
                             legend: { position: 'top' },
                             tooltip: { callbacks: { afterLabel: (item) => {
                                 const m = materiales[item.dataIndex] || {};
-                                return (m.desv_pct != null) ? `Desviación: ${m.desv_pct}% (${m.semaforo})` : 'sin datos';
+                                return (m.desv_pct != null) ? `Desviación: ${m.desv_pct}% (${m.semaforo}) — Calc: ${m.calc}${m.unidad || ''}, Real: ${m.real}${m.unidad || ''}` : 'sin datos';
                             } } },
                         },
                     },

@@ -17,6 +17,8 @@ en prod), no de CAMPO — el código ya funciona una vez el cronograma tenga
 fecha_inicio/fecha_fin_planeada + peso_pct.
 """
 
+from decimal import Decimal
+
 import pytest
 from django.urls import reverse
 
@@ -103,3 +105,66 @@ class TestB1GanttScrollZoom:
         resp = authenticated_client.get(url)
         assert resp.status_code == 200
         assert 'data-block="oc-gantt"' in resp.content.decode()
+
+
+# ===========================================================================
+# B2 — Barras Agua/Grava en Desviación de materiales (Solado/Vaciado)
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestB2BarrasMaterialesNormalizadas:
+    """Root cause (F2): NO es un bug de dato — es escala compartida en un eje
+    lineal (Cemento en kg aplasta Agua/Arena/Grava en m³ a 1-2px). Fix:
+    normalizar a % de Calculado, reusando ``desv_pct`` que YA calcula el
+    backend. CERO cambios en ``calculators.py``."""
+
+    def test_backend_conserva_desv_pct_no_none_para_agua_y_grava(self, proyecto_150):
+        """Regresión de DATO (no de render): el backend sigue devolviendo las
+        4 entradas por etapa con desv_pct completo — el bug era 100% de
+        visualización, confirmado por F2 contra calculators.py."""
+        from apps.construccion.calculators import desviacion_materiales_solado
+        from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
+
+        torre = _torre(proyecto_150, "T1")
+        ObraCivilTorreDetalle.objects.create(
+            proyecto=proyecto_150,
+            torre=torre,
+            pata="A",
+            sol_agua_calc=Decimal("10.00"),
+            sol_agua_real=Decimal("12.98"),  # +29.8% (m³)
+            sol_grava_calc=Decimal("5.00"),
+            sol_grava_real=Decimal("15.85"),  # +217.0% (m³)
+            sol_cemento_calc=Decimal("300.00"),
+            sol_cemento_real=Decimal("310.00"),  # +3.3% (kg, aplasta el eje)
+            sol_arena_calc=Decimal("8.00"),
+            sol_arena_real=Decimal("8.10"),
+        )
+
+        materiales = desviacion_materiales_solado(proyecto_150)
+        por_material = {m["material"]: m for m in materiales}
+
+        assert por_material["agua"]["desv_pct"] is not None
+        assert por_material["agua"]["semaforo"] == "rojo"
+        assert por_material["grava"]["desv_pct"] is not None
+        assert por_material["grava"]["semaforo"] == "rojo"
+        # Cemento en unidades "grandes" (kg) sigue con dato completo también.
+        assert por_material["cemento"]["calc"] == pytest.approx(300.0)
+
+    def test_chart_js_normaliza_a_pct_de_calculado_no_unidades_crudas(
+        self, authenticated_client, proyecto_150
+    ):
+        """El chart de Desviación de materiales ya NO grafica calc/real
+        crudos (que aplastaban Agua/Grava contra Cemento) — grafica
+        Calculado=100 fijo y Real=100+desv_pct, mismo dato, escala normalizada."""
+        url = reverse("construccion:dashboard_obra_civil", kwargs={"proyecto_id": proyecto_150.id})
+        resp = authenticated_client.get(url)
+        assert resp.status_code == 200
+        body = resp.content.decode()
+
+        assert "materiales.map(m => 100)" in body
+        assert "Math.max(0, 100 + m.desv_pct)" in body
+        assert "text: '% de Calculado'" in body
+        # La tabla debajo del chart (ya validada por Indunnova) no se tocó.
+        assert 'data-material="agua"' in body
+        assert 'data-material="grava"' in body
