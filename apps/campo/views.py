@@ -358,7 +358,7 @@ class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         # Filtro por tipo
         tipo = self.request.GET.get('tipo')
         if tipo:
-            qs = qs.filter(tipo=tipo)
+            qs = qs.filter(tipo_dano=tipo)
 
         return qs.order_by('-created_at')
 
