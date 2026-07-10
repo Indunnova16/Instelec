@@ -1,29 +1,39 @@
 """
-Tests issue #176 — Maestros editables: Tipos de Actividad y Colaboradores.
+Tests issue #176 — Maestros editables: Tipos de Actividad, Colaboradores y
+Cargos.
 
 Cubre (dentro de apps/cuadrillas):
-- A2: migración PersonalCuadrilla (salario_base, fecha_ingreso, fecha_salida)
-  + save()/signal que fija activo=False cuando se registra fecha_salida.
-- A3: CRUD Colaboradores en /cuadrillas/colaboradores/.
-- A5: Importer de colaboradores (extiende PersonalCuadrillaUploadView).
-- A4: Refactor de asignación a cuadrilla (picklist activo=True, cargo
-  bloqueado, autocompletado AJAX, resolución/creación de Usuario).
+- A2 (bounce 1): migración PersonalCuadrilla (salario_base, fecha_ingreso,
+  fecha_salida) + save()/signal que fija activo=False cuando se registra
+  fecha_salida.
+- A3 (bounce 1): CRUD Colaboradores en /cuadrillas/colaboradores/.
+- A5 (bounce 1): Importer de colaboradores (extiende PersonalCuadrillaUploadView).
+- A4 (bounce 1): Refactor de asignación a cuadrilla (picklist activo=True,
+  cargo bloqueado, autocompletado AJAX, resolución/creación de Usuario).
+- TestMaestro3A1CargoModeloYSeed (bounce 2, Maestro 3): modelo Cargo +
+  migración de seed 0019_seed_cargos (14 códigos de la unión de ambos
+  RolCuadrilla). Las clases `TestMaestro3A*` cubren los sub-items A1-A6 del
+  plan SPRINTS/PLAN_2026-07-10_maestro_cargos.md — usan el prefijo
+  "Maestro3" para no colisionar con los nombres TestA2/A3/A4/A5 del
+  bounce 1 de arriba (letras reusadas en el plan nuevo).
 
 Issue: Indunnova16/Instelec#176
 
 Ejecutar con:
-    python3 manage.py test apps.cuadrillas.tests_issue_176 -v 2
+    pytest apps/cuadrillas/tests_issue_176.py -v
 """
 
+import importlib
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
 
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, PersonalCuadrilla
+from apps.cuadrillas.models import Cargo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla
 
 Usuario = get_user_model()
 
@@ -519,3 +529,66 @@ class TestReprocesoNavbarFormatoBoton(TestCase):
         # El form de upload (dentro de su propio card) debe cerrarse antes
         # de que empiece el texto "Agregar Miembro" del card siguiente.
         self.assertLess(idx_cierre_form_upload, idx_agregar)
+
+
+# ---------------------------------------------------------------------------
+# Maestro 3: Cargos (issue #176, bounce 2) — A1: modelo Cargo + seed
+# ---------------------------------------------------------------------------
+# Los 14 códigos esperados: union de PersonalCuadrilla.RolCuadrilla y
+# CuadrillaMiembro.RolCuadrilla (idénticos, confirmado en F2). Se corre la
+# función de la migración 0019_seed_cargos directamente (importlib, el
+# nombre del módulo empieza con dígitos y no es importable con `import`
+# normal) contra el registro de apps real — el schema de Cargo no ha
+# cambiado de forma desde 0018, así que apps.get_model('cuadrillas','Cargo')
+# resuelve igual con el apps registry real que con el histórico.
+_SEED_MODULE = importlib.import_module("apps.cuadrillas.migrations.0019_seed_cargos")
+
+
+class TestMaestro3A1CargoModeloYSeed(TestCase):
+    """A1: modelo Cargo (codigo/nombre/activo) + data migration de seed."""
+
+    def test_modelo_cargo_tiene_los_campos_esperados(self):
+        cargo = Cargo.objects.create(codigo="SOLDADOR", nombre="Soldador")
+        self.assertTrue(cargo.activo)
+        self.assertEqual(str(cargo), "SOLDADOR - Soldador")
+
+    def test_codigo_es_unico(self):
+        from django.db import transaction
+        from django.db.utils import IntegrityError
+
+        Cargo.objects.create(codigo="SUPERVISOR", nombre="Supervisor")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Cargo.objects.create(codigo="SUPERVISOR", nombre="Otro Nombre")
+
+    def test_seed_crea_los_14_codigos_de_la_union_de_ambos_enums(self):
+        _SEED_MODULE.seed_cargos(django_apps, None)
+        self.assertEqual(Cargo.objects.count(), 14)
+        codigos_sembrados = set(Cargo.objects.values_list("codigo", flat=True))
+        codigos_personal = {c for c, _ in PersonalCuadrilla.RolCuadrilla.choices}
+        codigos_miembro = {c for c, _ in CuadrillaMiembro.RolCuadrilla.choices}
+        self.assertEqual(codigos_personal, codigos_miembro)  # union == cada uno (idénticos)
+        self.assertEqual(codigos_sembrados, codigos_personal)
+
+    def test_seed_labels_coinciden_con_rolcuadrilla_choices(self):
+        _SEED_MODULE.seed_cargos(django_apps, None)
+        labels_esperados = dict(PersonalCuadrilla.RolCuadrilla.choices)
+        for cargo in Cargo.objects.all():
+            self.assertEqual(cargo.nombre, labels_esperados[cargo.codigo])
+
+    def test_seed_es_idempotente_correrlo_dos_veces_no_duplica(self):
+        _SEED_MODULE.seed_cargos(django_apps, None)
+        _SEED_MODULE.seed_cargos(django_apps, None)
+        self.assertEqual(Cargo.objects.count(), 14)
+
+    def test_seed_no_pisa_activo_false_si_ya_fue_inactivado_por_el_usuario(self):
+        """get_or_create solo aplica defaults en creación — si el
+        coordinador ya inactivó un cargo sembrado, re-correr la migración
+        (idempotencia) no debe reactivarlo."""
+        _SEED_MODULE.seed_cargos(django_apps, None)
+        cargo = Cargo.objects.get(codigo="ASISTENTE_FOREST")
+        cargo.activo = False
+        cargo.save(update_fields=["activo"])
+        _SEED_MODULE.seed_cargos(django_apps, None)
+        cargo.refresh_from_db()
+        self.assertFalse(cargo.activo)
+        self.assertEqual(Cargo.objects.count(), 14)

@@ -10,6 +10,7 @@ keeps working everywhere (admin, views, importers, third-party apps).
 NEW MODELS GO IN A NEW FILE — do not append to this aggregator.
 """
 from .models_base import *  # noqa: F401, F403
+from .models_cargo import *  # noqa: F401, F403 — Maestro 3: Cargos (issue #176)
 
 # B3 — Cuadrilla auditoria desactivacion (Sofi, mayo 2026). Optional import so
 # the repo stays importable in `modulo/portafolio_sofi_may2026/base` before F3
