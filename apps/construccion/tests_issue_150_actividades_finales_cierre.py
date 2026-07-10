@@ -17,15 +17,40 @@ en prod), no de CAMPO — el código ya funciona una vez el cronograma tenga
 fecha_inicio/fecha_fin_planeada + peso_pct.
 """
 
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
+from django.db import connection
 from django.urls import reverse
 
 # ---------------------------------------------------------------------------
 # Fixtures compartidas
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sqlite_regexp_replace():
+    """Shim de ``regexp_replace`` para sqlite (dev_lite); en Postgres es
+    nativa. La matriz de Actividades Finales ordena las torres con
+    ``ordenar_torres_construccion`` (apps/construccion/views.py), que usa la
+    función Postgres ``regexp_replace`` — sqlite local no la trae. Mismo shim
+    que ``tests/unit/test_trinchos_cunetas.py::sqlite_regexp_replace`` (gap
+    preexistente del entorno dev_lite, no de este diff); se duplica aquí en
+    vez de importarlo cross-app para mantener el archivo por-issue autónomo.
+    """
+    if connection.vendor != "sqlite":
+        yield
+        return
+
+    def _regexp_replace(value, pattern, replacement, *flags):
+        if value is None:
+            return None
+        return re.sub(pattern, replacement, str(value))
+
+    connection.connection.create_function("regexp_replace", -1, _regexp_replace)
+    yield
 
 
 @pytest.fixture
@@ -255,3 +280,45 @@ class TestB3CurvaSPlaneadoMontaje:
         resp = authenticated_client.get(url)
         assert resp.status_code == 200
         assert 'data-hint="planeado-vacio"' not in resp.content.decode()
+
+
+# ===========================================================================
+# B4 — Freeze-header (thead sticky) en matriz de Actividades Finales
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestB4FreezeHeaderActividadesFinales:
+    """La matriz YA fijaba la 1ª columna (``sticky left-0 z-10``, issue
+    #183 parcial) — solo faltaba fijar la FILA (thead). Convención Tailwind
+    reusada tal cual en #147 (Tendido) y #166 (Obras de Protección): NO se
+    crea CSS/JS nuevo."""
+
+    def test_thead_sticky_top_y_celda_esquina_sticky_ambos_ejes(
+        self, authenticated_client, proyecto_150, sqlite_regexp_replace
+    ):
+        _torre(proyecto_150, "E1")
+
+        url = reverse("construccion:actividades_finales", kwargs={"proyecto_id": proyecto_150.id})
+        resp = authenticated_client.get(url)
+        assert resp.status_code == 200, resp.content[:500]
+        body = resp.content.decode()
+
+        # thead ahora sticky top-0 (antes: solo bg-gray-50 dark:bg-gray-900).
+        assert "sticky top-0 z-20" in body
+        # Celda esquina "Estructura": sticky en AMBOS ejes con z-index MAYOR
+        # (z-30) que el thead (z-20) — necesario porque el thead con
+        # position:sticky crea su propio stacking context.
+        assert "sticky left-0 top-0 bg-gray-50 dark:bg-gray-900 z-30" in body
+
+    def test_filas_del_body_conservan_su_sticky_left_z10_sin_cambio(
+        self, authenticated_client, proyecto_150, sqlite_regexp_replace
+    ):
+        """No se tocó ``_actividades_finales_row.html`` — las celdas de
+        columna fija del body siguen con su z-10 original, por debajo del
+        thead cuando este se fija arriba."""
+        _torre(proyecto_150, "E1")
+        url = reverse("construccion:actividades_finales", kwargs={"proyecto_id": proyecto_150.id})
+        resp = authenticated_client.get(url)
+        body = resp.content.decode()
+        assert "E1" in body
