@@ -93,9 +93,17 @@
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
             Cada barra cubre desde la fecha de inicio hasta la fecha final de la
             obra civil de la torre. Solo se muestran torres con fecha de inicio.
+            Con 64+ torres, desplázate dentro del recuadro (scroll) y usa la
+            rueda del mouse para hacer zoom horizontal.
         </p>
-        <div class="relative" style="height: 520px;">
-            <canvas id="oc-gantt-chart" height="520"></canvas>
+        {% comment %} #150 B1: wrapper con scroll x/y — la altura REAL del
+        canvas la fija renderOcGantt() en JS (proporcional al número de
+        torres, no un height="520" estático), y este wrapper la limita a
+        600px visibles. {% endcomment %}
+        <div class="max-h-[600px] overflow-auto">
+            <div class="relative" style="height: 520px;">
+                <canvas id="oc-gantt-chart"></canvas>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -367,6 +375,11 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% comment %} #150 B1: zoom/pan del Gantt de Obra Civil (wheel-zoom + pan).
+Registro defensivo — si el CDN de jsdelivr falla, el resto del dashboard
+(Curva S, G2, G3) no debe romperse (Riesgo #2 del plan). {% endcomment %}
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script>try { if (window.Chart && window.ChartZoom) { Chart.register(window.ChartZoom); } } catch (e) { console.warn('chartjs-plugin-zoom no disponible:', e && e.message); }</script>
 {# #139: sin animación — evita getContext-null que deja los canvas en blanco #}
 <script>try { if (window.Chart) { Chart.defaults.animation = false; } } catch (e) {}</script>
 <script>
@@ -638,6 +651,14 @@ function dashboardCurvaS(cfg) {
             if (fin === null) { fin = ini; }
             return [(ini - min) / DAY_MS, (fin - min) / DAY_MS];
         });
+        // #150 B1: altura dinámica proporcional al número de torres (22px/fila,
+        // mínimo 520px) — se fija en el wrapper ".relative" (el padre directo
+        // del canvas, que es la referencia real de tamaño que usa Chart.js en
+        // modo responsive), NO en el propio <canvas>, para que el resize
+        // observer de Chart.js no la sobreescriba de vuelta a 520px. El wrapper
+        // exterior "max-h-[600px] overflow-auto" habilita el scroll real.
+        var wrapper = el.parentElement;
+        if (wrapper) { wrapper.style.height = Math.max(520, filas.length * 22) + 'px'; }
         new Chart(el.getContext('2d'), {
             type: 'bar',
             data: {
@@ -670,7 +691,16 @@ function dashboardCurvaS(cfg) {
                         var ini = f.inicio || '—';
                         var fin = f.final || f.esperada || '—';
                         return f.torre + ': ' + ini + ' → ' + fin;
-                    } } }
+                    } } },
+                    // #150 B1: zoom con rueda del mouse + pan. mode:'x' en el
+                    // zoom (no 'xy') para que la rueda solo haga zoom horizontal
+                    // y no capture/discuta el scroll vertical de la página
+                    // (Riesgo #2 del plan). El pan sí es 'xy' (requiere drag,
+                    // no interfiere con el scroll de rueda).
+                    zoom: {
+                        pan: { enabled: true, mode: 'xy' },
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                    }
                 }
             }
         });
