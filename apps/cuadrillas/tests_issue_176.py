@@ -33,7 +33,9 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from apps.cuadrillas.importers import ProgramacionS18CuadrillaImporter
 from apps.cuadrillas.models import Cargo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla
+from apps.cuadrillas.tests_s18 import _act, _build_s18_excel, _crear_linea, _crear_usuario, _miembro
 
 Usuario = get_user_model()
 
@@ -999,3 +1001,114 @@ class TestMaestro3A4RetrofitCallSites(TestCase):
         miembros_supervisor = CuadrillaMiembro.objects.filter(rol_cuadrilla_id="SUPERVISOR")
         miembros_liniero = CuadrillaMiembro.objects.filter(rol_cuadrilla_id="LINIERO_I")
         self.assertTrue(miembros_supervisor.exists() or miembros_liniero.exists())
+
+
+# ---------------------------------------------------------------------------
+# Maestro 3: Cargos (issue #176, bounce 2) — A5: retrofit importer S18
+# ---------------------------------------------------------------------------
+class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
+    """A5: ProgramacionS18CuadrillaImporter reconoce un cargo NUEVO del
+    catálogo Cargo (no presente en ROL_TEXTO_A_CHOICE) vía el fallback de
+    matching dinámico, en vez de caer silenciosamente al default
+    LINIERO_I. Ver apps/cuadrillas/importers.py::_resolver_rol_desde_cargo_raw."""
+
+    def setUp(self):
+        _SEED_MODULE.seed_cargos(django_apps, None)
+
+    def test_cargo_nuevo_del_catalogo_se_reconoce_no_cae_a_fallback(self):
+        """Cargo 'TECNICO_EMPALMES' dado de alta en el catálogo (vía CRUD
+        /cuadrillas/cargos/, mismo efecto que un INSERT directo aquí) debe
+        reconocerse en la carga S18 con solo escribir 'Tecnico Empalmes'
+        en el Excel -- sin tocar ROL_TEXTO_A_CHOICE."""
+        Cargo.objects.create(codigo="TECNICO_EMPALMES", nombre="Técnico Empalmes", activo=True)
+        _crear_linea("LN817")
+        _crear_usuario("1143246675", "JHON JAIRO")
+
+        excel = _build_s18_excel(
+            [
+                _act(
+                    1,
+                    "Servidumbre",
+                    "817",
+                    date(2026, 4, 27),
+                    date(2026, 5, 3),
+                    "JHON JAIRO",
+                    "1143246675",
+                    "LINIERO I",
+                    "JT/CTA",
+                ),
+                _miembro("NUEVO EMPALMADOR", "11122299", "Tecnico Empalmes"),
+            ]
+        )
+        res = ProgramacionS18CuadrillaImporter().importar(excel, {"crear_usuarios_faltantes": True})
+        self.assertTrue(res["exito"], res.get("error"))
+        self.assertEqual(res["personal_creados"], 1)
+
+        personal = PersonalCuadrilla.objects.get(documento="11122299")
+        self.assertEqual(personal.rol_cuadrilla_id, "TECNICO_EMPALMES")
+        miembro = CuadrillaMiembro.objects.get(usuario__documento="11122299")
+        self.assertEqual(miembro.rol_cuadrilla_id, "TECNICO_EMPALMES")
+        # Anti falso-verde: confirma que NO cayó en el fallback LINIERO_I.
+        self.assertNotEqual(personal.rol_cuadrilla_id, "LINIERO_I")
+
+    def test_cargo_verdaderamente_desconocido_sigue_con_fallback_y_mensaje_nuevo(self):
+        """Un CARGO que no está ni en ROL_TEXTO_A_CHOICE ni en el catálogo
+        Cargo sigue cayendo a LINIERO_I (comportamiento histórico #124),
+        pero el mensaje de advertencia ahora apunta a la UI del maestro
+        (/cuadrillas/cargos/), no al dict hardcoded."""
+        _crear_linea("LN817")
+        _crear_usuario("1143246675", "JHON JAIRO")
+
+        excel = _build_s18_excel(
+            [
+                _act(
+                    1,
+                    "Servidumbre",
+                    "817",
+                    date(2026, 4, 27),
+                    date(2026, 5, 3),
+                    "JHON JAIRO",
+                    "1143246675",
+                    "LINIERO I",
+                    "JT/CTA",
+                ),
+                _miembro("CARGO INVENTADO", "11122300", "Puesto Que No Existe"),
+            ]
+        )
+        res = ProgramacionS18CuadrillaImporter().importar(excel, {"crear_usuarios_faltantes": True})
+        self.assertTrue(res["exito"], res.get("error"))
+        personal = PersonalCuadrilla.objects.get(documento="11122300")
+        self.assertEqual(personal.rol_cuadrilla_id, "LINIERO_I")
+        self.assertTrue(
+            any("/cuadrillas/cargos/" in a for a in res["advertencias"]),
+            res["advertencias"],
+        )
+
+    def test_cargo_nuevo_normaliza_espacios_y_mayusculas(self):
+        """'Tecnico Empalmes' (texto libre con espacios/minusculas) debe
+        normalizar a 'TECNICO_EMPALMES' para matchear el catálogo -- no
+        hace falta que el Excel traiga el código exacto."""
+        Cargo.objects.create(codigo="SOLDADOR_ESPECIAL", nombre="Soldador Especial", activo=True)
+        _crear_linea("LN818")
+        _crear_usuario("1143246676", "PEDRO PABLO")
+
+        excel = _build_s18_excel(
+            [
+                _act(
+                    1,
+                    "Mtto",
+                    "818",
+                    date(2026, 4, 27),
+                    date(2026, 5, 3),
+                    "PEDRO PABLO",
+                    "1143246676",
+                    "LINIERO I",
+                    "JT/CTA",
+                ),
+                _miembro("NUEVO SOLDADOR", "11122301", "soldador especial"),
+            ]
+        )
+        res = ProgramacionS18CuadrillaImporter().importar(excel, {"crear_usuarios_faltantes": True})
+        self.assertTrue(res["exito"], res.get("error"))
+        personal = PersonalCuadrilla.objects.get(documento="11122301")
+        self.assertEqual(personal.rol_cuadrilla_id, "SOLDADOR_ESPECIAL")

@@ -67,6 +67,45 @@ ROL_TEXTO_A_CHOICE = {
 }
 
 
+def _resolver_rol_desde_cargo_raw(cargo_raw):
+    """Resuelve un CARGO de texto libre del Excel a un código de `Cargo`
+    (issue #176, Maestro 3, A5).
+
+    Orden de resolución:
+    1. `ROL_TEXTO_A_CHOICE` — alias hardcoded de texto libre conocido
+       ("liniero", "ing residente", "sst"...), necesario porque el Excel
+       nunca trae el código exacto.
+    2. Fallback dinámico: normalizar (`strip().upper().replace(' ', '_')`)
+       y buscar ese valor directo contra el catálogo `Cargo` activo — esto
+       permite que un cargo NUEVO agregado por el coordinador vía el CRUD
+       (ej. "Soldador" -> "SOLDADOR") se reconozca en la próxima carga sin
+       tocar código, con solo escribir "Soldador" en el Excel.
+    3. Si ninguno matchea: `LINIERO_I` por defecto (comportamiento
+       histórico preservado).
+
+    Retorna `(rol_choice: str, reconocido: bool)`. `reconocido=False`
+    es responsabilidad del llamador para decidir si emite advertencia
+    (cada clase tiene su propio `self.advertencias` con distinto
+    contexto de fila/mensaje).
+    """
+    from apps.cuadrillas.models import Cargo
+
+    if not cargo_raw:
+        return 'LINIERO_I', False
+
+    rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
+    if rol_choice:
+        return rol_choice, True
+
+    codigo_normalizado = cargo_raw.strip().upper().replace(' ', '_')
+    if codigo_normalizado and Cargo.objects.filter(
+        activo=True, codigo=codigo_normalizado
+    ).exists():
+        return codigo_normalizado, True
+
+    return 'LINIERO_I', False
+
+
 class CuadrillaImporter:
     """
     Importa cuadrillas desde un Excel con formato Aviso SAP.
@@ -456,14 +495,20 @@ class CuadrillaImporter:
             )
             return
 
-        rol_choice = ROL_TEXTO_A_CHOICE.get(miembro_data['cargo'].lower(), 'LINIERO_I')
+        rol_choice, reconocido = _resolver_rol_desde_cargo_raw(miembro_data['cargo'])
+        if not reconocido and miembro_data['cargo']:
+            self.advertencias.append(
+                f'Fila {row_num}: CARGO "{miembro_data["cargo"]}" no reconocido, '
+                f'clasificado como LINIERO_I por defecto (agregarlo al maestro de '
+                f'Cargos en /cuadrillas/cargos/ si es un cargo nuevo real)'
+            )
 
         _, creado = CuadrillaMiembro.objects.get_or_create(
             cuadrilla=cuadrilla,
             usuario=usuario,
             activo=True,
             defaults={
-                'rol_cuadrilla': rol_choice,
+                'rol_cuadrilla_id': rol_choice,
                 'cargo': 'MIEMBRO',
                 'costo_dia': COSTOS_POR_ROL.get(rol_choice, 0),
                 'fecha_inicio': date.today(),
@@ -1000,7 +1045,7 @@ class ProgramacionS18CuadrillaImporter:
             usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
             if usuario is None:
                 return None
-            rol_choice = personal.rol_cuadrilla
+            rol_choice = personal.rol_cuadrilla_id
         else:
             usuario = Usuario.objects.filter(documento=cedula).first()
             if usuario is None:
@@ -1011,7 +1056,7 @@ class ProgramacionS18CuadrillaImporter:
                     usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
                     if usuario is None:
                         return None
-                    rol_choice = personal.rol_cuadrilla
+                    rol_choice = personal.rol_cuadrilla_id
                 else:
                     self.advertencias.append(
                         f'Fila {row_num}: cédula "{cedula}" ({miembro["nombre"]}) no '
@@ -1023,19 +1068,20 @@ class ProgramacionS18CuadrillaImporter:
 
         if rol_choice is None:
             # Usuario legacy sin PersonalCuadrilla — clasificar por CARGO
-            # (issue #178, A5). Antes el CARGO desconocido caía en fallback
-            # silencioso a LINIERO_I sin dejar rastro; ahora se avisa
-            # explícitamente para que un cargo nuevo no se pierda sin notar.
+            # (issue #178, A5; issue #176 Maestro 3 A5 agrega el fallback
+            # dinámico contra el catálogo Cargo). Antes el CARGO desconocido
+            # caía en fallback silencioso a LINIERO_I sin dejar rastro;
+            # ahora se avisa explícitamente para que un cargo nuevo no se
+            # pierda sin notar.
             cargo_raw = miembro['cargo']
-            rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
-            if rol_choice is None:
-                rol_choice = 'LINIERO_I'
-                if cargo_raw:
-                    self.advertencias.append(
-                        f'Fila {row_num}: CARGO "{cargo_raw}" no reconocido, '
-                        f'clasificado como LINIERO_I por defecto (agregar a '
-                        f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
-                    )
+            rol_choice, reconocido = _resolver_rol_desde_cargo_raw(cargo_raw)
+            if not reconocido and cargo_raw:
+                self.advertencias.append(
+                    f'Fila {row_num}: CARGO "{cargo_raw}" no reconocido, '
+                    f'clasificado como LINIERO_I por defecto (agregarlo al '
+                    f'maestro de Cargos en /cuadrillas/cargos/ si es un cargo '
+                    f'nuevo real)'
+                )
 
         cargo_jerarquico = 'JT_CTA' if miembro['es_jt'] else 'MIEMBRO'
         fecha_inicio = bloque['fecha_inicio'] or date.today()
@@ -1045,7 +1091,7 @@ class ProgramacionS18CuadrillaImporter:
             usuario=usuario,
             activo=True,
             defaults={
-                'rol_cuadrilla': rol_choice,
+                'rol_cuadrilla_id': rol_choice,
                 'cargo': cargo_jerarquico,
                 'costo_dia': COSTOS_POR_ROL.get(rol_choice, 0),
                 'fecha_inicio': fecha_inicio,
@@ -1071,15 +1117,13 @@ class ProgramacionS18CuadrillaImporter:
         cedula = miembro['cedula']
         nombre = miembro['nombre'] or f'Colaborador {cedula}'
         cargo_raw = miembro['cargo']
-        rol_choice = ROL_TEXTO_A_CHOICE.get(cargo_raw.lower())
-        if rol_choice is None:
-            rol_choice = 'LINIERO_I'
-            if cargo_raw:
-                self.advertencias.append(
-                    f'Fila {miembro["row_num"]}: CARGO "{cargo_raw}" no reconocido, '
-                    f'clasificado como LINIERO_I por defecto (agregar a '
-                    f'ROL_TEXTO_A_CHOICE si es un cargo nuevo real)'
-                )
+        rol_choice, reconocido = _resolver_rol_desde_cargo_raw(cargo_raw)
+        if not reconocido and cargo_raw:
+            self.advertencias.append(
+                f'Fila {miembro["row_num"]}: CARGO "{cargo_raw}" no reconocido, '
+                f'clasificado como LINIERO_I por defecto (agregarlo al maestro '
+                f'de Cargos en /cuadrillas/cargos/ si es un cargo nuevo real)'
+            )
         try:
             # Savepoint anidado (mismo patrón #124) para que una colisión
             # UNIQUE (documento ya existente por carrera) no envenene la
@@ -1088,7 +1132,7 @@ class ProgramacionS18CuadrillaImporter:
                 personal = PersonalCuadrilla.objects.create(
                     nombre=nombre,
                     documento=cedula,
-                    rol_cuadrilla=rol_choice,
+                    rol_cuadrilla_id=rol_choice,
                     activo=True,
                 )
             self.personal_creados += 1
