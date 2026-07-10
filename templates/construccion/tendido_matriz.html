@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load l10n %}
 
-{% block title %}CANT TENDIDO — {{ proyecto.nombre }}{% endblock %}
+{% block title %}Tendido — {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
 {% localize off %}
@@ -31,7 +31,7 @@
     <!-- Header -->
     <div class="flex items-center gap-4">
         <div class="flex-1">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">⚡ CANT TENDIDO</h1>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">⚡ Tendido</h1>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
                 · Torres: <span class="font-medium">{{ filas|length }}</span>

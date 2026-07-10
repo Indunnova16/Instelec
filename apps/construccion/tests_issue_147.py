@@ -655,33 +655,66 @@ def test_circuito1_muestra_cuadrilla_informativa_readonly(
     )
 
 
+def _render_tendido_matriz(proyecto, filas):
+    """Renderiza tendido_matriz.html directamente (bypass del queryset de la
+    vista real, que usa ordenar_torres_construccion -> regexp_replace, función
+    Postgres-only que no existe en sqlite). Mismo patrón ya usado en
+    test_lista_muestra_link_editar_torre_no_marcada para aislar el fix del
+    template del gap de infra de sqlite (ver docstring de ese test)."""
+    from django.template.loader import render_to_string
+
+    from apps.construccion.models import TendidoTorre
+
+    return render_to_string(
+        "construccion/tendido_matriz.html",
+        {
+            "proyecto": proyecto,
+            "filas": filas,
+            "pesos_conductor": {
+                "riega_manila": 0, "riega_guaya": 0, "tendido": 0,
+                "grapado": 0, "accesorios": 0, "balizas": 0,
+            },
+            "pesos_fibra": {
+                "riega_manila_fibra": 0, "riega_guaya_opgw": 0, "tendido_opgw": 0,
+                "grapado_fibra": 0, "empalmes_opgw": 0,
+            },
+            "suma_conductor": 0,
+            "suma_fibra": 0,
+            "suma_conductor_ok": False,
+            "suma_fibra_ok": False,
+            "columnas_conductor": TendidoTorre.COLUMNAS_CONDUCTOR,
+            "columnas_fibra": TendidoTorre.COLUMNAS_FIBRA,
+            "avance_general_conductor": 0,
+            "avance_general_fibra": 0,
+            "active_tab": "tendido",
+        },
+    )
+
+
 @pytest.mark.django_db
-def test_matriz_titulo_y_h1_dicen_tendido_no_cant_tendido(authenticated_client, proyecto_i147):
+def test_matriz_titulo_y_h1_dicen_tendido_no_cant_tendido(proyecto_i147):
     """Cambio 3: <title> y <h1> de la matriz dicen 'Tendido', no 'CANT TENDIDO'."""
-    url = _matriz_url(proyecto_i147)
-    resp = authenticated_client.get(url)
-    assert resp.status_code == 200, resp.content[:600]
-    body = resp.content.decode()
-    assert "<title>Tendido" in body or ">Tendido<" in body or "⚡ Tendido" in body
-    assert "CANT TENDIDO" not in body, "el rename debe eliminar 'CANT TENDIDO' del título/h1"
+    html = _render_tendido_matriz(proyecto_i147, filas=[])
+    assert "<title>Tendido" in html
+    assert "⚡ Tendido</h1>" in html
+    assert "CANT TENDIDO" not in html, "el rename debe eliminar 'CANT TENDIDO' del título/h1"
 
 
 @pytest.mark.django_db
-def test_matriz_thead_sticky_top_sin_regresion_columna_torre(
-    authenticated_client, proyecto_i147, torre_i147
-):
+def test_matriz_thead_sticky_top_sin_regresion_columna_torre(proyecto_i147, torre_i147):
     """Cambio 4: el <thead> completo lleva 'sticky top-0 z-20' (freeze-header
     vertical); el sticky left-0 ya existente de la columna Torre (header +
     celda de cuerpo) NO se toca — debe seguir intacto (esquina congelada)."""
-    url = _matriz_url(proyecto_i147)
-    resp = authenticated_client.get(url)
-    assert resp.status_code == 200, resp.content[:600]
-    body = resp.content.decode()
-    assert '<thead class="bg-gray-50 dark:bg-gray-900 sticky top-0 z-20">' in body
+    from apps.construccion.models import TendidoTorre
+
+    fila = TendidoTorre.objects.create(proyecto=proyecto_i147, torre=torre_i147)
+    html = _render_tendido_matriz(proyecto_i147, filas=[fila])
+
+    assert '<thead class="bg-gray-50 dark:bg-gray-900 sticky top-0 z-20">' in html
     # sin regresión: la columna Torre conserva su sticky left-0 (header y celda)
-    assert "sticky left-0 bg-gray-50 dark:bg-gray-900 z-10" in body, (
+    assert "sticky left-0 bg-gray-50 dark:bg-gray-900 z-10" in html, (
         "el header de la columna Torre debe conservar su sticky left-0 (sin regresión)"
     )
-    assert "sticky left-0 bg-white dark:bg-gray-800 z-10" in body, (
+    assert "sticky left-0 bg-white dark:bg-gray-800 z-10" in html, (
         "la celda de la columna Torre debe conservar su sticky left-0 (sin regresión)"
     )
