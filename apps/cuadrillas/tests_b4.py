@@ -167,9 +167,9 @@ class TestB4UploadExcelCuadrillas:
 
         # Verificar mapeo de rol_cuadrilla.
         miembro_carlos = CuadrillaMiembro.objects.get(usuario__documento='1055688')
-        assert miembro_carlos.rol_cuadrilla == 'LINIERO_I'
+        assert miembro_carlos.rol_cuadrilla_id == 'LINIERO_I'
         miembro_luis = CuadrillaMiembro.objects.get(usuario__documento='1033333')
-        assert miembro_luis.rol_cuadrilla == 'SUPERVISOR'
+        assert miembro_luis.rol_cuadrilla_id == 'SUPERVISOR'
 
     def test_b4_upload_excel_cuadrilla_existente_actualiza(self):
         """Edge — cuadrilla ya existe; con ``actualizar_existentes=True``

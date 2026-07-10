@@ -69,7 +69,7 @@ def _crear_bloque(
         CuadrillaMiembro.objects.create(
             cuadrilla=c,
             usuario=usuario,
-            rol_cuadrilla=rol_cuadrilla,
+            rol_cuadrilla_id=rol_cuadrilla,
             cargo=cargo,
             costo_dia=0,
             fecha_inicio=fecha,

@@ -202,13 +202,13 @@ class TestImportS18:
         # Encargado correcto.
         jt = CuadrillaMiembro.objects.get(usuario__documento='1143246675')
         assert jt.cargo == 'JT_CTA'
-        assert jt.rol_cuadrilla == 'LINIERO_I'
+        assert jt.rol_cuadrilla_id == 'LINIERO_I'
         # Miembros normales.
         m2 = CuadrillaMiembro.objects.get(usuario__documento='1004487321')
         assert m2.cargo == 'MIEMBRO'
-        assert m2.rol_cuadrilla == 'LINIERO_II'
+        assert m2.rol_cuadrilla_id == 'LINIERO_II'
         conductor = CuadrillaMiembro.objects.get(usuario__documento='72132633')
-        assert conductor.rol_cuadrilla == 'CONDUCTOR'
+        assert conductor.rol_cuadrilla_id == 'CONDUCTOR'
 
     def test_cedula_inexistente_es_advertencia_no_fatal(self):
         _crear_linea('LN817')

@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from django.urls import reverse
 
-from apps.cuadrillas.models import Vehiculo, Cuadrilla, CuadrillaMiembro, TrackingUbicacion
+from apps.cuadrillas.models import Vehiculo, Cuadrilla, TrackingUbicacion
 
 
 @pytest.mark.django_db
@@ -147,18 +147,20 @@ class TestCuadrillaMiembroModel:
         assert miembro.cuadrilla.codigo in str_repr
 
     def test_roles_cuadrilla(self):
-        """Test all crew roles."""
+        """Test all crew roles.
+
+        Issue #176 (Maestro 3, A6): `CuadrillaMiembro.RolCuadrilla`
+        (TextChoices) se eliminó en A3 -- el catálogo ahora es `Cargo`
+        (FK). Se reemplazan las constantes por los códigos literales y se
+        compara/asigna vía `rol_cuadrilla_id` (attname del FK), no el
+        accessor `rol_cuadrilla` (que ahora es el objeto `Cargo`).
+        """
         from tests.factories import CuadrillaMiembroFactory
 
-        roles = [
-            CuadrillaMiembro.RolCuadrilla.SUPERVISOR,
-            CuadrillaMiembro.RolCuadrilla.LINIERO_I,
-            CuadrillaMiembro.RolCuadrilla.LINIERO_II,
-            CuadrillaMiembro.RolCuadrilla.AYUDANTE,
-        ]
+        roles = ["SUPERVISOR", "LINIERO_I", "LINIERO_II", "AYUDANTE"]
         for rol in roles:
-            miembro = CuadrillaMiembroFactory(rol_cuadrilla=rol)
-            assert miembro.rol_cuadrilla == rol
+            miembro = CuadrillaMiembroFactory(rol_cuadrilla_id=rol)
+            assert miembro.rol_cuadrilla_id == rol
 
     def test_miembro_con_fecha_fin(self):
         """Test crew member with end date."""

@@ -72,9 +72,9 @@ class TestFlujoActividadRegistroCampo:
         liniero1 = LinieroFactory()
         liniero2 = LinieroFactory()
 
-        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=supervisor, rol_cuadrilla='SUPERVISOR')
-        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=liniero1, rol_cuadrilla='LINIERO')
-        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=liniero2, rol_cuadrilla='LINIERO')
+        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=supervisor, rol_cuadrilla_id='SUPERVISOR')
+        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=liniero1, rol_cuadrilla_id='LINIERO_I')
+        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=liniero2, rol_cuadrilla_id='LINIERO_I')
 
         # Create activity assigned to crew
         actividad = ActividadFactory(cuadrilla=cuadrilla)

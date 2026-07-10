@@ -65,7 +65,7 @@ class TestA2PersonalCuadrillaCamposNuevos(TestCase):
         legacy = PersonalCuadrilla.objects.create(
             nombre="Colaborador Legacy",
             documento="LEG-0001",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
         )
         legacy.refresh_from_db()
         self.assertEqual(legacy.salario_base, Decimal("0"))
@@ -78,7 +78,7 @@ class TestA2PersonalCuadrillaCamposNuevos(TestCase):
         persona = PersonalCuadrilla.objects.create(
             nombre="Juan Perez",
             documento="176-0001",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.AYUDANTE,
+            rol_cuadrilla_id="AYUDANTE",
             salario_base=Decimal("1750905"),
             fecha_ingreso=date(2025, 1, 15),
             activo=True,
@@ -97,7 +97,7 @@ class TestA2PersonalCuadrillaCamposNuevos(TestCase):
         persona = PersonalCuadrilla.objects.create(
             nombre="Maria Gomez",
             documento="176-0002",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_II,
+            rol_cuadrilla_id="LINIERO_II",
             salario_base=Decimal("2804856"),
             fecha_ingreso=date(2025, 3, 1),
         )
@@ -130,7 +130,7 @@ class TestA3CRUDColaboradores(TestCase):
             {
                 "nombre": "Carlos Ruiz",
                 "documento": "176-1001",
-                "rol_cuadrilla": PersonalCuadrilla.RolCuadrilla.CONDUCTOR,
+                "rol_cuadrilla": "CONDUCTOR",
                 "salario_base": "1800000",
                 "fecha_ingreso": "2026-01-10",
             },
@@ -146,7 +146,7 @@ class TestA3CRUDColaboradores(TestCase):
         persona = PersonalCuadrilla.objects.create(
             nombre="Ana Torres",
             documento="176-1002",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.AYUDANTE,
+            rol_cuadrilla_id="AYUDANTE",
             salario_base=Decimal("1750905"),
         )
         url = reverse("cuadrillas:colaboradores_editar", args=[persona.pk])
@@ -155,7 +155,7 @@ class TestA3CRUDColaboradores(TestCase):
             {
                 "nombre": "Ana Torres Actualizada",
                 "documento": "176-1002",
-                "rol_cuadrilla": PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+                "rol_cuadrilla": "LINIERO_I",
                 "salario_base": "3176095",
                 "fecha_ingreso": "2025-05-01",
             },
@@ -163,14 +163,14 @@ class TestA3CRUDColaboradores(TestCase):
         self.assertIn(resp.status_code, (200, 302))
         persona.refresh_from_db()
         self.assertEqual(persona.nombre, "Ana Torres Actualizada")
-        self.assertEqual(persona.rol_cuadrilla, PersonalCuadrilla.RolCuadrilla.LINIERO_I)
+        self.assertEqual(persona.rol_cuadrilla_id, "LINIERO_I")
         self.assertEqual(persona.salario_base, Decimal("3176095"))
 
     def test_documento_duplicado_rechazado_con_mensaje_dominio(self):
         PersonalCuadrilla.objects.create(
             nombre="Pedro Existing",
             documento="176-1003",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
         )
         url = reverse("cuadrillas:colaboradores_crear")
         resp = self.client.post(
@@ -178,7 +178,7 @@ class TestA3CRUDColaboradores(TestCase):
             {
                 "nombre": "Otro Pedro",
                 "documento": "176-1003",
-                "rol_cuadrilla": PersonalCuadrilla.RolCuadrilla.AYUDANTE,
+                "rol_cuadrilla": "AYUDANTE",
                 "salario_base": "1000000",
             },
         )
@@ -193,7 +193,7 @@ class TestA3CRUDColaboradores(TestCase):
         persona = PersonalCuadrilla.objects.create(
             nombre="Luis Mora",
             documento="176-1004",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
             activo=True,
         )
         url = reverse("cuadrillas:colaboradores_editar", args=[persona.pk])
@@ -202,7 +202,7 @@ class TestA3CRUDColaboradores(TestCase):
             {
                 "nombre": persona.nombre,
                 "documento": persona.documento,
-                "rol_cuadrilla": persona.rol_cuadrilla,
+                "rol_cuadrilla": persona.rol_cuadrilla_id,
                 "salario_base": "0",
                 "fecha_salida": date.today().isoformat(),
             },
@@ -215,13 +215,13 @@ class TestA3CRUDColaboradores(TestCase):
         PersonalCuadrilla.objects.create(
             nombre="Activo Uno",
             documento="176-1005",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
             activo=True,
         )
         PersonalCuadrilla.objects.create(
             nombre="Inactivo Uno",
             documento="176-1006",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
             fecha_salida=date.today(),
         )
         # El listado por defecto muestra todos (activos + inactivos) para que
@@ -304,7 +304,7 @@ class TestA5ImporterColaboradores(TestCase):
         PersonalCuadrilla.objects.create(
             nombre="Ya Existe",
             documento="176-2004",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
         )
         archivo = self._build_workbook(
             [
@@ -340,14 +340,14 @@ class TestA4RefactorAsignacionCuadrilla(TestCase):
         self.personal_activo = PersonalCuadrilla.objects.create(
             nombre="Roberto Activo",
             documento="176-3001",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
             salario_base=Decimal("3176095"),
             activo=True,
         )
         self.personal_inactivo = PersonalCuadrilla.objects.create(
             nombre="Sergio Inactivo",
             documento="176-3002",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.AYUDANTE,
+            rol_cuadrilla_id="AYUDANTE",
             fecha_salida=date.today(),
         )
 
@@ -366,7 +366,7 @@ class TestA4RefactorAsignacionCuadrilla(TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["nombre"], "Roberto Activo")
-        self.assertEqual(data["rol_cuadrilla"], PersonalCuadrilla.RolCuadrilla.LINIERO_I)
+        self.assertEqual(data["rol_cuadrilla"], "LINIERO_I")
 
     def test_cargo_bloqueado_post_con_rol_distinto_usa_el_del_maestro(self):
         url = reverse("cuadrillas:miembro_agregar", args=[self.cuadrilla.pk])
@@ -385,7 +385,7 @@ class TestA4RefactorAsignacionCuadrilla(TestCase):
         ).first()
         self.assertIsNotNone(miembro)
         # Se ignora el rol del POST; se usa el del maestro PersonalCuadrilla.
-        self.assertEqual(miembro.rol_cuadrilla, PersonalCuadrilla.RolCuadrilla.LINIERO_I)
+        self.assertEqual(miembro.rol_cuadrilla_id, "LINIERO_I")
 
     def test_usuario_se_crea_o_reusa_al_asignar_primera_vez(self):
         self.assertFalse(Usuario.objects.filter(documento="176-3001").exists())
@@ -394,7 +394,7 @@ class TestA4RefactorAsignacionCuadrilla(TestCase):
             url,
             {
                 "documento": "176-3001",
-                "rol_cuadrilla": PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+                "rol_cuadrilla": "LINIERO_I",
                 "cargo": "MIEMBRO",
             },
         )
@@ -412,7 +412,7 @@ class TestA4RefactorAsignacionCuadrilla(TestCase):
             url,
             {
                 "documento": "176-3002",
-                "rol_cuadrilla": PersonalCuadrilla.RolCuadrilla.AYUDANTE,
+                "rol_cuadrilla": "AYUDANTE",
                 "cargo": "MIEMBRO",
             },
         )
@@ -436,7 +436,7 @@ class TestA4RefactorAsignacionCuadrilla(TestCase):
         CuadrillaMiembro.objects.create(
             cuadrilla=self.cuadrilla,
             usuario=legacy_usuario,
-            rol_cuadrilla="LINIERO_I",
+            rol_cuadrilla_id="LINIERO_I",
             fecha_inicio=date.today() - timedelta(days=30),
             activo=True,
         )
@@ -475,7 +475,7 @@ class TestReprocesoNavbarFormatoBoton(TestCase):
         PersonalCuadrilla.objects.create(
             nombre="Colaborador Moneda",
             documento="176-4001",
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
             salario_base=Decimal("3176095"),
             activo=True,
         )
@@ -501,7 +501,7 @@ class TestReprocesoNavbarFormatoBoton(TestCase):
         CuadrillaMiembro.objects.create(
             cuadrilla=cuadrilla,
             usuario=usuario,
-            rol_cuadrilla=PersonalCuadrilla.RolCuadrilla.LINIERO_I,
+            rol_cuadrilla_id="LINIERO_I",
             costo_dia=Decimal("3176095"),
             fecha_inicio=date.today(),
             activo=True,
@@ -558,9 +558,11 @@ class TestMaestro3A1CargoModeloYSeed(TestCase):
         from django.db import transaction
         from django.db.utils import IntegrityError
 
-        Cargo.objects.create(codigo="SUPERVISOR", nombre="Supervisor")
+        # Código fuera del catálogo de 14 (el conftest autouse ya los
+        # siembra a todos) para no colisionar con la siembra global.
+        Cargo.objects.create(codigo="TEST_CODIGO_UNICO", nombre="Test Único")
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Cargo.objects.create(codigo="SUPERVISOR", nombre="Otro Nombre")
+            Cargo.objects.create(codigo="TEST_CODIGO_UNICO", nombre="Otro Nombre")
 
     def test_seed_crea_los_14_codigos_de_la_union_de_ambos_enums(self):
         """Los 14 códigos vienen de la unión de PersonalCuadrilla.RolCuadrilla

@@ -22,7 +22,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from apps.campo.views import RegistroAvanceCreateView
-from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, Vehiculo
+from apps.cuadrillas.models import Cargo, Cuadrilla, CuadrillaMiembro, Vehiculo
 from apps.lineas.models import Linea, Vano
 from apps.usuarios.models import Usuario
 
@@ -52,6 +52,14 @@ class RegistroAvanceCreateViewB12Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.url = reverse('campo:avance_registrar')
+
+        # Issue #176 (Maestro 3, A6): rol_cuadrilla ahora es FK(Cargo,
+        # to_field='codigo') (A3) -- sembrar el codigo usado abajo antes de
+        # crear los CuadrillaMiembro (no hay migracion de seed bajo
+        # --nomigrations, cada test corre en su propia transaccion).
+        Cargo.objects.get_or_create(
+            codigo='LINIERO_I', defaults={'nombre': 'Liniero I', 'activo': True}
+        )
 
         # Línea CON vanos
         cls.linea = Linea.objects.create(
@@ -133,7 +141,7 @@ class RegistroAvanceCreateViewB12Tests(TestCase):
         CuadrillaMiembro.objects.create(
             cuadrilla=cls.cuadrilla_propia,
             usuario=cls.liniero_asignado,
-            rol_cuadrilla='LINIERO',
+            rol_cuadrilla_id='LINIERO_I',
             fecha_inicio=date.today(),
             activo=True,
         )
@@ -157,7 +165,7 @@ class RegistroAvanceCreateViewB12Tests(TestCase):
         CuadrillaMiembro.objects.create(
             cuadrilla=cls.cuadrilla_ajena,
             usuario=cls.liniero_ajeno,
-            rol_cuadrilla='LINIERO',
+            rol_cuadrilla_id='LINIERO_I',
             fecha_inicio=date.today(),
             activo=True,
         )

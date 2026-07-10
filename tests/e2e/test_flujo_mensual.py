@@ -61,9 +61,9 @@ class TestFlujoMensualCompleto:
         supervisor = SupervisorFactory()
         linieros = [LinieroFactory() for _ in range(3)]
         cuadrilla = CuadrillaFactory(codigo="CUA-E2E", linea_asignada=linea)
-        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=supervisor, rol_cuadrilla='SUPERVISOR')
+        CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=supervisor, rol_cuadrilla_id='SUPERVISOR')
         for liniero in linieros:
-            CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=liniero, rol_cuadrilla='LINIERO')
+            CuadrillaMiembroFactory(cuadrilla=cuadrilla, usuario=liniero, rol_cuadrilla_id='LINIERO_I')
 
         # Create activity type
         tipo_poda = TipoActividadFactory(

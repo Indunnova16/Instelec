@@ -100,7 +100,7 @@ def _crear_cuadrilla_con_miembro(usuario, codigo_cuadrilla):
     CuadrillaMiembro.objects.create(
         cuadrilla=cuadrilla,
         usuario=usuario,
-        rol_cuadrilla='LINIERO_I',
+        rol_cuadrilla_id='LINIERO_I',
         cargo='MIEMBRO',
         costo_dia=0,
         fecha_inicio=date.today(),
@@ -548,8 +548,8 @@ class TestA5RolesNuevosCuadrillas:
         assert res['exito'] is True, res.get('error')
         m1 = CuadrillaMiembro.objects.get(usuario__documento='72015917')
         m2 = CuadrillaMiembro.objects.get(usuario__documento='99988877')
-        assert m1.rol_cuadrilla == 'MALACATERO'
-        assert m2.rol_cuadrilla == 'COORDINADOR_HSQ'
+        assert m1.rol_cuadrilla_id == 'MALACATERO'
+        assert m2.rol_cuadrilla_id == 'COORDINADOR_HSQ'
         # No cayeron al fallback silencioso.
         assert not any('no reconocido' in a for a in res['advertencias'])
 
@@ -569,7 +569,7 @@ class TestA5RolesNuevosCuadrillas:
         assert res['exito'] is True, res.get('error')
         miembro = CuadrillaMiembro.objects.get(usuario__documento='55544433')
         # No falla silenciosamente: clasifica a LINIERO_I por defecto...
-        assert miembro.rol_cuadrilla == 'LINIERO_I'
+        assert miembro.rol_cuadrilla_id == 'LINIERO_I'
         # ...pero deja advertencia explícita (no más fallback mudo).
         assert any(
             'TOPOGRAFO JEFE' in a and 'no reconocido' in a
@@ -594,7 +594,7 @@ class TestA6EnlacePersonalCuadrilla:
         _crear_usuario('1143246675', 'JHON JAIRO')
         PersonalCuadrilla.objects.create(
             nombre='CASIMIRO PALOMINO ARMESTO', documento='72015917',
-            rol_cuadrilla='SUPERVISOR', activo=True,
+            rol_cuadrilla_id='SUPERVISOR', activo=True,
         )
         bloque = [
             _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
@@ -608,7 +608,7 @@ class TestA6EnlacePersonalCuadrilla:
 
         assert res['exito'] is True, res.get('error')
         miembro = CuadrillaMiembro.objects.get(usuario__documento='72015917')
-        assert miembro.rol_cuadrilla == 'SUPERVISOR'
+        assert miembro.rol_cuadrilla_id == 'SUPERVISOR'
         assert res['personal_creados'] == 0
 
     def test_edge_cedula_no_encontrada_flag_off_advertencia_y_omite(self):
@@ -647,10 +647,10 @@ class TestA6EnlacePersonalCuadrilla:
         assert res['exito'] is True, res.get('error')
         assert res['personal_creados'] == 1
         personal = PersonalCuadrilla.objects.get(documento='11122234')
-        assert personal.rol_cuadrilla == 'MALACATERO'
+        assert personal.rol_cuadrilla_id == 'MALACATERO'
         assert personal.activo is True
         miembro = CuadrillaMiembro.objects.get(usuario__documento='11122234')
-        assert miembro.rol_cuadrilla == 'MALACATERO'
+        assert miembro.rol_cuadrilla_id == 'MALACATERO'
 
     def test_legacy_usuario_sin_personal_cuadrilla_preserva_comportamiento_124(self):
         """No-regresión CRÍTICA: una cédula que YA existe como Usuario (creada
@@ -672,7 +672,7 @@ class TestA6EnlacePersonalCuadrilla:
 
         assert res['exito'] is True, res.get('error')
         miembro = CuadrillaMiembro.objects.get(usuario__documento='8646508')
-        assert miembro.rol_cuadrilla == 'CONDUCTOR'
+        assert miembro.rol_cuadrilla_id == 'CONDUCTOR'
         assert res['personal_creados'] == 0
         assert not PersonalCuadrilla.objects.filter(documento='8646508').exists()
 
