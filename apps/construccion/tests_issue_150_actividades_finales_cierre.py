@@ -17,6 +17,7 @@ en prod), no de CAMPO — el código ya funciona una vez el cronograma tenga
 fecha_inicio/fecha_fin_planeada + peso_pct.
 """
 
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -168,3 +169,89 @@ class TestB2BarrasMaterialesNormalizadas:
         # La tabla debajo del chart (ya validada por Indunnova) no se tocó.
         assert 'data-material="agua"' in body
         assert 'data-material="grava"' in body
+
+
+# ===========================================================================
+# B3 — Línea "Planeado" en Curva S de Montaje (gap de DATO, no de CAMPO)
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestB3CurvaSPlaneadoMontaje:
+    """F2 confirmó contra BD prod que ``ProgramacionFase(seccion=MONTAJE)``
+    existe pero con fecha_inicio_planeada/fecha_fin_planeada=NULL y
+    peso_pct=0 — ``serie_planeado()`` YA arma la serie sola en cuanto esos 3
+    campos se pueblan vía /cronograma/. NO requiere migración ni campo nuevo."""
+
+    def test_serie_planeado_arma_serie_cuando_hay_fechas_pobladas(self, proyecto_150):
+        """Mecanismo real: con fecha_inicio/fecha_fin/peso poblados (como
+        haría el cliente en /cronograma/), la serie deja de estar vacía."""
+        from apps.construccion import calculators_avance_real as car
+        from apps.construccion.models import ProgramacionFase
+
+        hoy = date.today()
+        ProgramacionFase.objects.create(
+            proyecto=proyecto_150,
+            seccion=ProgramacionFase.Seccion.MONTAJE,
+            fecha_inicio_planeada=hoy - timedelta(days=180),
+            fecha_fin_planeada=hoy + timedelta(days=30),
+            peso_pct=100,
+        )
+
+        serie = car.serie_planeado(proyecto_150, car.FASE_MONTAJE)
+        assert serie["planeado"], "la serie planeado no debe quedar vacía con fechas pobladas"
+        assert serie["labels"]
+        assert serie["planeado"][0] == 0.0
+        assert serie["planeado"][-1] == 100.0
+
+    def test_serie_planeado_vacia_sin_fechas_replica_gap_de_dato_prod(self, proyecto_150):
+        """Réplica del estado real de prod (MONTAJE existe, fechas NULL, peso
+        0) — confirma que sin dato la serie sale vacía SIN romper (gap de
+        DATO, no de CAMPO: no hace falta migración ni código nuevo)."""
+        from apps.construccion import calculators_avance_real as car
+        from apps.construccion.models import ProgramacionFase
+
+        ProgramacionFase.objects.create(
+            proyecto=proyecto_150,
+            seccion=ProgramacionFase.Seccion.MONTAJE,
+        )  # fecha_inicio_planeada/fecha_fin_planeada NULL, peso_pct=0 (default)
+
+        serie = car.serie_planeado(proyecto_150, car.FASE_MONTAJE)
+        assert not serie["planeado"]
+
+    def test_dashboard_montaje_real_hint_estado_vacio_cuando_falta_cronograma(
+        self, authenticated_client, proyecto_150
+    ):
+        """B3 opcional (implementado): hint de estado vacío + link directo a
+        /cronograma/ cuando la serie planeada está vacía."""
+        url = reverse(
+            "construccion:dashboard_montaje_real", kwargs={"proyecto_id": proyecto_150.id}
+        )
+        resp = authenticated_client.get(url)
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        assert 'data-hint="planeado-vacio"' in body
+        assert "/cronograma/" in body
+
+    def test_dashboard_montaje_real_sin_hint_cuando_cronograma_poblado(
+        self, authenticated_client, proyecto_150
+    ):
+        """El hint desaparece en cuanto el cronograma tiene dato (no es un
+        banner permanente)."""
+        from apps.construccion.models import ProgramacionFase
+
+        hoy = date.today()
+        ProgramacionFase.objects.create(
+            proyecto=proyecto_150,
+            seccion=ProgramacionFase.Seccion.MONTAJE,
+            fecha_inicio_planeada=hoy - timedelta(days=180),
+            fecha_fin_planeada=hoy + timedelta(days=30),
+            peso_pct=100,
+        )
+
+        url = reverse(
+            "construccion:dashboard_montaje_real", kwargs={"proyecto_id": proyecto_150.id}
+        )
+        resp = authenticated_client.get(url)
+        assert resp.status_code == 200
+        assert 'data-hint="planeado-vacio"' not in resp.content.decode()

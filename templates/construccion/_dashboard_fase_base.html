@@ -46,6 +46,19 @@ en B3) en su propio template, alrededor de este include.
             "Ejecutado" refleja el avance real ponderado por torre, distribuido en
             el tiempo. "Planeado" sale del cronograma de la fase.
         </p>
+        {% comment %} #150 B3: gap de DATO, no de CAMPO — serie_planeado() ya
+        arma la línea "Planeado" sola en cuanto el Cronograma tenga fecha
+        inicio/fin + peso% cargados; si no, este hint señala dónde cargarlo.
+        {% endcomment %}
+        {% if not curva_planeado_disponible %}
+        <p class="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1.5 mb-3"
+           data-hint="planeado-vacio">
+            ⚠️ La línea "Planeado" no tiene datos de cronograma para esta fase.
+            Configúrala en
+            <a href="{% url 'construccion:cronograma' proyecto_id=proyecto.id %}" class="underline font-medium">Cronograma</a>
+            (fecha inicio, fecha fin y peso%).
+        </p>
+        {% endif %}
         <div class="relative" style="height: 400px;">
             <canvas id="curva-s-chart" width="1200" height="400"></canvas>
         </div>
