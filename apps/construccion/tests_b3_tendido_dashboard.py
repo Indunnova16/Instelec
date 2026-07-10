@@ -21,11 +21,13 @@ wiring pendiente) y el endpoint de datos por el mismo medio.
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
+from apps.construccion import calculators_avance_real as car
 from apps.construccion.views_dashboards_b3_tendido import (
     DashboardTendidoDataView,
     DashboardTendidoView,
@@ -78,6 +80,18 @@ def _tendido(proyecto, torre, **flags):
     """Crea un TendidoTorre con los flags dados (resto en False por default)."""
     from apps.construccion.models import TendidoTorre
     return TendidoTorre.objects.create(proyecto=proyecto, torre=torre, **flags)
+
+
+def _fase_torre(proyecto, torre, **fechas):
+    """Crea un FaseTorre (A3, #166) con las fechas MANUALES dadas por torre.
+
+    ``TendidoTorre.updated_at``/``created_at`` quedan en la fecha real de
+    creación del registro (HOY, 2026 por ``auto_now``/``auto_now_add`` — mismo
+    patrón que ``tests_issue_122_curvas.py``): las fixtures pasan fechas 2025
+    explícitas en ``FaseTorre`` para probar que la cascada A3 las prefiere.
+    """
+    from apps.construccion.models import FaseTorre
+    return FaseTorre.objects.create(proyecto=proyecto, torre=torre, **fechas)
 
 
 def _ctx(view_cls, proyecto, admin, **get):
@@ -305,3 +319,224 @@ def test_b3_dato_legacy_conductor_solo(proyecto, admin):
     assert len(ctx['vista_torres']) == 1
     assert any('OPGW' in p or 'fibra' in p.lower()
                for p in ctx['vista_torres'][0]['pendientes'])
+
+
+# ---------------------------------------------------------------------------
+# A1 (#166 Hilo A) — % Ejecutado total nunca seteado
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_a1_pct_construido_total_mayor_a_cero_con_datos_reales(proyecto, admin):
+    """Root cause A1: antes del fix el template leía 'pct_construido_total' del
+    contexto legacy (DashboardAvanceSemanal, 0 filas TENDIDO en prod) -> 0%
+    pese a Conductor/Fibra=100%. Con conductor+fibra completos al 100%, la
+    tarjeta '% Ejecutado total' debe reflejar avance real > 0 (y = 100 cuando
+    ambas secciones están completas)."""
+    t1 = _torre(proyecto, '1')
+    _tendido(
+        proyecto, t1,
+        riega_manila_conductor=True, riega_guaya_conductor=True,
+        tendido_conductor=True, grapado_amarre_conductor=True,
+        accesorios_puentes=True, balizas_desviadores=True,
+        riega_manila_fibra=True, riega_guaya_opgw=True, tendido_opgw=True,
+        grapado_amarre_fibra=True, empalmes_opgw=True,
+    )
+
+    ctx = _ctx(DashboardTendidoView, proyecto, admin)
+
+    assert ctx['pct_conductor'] == 100.0
+    assert ctx['pct_fibra'] == 100.0
+    assert ctx['pct_construido_total'] > 0
+    assert ctx['pct_construido_total'] == 100.0
+
+
+@pytest.mark.django_db
+def test_a1_pct_construido_total_promedia_conductor_y_fibra_parcial(proyecto, admin):
+    """Avance parcial: pct_construido_total = promedio(pct_conductor, pct_fibra),
+    NO 0% ni un valor inventado."""
+    t1 = _torre(proyecto, '1')
+    # Conductor 100% (6/6), fibra 0% (0/5) -> promedio = 50.
+    _tendido(
+        proyecto, t1,
+        riega_manila_conductor=True, riega_guaya_conductor=True,
+        tendido_conductor=True, grapado_amarre_conductor=True,
+        accesorios_puentes=True, balizas_desviadores=True,
+    )
+
+    ctx = _ctx(DashboardTendidoView, proyecto, admin)
+    assert ctx['pct_construido_total'] == round((ctx['pct_conductor'] + ctx['pct_fibra']) / 2, 2)
+    assert ctx['pct_construido_total'] == 50.0
+
+
+# ---------------------------------------------------------------------------
+# A2 (#166 Hilo A) — card genérico "Avance por etapa" fantasma en Tendido
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_a2_heading_generico_avance_por_etapa_ausente_en_tendido(proyecto, admin):
+    """Root cause A2: el parcial base pintaba SIEMPRE el card genérico
+    'Avance por etapa — Tendido' aunque B3 le pase avance_etapas=[] a propósito
+    (usa sus 2 charts propios de Conductor/Fibra) -> panel vacío fantasma.
+    Envuelto en {% if avance_etapas %}, el heading genérico NO debe aparecer
+    en el HTML renderizado de Tendido."""
+    from django.template.loader import render_to_string
+
+    t1 = _torre(proyecto, '1')
+    _tendido(proyecto, t1, riega_manila_conductor=True, tendido_conductor=True)
+    ctx = _ctx(DashboardTendidoView, proyecto, admin)
+    assert ctx['avance_etapas'] == []
+
+    html = render_to_string('construccion/dashboard_tendido.html', ctx)
+
+    assert 'Avance por etapa — Tendido' not in html
+    # Los 2 charts propios de B3 SÍ siguen presentes (no se rompió nada).
+    assert 'Avance por etapa — Conductor' in html
+    assert 'Avance por etapa — Fibra OPGW' in html
+
+
+# ---------------------------------------------------------------------------
+# A3 (#166 Hilo A) — Curva S anclada en FaseTorre (fechas manuales), no en
+# updated_at/created_at de TendidoTorre (fecha de guardado del registro)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_a3_fecha_avance_tendido_usa_fasetorre_no_updated_at(proyecto, admin):
+    """Root cause A3 (confirmado en BD prod, proyecto QA#49): FaseTorre tiene
+    fechas reales 2025 pobladas para torres cuyo TendidoTorre.updated_at cae en
+    2026 (fecha de GUARDADO, por crearse/actualizarse hoy). La Curva S debe
+    anclarse en las fechas 2025 de FaseTorre, NO en 2026."""
+    t1 = _torre(proyecto, '1')
+    _fase_torre(
+        proyecto, t1,
+        fecha_riega_manila=date(2025, 7, 5),
+        tendido_conductor_a_fecha=date(2025, 8, 10),
+        tendido_opgw_der_fecha=date(2025, 10, 15),
+    )
+    tendido = _tendido(
+        proyecto, t1,
+        riega_manila_conductor=True, riega_guaya_conductor=True,
+        tendido_conductor=True, grapado_amarre_conductor=True,
+        accesorios_puentes=True, balizas_desviadores=True,
+        riega_manila_fibra=True, riega_guaya_opgw=True, tendido_opgw=True,
+        grapado_amarre_fibra=True, empalmes_opgw=True,
+    )
+    # updated_at/created_at quedan HOY (2026 en este entorno) por auto_now(_add).
+    assert tendido.updated_at.year >= 2026
+
+    fecha = car.fecha_avance_tendido(tendido)
+    assert fecha == date(2025, 10, 15)  # MAX de las fechas pobladas de FaseTorre
+    assert fecha.year == 2025
+
+    # La Curva S real de la fase TENDIDO también debe usar 2025, no 2026.
+    curva = car.serie_curva_s_real(proyecto, car.FASE_TENDIDO)
+    anios = {lab[:4] for lab in curva['labels']}
+    assert anios == {'2025'}
+    assert '2026' not in anios
+
+
+@pytest.mark.django_db
+def test_a3_fecha_avance_tendido_sin_fasetorre_cae_a_cascada_legacy(proyecto, admin):
+    """Si la torre NO tiene FaseTorre (OneToOne reverse inexistente), la
+    cascada cae a updated_at -> created_at (comportamiento legacy preservado,
+    NUNCA 500 / AttributeError)."""
+    t1 = _torre(proyecto, '1')
+    tendido = _tendido(proyecto, t1, tendido_conductor=True)
+
+    fecha = car.fecha_avance_tendido(tendido)
+    assert fecha == tendido.updated_at.date()
+
+
+@pytest.mark.django_db
+def test_a3_guard_fecha_futura_no_contamina_curva_s(proyecto, admin):
+    """Guard anti-typo (hallazgo BD prod: torre E58 con tendido_opgw_der_fecha=
+    2028-09-19, único dato futuro del proyecto). Una fecha de FaseTorre > hoy
+    se EXCLUYE; si quedan otras fechas válidas pobladas se usa el MAX de esas,
+    y solo si TODAS son futuras cae a la cascada legacy."""
+    # +3 días (no +1): margen de sobra para que la fecha "typo" nunca coincida
+    # por casualidad con la fecha derivada de auto_now/auto_now_add (que
+    # persiste en UTC y puede diferir del "hoy" local por el desfase de huso
+    # horario — a lo sumo 1 día de skew).
+    fecha_futura_typo = date.today() + timedelta(days=3)
+
+    # Torre 1: mezcla de fecha futura (typo) + fechas válidas 2025 -> usa el
+    # MAX de las válidas, ignora la futura.
+    t1 = _torre(proyecto, '1')
+    _fase_torre(
+        proyecto, t1,
+        fecha_riega_manila=date(2025, 9, 1),
+        tendido_opgw_der_fecha=fecha_futura_typo,  # typo simulado (nunca se debe usar)
+    )
+    tendido1 = _tendido(proyecto, t1, tendido_conductor=True)
+    fecha1 = car.fecha_avance_tendido(tendido1)
+    assert fecha1 == date(2025, 9, 1)
+    assert fecha1 < date.today()
+
+    # Torre 2: TODAS las fechas de FaseTorre son futuras -> cae a la cascada
+    # legacy (updated_at), nunca propaga un punto futuro a la Curva S.
+    t2 = _torre(proyecto, '2')
+    _fase_torre(proyecto, t2, tendido_opgw_der_fecha=fecha_futura_typo)
+    tendido2 = _tendido(proyecto, t2, tendido_conductor=True)
+    fecha2 = car.fecha_avance_tendido(tendido2)
+    # El invariante que importa: NUNCA propaga la fecha futura del typo. El
+    # valor exacto de la cascada (updated_at/created_at) queda a criterio de
+    # BaseModel (auto_now/auto_now_add en UTC) — no se fija aquí para no
+    # acoplar el test a la conversión de zona horaria local vs. UTC.
+    assert fecha2 != fecha_futura_typo
+
+
+# ---------------------------------------------------------------------------
+# A3 — contra dato legacy real (documentado; ver también F2 en BD prod)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_a3_dato_legacy_conductor_solo_usa_fasetorre_si_existe(proyecto, admin):
+    """Réplica del patrón legacy de prod (65 filas con solo flags de conductor
+    en TendidoTorre) + FaseTorre con fecha manual real poblada (como las
+    torres E1-E22 del proyecto QA#49, confirmado por F2 vía SELECT directo a
+    BD prod — no reproducible 1:1 en este test unitario, documentado aquí como
+    la validación complementaria: BD prod SELECT ``construccion_fases_torres``
+    vs ``construccion_tendido_torre.updated_at`` para las torres E1-E22, ver
+    ``F2_OUTPUT`` de la corrida de #166). Este test cubre el mismo camino de
+    código con datos locales: si FaseTorre tiene AL MENOS una fecha poblada,
+    se prefiere sobre la cascada updated_at/created_at aunque el TendidoTorre
+    sea "legacy" (solo flags de conductor, fibra sin tocar)."""
+    t1 = _torre(proyecto, '1')
+    _fase_torre(proyecto, t1, tendido_conductor_a_fecha=date(2025, 6, 2))
+    legacy = _tendido(
+        proyecto, t1,
+        riega_manila_conductor=True, riega_guaya_conductor=True,
+        tendido_conductor=True,
+    )
+    legacy.refresh_from_db()
+    assert legacy.tendido_opgw is False  # fibra sin tocar, estilo prod
+
+    fecha = car.fecha_avance_tendido(legacy)
+    assert fecha == date(2025, 6, 2)
+
+
+# ---------------------------------------------------------------------------
+# A4 (#166 Hilo A) — copy de la columna Pendientes cuando la lista viene vacía
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_a4_pendientes_vacio_muestra_no_hay_pendientes(proyecto, admin):
+    """Root cause A4: una torre 100% completa mostraba '—' en la columna
+    Pendientes; debe mostrar 'No hay pendientes'."""
+    from django.template.loader import render_to_string
+
+    t1 = _torre(proyecto, '1')
+    _tendido(
+        proyecto, t1,
+        riega_manila_conductor=True, riega_guaya_conductor=True,
+        tendido_conductor=True, grapado_amarre_conductor=True,
+        accesorios_puentes=True, balizas_desviadores=True,
+        riega_manila_fibra=True, riega_guaya_opgw=True, tendido_opgw=True,
+        grapado_amarre_fibra=True, empalmes_opgw=True,
+    )
+    ctx = _ctx(DashboardTendidoView, proyecto, admin)
+    assert ctx['vista_torres'][0]['completa'] is True
+    assert ctx['vista_torres'][0]['pendientes'] == []
+
+    html = render_to_string('construccion/dashboard_tendido.html', ctx)
+    assert 'No hay pendientes' in html
+    assert '>—<' not in html

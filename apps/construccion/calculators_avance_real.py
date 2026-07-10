@@ -165,12 +165,57 @@ def fecha_avance_montaje(d) -> date:
     ) or date.today()
 
 
+#: Campos de fecha MANUAL diligenciados por torre en ``FaseTorre`` (A3, #166
+#: Hilo A). ``TendidoTorre`` solo guarda flags booleanos + updated_at/created_at
+#: (fechas de GUARDADO del registro, no de ejecución); estas 8 columnas son las
+#: fechas reales que el usuario captura por torre.
+_CAMPOS_FECHA_TENDIDO_FASETORRE = (
+    'fecha_riega_manila',
+    'tendido_conductor_a_fecha',
+    'tendido_conductor_b_fecha',
+    'tendido_conductor_c_fecha',
+    'tendido_opgw_izq_fecha',
+    'tendido_opgw_der_fecha',
+    'tendido_guarda_fecha',
+    'regulacion_fecha',
+)
+
+
 def fecha_avance_tendido(t) -> date:
     """Fecha de avance de un ``TendidoTorre``.
 
-    TendidoTorre no tiene fechas de etapa → cascada updated_at -> created_at.
-    NUNCA None.
+    A3 (#166 Hilo A, reproceso bounce=2): la cascada legacy
+    updated_at -> created_at ancla la Curva S en la fecha de GUARDADO del
+    registro (BD prod: 2026-06-08..2026-06-19), no en la fecha real de
+    ejecución que el usuario diligencia por torre en ``FaseTorre``
+    (BD prod: 2025-07..2025-10 para las mismas torres) — eso desplazaba la
+    Curva S ~9-11 meses hacia el futuro (bug reportado por el cliente).
+
+    Se intenta PRIMERO el MAX de las fechas pobladas de ``t.torre.fase``
+    (getattr defensivo: el OneToOne reverse ``TorreConstruccion.fase`` puede
+    no existir — ``RelatedObjectDoesNotExist`` es subclase de
+    ``AttributeError``, así que ``getattr(..., None)`` devuelve None sin
+    excepción), EXCLUYENDO fechas futuras (> hoy) como guard anti-typo (BD
+    prod tiene 1 fecha corrupta a 2028 en torre E58 que de otro modo
+    contaminaría la Curva S con un punto en el futuro). Si NINGUNA fecha de
+    FaseTorre está poblada (o todas son futuras), cae a la cascada legacy
+    updated_at -> created_at. NUNCA None.
     """
+    fase_torre = getattr(t.torre, 'fase', None)
+    if fase_torre is not None:
+        hoy = date.today()
+        candidatas = []
+        for campo in _CAMPOS_FECHA_TENDIDO_FASETORRE:
+            valor = getattr(fase_torre, campo, None)
+            if valor is None:
+                continue
+            valor = valor.date() if hasattr(valor, 'date') else valor
+            if valor > hoy:
+                continue  # guard anti-typo (p.ej. 2028 en vez de 2025)
+            candidatas.append(valor)
+        if candidatas:
+            return max(candidatas)
+
     return _cascada_fecha(
         getattr(t, 'updated_at', None),
         getattr(t, 'created_at', None),

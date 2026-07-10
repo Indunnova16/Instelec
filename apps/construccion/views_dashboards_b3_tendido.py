@@ -74,6 +74,12 @@ class DashboardTendidoView(_DashboardCurvaSBase):
         # % global de cada sección (promedio del avance real por torre) — para las
         # tarjetas resumen. Derivado del real, NO del semanal vacío.
         pct_conductor, pct_fibra = self._pct_secciones(proyecto)
+        # A1 (#166 Hilo A): "% Ejecutado total" NUNCA se seteaba -> el template
+        # leía el default legacy (DashboardAvanceSemanal, 0 filas TENDIDO en
+        # prod) y quedaba en 0% pese a Conductor/Fibra=100%. Reusa los % ya
+        # materializados arriba (mismo patrón de paridad con B1/_tarjetas_real,
+        # más barato que recalcular la curva completa).
+        pct_construido_total = round((pct_conductor + pct_fibra) / 2, 2)
 
         ctx.update({
             'fase_codigo': car.FASE_TENDIDO,
@@ -83,6 +89,7 @@ class DashboardTendidoView(_DashboardCurvaSBase):
             'vista_torres': vista_torres,
             'pct_conductor': pct_conductor,
             'pct_fibra': pct_fibra,
+            'pct_construido_total': pct_construido_total,
             # NOTA (F4 integración): ``curva_real_json`` lo inyecta ya como DICT la
             # base ``_DashboardCurvaSBase.build_curva_real`` (corregido en la fuente
             # para que NO sea un string json.dumps doble-codificado). El parcial
