@@ -67,6 +67,7 @@
                             replanteo_c: {% if fila.hochiminh.replanteo_c %}true{% else %}false{% endif %},
                             replanteo_d: {% if fila.hochiminh.replanteo_d %}true{% else %}false{% endif %}
                         })'
+                        data-torre-id="{{ fila.torre.id }}"
                         class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not fila.torre.aplica %} opacity-50{% endif %}">
                         <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">
                             <a href="{% url 'construccion:torre_editar' proyecto.id fila.torre.id %}"
@@ -80,17 +81,17 @@
                         <td class="px-2 py-1 text-center">
                             {% if fila.ambiental is None %}—{% elif fila.ambiental %}✓{% else %}✗{% endif %}
                         </td>
-                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.marcacion_a" @change="toggle('marcacion_a', $event.target.checked)"></td>
-                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.marcacion_b" @change="toggle('marcacion_b', $event.target.checked)"></td>
-                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.marcacion_c" @change="toggle('marcacion_c', $event.target.checked)"></td>
-                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.marcacion_d" @change="toggle('marcacion_d', $event.target.checked)"></td>
-                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.replanteo_a" @change="toggle('replanteo_a', $event.target.checked)"></td>
-                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.replanteo_b" @change="toggle('replanteo_b', $event.target.checked)"></td>
-                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.replanteo_c" @change="toggle('replanteo_c', $event.target.checked)"></td>
-                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.replanteo_d" @change="toggle('replanteo_d', $event.target.checked)"></td>
-                        <td class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 {{ fila.color_obra_civil }}">{{ fila.obra_civil_pct }}%</td>
-                        <td class="px-2 py-1 text-center font-semibold {{ fila.color_montaje }}">{{ fila.montaje_pct }}%</td>
-                        <td class="px-2 py-1 text-center font-semibold {{ fila.color_tendido }}">{{ fila.tendido_pct }}%</td>
+                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" data-campo="marcacion_a" :checked="campos.marcacion_a" @change="toggle('marcacion_a', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" data-campo="marcacion_b" :checked="campos.marcacion_b" @change="toggle('marcacion_b', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" data-campo="marcacion_c" :checked="campos.marcacion_c" @change="toggle('marcacion_c', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" data-campo="marcacion_d" :checked="campos.marcacion_d" @change="toggle('marcacion_d', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" data-campo="replanteo_a" :checked="campos.replanteo_a" @change="toggle('replanteo_a', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" data-campo="replanteo_b" :checked="campos.replanteo_b" @change="toggle('replanteo_b', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" data-campo="replanteo_c" :checked="campos.replanteo_c" @change="toggle('replanteo_c', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" data-campo="replanteo_d" :checked="campos.replanteo_d" @change="toggle('replanteo_d', $event.target.checked)"></td>
+                        <td class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 hochiminh-oc-pct {{ fila.color_obra_civil }}">{{ fila.obra_civil_pct }}%</td>
+                        <td class="px-2 py-1 text-center font-semibold hochiminh-montaje-pct {{ fila.color_montaje }}">{{ fila.montaje_pct }}%</td>
+                        <td class="px-2 py-1 text-center font-semibold hochiminh-tendido-pct {{ fila.color_tendido }}">{{ fila.tendido_pct }}%</td>
                         <td class="px-2 py-1 text-center border-l border-gray-200 dark:border-gray-700">
                             <span class="font-semibold {{ fila.color_estado_general }}">{{ fila.estado_general_pct }}%</span>
                         </td>
