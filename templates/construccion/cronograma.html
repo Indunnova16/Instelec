@@ -52,8 +52,8 @@
                    value="{{ f.peso_pct }}"
                    class="w-16 px-2 py-1 border rounded text-right text-sm">
           </td>
-          <td class="px-3 py-2 text-right text-gray-600">{{ f.pct_avance_esperado_hoy|default:"—" }}%</td>
-          <td class="px-3 py-2 text-right text-gray-600">{{ f.pct_avance_real|default:"—" }}%</td>
+          <td class="px-3 py-2 text-right text-gray-600">{{ f.pct_avance_esperado_hoy|default_if_none:"—" }}%</td>
+          <td class="px-3 py-2 text-right text-gray-600">{{ f.pct_avance_real|default_if_none:"—" }}%</td>
           <td class="px-3 py-2 text-center">
             {% if f.estado == 'ON_TIME' %}<span class="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">A tiempo</span>
             {% elif f.estado == 'ADELANTADO' %}<span class="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">Adelantado</span>

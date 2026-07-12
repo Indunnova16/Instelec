@@ -368,6 +368,14 @@ class ProyectoConstruccion(BaseModel):
             return []
         inicio = min(fechas_inicio)
         fin = max(fechas_fin)
+        # #150 (bounce 5): si los pesos de las fases no suman 100 (ej. 200 por
+        # error de captura), el acumulado de "esperado" quedaba inflado por
+        # encima de 100 en vez de treparse hasta el peso real cargado.
+        # Normalizamos por el total real de pesos (mismo patrón que
+        # calculators_avance_real.avance_general). Fallback a 100 si nadie
+        # cargó pesos (todos en 0) para no dividir por cero y preservar el
+        # comportamiento previo (esperado se queda en 0).
+        total_pesos = sum(f.peso_pct for f in fases) or 100
         # Genera lista mes-a-mes
         meses = []
         cursor = date(inicio.year, inicio.month, 1)
@@ -393,9 +401,10 @@ class ProyectoConstruccion(BaseModel):
                     transcurridos = (m - fase.fecha_inicio_planeada).days
                     aporte = (transcurridos / total_dias) * fase.peso_pct if total_dias else 0
                 esperado += aporte
+            esperado_normalizado = min((esperado / total_pesos) * 100, 100)
             resultado.append({
                 'mes': m.isoformat(),
-                'planeado': round(esperado, 1),
+                'planeado': round(esperado_normalizado, 1),
                 'real': None,
             })
         # Sobrescribir 'real' con SnapshotAvance histórico (#61)
@@ -2574,11 +2583,21 @@ class ProgramacionFase(BaseModel):
 
     @property
     def pct_avance_real(self):
-        """Lee el % real desde el ProyectoConstruccion según la sección."""
+        """Lee el % real desde el ProyectoConstruccion según la sección.
+
+        #150 (bounce 5): MONTAJE usaba `porcentaje_avance_montaje`, propiedad
+        legacy que lee `FaseTorre.porcentaje_montaje` — un checklist que el
+        editor de detalle actual (`MontajeEstructuraTorreDetalle`) ya no
+        escribe (el signal de sync solo propaga `entrega_carga_ok`), por lo
+        que quedaba siempre en 0.0 → "—%". `_pct_montaje()` ya lee la fuente
+        correcta y excluye torres `aplica=False` (#160), igual que las demás
+        fases de `calculators_avance_real.FASES_GENERAL`.
+        """
+        from .calculators_avance_real import _pct_montaje
         p = self.proyecto
         mapeo = {
             'OBRA_CIVIL': p.porcentaje_avance_civil,
-            'MONTAJE': p.porcentaje_avance_montaje,
+            'MONTAJE': _pct_montaje(p),
             'TENDIDO': p.porcentaje_avance_tendido,
         }
         return mapeo.get(self.seccion)
