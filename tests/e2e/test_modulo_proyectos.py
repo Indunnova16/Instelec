@@ -153,7 +153,9 @@ class TestCRUDTorre:
         url = reverse('construccion:torre_crear', kwargs={'proyecto_id': proyecto.id})
         data = {
             'numero': 'T-001',
-            'tipo': 'D6',
+            # #171 Fase 1 (2026-07-12): 'D6' era del dominio legacy (help_text
+            # aspiracional, nunca usado en prod). choices real ahora: A/AE/B/C/D/TAE.
+            'tipo': 'D',
             'tipo_cimentacion': 'ZAPATA',
             'peso_kg': 1500.0,
             'tramo_tendido': 'TEND 1',
@@ -168,7 +170,7 @@ class TestCRUDTorre:
         assert resp.status_code in (302, 200), resp.content[:300]
 
         torre = TorreConstruccion.objects.get(proyecto=proyecto, numero='T-001')
-        assert torre.tipo == 'D6'
+        assert torre.tipo == 'D'
         # form_valid crea PataObra para A,B,C,D
         patas = PataObra.objects.filter(torre=torre).values_list('pata', flat=True)
         assert set(patas) == {'A', 'B', 'C', 'D'}

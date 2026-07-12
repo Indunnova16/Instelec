@@ -171,6 +171,12 @@ urlpatterns = [
          views.TendidoRealizoUpdateView.as_view(), name='tendido_realizo_update'),
     path('<uuid:proyecto_id>/tendido-legacy/',
          views.TendidoListView.as_view(), name='tendido_lista_legacy'),
+
+    # Hochiminh Fase 1 (#171) — matriz Marcación/Replanteo por torre
+    path('<uuid:proyecto_id>/hochiminh/',
+         views.HochiminhMatrizView.as_view(), name='hochiminh_lista'),
+    path('<uuid:proyecto_id>/hochiminh/torres/<uuid:torre_id>/toggle/',
+         views.HochiminhToggleView.as_view(), name='hochiminh_toggle'),
     path('<uuid:proyecto_id>/tendido/<uuid:torre_id>/fase/',
          views.TendidoTorreView.as_view(), name='tendido_torre_fase'),
     path('<uuid:proyecto_id>/tendido/<uuid:torre_id>/',

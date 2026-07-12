@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% block title %}Hochiminh — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+<div class="space-y-6"
+     x-data='hochiminhMatriz({
+        proyectoId: "{{ proyecto.id }}",
+        urlBase: "{% url "construccion:hochiminh_lista" proyecto_id=proyecto.id %}",
+        csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}"
+     })'>
+
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">📍 Hochiminh</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+                · Torres: <span class="font-medium">{{ filas|length }}</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Tabla matriz -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-xs">
+                <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0 z-20">
+                    <tr>
+                        <th class="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">Torre</th>
+                        <th class="px-2 py-2 text-center font-semibold">Tipo</th>
+                        <th class="px-2 py-2 text-center font-semibold">Cimentación</th>
+                        <th class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700" title="Actividades Preliminares — Predial">Predial</th>
+                        <th class="px-2 py-2 text-center font-semibold" title="Actividades Preliminares — Ambiental">Ambiental</th>
+                        <th colspan="4" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30">Marcación</th>
+                        <th colspan="4" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Replanteo</th>
+                        <th class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Obra Civil %</th>
+                        <th class="px-2 py-2 text-center font-semibold">Montaje %</th>
+                        <th class="px-2 py-2 text-center font-semibold">Tendido/Guarda %</th>
+                        <th class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Estado general</th>
+                    </tr>
+                    <tr>
+                        <th class="sticky left-0 bg-gray-50 dark:bg-gray-900 z-10"></th>
+                        <th colspan="4"></th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500 border-l border-gray-200 dark:border-gray-700">A</th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500">B</th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500">C</th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500">D</th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500 border-l border-gray-200 dark:border-gray-700">A</th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500">B</th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500">C</th>
+                        <th class="px-1 py-1 text-center font-medium text-gray-500">D</th>
+                        <th colspan="4"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in filas %}
+                    <tr x-data='filaHochiminh("{{ fila.torre.id }}", {
+                            marcacion_a: {% if fila.hochiminh.marcacion_a %}true{% else %}false{% endif %},
+                            marcacion_b: {% if fila.hochiminh.marcacion_b %}true{% else %}false{% endif %},
+                            marcacion_c: {% if fila.hochiminh.marcacion_c %}true{% else %}false{% endif %},
+                            marcacion_d: {% if fila.hochiminh.marcacion_d %}true{% else %}false{% endif %},
+                            replanteo_a: {% if fila.hochiminh.replanteo_a %}true{% else %}false{% endif %},
+                            replanteo_b: {% if fila.hochiminh.replanteo_b %}true{% else %}false{% endif %},
+                            replanteo_c: {% if fila.hochiminh.replanteo_c %}true{% else %}false{% endif %},
+                            replanteo_d: {% if fila.hochiminh.replanteo_d %}true{% else %}false{% endif %}
+                        })'
+                        class="hover:bg-gray-50 dark:hover:bg-gray-700/50{% if not fila.torre.aplica %} opacity-50{% endif %}">
+                        <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">
+                            <a href="{% url 'construccion:torre_editar' proyecto.id fila.torre.id %}"
+                               class="hover:underline{% if not fila.torre.aplica %} text-red-600{% else %} text-blue-600 dark:text-blue-400{% endif %}">{{ fila.torre.numero_display }}</a>
+                        </td>
+                        <td class="px-2 py-1 text-center">{{ fila.torre.get_tipo_display|default:"—" }}</td>
+                        <td class="px-2 py-1 text-center">{{ fila.torre.get_tipo_cimentacion_display|default:"—" }}</td>
+                        <td class="px-2 py-1 text-center border-l border-gray-200 dark:border-gray-700">
+                            {% if fila.predial is None %}—{% elif fila.predial %}✓{% else %}✗{% endif %}
+                        </td>
+                        <td class="px-2 py-1 text-center">
+                            {% if fila.ambiental is None %}—{% elif fila.ambiental %}✓{% else %}✗{% endif %}
+                        </td>
+                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.marcacion_a" @change="toggle('marcacion_a', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.marcacion_b" @change="toggle('marcacion_b', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.marcacion_c" @change="toggle('marcacion_c', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.marcacion_d" @change="toggle('marcacion_d', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.replanteo_a" @change="toggle('replanteo_a', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.replanteo_b" @change="toggle('replanteo_b', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.replanteo_c" @change="toggle('replanteo_c', $event.target.checked)"></td>
+                        <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.replanteo_d" @change="toggle('replanteo_d', $event.target.checked)"></td>
+                        <td class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 {{ fila.color_obra_civil }}">{{ fila.obra_civil_pct }}%</td>
+                        <td class="px-2 py-1 text-center font-semibold {{ fila.color_montaje }}">{{ fila.montaje_pct }}%</td>
+                        <td class="px-2 py-1 text-center font-semibold {{ fila.color_tendido }}">{{ fila.tendido_pct }}%</td>
+                        <td class="px-2 py-1 text-center border-l border-gray-200 dark:border-gray-700">
+                            <span class="font-semibold {{ fila.color_estado_general }}">{{ fila.estado_general_pct }}%</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="15" class="px-3 py-8 text-center text-gray-500">No hay torres en este proyecto.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p x-show="mensaje" x-text="mensaje" class="px-4 py-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20" style="display:none"></p>
+    </div>
+</div>
+
+<script>
+window.__hochiminh_matriz__ = null;
+function hochiminhMatriz(cfg) {
+    return {
+        urlBase: cfg.urlBase,
+        csrfToken: cfg.csrfToken,
+        mensaje: '',
+        init() { window.__hochiminh_matriz__ = this; },
+        mostrar(msg) { this.mensaje = msg; setTimeout(() => { this.mensaje = ''; }, 3000); },
+    };
+}
+
+function filaHochiminh(torreId, campos) {
+    return {
+        torreId: torreId,
+        campos: { ...campos },
+        async toggle(campo, valor) {
+            const previo = this.campos[campo];
+            this.campos[campo] = valor;
+            const m = window.__hochiminh_matriz__;
+            try {
+                const fd = new FormData();
+                fd.append('campo', campo);
+                fd.append('valor', valor ? '1' : '0');
+                const r = await fetch(m.urlBase + 'torres/' + this.torreId + '/toggle/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': m.csrfToken },
+                    body: fd,
+                });
+                if (!r.ok) {
+                    this.campos[campo] = previo;
+                    const data = await r.json();
+                    m.mostrar(data.error || 'Error guardando');
+                }
+            } catch (e) {
+                this.campos[campo] = previo;
+                m.mostrar('Error de red');
+            }
+        },
+    };
+}
+</script>
+{% endlocalize %}
+{% endblock %}

@@ -528,18 +528,28 @@ class TorreConstruccion(BaseModel):
     aplica = models.BooleanField(
         'Aplica al proyecto', default=True,
         help_text='Si está desmarcada, la torre se excluye de todos los módulos y del % de avance.')
-    tipo = models.CharField('Tipo de estructura', max_length=20, blank=True, help_text='e.g., D6, B4, C5')
+    tipo = models.CharField(
+        'Tipo de estructura', max_length=20, blank=True,
+        choices=[
+            ('A', 'A'), ('AE', 'AE'), ('B', 'B'),
+            ('C', 'C'), ('D', 'D'), ('TAE', 'TAE'),
+        ],
+        help_text='Dominio confirmado por leyenda "TIPO DE TORRE" del PDF Hochiminh del cliente (#171).')
     tipo_cimentacion = models.CharField(
         'Tipo de cimentación',
         max_length=20,
         choices=[
-            ('ZAPATA', 'Zapata'),
-            ('HELICOIDAL', 'Helicoidal'),
-            ('PARRILLA', 'Parrilla'),
-            ('PILOTE', 'Pilote'),
+            ('ZAPATA', 'Exc. Zapata'),
+            ('PARRILLA_PESADA', 'Parrilla pesada'),
+            ('PARRILLA_LIVIANA', 'Parrilla liviana'),
+            ('PILA_CAMPANA', 'Exc. Pila con campana'),
+            ('PILA_DADO', 'Exc. Pila con dado'),
             ('MICROPILOTE', 'Micropilote'),
         ],
         blank=True,
+        help_text='#171 (2026-07-12): dominio de 6 valores del PDF Hochiminh del cliente. '
+                   'Reemplaza el dominio legacy (ZAPATA/HELICOIDAL/PARRILLA/PILOTE/MICROPILOTE) — '
+                   'verificado 0 filas con HELICOIDAL/PILOTE/PARRILLA en prod (F2).',
     )
     peso_kg = models.FloatField('Peso de estructura (kg)', null=True, blank=True)
     tramo_tendido = models.CharField('Tramo de tendido', max_length=20, blank=True, help_text='e.g., TEND 1, TEND 4')
@@ -2986,3 +2996,6 @@ from .models_b3_mont_detalle import *  # noqa: E402,F401,F403
 # === /modulo financiero_construccion_runB — modelos financieros ===
 # F2 scaffolding: B3 (#123) llena los 5 modelos financieros en models_fin.
 from .models_fin import *  # noqa: E402,F401,F403
+
+# === #171 Hochiminh Fase 1 (2026-07-12) — marcación/replanteo por torre ===
+from .models_hochiminh import *  # noqa: E402,F401,F403

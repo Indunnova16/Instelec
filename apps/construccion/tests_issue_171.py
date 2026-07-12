@@ -65,7 +65,11 @@ def test_torre_crear_post_crea_torre_y_redirige(authenticated_client, proyecto_c
     url = reverse('construccion:torre_crear', kwargs={'proyecto_id': proyecto_construccion.id})
     resp = authenticated_client.post(url, data={
         'numero': 'T-65',
-        'tipo': 'D6',
+        # #171 Fase 1 (2026-07-12): 'D6' era el dominio legacy (help_text
+        # aspiracional, nunca usado en prod — 0 filas). El choices real ahora
+        # es A/AE/B/C/D/TAE (PDF Hochiminh del cliente); 'D' es el equivalente
+        # válido más cercano.
+        'tipo': 'D',
         'tipo_cimentacion': 'ZAPATA',
         'peso_kg': '1200.5',
         'tramo_tendido': 'TEND 1',
@@ -81,7 +85,7 @@ def test_torre_crear_post_crea_torre_y_redirige(authenticated_client, proyecto_c
     assert resp.url == expected_redirect
 
     torre = TorreConstruccion.objects.get(proyecto=proyecto_construccion, numero='T-65')
-    assert torre.tipo == 'D6'
+    assert torre.tipo == 'D'
     assert torre.tipo_cimentacion == 'ZAPATA'
     assert PataObra.objects.filter(torre=torre).count() == 4
     assert FaseTorre.objects.filter(torre=torre).exists()
@@ -109,8 +113,11 @@ def test_torre_editar_post_actualiza_torre_legacy(authenticated_client, proyecto
                   kwargs={'proyecto_id': proyecto_construccion.id, 'pk': torre_legacy.id})
     resp = authenticated_client.post(url, data={
         'numero': 'T-1A',
-        'tipo': 'B4',
-        'tipo_cimentacion': 'PILOTE',
+        # #171 Fase 1 (2026-07-12): 'B4'/'PILOTE' eran del dominio legacy.
+        # choices real ahora: tipo=A/AE/B/C/D/TAE, tipo_cimentacion=6 valores
+        # del PDF Hochiminh del cliente (PILOTE retirado, 0 filas lo usaban).
+        'tipo': 'B',
+        'tipo_cimentacion': 'PILA_DADO',
         'peso_kg': '',
         'tramo_tendido': '',
         'latitud': '',
@@ -123,8 +130,8 @@ def test_torre_editar_post_actualiza_torre_legacy(authenticated_client, proyecto
     assert resp.status_code == 302
     torre_legacy.refresh_from_db()
     assert torre_legacy.numero == 'T-1A'
-    assert torre_legacy.tipo == 'B4'
-    assert torre_legacy.tipo_cimentacion == 'PILOTE'
+    assert torre_legacy.tipo == 'B'
+    assert torre_legacy.tipo_cimentacion == 'PILA_DADO'
     assert torre_legacy.observaciones == 'Editada via test #171'
 
 

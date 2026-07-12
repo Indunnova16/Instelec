@@ -65,6 +65,8 @@ from .models import (
     CategoriaFinanciera,
     PeriodoFinanciero,
     MovimientoFinanciero,
+    HochiminhMarcacionReplanteo,
+    cruzar_preliminares,
 )
 
 
@@ -2189,6 +2191,86 @@ class TendidoRealizoUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
         t, _ = TendidoTorre.objects.get_or_create(proyecto=proyecto, torre=torre)
         setattr(t, campo, valor)
         t.save(update_fields=[campo, 'updated_at'])
+        return JsonResponse({'ok': True})
+
+
+# ==========================================================================
+# Hochiminh Fase 1 (#171, 2026-07-12) — matriz por torre: Marcación/Replanteo
+# + columnas de solo-lectura reusadas de Obra Civil/Montaje/Tendido/Preliminares
+# ==========================================================================
+
+HOCHIMINH_TODOS_BOOL = {
+    'marcacion_a', 'marcacion_b', 'marcacion_c', 'marcacion_d',
+    'replanteo_a', 'replanteo_b', 'replanteo_c', 'replanteo_d',
+}
+
+
+class HochiminhMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Matriz Hochiminh: Torre/Tipo/Cimentación/Predial/Ambiental (solo
+    lectura, reuso) + Marcación A-D/Replanteo A-D (editable) + % Obra
+    Civil/Montaje/Tendido/Estado general (solo lectura, reuso). Mismo patrón
+    que TendidoMatrizView: TODAS las torres visibles (grisadas si no
+    aplica), sin toggle propio de aplicabilidad — #160 no se toca."""
+    template_name = 'construccion/hochiminh_matriz.html'
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+        torres_qs = TorreConstruccion.objects.filter(proyecto=proyecto)
+        torres_qs = filtrar_torres_por_cuadrilla(torres_qs, self.request.user)
+        # #171: listar TODAS las torres (incl. "No aplica"), igual que Tendido.
+        torres = list(ordenar_torres_construccion(torres_qs.select_related(), incluir_no_aplica=True))
+
+        existentes = {h.torre_id: h for h in HochiminhMarcacionReplanteo.objects.filter(
+            torre__proyecto=proyecto)}
+        preliminares = cruzar_preliminares(proyecto, torres)
+
+        filas = []
+        for torre in torres:
+            h = existentes.get(torre.id)
+            if h is None:
+                h, _ = HochiminhMarcacionReplanteo.objects.get_or_create(torre=torre)
+            filas.append({
+                'torre': torre,
+                'hochiminh': h,
+                'predial': preliminares.get(torre.id, {}).get('predial'),
+                'ambiental': preliminares.get(torre.id, {}).get('ambiental'),
+                'obra_civil_pct': h.obra_civil_pct,
+                'montaje_pct': h.montaje_pct,
+                'tendido_pct': h.tendido_pct,
+                'estado_general_pct': h.estado_general_pct,
+                'color_obra_civil': HochiminhMarcacionReplanteo.color_semaforo(h.obra_civil_pct),
+                'color_montaje': HochiminhMarcacionReplanteo.color_semaforo(h.montaje_pct),
+                'color_tendido': HochiminhMarcacionReplanteo.color_semaforo(h.tendido_pct),
+                'color_estado_general': HochiminhMarcacionReplanteo.color_semaforo(h.estado_general_pct),
+            })
+
+        ctx.update({
+            'proyecto': proyecto,
+            'filas': filas,
+            'active_tab': 'hochiminh',
+        })
+        return ctx
+
+
+class HochiminhToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — toggle de Marcación/Replanteo por pata de una torre.
+    Mismo patrón que TendidoToggleView."""
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+        campo = request.POST.get('campo', '').strip()
+        if campo not in HOCHIMINH_TODOS_BOOL:
+            return JsonResponse({'error': f'Campo inválido: {campo!r}'}, status=400)
+        valor = request.POST.get('valor', '').strip() in ('1', 'true', 'on', 'True')
+
+        h, _ = HochiminhMarcacionReplanteo.objects.get_or_create(torre=torre)
+        setattr(h, campo, valor)
+        h.save(update_fields=[campo, 'updated_at'])
         return JsonResponse({'ok': True})
 
 
