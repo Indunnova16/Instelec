@@ -85,10 +85,10 @@ Los avances de las 4 etapas son READ-ONLY: vienen del cache
   </div>
 
   <!-- Tabla matriz (read-only, links al detalle) -->
-  <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-    <div class="overflow-x-auto">
+  <div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="overflow-x-auto overflow-y-visible">
       <table class="min-w-full divide-y divide-gray-200 text-sm">
-        <thead class="bg-gray-50">
+        <thead class="bg-gray-50 sticky top-0 z-20">
           <tr>
             <th class="px-3 py-2 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10">Torre</th>
             {% for slug, label in columnas %}
