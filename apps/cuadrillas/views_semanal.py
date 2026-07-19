@@ -24,7 +24,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import path, reverse
 from django.utils import timezone
@@ -181,12 +181,28 @@ def _siguiente_codigo_bloque(anio, semana, nombre=""):
     return f"{prefijo}{max_num + 1:04d}-{iniciales}"
 
 
-def _post_a_bloque_dict(request, fecha=None):
+def _anio_semana_desde_codigo(codigo):
+    """Extrae (anio, semana) del prefijo ``WW-YYYY-`` de un código de bloque
+    (issue #188, A4) — mismo criterio de ``CuadrillaListView._parse_semana``."""
+    partes = (codigo or "").split("-")
+    try:
+        if len(partes) >= 2:
+            semana, anio = int(partes[0]), int(partes[1])
+            if 1 <= semana <= 53 and 2000 <= anio <= 2100:
+                return anio, semana
+    except (ValueError, IndexError):
+        pass
+    return None, None
+
+
+def _post_a_bloque_dict(request, fecha=None, codigo=""):
     """Reconstruye un dict "tipo _bloque_a_dict" a partir de un POST fallido
-    (issue #188, A3/A4) — para reusar _bloque_form.html y NO perder lo que el
-    usuario ya había llenado cuando el submit falla por validación."""
+    (issue #188, A3/A4) — para reusar _bloque_form.html/_bloque_card.html y NO
+    perder lo que el usuario ya había llenado cuando el submit falla por
+    validación."""
     return {
         "id": "",
+        "codigo": codigo,
         "nombre": (request.POST.get("nombre") or "").strip(),
         "tipo_actividad_id": request.POST.get("tipo_actividad") or "",
         "linea_id": request.POST.get("linea_asignada") or "",
@@ -396,6 +412,75 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
         return HttpResponse(html, status=400)
 
 
+class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST /cuadrillas/semanal/bloque/<uuid:pk>/editar/ (issue #188, A4).
+
+    Mismos campos de A3 sobre un bloque YA existente. Éxito: reemplaza el
+    card completo (outerHTML) con la vista de solo lectura actualizada —
+    reinicia el `x-data` de Alpine (nuevo nodo del DOM), sin necesidad de
+    tocar el estado ``editando`` a mano. Falla: reemplaza el card con el
+    mismo form de edición abierto (``editando_inicial=True``) + error
+    inline, preservando lo ya llenado."""
+
+    allowed_roles = ROLES_CUADRILLAS
+
+    def post(self, request, pk):
+        cuadrilla = get_object_or_404(Cuadrilla, pk=pk)
+        anio, semana = _anio_semana_desde_codigo(cuadrilla.codigo)
+
+        nombre = (request.POST.get("nombre") or "").strip()
+        if not nombre:
+            return self._card_con_error(request, cuadrilla, anio, semana, "El nombre del bloque es obligatorio.")
+
+        fecha_str = (request.POST.get("fecha") or "").strip()
+        fecha = None
+        if fecha_str:
+            try:
+                fecha = date.fromisoformat(fecha_str)
+            except ValueError:
+                return self._card_con_error(request, cuadrilla, anio, semana, "La fecha ingresada no es válida.")
+
+        try:
+            with transaction.atomic():
+                cuadrilla.nombre = nombre
+                cuadrilla.tipo_actividad_id = request.POST.get("tipo_actividad") or None
+                cuadrilla.linea_asignada_id = request.POST.get("linea_asignada") or None
+                cuadrilla.tramo_id = request.POST.get("tramo") or None
+                cuadrilla.vehiculo_id = request.POST.get("vehiculo") or None
+                cuadrilla.supervisor_id = request.POST.get("supervisor") or None
+                cuadrilla.observaciones = (request.POST.get("observaciones") or "").strip()
+                cuadrilla.fecha = fecha
+                cuadrilla.save()
+        except Exception as e:
+            logger.exception("Error editando bloque de programación semanal (issue #188)")
+            return self._card_con_error(request, cuadrilla, anio, semana, f"Error al guardar: {e}")
+
+        cuadrilla.refresh_from_db()
+        html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            request=request,
+        )
+        return HttpResponse(html)
+
+    def _card_con_error(self, request, cuadrilla, anio, semana, mensaje):
+        valores = _post_a_bloque_dict(request, codigo=cuadrilla.codigo)
+        valores["id"] = str(cuadrilla.id)
+        html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {
+                **_choices_form_bloque(),
+                "b": valores,
+                "anio": anio,
+                "semana": semana,
+                "editando_inicial": True,
+                "form_error": mensaje,
+            },
+            request=request,
+        )
+        return HttpResponse(html, status=400)
+
+
 class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Copia los bloques (Cuadrilla + CuadrillaMiembro) de la semana anterior a
     la semana destino como base editable. NO destructivo: si un bloque ya existe
@@ -536,4 +621,10 @@ urlpatterns = [
         name="semanal_bloque_crear",
     ),
     path("api/tramos-por-linea/", TramosPorLineaAPIView.as_view(), name="tramos_por_linea_api"),
+    # Issue #188 (A4) — editar bloque existente in-place.
+    path(
+        "semanal/bloque/<uuid:pk>/editar/",
+        ProgramacionSemanalBloqueEditarView.as_view(),
+        name="semanal_bloque_editar",
+    ),
 ]

@@ -229,3 +229,56 @@ class TestA3CrearBloqueCascadaTramo(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertContains(resp, "obligatorio", status_code=400)
         self.assertEqual(Cuadrilla.objects.count(), antes)
+
+
+# ---------------------------------------------------------------------------
+# A4 — Endpoint editar bloque existente
+# ---------------------------------------------------------------------------
+class TestA4EditarBloqueExistente(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.cuadrilla = Cuadrilla.objects.create(
+            codigo="43-2026-0001-A4T", nombre="Bloque A4 Original", activa=True
+        )
+
+    def test_happy_editar_nombre_y_tramo_persiste(self):
+        from apps.lineas.models import Linea, Torre, Tramo
+
+        linea = Linea.objects.create(codigo="188-A4-L1", nombre="Linea A4", cliente="TRANSELCA")
+        t1 = Torre.objects.create(linea=linea, numero="1", latitud="7.0", longitud="-75.5")
+        t2 = Torre.objects.create(linea=linea, numero="2", latitud="7.01", longitud="-75.51")
+        tramo = Tramo.objects.create(
+            linea=linea, codigo="188-A4-TRM1", nombre="Tramo A4 Uno", torre_inicio=t1, torre_fin=t2
+        )
+        url = reverse("cuadrillas:semanal_bloque_editar", args=[self.cuadrilla.id])
+        resp = self.client.post(
+            url,
+            {
+                "nombre": "Bloque A4 Editado",
+                "linea_asignada": str(linea.id),
+                "tramo": str(tramo.id),
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Bloque A4 Editado")
+        self.cuadrilla.refresh_from_db()
+        self.assertEqual(self.cuadrilla.nombre, "Bloque A4 Editado")
+        self.assertEqual(self.cuadrilla.tramo_id, tramo.id)
+
+    def test_edge_guardar_sin_cambios_no_rompe(self):
+        url = reverse("cuadrillas:semanal_bloque_editar", args=[self.cuadrilla.id])
+        resp = self.client.post(url, {"nombre": self.cuadrilla.nombre})
+        self.assertEqual(resp.status_code, 200)
+        self.cuadrilla.refresh_from_db()
+        self.assertEqual(self.cuadrilla.nombre, "Bloque A4 Original")
+
+    def test_edge_nombre_vacio_no_guarda_y_reabre_form(self):
+        url = reverse("cuadrillas:semanal_bloque_editar", args=[self.cuadrilla.id])
+        resp = self.client.post(url, {"nombre": ""})
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "obligatorio", status_code=400)
+        self.assertContains(resp, 'id="form-editar-bloque"', status_code=400)
+        self.cuadrilla.refresh_from_db()
+        self.assertEqual(self.cuadrilla.nombre, "Bloque A4 Original")
