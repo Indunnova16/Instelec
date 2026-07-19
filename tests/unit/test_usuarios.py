@@ -117,3 +117,78 @@ class TestUsuarioFactory:
 
         user = CoordinadorFactory()
         assert user.rol == "coordinador"
+
+
+@pytest.mark.django_db
+class TestEsOperarioCampoRetrofit186:
+    """Issue #186 (A4): `es_operario_campo` retrofit BD-backed.
+
+    Antes importaba `ROL_NIVEL`/`NIVEL_OPERARIO` directo del dict eliminado
+    en A3; ahora pasa por `apps.core.permissions.rol_nivel` (BD-backed,
+    cacheado). Debe dar el MISMO resultado que antes para los 15 roles
+    legacy -- reusa el snapshot congelado del Gate de Paridad (A2)."""
+
+    def test_es_operario_campo_paridad_15_roles(self):
+        from apps.core import rbac_seed_data as snap
+
+        for codigo in snap.TODOS_LOS_CODIGOS:
+            user = User(rol=codigo, is_superuser=False, is_staff=False)
+            esperado = snap.ROL_NIVEL.get(codigo) == snap.NIVEL_OPERARIO
+            assert user.es_operario_campo == esperado, (
+                f"es_operario_campo roto para rol={codigo}: "
+                f"esperado={esperado} real={user.es_operario_campo}"
+            )
+
+    def test_es_operario_campo_liniero_true(self):
+        """Caso concreto (liniero es el rol legacy más usado en prod, 90
+        usuarios reales confirmados 2026-07-18 vía proxy Cloud SQL)."""
+        user = User(rol="liniero", is_superuser=False, is_staff=False)
+        assert user.es_operario_campo is True
+
+    def test_es_operario_campo_admin_false(self):
+        user = User(rol="admin", is_superuser=False, is_staff=False)
+        assert user.es_operario_campo is False
+
+
+@pytest.mark.django_db
+class TestDropdownRolesDinamicoRetrofit186:
+    """Issue #186 (A4): el dropdown de asignación de rol en
+    GestionUsuariosView/CrearUsuarioAdminView lee `Role.objects.filter(
+    activo=True)` en vez de `Usuario.Rol.choices` -- así un rol creado desde
+    la matriz (A5) queda disponible para asignar sin deploy."""
+
+    def test_gestion_usuarios_dropdown_incluye_rol_nuevo(self, client, user_password):
+        from apps.core.models import Role
+        from tests.factories import AdminFactory
+
+        Role.objects.create(
+            codigo="qa_e2e_test_dropdown_a4",
+            nombre="QA_E2E_186 Rol Dropdown",
+            nivel=Role.NIVEL_OPERARIO,
+            activo=True,
+        )
+        admin = AdminFactory()
+        client.login(username=admin.email, password=user_password)
+
+        response = client.get("/usuarios/gestion/")
+        assert response.status_code == 200
+        codigos = [codigo for codigo, _nombre in response.context["roles"]]
+        assert "qa_e2e_test_dropdown_a4" in codigos
+
+    def test_crear_usuario_dropdown_excluye_rol_inactivo(self, client, user_password):
+        from apps.core.models import Role
+        from tests.factories import AdminFactory
+
+        Role.objects.create(
+            codigo="qa_e2e_dropdown_inact_a4",
+            nombre="QA_E2E_186 Rol Inactivo",
+            nivel=Role.NIVEL_OPERARIO,
+            activo=False,
+        )
+        admin = AdminFactory()
+        client.login(username=admin.email, password=user_password)
+
+        response = client.get("/usuarios/gestion/crear/")
+        assert response.status_code == 200
+        codigos = [codigo for codigo, _nombre in response.context["roles"]]
+        assert "qa_e2e_dropdown_inact_a4" not in codigos

@@ -196,9 +196,13 @@ class Usuario(AbstractUser):
     @property
     def es_operario_campo(self):
         """True si el rol RBAC v2 lo marca como operario (de cualquier módulo).
-        Las vistas pueden usar esto para filtrar querysets por cuadrilla."""
-        from apps.core.permissions import ROL_NIVEL, NIVEL_OPERARIO
-        return ROL_NIVEL.get(self.rol) == NIVEL_OPERARIO
+        Las vistas pueden usar esto para filtrar querysets por cuadrilla.
+
+        Issue #186 (A4): BD-backed vía `apps.core.permissions.rol_nivel` --
+        antes importaba `ROL_NIVEL`/`NIVEL_OPERARIO` directo del dict
+        hardcodeado (eliminado en A3)."""
+        from apps.core.permissions import NIVEL_OPERARIO, rol_nivel
+        return rol_nivel(self.rol) == NIVEL_OPERARIO
 
     def has_role(self, roles):
         """Check if user has any of the specified roles."""
