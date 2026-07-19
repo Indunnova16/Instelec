@@ -352,3 +352,43 @@ class TestA5AgregarPersonalBloque(TestCase):
         self.assertEqual(Usuario.objects.filter(documento="188-A5-0003").count(), antes)
         miembro = CuadrillaMiembro.objects.get(cuadrilla=self.cuadrilla)
         self.assertEqual(miembro.usuario_id, usuario_existente.id)
+
+
+# ---------------------------------------------------------------------------
+# A6 — Endpoint quitar/inactivar personal de un bloque
+# ---------------------------------------------------------------------------
+class TestA6QuitarPersonalBloque(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.cuadrilla = Cuadrilla.objects.create(
+            codigo="45-2026-0001-A6T", nombre="Bloque A6", activa=True
+        )
+        self.usuario = _crear_usuario_miembro("188-A6-0001", "Miembro A6 Quitar")
+        self.miembro = CuadrillaMiembro.objects.create(
+            cuadrilla=self.cuadrilla,
+            usuario=self.usuario,
+            rol_cuadrilla_id="LINIERO_I",
+            fecha_inicio=date.today(),
+        )
+
+    def test_happy_quitar_miembro_desaparece_de_la_card(self):
+        url = reverse("cuadrillas:semanal_miembro_quitar", args=[self.cuadrilla.id, self.miembro.id])
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Miembro A6 Quitar")
+        self.miembro.refresh_from_db()
+        self.assertFalse(self.miembro.activo)
+        self.assertEqual(self.miembro.fecha_fin, date.today())
+
+    def test_edge_quitar_miembro_ya_inactivo_es_idempotente(self):
+        self.miembro.activo = False
+        self.miembro.fecha_fin = date.today()
+        self.miembro.save(update_fields=["activo", "fecha_fin"])
+
+        url = reverse("cuadrillas:semanal_miembro_quitar", args=[self.cuadrilla.id, self.miembro.id])
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 200)
+        self.miembro.refresh_from_db()
+        self.assertFalse(self.miembro.activo)

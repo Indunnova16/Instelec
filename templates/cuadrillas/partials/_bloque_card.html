@@ -58,10 +58,12 @@ montado a la vez). Recibe:
                             <th class="py-2 pr-4 font-medium">Cargo</th>
                             <th class="py-2 pr-4 font-medium">Rol</th>
                             <th class="py-2 pr-4 font-medium">Placa</th>
+                            <th class="py-2 pr-4 font-medium text-right">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for m in b.miembros %}
+                        {% url 'cuadrillas:semanal_miembro_quitar' pk=b.id miembro_pk=m.miembro_pk as url_quitar_miembro %}
                         <tr class="border-b border-gray-50 dark:border-gray-700/50" data-miembro-usuario="{{ m.usuario_pk }}">
                             <td class="py-2 pr-4 text-gray-900 dark:text-gray-100">
                                 {{ m.nombre }}
@@ -72,6 +74,17 @@ montado a la vez). Recibe:
                             <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ m.cargo }}</td>
                             <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ m.rol }}</td>
                             <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ m.placa_vehiculo|default:"—" }}</td>
+                            <td class="py-2 pr-4 text-right">
+                                <button type="button" data-action="quitar-personal"
+                                        hx-post="{{ url_quitar_miembro }}"
+                                        hx-target="closest [data-bloque-codigo]"
+                                        hx-swap="outerHTML"
+                                        hx-confirm="¿Quitar a {{ m.nombre }} de este bloque?"
+                                        class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-800 transition"
+                                        aria-label="Quitar a {{ m.nombre }} del bloque {{ b.codigo }}">
+                                    Quitar
+                                </button>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

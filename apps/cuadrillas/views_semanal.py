@@ -602,6 +602,34 @@ class ProgramacionSemanalMiembroAgregarView(LoginRequiredMixin, RoleRequiredMixi
         return HttpResponse(html, status=400)
 
 
+class ProgramacionSemanalMiembroQuitarView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST /cuadrillas/semanal/bloque/<uuid:pk>/miembro/<uuid:miembro_pk>/quitar/
+    (issue #188, A6). Soft-remove: marca ``activo=False`` + ``fecha_fin`` (NO
+    DELETE físico — mismo patrón que ``CuadrillaMiembroRemoveView``).
+    Idempotente: si el miembro ya estaba inactivo, no rompe — simplemente
+    devuelve el card sin cambios."""
+
+    allowed_roles = ROLES_CUADRILLAS
+
+    def post(self, request, pk, miembro_pk):
+        cuadrilla = get_object_or_404(Cuadrilla, pk=pk)
+        anio, semana = _anio_semana_desde_codigo(cuadrilla.codigo)
+
+        miembro = CuadrillaMiembro.objects.filter(pk=miembro_pk, cuadrilla=cuadrilla).first()
+        if miembro and miembro.activo:
+            miembro.activo = False
+            miembro.fecha_fin = date.today()
+            miembro.save(update_fields=["activo", "fecha_fin", "updated_at"])
+
+        cuadrilla.refresh_from_db()
+        html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            request=request,
+        )
+        return HttpResponse(html)
+
+
 class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Copia los bloques (Cuadrilla + CuadrillaMiembro) de la semana anterior a
     la semana destino como base editable. NO destructivo: si un bloque ya existe
@@ -753,5 +781,11 @@ urlpatterns = [
         "semanal/bloque/<uuid:pk>/miembro/agregar/",
         ProgramacionSemanalMiembroAgregarView.as_view(),
         name="semanal_miembro_agregar",
+    ),
+    # Issue #188 (A6) — quitar/inactivar personal de un bloque in-place.
+    path(
+        "semanal/bloque/<uuid:pk>/miembro/<uuid:miembro_pk>/quitar/",
+        ProgramacionSemanalMiembroQuitarView.as_view(),
+        name="semanal_miembro_quitar",
     ),
 ]
