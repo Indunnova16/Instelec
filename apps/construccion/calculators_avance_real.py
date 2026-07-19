@@ -34,6 +34,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
+from django.utils import timezone
+
 # Etiquetas canónicas de fase (alineadas con DashboardAvanceSemanal.Fase).
 FASE_OOCC = 'OOCC'
 FASE_MONTAJE = 'MONTAJE'
@@ -148,7 +150,7 @@ def fecha_avance_oc(detalle) -> date:
         getattr(detalle, 'vac_fecha_vaciado', None),
         getattr(detalle, 'updated_at', None),
         getattr(detalle, 'created_at', None),
-    ) or date.today()
+    ) or timezone.localdate()
 
 
 def fecha_avance_montaje(d) -> date:
@@ -162,7 +164,7 @@ def fecha_avance_montaje(d) -> date:
         getattr(d, 'prearmado_fecha_fin', None),
         getattr(d, 'updated_at', None),
         getattr(d, 'created_at', None),
-    ) or date.today()
+    ) or timezone.localdate()
 
 
 #: Campos de fecha MANUAL diligenciados por torre en ``FaseTorre`` (A3, #166
@@ -203,7 +205,7 @@ def fecha_avance_tendido(t) -> date:
     """
     fase_torre = getattr(t.torre, 'fase', None)
     if fase_torre is not None:
-        hoy = date.today()
+        hoy = timezone.localdate()
         candidatas = []
         for campo in _CAMPOS_FECHA_TENDIDO_FASETORRE:
             valor = getattr(fase_torre, campo, None)
@@ -219,7 +221,7 @@ def fecha_avance_tendido(t) -> date:
     return _cascada_fecha(
         getattr(t, 'updated_at', None),
         getattr(t, 'created_at', None),
-    ) or date.today()
+    ) or timezone.localdate()
 
 
 # ==========================================================================
@@ -368,7 +370,7 @@ def serie_planeado(proyecto, fase) -> dict:
         planeado = [0.0, 100.0]
         if total_dias > 0:
             # Punto intermedio "hoy" si cae dentro del rango, para una curva más fiel.
-            hoy = date.today()
+            hoy = timezone.localdate()
             if inicio < hoy < fin:
                 pct_hoy = round(((hoy - inicio).days / total_dias) * 100.0, 2)
                 labels = [inicio.isoformat(), hoy.isoformat(), fin.isoformat()]
