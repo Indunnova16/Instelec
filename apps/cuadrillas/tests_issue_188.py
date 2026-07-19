@@ -487,3 +487,43 @@ class TestA8DuplicarEditarSinPerderDatos(TestCase):
         # El duplicado (semana 48) sí persistió el cambio.
         duplicado.refresh_from_db()
         self.assertEqual(duplicado.nombre, "Bloque A8 Duplicado Editado")
+
+
+# ---------------------------------------------------------------------------
+# A9 — Fusionar /cuadrillas/ (listado) con /cuadrillas/semanal/ (grid)
+# ---------------------------------------------------------------------------
+class TestA9FusionListadoYGrid(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_happy_pantalla_fusionada_muestra_grid_y_acciones_de_listado(self):
+        Cuadrilla.objects.create(codigo="49-2026-0001-A9T", nombre="Bloque A9 Fusion", activa=True)
+        resp = self.client.get(reverse("cuadrillas:lista"), {"semana": "49-2026"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Bloque A9 Fusion")
+        self.assertContains(resp, "Nueva Cuadrilla")
+        self.assertContains(resp, 'id="bloques-lista"')
+        self.assertContains(resp, 'id="btn-nuevo-bloque"')
+
+    def test_happy_semana_sin_filtro_usa_mas_reciente_con_datos(self):
+        Cuadrilla.objects.create(codigo="50-2026-0001-A9T", nombre="Bloque A9 Reciente", activa=True)
+        resp = self.client.get(reverse("cuadrillas:lista"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Bloque A9 Reciente")
+
+    def test_regresion_export_pdf_duplicar_mapa_siguen_200(self):
+        Cuadrilla.objects.create(codigo="51-2026-0001-A9T", nombre="Bloque A9 Regresion", activa=True)
+
+        resp_pdf = self.client.get(reverse("cuadrillas:semanal_pdf", args=[2026, 51]))
+        self.assertEqual(resp_pdf.status_code, 200)
+
+        resp_dup = self.client.post(reverse("cuadrillas:semanal_duplicar", args=[2026, 52]))
+        self.assertEqual(resp_dup.status_code, 302)
+
+        resp_mapa = self.client.get(reverse("cuadrillas:mapa"))
+        self.assertEqual(resp_mapa.status_code, 200)
+
+        resp_fusion = self.client.get(reverse("cuadrillas:lista"), {"semana": "51-2026"})
+        self.assertEqual(resp_fusion.status_code, 200)

@@ -1,0 +1,43 @@
+{% comment %}
+JS compartido del mini-form "agregar personal" del grid editable (issue
+#188, A5/A9) -- incluido desde el {% block extra_js %} de
+programacion_semanal_grid.html Y de lista.html (pantalla fusionada, A9) para
+no duplicar la función en ambas páginas.
+{% endcomment %}
+<script>
+// Issue #188 (A5): autocompletado de "agregar personal" -- misma idea de
+// autoCargarDatosPorDocumento() en detalle.html, adaptada al mini-form del
+// grid (PersonalCuadrillaAPIView ahora expone `celular`; A3 exige placa
+// manual si el Cargo resuelto es CONDUCTOR).
+function cargarDatosPersonalBloque(inputEl) {
+    const documento = inputEl.value.trim();
+    const form = inputEl.closest('form');
+    const nombreDisplay = form.querySelector('#id_nombre_display');
+    const placaWrap = form.querySelector('#placa_vehiculo_wrap');
+    if (!documento) {
+        if (nombreDisplay) nombreDisplay.value = '';
+        if (placaWrap) placaWrap.classList.add('hidden');
+        return;
+    }
+    fetch(`{% url 'cuadrillas:personal_detalle_api' %}?documento=${encodeURIComponent(documento)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+            if (!data || !data.nombre) {
+                if (nombreDisplay) nombreDisplay.value = 'No encontrado';
+                if (placaWrap) placaWrap.classList.add('hidden');
+                return;
+            }
+            if (nombreDisplay) nombreDisplay.value = data.nombre;
+            if (placaWrap) {
+                if (data.rol_cuadrilla === 'CONDUCTOR') {
+                    placaWrap.classList.remove('hidden');
+                } else {
+                    placaWrap.classList.add('hidden');
+                }
+            }
+        })
+        .catch(() => {
+            if (nombreDisplay) nombreDisplay.value = '';
+        });
+}
+</script>

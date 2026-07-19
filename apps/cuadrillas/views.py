@@ -110,6 +110,37 @@ class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVi
         # vacío sin pageerror — el JS de lista.html ya tolera lista vacía).
         ubicaciones = self._build_ubicaciones_proyecto(context['cuadrillas'])
         context['cuadrillas_ubicaciones_json'] = json.dumps(ubicaciones)
+
+        # Issue #188 (A9): fusión con /cuadrillas/semanal/ -- la pantalla
+        # fusionada agrega el grid EDITABLE (bloques cards) de una semana
+        # puntual, reusando _contexto_semana/_choices_form_bloque de
+        # views_semanal.py como fuente única de verdad (en vez de duplicar el
+        # modelo de acceso a datos). Reusa el MISMO `semana_param` que ya
+        # filtra el listado plano de abajo (mismo formato WW-YYYY); si no
+        # viene, usa la semana con datos más reciente. Preserva TODO lo de
+        # arriba (filtros activas/inactivas de B3, mapa por proyecto, listado
+        # agrupado) sin tocarlo -- el grid es una sección nueva, no un
+        # reemplazo.
+        from .views_semanal import (
+            _choices_form_bloque,
+            _contexto_semana,
+            _semana_mas_reciente_con_datos,
+        )
+
+        grid_anio = grid_semana = None
+        if semana_param:
+            try:
+                partes = semana_param.split('-')
+                grid_semana = int(partes[0])
+                grid_anio = int(partes[1])
+            except (IndexError, ValueError):
+                grid_anio = grid_semana = None
+        if grid_anio is None or grid_semana is None:
+            grid_anio, grid_semana = _semana_mas_reciente_con_datos()
+
+        context.update(_contexto_semana(grid_anio, grid_semana))
+        context.update(_choices_form_bloque())
+        context['confirmar_duplicado'] = self.request.GET.get('confirmar_duplicado') == '1'
         return context
 
     @staticmethod

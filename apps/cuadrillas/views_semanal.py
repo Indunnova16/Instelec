@@ -288,6 +288,31 @@ def _contexto_semana(anio, semana):
 # ---------------------------------------------------------------------------
 
 
+def _semana_mas_reciente_con_datos():
+    """(anio, semana) de la programación con datos más reciente, o la semana
+    ISO actual si no hay ninguna cargada. Issue #188 (A9): extraído de
+    ``ProgramacionSemanalIndexView.get()`` para reusarlo también desde
+    ``CuadrillaListView`` (pantalla fusionada) cuando no viene un ``semana``
+    explícito en la URL."""
+    codigos = Cuadrilla.objects.filter(
+        codigo__regex=r"^[0-9]{2}-[0-9]{4}-", activa=True
+    ).values_list("codigo", flat=True)
+    mejor = None
+    for codigo in codigos:
+        partes = codigo.split("-")
+        try:
+            sem, ano = int(partes[0]), int(partes[1])
+        except (ValueError, IndexError):
+            continue
+        if 1 <= sem <= 53 and 2000 <= ano <= 2100:
+            if mejor is None or (ano, sem) > mejor:
+                mejor = (ano, sem)
+    if mejor is None:
+        hoy = date.today().isocalendar()
+        mejor = (hoy[0], hoy[1])
+    return mejor[0], mejor[1]
+
+
 class ProgramacionSemanalIndexView(LoginRequiredMixin, RoleRequiredMixin, View):
     """``/cuadrillas/semanal/`` → redirige a la semana con datos más reciente
     (o a la semana ISO actual si no hay ninguna programación cargada)."""
@@ -295,23 +320,8 @@ class ProgramacionSemanalIndexView(LoginRequiredMixin, RoleRequiredMixin, View):
     allowed_roles = ROLES_CUADRILLAS
 
     def get(self, request):
-        codigos = Cuadrilla.objects.filter(
-            codigo__regex=r"^[0-9]{2}-[0-9]{4}-", activa=True
-        ).values_list("codigo", flat=True)
-        mejor = None
-        for codigo in codigos:
-            partes = codigo.split("-")
-            try:
-                sem, ano = int(partes[0]), int(partes[1])
-            except (ValueError, IndexError):
-                continue
-            if 1 <= sem <= 53 and 2000 <= ano <= 2100:
-                if mejor is None or (ano, sem) > mejor:
-                    mejor = (ano, sem)
-        if mejor is None:
-            hoy = date.today().isocalendar()
-            mejor = (hoy[0], hoy[1])
-        return redirect("cuadrillas:semanal_grid", anio=mejor[0], semana=mejor[1])
+        anio, semana = _semana_mas_reciente_con_datos()
+        return redirect("cuadrillas:semanal_grid", anio=anio, semana=semana)
 
 
 class ProgramacionSemanalGridView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
