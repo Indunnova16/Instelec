@@ -52,12 +52,23 @@ class RoleModuloPermiso(BaseModel):
     """Permiso de un `Role` sobre un módulo (y, opcionalmente, sub-módulo de
     CONSTRUCCION).
 
-    Una fila con `submodulo=None` = permiso a nivel de MÓDULO completo
-    (MANTENIMIENTO/CONSTRUCCION/CONFIG). Una fila con `submodulo != None`
-    afina el acceso dentro de CONSTRUCCION (obra civil, montaje, etc. — ver
-    `TODOS_SUBMODULOS` en `apps.core.permissions`). La AUSENCIA de una fila
-    para un módulo/submódulo dado equivale a `sin_acceso` (no se crean filas
+    Una fila con `submodulo=''` (string vacío, NO NULL -- ver nota abajo) =
+    permiso a nivel de MÓDULO completo (MANTENIMIENTO/CONSTRUCCION/CONFIG).
+    Una fila con `submodulo` no vacío afina el acceso dentro de CONSTRUCCION
+    (obra civil, montaje, etc. — ver `TODOS_SUBMODULOS` en
+    `apps.core.permissions`). La AUSENCIA de una fila para un
+    módulo/submódulo dado equivale a `sin_acceso` (no se crean filas
     explícitas de `sin_acceso` en la migración de datos, ver 0002).
+
+    Nota A6 (hallazgo de hardening): `submodulo` usa `default=''` en vez de
+    `null=True` A PROPÓSITO -- Postgres trata cada NULL como distinto de
+    cualquier otro NULL para efectos de `UNIQUE`/`unique_together`, así que
+    con `null=True` dos filas (role, modulo, NULL) NO chocaban contra el
+    constraint (confirmado con un test que falló: "DID NOT RAISE
+    IntegrityError"). Con `''` como sentinel de "sin submódulo", el
+    constraint sí protege la unicidad real. Los checks `if p.submodulo`/
+    `if not p.submodulo` (permissions.py, views.py) no cambian: `''` es
+    falsy igual que `None`.
     """
 
     SIN_ACCESO = "sin_acceso"
@@ -86,9 +97,7 @@ class RoleModuloPermiso(BaseModel):
         related_name="permisos",
     )
     modulo = models.CharField("Módulo", max_length=20, choices=MODULO_CHOICES)
-    submodulo = models.CharField(  # noqa: DJ001 — NULL (no '') es intencional: ver docstring arriba
-        "Sub-módulo", max_length=40, blank=True, null=True
-    )
+    submodulo = models.CharField("Sub-módulo", max_length=40, blank=True, default="")
     nivel_acceso = models.CharField(
         "Nivel de acceso",
         max_length=12,

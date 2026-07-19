@@ -15,6 +15,11 @@
 # NOTA sobre el conteo: el plan (F2) dice "14 roles". El conteo real de
 # Usuario.Rol.choices es 15 (7 RBAC v2 + 8 legacy). Se siembran los 15 —
 # ver rbac_seed_data.py para el detalle.
+#
+# NOTA A6: `submodulo=''` (string vacío), NO `None` -- Postgres no aplica
+# `unique_together` entre dos NULLs, así que con `None` el constraint
+# (role, modulo, submodulo) no protegía la unicidad real de las filas de
+# módulo completo. Ver docstring de RoleModuloPermiso (models_roles.py).
 from django.db import migrations
 
 from apps.core import rbac_seed_data as data
@@ -38,12 +43,12 @@ def seed_roles_permisos(apps, schema_editor):
 
         nivel_acceso = data.nivel_acceso_modulo(codigo)
 
-        # Permisos de MÓDULO completo (submodulo=None)
+        # Permisos de MÓDULO completo (submodulo='' -- sentinel, ver nota arriba)
         for modulo in data.ROL_MODULOS.get(codigo, set()):
             RoleModuloPermiso.objects.get_or_create(
                 role=role,
                 modulo=modulo,
-                submodulo=None,
+                submodulo="",
                 defaults={"nivel_acceso": nivel_acceso},
             )
 

@@ -196,7 +196,7 @@ def seed_roles_permisos_bd():
             RoleModuloPermiso.objects.get_or_create(
                 role=role,
                 modulo=modulo,
-                submodulo=None,
+                submodulo="",  # sentinel de "sin submódulo" -- ver models_roles.py (A6)
                 defaults={"nivel_acceso": nivel_acceso},
             )
 

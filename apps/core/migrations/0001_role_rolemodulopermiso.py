@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Fecha de creación')),
                 ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Fecha de actualización')),
                 ('modulo', models.CharField(choices=[('MANTENIMIENTO', 'Mantenimiento'), ('CONSTRUCCION', 'Construcción'), ('CONFIG', 'Configuración')], max_length=20, verbose_name='Módulo')),
-                ('submodulo', models.CharField(blank=True, max_length=40, null=True, verbose_name='Sub-módulo')),
+                ('submodulo', models.CharField(blank=True, default='', max_length=40, verbose_name='Sub-módulo')),
                 ('nivel_acceso', models.CharField(choices=[('sin_acceso', 'Sin acceso'), ('ver', 'Ver'), ('ver_editar', 'Ver y editar')], default='sin_acceso', max_length=12, verbose_name='Nivel de acceso')),
                 ('role', models.ForeignKey(db_column='role_codigo', on_delete=django.db.models.deletion.CASCADE, related_name='permisos', to='core.role', to_field='codigo')),
             ],

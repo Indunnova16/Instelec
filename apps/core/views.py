@@ -356,7 +356,7 @@ class RoleModuloPermisoCeldaView(LoginRequiredMixin, RoleRequiredMixin, Template
 
         modulos_validos = dict(RoleModuloPermiso.MODULO_CHOICES)
         if columna in modulos_validos:
-            modulo, submodulo = columna, None
+            modulo, submodulo = columna, ""
         else:
             modulo, submodulo = RoleModuloPermiso.MODULO_CONSTRUCCION, columna
 

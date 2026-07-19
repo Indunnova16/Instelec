@@ -135,7 +135,7 @@ class TestRoleModuloPermisoMatriz186:
         )
         assert response.status_code == 200
         permiso = RoleModuloPermiso.objects.get(
-            role=role, modulo="CONSTRUCCION", submodulo=None
+            role=role, modulo="CONSTRUCCION", submodulo=""
         )
         assert permiso.nivel_acceso == "ver"
 
