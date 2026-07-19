@@ -10,6 +10,37 @@ User = get_user_model()
 
 
 # ==============================================================================
+# RBAC (issue #186, A3) — seed de Role/RoleModuloPermiso para TODA la suite
+# ==============================================================================
+
+@pytest.fixture(scope="session")
+def django_db_setup(django_db_setup, django_db_blocker):
+    """Extiende el setup de BD de pytest-django sembrando Role/
+    RoleModuloPermiso UNA VEZ por sesión.
+
+    `apps/core/permissions.py` (A3) ahora lee RBAC desde `Role`/
+    `RoleModuloPermiso` (BD) en vez de dicts hardcodeados. Pero `pytest`
+    corre con `--nomigrations` (ver `pyproject.toml`) — la migración de
+    datos real (`0002_seed_roles_permisos.py`) NUNCA se ejecuta en la suite
+    de tests. Sin este fixture, CUALQUIER test que dependa de acceso por
+    rol (RBAC, `RoleRequiredMixin`, `RBACModuloMiddleware`, que corre en
+    CADA request) fallaría con 403/redirect porque no habría filas de
+    `Role` que leer — confirmado con 6 regresiones reales en
+    `tests/unit/test_permissions.py` antes de agregar este fixture.
+
+    Sembrado a nivel de SESIÓN (no por-test) y con commit real (vía
+    `django_db_blocker.unblock()`) para que sea visible como datos
+    "ya existentes" en la transacción de cada test individual — igual que
+    una migración de datos real ya aplicada. Misma fuente que la migración
+    real y el Gate de Paridad (`apps/core/rbac_seed_data.py`).
+    """
+    with django_db_blocker.unblock():
+        from apps.core.rbac_seed_data import seed_roles_permisos_bd
+
+        seed_roles_permisos_bd()
+
+
+# ==============================================================================
 # User Fixtures
 # ==============================================================================
 

@@ -10,6 +10,7 @@ from django.shortcuts import redirect
 from django.contrib import messages
 
 from apps.core.mixins import RoleRequiredMixin
+from apps.core.models import Role
 from .models import Usuario
 from .forms import LoginForm, PerfilForm
 
@@ -75,7 +76,10 @@ class GestionUsuariosView(LoginRequiredMixin, RoleRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['roles'] = Usuario.Rol.choices
+        # Issue #186 (A4): dropdown dinámico BD-backed -- antes
+        # `Usuario.Rol.choices` (hardcodeado). Con esto, un rol creado desde
+        # la matriz (A5) aparece disponible sin deploy.
+        context['roles'] = Role.objects.filter(activo=True).values_list('codigo', 'nombre')
         context['rol_actual'] = self.request.GET.get('rol', '')
         context['buscar'] = self.request.GET.get('buscar', '')
         return context
@@ -88,7 +92,8 @@ class CrearUsuarioAdminView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['roles'] = Usuario.Rol.choices
+        # Issue #186 (A4): dropdown dinámico BD-backed -- ver GestionUsuariosView arriba.
+        context['roles'] = Role.objects.filter(activo=True).values_list('codigo', 'nombre')
         return context
 
     def post(self, request, *args, **kwargs):
