@@ -1383,7 +1383,18 @@ class PersonalCuadrillaListAPIView(LoginRequiredMixin, View):
 
 
 class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """API endpoint to get cost by role."""
+    """API endpoint: costo/salario base de un Cargo.
+
+    Retrofit issue #176 (bounce 3, A2): antes tenia un dict hardcoded de
+    costos por rol (huerfano -- grep 2026-07-19 confirmo CERO consumidores
+    en templates/JS antes de este retrofit). Se retrofitea para leer
+    Cargo.salario_base y se convierte en el backend real del autocompletado
+    de colaboradores_form.html (A3). Mantiene el contrato JSON original
+    (costo_dia/es_conductor/conductor_interno) para minimizar diff -- NO se
+    renombra `costo_dia` pese a que hoy contiene un valor MENSUAL (mismo
+    nombre confuso que ya traia el dict original, fuera de scope
+    corregirlo).
+    """
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
     def get(self, request, *args, **kwargs):
@@ -1391,23 +1402,10 @@ class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
         if not rol:
             return JsonResponse({'costo_dia': 0})
 
-        # Costos fijos por rol
-        costos = {
-            'SUPERVISOR': 0,
-            'LINIERO_I': 3176095,
-            'LINIERO_II': 2804856,
-            'AYUDANTE': 1750905,
-            'CONDUCTOR': 480000,
-            'ADMINISTRADOR_OBRA': 2522400,
-            'PROFESIONAL_SST': 4204000,
-            'ING_RESIDENTE': 7357000,
-            'SERVICIO_GENERAL': 1750905,
-            'ALMACENISTA': 1800000,
-            'SUPERVISOR_FOREST': 2969427,
-            'ASISTENTE_FOREST': 4204000,
-        }
-
-        costo = costos.get(rol, 0)
+        cargo = Cargo.objects.filter(codigo=rol, activo=True).first()
+        # float(): Decimal NO es JSON-serializable por default -- JsonResponse
+        # truena con TypeError si se pasa el Decimal crudo (issue #176 A2).
+        costo = float(cargo.salario_base) if cargo else 0
 
         # Para conductor, diferenciar interno/externo
         es_conductor = rol == 'CONDUCTOR'
