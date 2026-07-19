@@ -392,3 +392,54 @@ class TestA6QuitarPersonalBloque(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.miembro.refresh_from_db()
         self.assertFalse(self.miembro.activo)
+
+
+# ---------------------------------------------------------------------------
+# A7 — Validación de duplicado inline
+# ---------------------------------------------------------------------------
+class TestA7ValidacionDuplicadoInline(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.personal = PersonalCuadrilla.objects.create(
+            nombre="Colaborador A7 Duplicado",
+            documento="188-A7-0001",
+            rol_cuadrilla_id="LINIERO_I",
+            activo=True,
+        )
+
+    def test_happy_agregar_misma_persona_2_veces_mismo_bloque_muestra_aviso_no_duplica(self):
+        cuadrilla = Cuadrilla.objects.create(codigo="46-2026-0001-A7T", nombre="Bloque A7", activa=True)
+        url = reverse("cuadrillas:semanal_miembro_agregar", args=[cuadrilla.id])
+
+        resp1 = self.client.post(url, {"documento": self.personal.documento})
+        self.assertEqual(resp1.status_code, 200)
+
+        resp2 = self.client.post(url, {"documento": self.personal.documento})
+        self.assertEqual(resp2.status_code, 400)
+        self.assertContains(resp2, "ya es miembro activo", status_code=400)
+
+        self.assertEqual(
+            CuadrillaMiembro.objects.filter(cuadrilla=cuadrilla, activo=True).count(), 1
+        )
+
+    def test_edge_misma_persona_en_2_bloques_distintos_es_valido(self):
+        bloque1 = Cuadrilla.objects.create(codigo="46-2026-0002-A7T", nombre="Bloque A7 Uno", activa=True)
+        bloque2 = Cuadrilla.objects.create(codigo="46-2026-0003-A7T", nombre="Bloque A7 Dos", activa=True)
+
+        resp1 = self.client.post(
+            reverse("cuadrillas:semanal_miembro_agregar", args=[bloque1.id]),
+            {"documento": self.personal.documento},
+        )
+        self.assertEqual(resp1.status_code, 200)
+
+        resp2 = self.client.post(
+            reverse("cuadrillas:semanal_miembro_agregar", args=[bloque2.id]),
+            {"documento": self.personal.documento},
+        )
+        self.assertEqual(resp2.status_code, 200)
+
+        self.assertEqual(
+            CuadrillaMiembro.objects.filter(usuario__documento="188-A7-0001", activo=True).count(), 2
+        )

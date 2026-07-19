@@ -553,6 +553,25 @@ class ProgramacionSemanalMiembroAgregarView(LoginRequiredMixin, RoleRequiredMixi
 
         usuario = resolver_o_crear_usuario(personal)
 
+        # Issue #188 (A7): la unicidad cuadrilla+usuario+activo YA existe a
+        # nivel de BD (unique_together, ver models_base.py) — este pre-check
+        # es SOLO superficie UX: convierte lo que sería un IntegrityError
+        # crudo en un aviso inline claro, ANTES de intentar el insert. Misma
+        # persona en un bloque DISTINTO de la semana no cae acá (el filtro
+        # está scoped a `cuadrilla`), sigue siendo válido.
+        if CuadrillaMiembro.objects.filter(cuadrilla=cuadrilla, usuario=usuario, activo=True).exists():
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                f"{usuario.get_full_name()} ya es miembro activo.",
+                agregar_state={
+                    "open": True,
+                    "documento": documento,
+                    "nombre_display": personal.nombre,
+                    "es_conductor": es_conductor,
+                    "placa": placa_vehiculo,
+                },
+            )
+
         try:
             with transaction.atomic():
                 CuadrillaMiembro.objects.create(
