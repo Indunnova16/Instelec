@@ -4,6 +4,11 @@ Core models - Base classes for all models.
 import uuid
 from django.db import models
 
+# NEW MODELS GO IN A NEW FILE (issue #186, RBAC dinámico) — re-exportado acá
+# para que `from apps.core.models import Role` siga funcionando (mismo
+# patrón que apps/cuadrillas/models.py re-exporta models_cargo.py).
+# Import diferido al final del archivo — ver models_roles.py.
+
 
 class BaseModel(models.Model):
     """
@@ -88,3 +93,8 @@ class SoftDeleteModelWithManager(SoftDeleteModel):
 
     class Meta:
         abstract = True
+
+
+# Import al final del archivo (después de BaseModel) para evitar import
+# circular: models_roles.py hace `from apps.core.models import BaseModel`.
+from .models_roles import *  # noqa: E402, F401, F403 — issue #186
