@@ -326,10 +326,13 @@ class TestA6ImportColaboradoresExpuestoYExport(TestCase):
         self.client.force_login(self.admin)
 
     def test_modal_importar_visible_en_colaboradores_lista(self):
+        # NOTA (bundle #176+#188): el modal propio de A6 (modal-importar-colaboradores)
+        # se dedupe con el modal ya reubicado por #188 A11 (modal-personal) al mergear
+        # ambas branches -- mismo endpoint personal_upload, un solo boton/modal.
         resp = self.client.get(reverse("cuadrillas:colaboradores_lista"))
         self.assertEqual(resp.status_code, 200)
         content = resp.content.decode()
-        self.assertIn("modal-importar-colaboradores", content)
+        self.assertIn("modal-personal", content)
         self.assertIn(reverse("cuadrillas:personal_upload"), content)
 
     def test_modal_nuevo_postea_al_mismo_endpoint_ya_validado(self):
@@ -442,7 +445,8 @@ class TestA7CopyDependenciaCargoColaboradores(TestCase):
         con el card equivocado)."""
         resp = self.client.get(reverse("cuadrillas:colaboradores_lista"))
         content = resp.content.decode()
-        idx_modal = content.index('id="modal-importar-colaboradores"')
+        # NOTA (bundle #176+#188): modal deduplicado a modal-personal, ver nota arriba.
+        idx_modal = content.index('id="modal-personal"')
         idx_copy = content.index("deben existir primero")
         idx_cierre_modal = content.index("</form>", idx_modal)
         self.assertLess(idx_modal, idx_copy)

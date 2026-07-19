@@ -100,6 +100,13 @@ class PersonalCuadrilla(BaseModel):
         verbose_name='Cargo / Rol',
     )
     activo = models.BooleanField('Activo', default=True)
+    celular = models.CharField(
+        'Celular',
+        max_length=20,
+        blank=True,
+        help_text='Issue #188 (A1): celular del colaborador, expuesto en el autocompletado '
+        'de PersonalCuadrillaAPIView para el grid editable de programación semanal.',
+    )
     salario_base = models.DecimalField(
         'Salario base',
         max_digits=12,
@@ -188,6 +195,27 @@ class Cuadrilla(BaseModel):
         blank=True,
         related_name='cuadrillas',
         verbose_name='Línea asignada'
+    )
+    tipo_actividad = models.ForeignKey(
+        'actividades.TipoActividad',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cuadrillas_bloque',
+        verbose_name='Tipo de actividad',
+        help_text='Issue #188 (A1): tipo de actividad del bloque, cabeza de la cascada '
+        'Tipo de actividad → Línea → Tramo del grid editable de programación semanal.',
+    )
+    tramo = models.ForeignKey(
+        'lineas.Tramo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cuadrillas_bloque',
+        verbose_name='Tramo',
+        help_text='Issue #188 (A1): tramo de la línea asignada (cascada Línea → Tramo). '
+        'La tabla tramos puede estar vacía hasta que el cliente la cargue — el campo '
+        'admite None sin romper el bloque.',
     )
     activa = models.BooleanField(
         'Activa',
@@ -290,6 +318,13 @@ class CuadrillaMiembro(BaseModel):
         'Conductor interno',
         default=True,
         help_text='Si es conductor: True=empleado Instelec, False=externo/subcontratado'
+    )
+    placa_vehiculo = models.CharField(
+        'Placa del vehículo',
+        max_length=10,
+        blank=True,
+        help_text='Issue #188 (A1/A5): placa manual del vehículo cuando el rol del miembro '
+        'es CONDUCTOR (el grid la exige en ese caso; para el resto queda vacía).',
     )
 
     class Meta:

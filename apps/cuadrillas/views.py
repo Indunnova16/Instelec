@@ -110,6 +110,37 @@ class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVi
         # vacío sin pageerror — el JS de lista.html ya tolera lista vacía).
         ubicaciones = self._build_ubicaciones_proyecto(context['cuadrillas'])
         context['cuadrillas_ubicaciones_json'] = json.dumps(ubicaciones)
+
+        # Issue #188 (A9): fusión con /cuadrillas/semanal/ -- la pantalla
+        # fusionada agrega el grid EDITABLE (bloques cards) de una semana
+        # puntual, reusando _contexto_semana/_choices_form_bloque de
+        # views_semanal.py como fuente única de verdad (en vez de duplicar el
+        # modelo de acceso a datos). Reusa el MISMO `semana_param` que ya
+        # filtra el listado plano de abajo (mismo formato WW-YYYY); si no
+        # viene, usa la semana con datos más reciente. Preserva TODO lo de
+        # arriba (filtros activas/inactivas de B3, mapa por proyecto, listado
+        # agrupado) sin tocarlo -- el grid es una sección nueva, no un
+        # reemplazo.
+        from .views_semanal import (
+            _choices_form_bloque,
+            _contexto_semana,
+            _semana_mas_reciente_con_datos,
+        )
+
+        grid_anio = grid_semana = None
+        if semana_param:
+            try:
+                partes = semana_param.split('-')
+                grid_semana = int(partes[0])
+                grid_anio = int(partes[1])
+            except (IndexError, ValueError):
+                grid_anio = grid_semana = None
+        if grid_anio is None or grid_semana is None:
+            grid_anio, grid_semana = _semana_mas_reciente_con_datos()
+
+        context.update(_contexto_semana(grid_anio, grid_semana))
+        context.update(_choices_form_bloque())
+        context['confirmar_duplicado'] = self.request.GET.get('confirmar_duplicado') == '1'
         return context
 
     @staticmethod
@@ -533,35 +564,13 @@ class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
 
     @staticmethod
     def _resolver_o_crear_usuario(personal):
-        """Resuelve el Usuario vinculado a un PersonalCuadrilla por documento,
-        o lo crea si es la primera vez que se asigna (mismo patrón de
-        apps.cuadrillas.importers._crear_usuario para altas masivas S18):
-        email sintético determinístico, is_active=False, sin password
-        utilizable -- es solo un registro de vínculo, no una cuenta operativa.
-        """
-        from apps.usuarios.models import Usuario
+        """Issue #188 (A5): extraído a ``apps.cuadrillas.services`` para
+        reusarlo también desde ``ProgramacionSemanalMiembroAgregarView``
+        (grid editable). Este wrapper se conserva tal cual (mismo nombre,
+        mismo comportamiento) para no romper llamadas existentes."""
+        from .services import resolver_o_crear_usuario
 
-        usuario = Usuario.objects.filter(documento=personal.documento).first()
-        if usuario:
-            return usuario
-
-        nombre = personal.nombre or f'Colaborador {personal.documento}'
-        partes = nombre.split()
-        first = partes[0] if partes else nombre
-        last = ' '.join(partes[1:]) if len(partes) > 1 else ''
-        email = f'{personal.documento}@instelec-colaborador.local'
-
-        usuario = Usuario.objects.create(
-            email=email,
-            first_name=first[:150],
-            last_name=last[:150],
-            documento=personal.documento,
-            rol='operario_general',
-            is_active=False,
-        )
-        usuario.set_unusable_password()
-        usuario.save(update_fields=['password'])
-        return usuario
+        return resolver_o_crear_usuario(personal)
 
     def post(self, request, *args, **kwargs):
         from datetime import date
@@ -1270,7 +1279,7 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
         archivo = request.FILES.get('archivo')
         if not archivo:
             messages.error(request, 'Debe seleccionar un archivo.')
-            return redirect('cuadrillas:lista')
+            return redirect('cuadrillas:colaboradores_lista')
 
         # Issue #176 (A4): RolCuadrilla (TextChoices) eliminado, catalogo
         # ahora es Cargo (dinamico, editable via /cuadrillas/cargos/).
@@ -1340,7 +1349,11 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
         except Exception as e:
             messages.error(request, f'Error al procesar archivo: {str(e)}')
 
-        return redirect('cuadrillas:lista')
+        # Issue #188 (A11): el trigger de esta carga vive ahora en
+        # /cuadrillas/colaboradores/ (antes en /cuadrillas/) — redirige ahí
+        # para que el usuario vea el maestro actualizado en el mismo lugar
+        # donde subió el archivo.
+        return redirect('cuadrillas:colaboradores_lista')
 
 
 class PersonalCuadrillaAPIView(LoginRequiredMixin, View):
@@ -1361,6 +1374,9 @@ class PersonalCuadrillaAPIView(LoginRequiredMixin, View):
                 'nombre': personal.nombre,
                 'documento': personal.documento,
                 'rol_cuadrilla': personal.rol_cuadrilla_id,
+                # Issue #188 (A5): celular nuevo en el maestro Colaboradores,
+                # expuesto para el autocompletado del grid editable.
+                'celular': personal.celular,
             })
         return JsonResponse({}, status=404)
 

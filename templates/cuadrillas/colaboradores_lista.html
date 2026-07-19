@@ -11,21 +11,39 @@
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Colaboradores</h1>
             <p class="text-gray-600 dark:text-gray-400">Maestro de personal disponible para cuadrillas</p>
         </div>
-        <div class="flex items-center gap-3">
-            <!-- Importar Colaboradores (issue #176, A6): mismo endpoint que ya
-                 funciona en /cuadrillas/ (personal_upload), segunda entrada
-                 visual desde la pantalla natural del maestro. -->
-            <button onclick="document.getElementById('modal-importar-colaboradores').classList.remove('hidden')"
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Subir Personal de Cuadrilla -- reubicado desde /cuadrillas/ (issue #188, A11);
+                 mismo endpoint que ya funciona en /cuadrillas/ (personal_upload); cubre
+                 tambien el pedido de import de #176 A6 (mismo endpoint, un solo boton). -->
+            <button onclick="document.getElementById('modal-personal').classList.remove('hidden')"
                     class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
-                    aria-label="Importar colaboradores desde Excel">
+                    aria-label="Subir personal de cuadrilla">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                 </svg>
-                Importar
+                Subir Personal
             </button>
+            <!-- Descargar Plantilla Excel -- reubicado desde /cuadrillas/ (issue #188, A11) -->
+            <a href="{% url 'cuadrillas:descargar_plantilla' %}"
+               class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2"
+               aria-label="Descargar plantilla Excel">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                📥 Plantilla
+            </a>
+            <!-- Carga Masiva de Cuadrillas -- reubicado desde /cuadrillas/ (issue #188, A11) -->
+            <a href="{% url 'cuadrillas:masiva_upload' %}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+               aria-label="Carga masiva de cuadrillas desde Excel">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Carga Masiva
+            </a>
             <!-- Exportar Colaboradores (issue #176, A6) -->
             <a href="{% url 'cuadrillas:colaboradores_export' %}"
-               class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2"
+               class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition flex items-center gap-2"
                aria-label="Exportar colaboradores a Excel">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -129,17 +147,19 @@
     </div>
 </div>
 
-<!-- Modal Importar Colaboradores (issue #176, A6) -->
-<div id="modal-importar-colaboradores" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick="if(event.target===this)this.classList.add('hidden')">
+<!-- Modal Subir Personal -- reubicado desde /cuadrillas/ (issue #188, A11); mismo modal
+     cubre el pedido de import de #176 A6 (mismo endpoint personal_upload, un solo boton/modal). -->
+<div id="modal-personal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick="if(event.target===this)this.classList.add('hidden')">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 m-4">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Importar Colaboradores</h3>
-            <button onclick="document.getElementById('modal-importar-colaboradores').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Subir Personal de Cuadrilla</h3>
+            <button onclick="document.getElementById('modal-personal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">&times;</button>
         </div>
         <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Suba un archivo Excel (.xlsx) con las columnas:<br>
             <strong>Nombre | Documento | Cargo | Salario Base | Fecha Ingreso | Fecha Salida</strong><br>
-            <span class="text-xs text-gray-500">Las 3 &uacute;ltimas columnas son opcionales. Formato de fecha: AAAA-MM-DD. Si registra Fecha Salida, el colaborador queda inactivo autom&aacute;ticamente.</span>
+            <span class="text-xs text-gray-500">Las 3 &uacute;ltimas columnas son opcionales (issue #176). Formato de fecha: AAAA-MM-DD. Si registra Fecha Salida, el colaborador queda inactivo autom&aacute;ticamente.</span><br>
+            <span class="text-xs text-gray-500">Cargos v&aacute;lidos: Supervisor, Liniero I, Liniero II, Ayudante, Conductor, Administrador de Obra, Profesional SST, Ingeniero Residente, Servicio General, Almacenista, Supervisor Forestal, Asistente Forestal</span>
         </p>
         <p class="text-xs text-amber-600 dark:text-amber-400 mb-4" role="alert">
             <!-- Issue #176 (A7): orden de dependencia Cargo -> Colaboradores. -->
@@ -156,13 +176,13 @@
                        class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
             </div>
             <div class="flex justify-end gap-2">
-                <button type="button" onclick="document.getElementById('modal-importar-colaboradores').classList.add('hidden')"
+                <button type="button" onclick="document.getElementById('modal-personal').classList.add('hidden')"
                         class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-700">
                     Cancelar
                 </button>
                 <button type="submit"
                         class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                    Importar
+                    Subir Personal
                 </button>
             </div>
         </form>
