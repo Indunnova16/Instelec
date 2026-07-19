@@ -1279,7 +1279,7 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
         archivo = request.FILES.get('archivo')
         if not archivo:
             messages.error(request, 'Debe seleccionar un archivo.')
-            return redirect('cuadrillas:lista')
+            return redirect('cuadrillas:colaboradores_lista')
 
         # Issue #176 (A4): RolCuadrilla (TextChoices) eliminado, catalogo
         # ahora es Cargo (dinamico, editable via /cuadrillas/cargos/).
@@ -1349,7 +1349,11 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
         except Exception as e:
             messages.error(request, f'Error al procesar archivo: {str(e)}')
 
-        return redirect('cuadrillas:lista')
+        # Issue #188 (A11): el trigger de esta carga vive ahora en
+        # /cuadrillas/colaboradores/ (antes en /cuadrillas/) — redirige ahí
+        # para que el usuario vea el maestro actualizado en el mismo lugar
+        # donde subió el archivo.
+        return redirect('cuadrillas:colaboradores_lista')
 
 
 class PersonalCuadrillaAPIView(LoginRequiredMixin, View):

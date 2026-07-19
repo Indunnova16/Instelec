@@ -527,3 +527,81 @@ class TestA9FusionListadoYGrid(TestCase):
 
         resp_fusion = self.client.get(reverse("cuadrillas:lista"), {"semana": "51-2026"})
         self.assertEqual(resp_fusion.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# A10 — Pestañas "Semanas" / "Mapa" en la pantalla fusionada
+# ---------------------------------------------------------------------------
+class TestA10PestanasSemanasMapa(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_happy_pestanas_presentes_y_mapa_sigue_actualizando(self):
+        resp = self.client.get(reverse("cuadrillas:lista"))
+        self.assertEqual(resp.status_code, 200)
+        contenido = resp.content.decode()
+        self.assertIn("Semanas", contenido)
+        self.assertIn("Mapa", contenido)
+        self.assertIn('data-tab="semanas"', contenido)
+        self.assertIn('data-tab="mapa"', contenido)
+        self.assertIn('id="mapa-cuadrillas"', contenido)
+        # El polling cada 30s del mapa sigue intacto (issue #155), sin
+        # importar la pestaña activa por default.
+        self.assertIn('hx-trigger="every 30s"', contenido)
+
+
+# ---------------------------------------------------------------------------
+# A11 — Mover botones de carga masiva de personas a /cuadrillas/colaboradores/
+# ---------------------------------------------------------------------------
+class TestA11BotonesReubicados(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_happy_botones_no_en_fusionada_si_en_colaboradores(self):
+        # Strings UNICOS de los 3 botones reubicados (no el genérico "Carga
+        # Masiva"/"Subir Personal", que también aparece en el nav lateral
+        # global de templates/components/sidebar.html con otro texto/aria).
+        resp_fusion = self.client.get(reverse("cuadrillas:lista"))
+        self.assertEqual(resp_fusion.status_code, 200)
+        contenido_fusion = resp_fusion.content.decode()
+        self.assertNotIn('aria-label="Subir personal de cuadrilla"', contenido_fusion)
+        self.assertNotIn('aria-label="Carga masiva de cuadrillas desde Excel"', contenido_fusion)
+        self.assertNotIn('aria-label="Descargar plantilla Excel"', contenido_fusion)
+        self.assertNotIn('id="modal-personal"', contenido_fusion)
+
+        resp_colab = self.client.get(reverse("cuadrillas:colaboradores_lista"))
+        self.assertEqual(resp_colab.status_code, 200)
+        contenido_colab = resp_colab.content.decode()
+        self.assertIn('aria-label="Subir personal de cuadrilla"', contenido_colab)
+        self.assertIn('aria-label="Carga masiva de cuadrillas desde Excel"', contenido_colab)
+        self.assertIn('aria-label="Descargar plantilla Excel"', contenido_colab)
+        self.assertIn('id="modal-personal"', contenido_colab)
+
+    def test_happy_subir_personal_funciona_desde_colaboradores(self):
+        import openpyxl
+        from io import BytesIO
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Nombre", "Documento", "Cargo"])
+        ws.append(["Colaborador A11 Excel", "188-A11-0001", "LINIERO_I"])
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        archivo = SimpleUploadedFile(
+            "personal.xlsx", buffer.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        url = reverse("cuadrillas:personal_upload")
+        resp = self.client.post(url, {"archivo": archivo})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("cuadrillas:colaboradores_lista"))
+        self.assertTrue(
+            PersonalCuadrilla.objects.filter(documento="188-A11-0001").exists()
+        )
