@@ -1,0 +1,13 @@
+{% comment %}Celda de la matriz roles x módulos/sub-módulos (issue #186, A5).
+Renderizada tanto dentro de roles_matriz.html (loop inicial) como devuelta
+sola por RoleModuloPermisoCeldaView tras un guardado HTMX (hx-swap=outerHTML).{% endcomment %}
+<select name="celda_{{ role.codigo }}_{{ columna }}"
+        hx-post="{% url 'core:roles_matriz_celda' role.codigo columna %}"
+        hx-trigger="change"
+        hx-swap="outerHTML"
+        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+        class="text-xs rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white py-1 w-full">
+    {% for value, label in nivel_choices %}
+    <option value="{{ value }}" {% if value == nivel_actual %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>

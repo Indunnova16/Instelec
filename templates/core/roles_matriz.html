@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load core_tags %}
+
+{% block title %}Matriz de Roles y Permisos - TransMaint{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Matriz de Roles y Permisos</h1>
+            <p class="text-gray-600 dark:text-gray-400">
+                Editá el nivel de acceso de cada rol por módulo/sub-módulo. Los cambios se guardan
+                al instante (issue #186) -- no requieren deploy.
+            </p>
+        </div>
+        <a href="{% url 'core:roles_crear' %}"
+           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition whitespace-nowrap">
+            Nuevo Rol
+        </a>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 dark:bg-gray-900">
+                            Rol
+                        </th>
+                        {% for codigo, etiqueta in columnas_modulo %}
+                        <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{{ etiqueta }}</th>
+                        {% endfor %}
+                        {% for codigo, etiqueta in columnas_submodulo %}
+                        <th class="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase whitespace-nowrap">{{ etiqueta }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for fila in filas %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-2 whitespace-nowrap font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800">
+                            {{ fila.role.nombre }}
+                            <span class="block text-xs font-mono text-gray-400">{{ fila.role.codigo }}</span>
+                        </td>
+                        {% for codigo, etiqueta in columnas_modulo %}
+                        <td class="px-2 py-2 text-center">
+                            {% include "core/partials/_matriz_celda.html" with role=fila.role columna=codigo nivel_actual=fila.permisos|get_item:codigo|default:sin_acceso nivel_choices=nivel_choices %}
+                        </td>
+                        {% endfor %}
+                        {% for codigo, etiqueta in columnas_submodulo %}
+                        <td class="px-2 py-2 text-center">
+                            {% include "core/partials/_matriz_celda.html" with role=fila.role columna=codigo nivel_actual=fila.permisos|get_item:codigo|default:sin_acceso nivel_choices=nivel_choices %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="99" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                            No hay roles activos. <a href="{% url 'core:roles_crear' %}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400">Creá el primero</a>.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <p class="text-xs text-gray-500 dark:text-gray-400">
+        Las columnas de módulo (Mantenimiento/Construcción/Configuración) controlan el acceso al
+        bloque completo. Las columnas de sub-módulo (a la derecha) afinan el acceso DENTRO de
+        Construcción -- solo tienen efecto si el rol también tiene acceso al módulo Construcción.
+    </p>
+</div>
+{% endblock %}
