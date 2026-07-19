@@ -25,7 +25,7 @@ class CargoForm(forms.ModelForm):
 
     class Meta:
         model = Cargo
-        fields = ["codigo", "nombre", "activo"]
+        fields = ["codigo", "nombre", "salario_base", "activo"]
         widgets = {
             "codigo": forms.TextInput(
                 attrs={
@@ -37,6 +37,14 @@ class CargoForm(forms.ModelForm):
                 attrs={
                     "class": INPUT_CLS,
                     "placeholder": "Ej: Soldador",
+                }
+            ),
+            "salario_base": forms.NumberInput(
+                attrs={
+                    "class": INPUT_CLS,
+                    "min": 0,
+                    "step": "0.01",
+                    "placeholder": "0",
                 }
             ),
         }
@@ -73,3 +81,19 @@ class CargoForm(forms.ModelForm):
         if not nombre:
             raise forms.ValidationError("El nombre es obligatorio.")
         return nombre
+
+    def clean_salario_base(self):
+        """Issue #176 (A1): campo opcional (blank=True, default=0) — si se
+        deja vacío en el form, cae al default del modelo en vez de intentar
+        guardar NULL (el campo de BD no admite null). El widget pone min=0
+        pero eso es solo HTML — el backend rechaza negativos igual (edge
+        case: request directo sin pasar por el input, o navegador que
+        ignora el atributo)."""
+        from decimal import Decimal
+
+        salario = self.cleaned_data.get("salario_base")
+        if salario is None:
+            return Decimal("0")
+        if salario < 0:
+            raise forms.ValidationError("El salario base no puede ser negativo.")
+        return salario

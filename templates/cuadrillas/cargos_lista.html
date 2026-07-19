@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Cargos - TransMaint{% endblock %}
 
@@ -10,14 +11,34 @@
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Cargos</h1>
             <p class="text-gray-600 dark:text-gray-400">Maestro de cargos/roles disponibles para Colaboradores y Miembros de cuadrilla</p>
         </div>
-        <a href="{% url 'cuadrillas:cargos_crear' %}"
-           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
-           aria-label="Crear nuevo cargo">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Nuevo Cargo
-        </a>
+        <div class="flex items-center gap-3">
+            <!-- Importar Cargos (issue #176, A5) -->
+            <button onclick="document.getElementById('modal-importar-cargos').classList.remove('hidden')"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+                    aria-label="Importar cargos desde Excel">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+                Importar
+            </button>
+            <!-- Exportar Cargos (issue #176, A5) -->
+            <a href="{% url 'cuadrillas:cargos_export' %}"
+               class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2"
+               aria-label="Exportar cargos a Excel">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                📥 Exportar
+            </a>
+            <a href="{% url 'cuadrillas:cargos_crear' %}"
+               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+               aria-label="Crear nuevo cargo">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Nuevo Cargo
+            </a>
+        </div>
     </div>
 
     <!-- Stats -->
@@ -57,6 +78,7 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Salario Base</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                     </tr>
@@ -66,6 +88,7 @@
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                         <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-600 dark:text-gray-400">{{ cargo.codigo }}</td>
                         <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">{{ cargo.nombre }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-gray-600 dark:text-gray-400">${{ cargo.salario_base|floatformat:0|intcomma }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-center">
                             {% if cargo.activo %}
                             <span class="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full" role="status">Activo</span>
@@ -89,7 +112,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="5" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                             No hay cargos {% if estado_filtro %}con este filtro{% endif %}.
                         </td>
                     </tr>
@@ -97,6 +120,39 @@
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<!-- Modal Importar Cargos (issue #176, A5) -->
+<div id="modal-importar-cargos" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 m-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Importar Cargos</h3>
+            <button onclick="document.getElementById('modal-importar-cargos').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">&times;</button>
+        </div>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Suba un archivo Excel (.xlsx) con las columnas:<br>
+            <strong>Código | Nombre | Salario Base</strong><br>
+            <span class="text-xs text-gray-500">Si el código ya existe, se actualiza nombre y salario base (el código nunca cambia). Si no existe, se crea.</span>
+        </p>
+        <form method="post" action="{% url 'cuadrillas:cargos_upload' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-4">
+                <input type="file" name="archivo" accept=".xlsx,.xls"
+                       required
+                       class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('modal-importar-cargos').classList.add('hidden')"
+                        class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-700">
+                    Cancelar
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                    Importar
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}

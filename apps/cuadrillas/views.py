@@ -1383,7 +1383,18 @@ class PersonalCuadrillaListAPIView(LoginRequiredMixin, View):
 
 
 class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """API endpoint to get cost by role."""
+    """API endpoint: costo/salario base de un Cargo.
+
+    Retrofit issue #176 (bounce 3, A2): antes tenia un dict hardcoded de
+    costos por rol (huerfano -- grep 2026-07-19 confirmo CERO consumidores
+    en templates/JS antes de este retrofit). Se retrofitea para leer
+    Cargo.salario_base y se convierte en el backend real del autocompletado
+    de colaboradores_form.html (A3). Mantiene el contrato JSON original
+    (costo_dia/es_conductor/conductor_interno) para minimizar diff -- NO se
+    renombra `costo_dia` pese a que hoy contiene un valor MENSUAL (mismo
+    nombre confuso que ya traia el dict original, fuera de scope
+    corregirlo).
+    """
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
     def get(self, request, *args, **kwargs):
@@ -1391,23 +1402,10 @@ class CostoRolAPIView(LoginRequiredMixin, RoleRequiredMixin, View):
         if not rol:
             return JsonResponse({'costo_dia': 0})
 
-        # Costos fijos por rol
-        costos = {
-            'SUPERVISOR': 0,
-            'LINIERO_I': 3176095,
-            'LINIERO_II': 2804856,
-            'AYUDANTE': 1750905,
-            'CONDUCTOR': 480000,
-            'ADMINISTRADOR_OBRA': 2522400,
-            'PROFESIONAL_SST': 4204000,
-            'ING_RESIDENTE': 7357000,
-            'SERVICIO_GENERAL': 1750905,
-            'ALMACENISTA': 1800000,
-            'SUPERVISOR_FOREST': 2969427,
-            'ASISTENTE_FOREST': 4204000,
-        }
-
-        costo = costos.get(rol, 0)
+        cargo = Cargo.objects.filter(codigo=rol, activo=True).first()
+        # float(): Decimal NO es JSON-serializable por default -- JsonResponse
+        # truena con TypeError si se pasa el Decimal crudo (issue #176 A2).
+        costo = float(cargo.salario_base) if cargo else 0
 
         # Para conductor, diferenciar interno/externo
         es_conductor = rol == 'CONDUCTOR'
@@ -1918,3 +1916,121 @@ class CargoInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
                 'No aparecerá en el picklist de asignación de Colaboradores/Miembros.',
             )
         return redirect('cuadrillas:cargos_lista')
+
+
+class CargoUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Carga masiva de Cargos (issue #176, A5). Upsert por código: crea el
+    código si no existe, actualiza nombre+salario_base si ya existe (NUNCA
+    reasigna el propio código -- es el campo de lookup)."""
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        import openpyxl
+        from decimal import Decimal, InvalidOperation
+        from io import BytesIO
+
+        archivo = request.FILES.get('archivo')
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo.')
+            return redirect('cuadrillas:cargos_lista')
+
+        creados = actualizados = 0
+        errores = []
+        try:
+            wb = openpyxl.load_workbook(BytesIO(archivo.read()))
+            ws = wb.active
+            for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if not row or not row[0]:
+                    continue
+                try:
+                    codigo = str(row[0]).strip().upper()
+                    if not codigo:
+                        errores.append(f'Fila {idx}: código vacío')
+                        continue
+                    nombre = str(row[1]).strip() if len(row) > 1 and row[1] else codigo
+                    try:
+                        salario_raw = row[2] if len(row) > 2 else None
+                        salario_base = (
+                            Decimal(str(salario_raw).replace(',', '').strip() or '0')
+                            if salario_raw not in (None, '')
+                            else Decimal('0')
+                        )
+                    except InvalidOperation:
+                        salario_base = Decimal('0')
+
+                    _, created = Cargo.objects.update_or_create(
+                        codigo=codigo,
+                        defaults={'nombre': nombre, 'salario_base': salario_base, 'activo': True},
+                    )
+                    if created:
+                        creados += 1
+                    else:
+                        actualizados += 1
+                except Exception as row_exc:
+                    errores.append(f'Fila {idx}: {row_exc}')
+
+            msg = f'Cargos cargados: {creados} nuevos, {actualizados} actualizados.'
+            if errores:
+                msg += f' Errores: {len(errores)} filas.'
+            messages.success(request, msg)
+        except Exception as e:
+            messages.error(request, f'Error al procesar archivo: {str(e)}')
+
+        return redirect('cuadrillas:cargos_lista')
+
+
+class CargoExportView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Exporta el catálogo Cargo a xlsx (issue #176, A5)."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get(self, request, *args, **kwargs):
+        import openpyxl
+        from io import BytesIO
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Cargos'
+        ws.append(['Código', 'Nombre', 'Salario Base'])
+        for cargo in Cargo.objects.all().order_by('nombre'):
+            ws.append([cargo.codigo, cargo.nombre, float(cargo.salario_base)])
+
+        buffer = BytesIO()
+        wb.save(buffer)
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="cargos.xlsx"'
+        return response
+
+
+class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Exporta el maestro de Colaboradores a xlsx (issue #176, A6)."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get(self, request, *args, **kwargs):
+        import openpyxl
+        from io import BytesIO
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Colaboradores'
+        ws.append(['Documento', 'Nombre', 'Cargo', 'Salario Base', 'Fecha Ingreso', 'Fecha Salida'])
+        for p in PersonalCuadrilla.objects.select_related('rol_cuadrilla').all().order_by('nombre'):
+            ws.append([
+                p.documento,
+                p.nombre,
+                p.rol_cuadrilla.nombre if p.rol_cuadrilla_id else '',
+                float(p.salario_base),
+                p.fecha_ingreso.strftime('%Y-%m-%d') if p.fecha_ingreso else '',
+                p.fecha_salida.strftime('%Y-%m-%d') if p.fecha_salida else '',
+            ])
+
+        buffer = BytesIO()
+        wb.save(buffer)
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="colaboradores.xlsx"'
+        return response

@@ -47,6 +47,19 @@
                     {% endif %}
                 </div>
 
+                <div>
+                    <label for="{{ form.salario_base.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Salario base
+                    </label>
+                    {{ form.salario_base }}
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Valor sugerido al autocompletar el salario de un Colaborador con este cargo.
+                    </p>
+                    {% if form.salario_base.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.salario_base.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
                 <div class="flex items-center gap-2">
                     {{ form.activo }}
                     <label for="{{ form.activo.id_for_label }}" class="text-sm font-medium text-gray-700 dark:text-gray-300">
