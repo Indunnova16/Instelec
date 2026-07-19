@@ -152,5 +152,53 @@
     <div>
         <a href="{% url 'cuadrillas:lista' %}" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">&larr; Volver a cuadrillas</a>
     </div>
+
+    <!-- Datalist global de Colaboradores activos (issue #188, A5) -- compartido
+         por el mini-form "agregar personal" de todas las cards de la semana. -->
+    <datalist id="personal_disponible_datalist">
+        {% for p in personal_disponible_datalist %}
+        <option value="{{ p.documento }}">{{ p.nombre }}</option>
+        {% endfor %}
+    </datalist>
 </main>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Issue #188 (A5): autocompletado de "agregar personal" -- misma idea de
+// autoCargarDatosPorDocumento() en detalle.html, adaptada al mini-form del
+// grid (PersonalCuadrillaAPIView ahora expone `celular`; A3 exige placa
+// manual si el Cargo resuelto es CONDUCTOR).
+function cargarDatosPersonalBloque(inputEl) {
+    const documento = inputEl.value.trim();
+    const form = inputEl.closest('form');
+    const nombreDisplay = form.querySelector('#id_nombre_display');
+    const placaWrap = form.querySelector('#placa_vehiculo_wrap');
+    if (!documento) {
+        if (nombreDisplay) nombreDisplay.value = '';
+        if (placaWrap) placaWrap.classList.add('hidden');
+        return;
+    }
+    fetch(`{% url 'cuadrillas:personal_detalle_api' %}?documento=${encodeURIComponent(documento)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+            if (!data || !data.nombre) {
+                if (nombreDisplay) nombreDisplay.value = 'No encontrado';
+                if (placaWrap) placaWrap.classList.add('hidden');
+                return;
+            }
+            if (nombreDisplay) nombreDisplay.value = data.nombre;
+            if (placaWrap) {
+                if (data.rol_cuadrilla === 'CONDUCTOR') {
+                    placaWrap.classList.remove('hidden');
+                } else {
+                    placaWrap.classList.add('hidden');
+                }
+            }
+        })
+        .catch(() => {
+            if (nombreDisplay) nombreDisplay.value = '';
+        });
+}
+</script>
 {% endblock %}

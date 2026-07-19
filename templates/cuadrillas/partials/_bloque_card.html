@@ -11,8 +11,9 @@ montado a la vez). Recibe:
     sin perder lo que el usuario ya llenó).
 {% endcomment %}
 {% url 'cuadrillas:semanal_bloque_editar' pk=b.id as url_editar_bloque %}
+{% url 'cuadrillas:semanal_miembro_agregar' pk=b.id as url_agregar_personal %}
 <div data-bloque-codigo="{{ b.codigo }}"
-     x-data="{ editando: {{ editando_inicial|yesno:'true,false' }} }"
+     x-data="{ editando: {{ editando_inicial|yesno:'true,false' }}, agregando: {{ agregar_state.open|yesno:'true,false' }} }"
      class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
 
     <template x-if="editando">
@@ -78,6 +79,70 @@ montado a la vez). Recibe:
                 {% else %}
                 <p class="text-sm text-gray-400">Sin personal asignado.</p>
                 {% endif %}
+            </div>
+            <div class="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-3">
+                <button type="button" data-action="agregar-personal" @click="agregando = !agregando"
+                        class="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        aria-label="Agregar personal al bloque {{ b.codigo }}">
+                    + Agregar personal
+                </button>
+                <template x-if="agregando">
+                    <div class="mt-3">
+                        <form id="form-agregar-personal"
+                              hx-post="{{ url_agregar_personal }}"
+                              hx-target="closest [data-bloque-codigo]"
+                              hx-swap="outerHTML"
+                              class="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                            {% csrf_token %}
+                            <div class="relative">
+                                <label for="id_documento" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Documento</label>
+                                <input type="text" name="documento" id="id_documento" required autocomplete="off"
+                                       list="personal_disponible_datalist"
+                                       value="{{ agregar_state.documento|default:'' }}"
+                                       oninput="cargarDatosPersonalBloque(this)"
+                                       placeholder="Ingrese documento…"
+                                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                            </div>
+                            <div>
+                                <label for="id_nombre_display" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>
+                                <input type="text" id="id_nombre_display" readonly
+                                       value="{{ agregar_state.nombre_display|default:'' }}"
+                                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm bg-gray-50 dark:bg-gray-600">
+                            </div>
+                            <div>
+                                <label for="id_cargo_jerarquico" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cargo en la actividad</label>
+                                <select name="cargo" id="id_cargo_jerarquico"
+                                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                                    <option value="MIEMBRO">Miembro</option>
+                                    <option value="JT_CTA">Jefe de Trabajo / Capacitado</option>
+                                </select>
+                            </div>
+                            <div id="placa_vehiculo_wrap" class="{% if not agregar_state.es_conductor %}hidden{% endif %}">
+                                <label for="id_placa_vehiculo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Placa del vehículo</label>
+                                <input type="text" name="placa_vehiculo" id="id_placa_vehiculo" maxlength="10"
+                                       value="{{ agregar_state.placa|default:'' }}"
+                                       placeholder="ABC123"
+                                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                            </div>
+                            {% if agregar_state.error %}
+                            <div class="md:col-span-4">
+                                <p class="text-sm text-red-600 dark:text-red-400" role="alert">{{ agregar_state.error }}</p>
+                            </div>
+                            {% endif %}
+                            <div class="md:col-span-4 flex items-center gap-2">
+                                <span class="htmx-indicator text-xs text-gray-400" role="status" aria-live="polite">Agregando…</span>
+                                <button type="submit"
+                                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+                                    Agregar
+                                </button>
+                                <button type="button" @click="agregando = false"
+                                        class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </template>
             </div>
         </div>
     </template>

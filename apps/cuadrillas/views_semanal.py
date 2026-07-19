@@ -33,7 +33,7 @@ from django.views.generic import TemplateView
 
 from apps.core.mixins import RoleRequiredMixin
 
-from .models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana, Vehiculo
+from .models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana, PersonalCuadrilla, Vehiculo
 
 logger = logging.getLogger(__name__)
 
@@ -118,14 +118,27 @@ def _bloque_a_dict(cuadrilla):
     Issue #188 (A2): agrega ``id``/FKs crudos (para hx-post/selects
     precargados del grid editable) y enriquece cada miembro con
     ``miembro_pk``/``celular``/``placa_vehiculo``/``es_conductor`` (A5-A7).
+    El ``celular`` vive en el maestro ``PersonalCuadrilla`` (A1/A5), NO en
+    ``Usuario.telefono`` (ese es un concepto distinto, poblado solo por los
+    importers S18) — se resuelve por ``documento`` en un único query batched
+    (evita N+1 por miembro).
     """
+    activos = [m for m in cuadrilla.miembros.all() if m.activo]
+    documentos = [
+        getattr(m.usuario, "documento", "") for m in activos if getattr(m.usuario, "documento", "")
+    ]
+    celulares_por_documento = dict(
+        PersonalCuadrilla.objects.filter(documento__in=documentos).values_list(
+            "documento", "celular"
+        )
+    )
     miembros = [
         {
             "miembro_pk": str(m.pk),
             "usuario_pk": str(m.usuario_id),
             "nombre": (m.usuario.get_full_name() or m.usuario.get_username()),
             "documento": getattr(m.usuario, "documento", "") or "",
-            "celular": getattr(m.usuario, "telefono", "") or "",
+            "celular": celulares_por_documento.get(getattr(m.usuario, "documento", ""), "") or "",
             "rol": m.get_rol_cuadrilla_display(),
             "rol_codigo": m.rol_cuadrilla_id,
             "cargo": m.get_cargo_display(),
@@ -134,8 +147,7 @@ def _bloque_a_dict(cuadrilla):
             "es_conductor": m.rol_cuadrilla_id == "CONDUCTOR",
             "placa_vehiculo": m.placa_vehiculo or "",
         }
-        for m in cuadrilla.miembros.all()
-        if m.activo
+        for m in activos
     ]
     miembros.sort(key=lambda x: (not x["es_jt"], x["nombre"]))
     return {
@@ -219,7 +231,9 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
 def _choices_form_bloque():
     """Catálogos activos para el form de bloque (crear/editar, issue #188
     A2-A4): tipo de actividad, línea, vehículo, supervisor. El propio Tramo
-    se resuelve por cascada AJAX dependiente de la línea (A3) — no vive acá."""
+    se resuelve por cascada AJAX dependiente de la línea (A3) — no vive acá.
+    También incluye el datalist de Colaboradores activos (A5) que alimenta
+    el autocompletado de "agregar personal" en cada card."""
     from apps.actividades.models import TipoActividad
     from apps.lineas.models import Linea
     from apps.usuarios.models import Usuario
@@ -230,6 +244,9 @@ def _choices_form_bloque():
         "vehiculos_bloque": Vehiculo.objects.filter(activo=True).order_by("placa"),
         "supervisores_bloque": Usuario.objects.filter(rol="supervisor", is_active=True).order_by(
             "first_name"
+        ),
+        "personal_disponible_datalist": PersonalCuadrilla.objects.filter(activo=True).order_by(
+            "nombre"
         ),
     }
 
@@ -481,6 +498,110 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
         return HttpResponse(html, status=400)
 
 
+class ProgramacionSemanalMiembroAgregarView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST /cuadrillas/semanal/bloque/<uuid:pk>/miembro/agregar/ (issue #188,
+    A5). Agrega personal a un bloque REUSANDO el patrón probado de
+    ``CuadrillaMiembroAddView``/``detalle.html``: documento + autocompletado
+    AJAX vía ``PersonalCuadrillaAPIView`` (ahora con ``celular``, A5) +
+    ``resolver_o_crear_usuario`` (extraído a ``services.py``). Si el ``Cargo``
+    elegido es ``CONDUCTOR``, exige placa manual. Éxito y falla responden
+    SIEMPRE el card completo (outerHTML) — en falla, con el mini-form de
+    "agregar personal" reabierto (``agregar_state``) y el mensaje inline."""
+
+    allowed_roles = ROLES_CUADRILLAS
+
+    def post(self, request, pk):
+        from .services import resolver_o_crear_usuario
+
+        cuadrilla = get_object_or_404(Cuadrilla, pk=pk)
+        anio, semana = _anio_semana_desde_codigo(cuadrilla.codigo)
+        documento = (request.POST.get("documento") or "").strip()
+        cargo_jerarquico = request.POST.get("cargo") or CuadrillaMiembro.CargoJerarquico.MIEMBRO
+        if cargo_jerarquico not in dict(CuadrillaMiembro.CargoJerarquico.choices):
+            cargo_jerarquico = CuadrillaMiembro.CargoJerarquico.MIEMBRO
+        placa_vehiculo = (request.POST.get("placa_vehiculo") or "").strip()
+
+        if not documento:
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                "Debe ingresar el documento de un colaborador.",
+                agregar_state={"open": True, "documento": documento},
+            )
+
+        personal = PersonalCuadrilla.objects.filter(documento=documento, activo=True).first()
+        if not personal:
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                f'No se encontró un colaborador activo con documento "{documento}". '
+                'Verifique el documento o dé de alta el colaborador en el maestro.',
+                agregar_state={"open": True, "documento": documento},
+            )
+
+        rol_id = personal.rol_cuadrilla_id
+        es_conductor = rol_id == "CONDUCTOR"
+        if es_conductor and not placa_vehiculo:
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                "Debe ingresar la placa del vehículo.",
+                agregar_state={
+                    "open": True,
+                    "documento": documento,
+                    "nombre_display": personal.nombre,
+                    "es_conductor": True,
+                },
+            )
+
+        usuario = resolver_o_crear_usuario(personal)
+
+        try:
+            with transaction.atomic():
+                CuadrillaMiembro.objects.create(
+                    cuadrilla=cuadrilla,
+                    usuario=usuario,
+                    rol_cuadrilla_id=rol_id,
+                    cargo=cargo_jerarquico,
+                    costo_dia=0,
+                    fecha_inicio=date.today(),
+                    placa_vehiculo=placa_vehiculo if es_conductor else "",
+                )
+        except Exception as e:
+            logger.exception("Error agregando personal al bloque (issue #188)")
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                f"Error al agregar el colaborador: {e}",
+                agregar_state={
+                    "open": True,
+                    "documento": documento,
+                    "nombre_display": personal.nombre,
+                    "es_conductor": es_conductor,
+                    "placa": placa_vehiculo,
+                },
+            )
+
+        cuadrilla.refresh_from_db()
+        html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            request=request,
+        )
+        return HttpResponse(html)
+
+    def _card_con_error(self, request, cuadrilla, anio, semana, mensaje, agregar_state):
+        agregar_state = {**agregar_state, "error": mensaje}
+        html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {
+                **_choices_form_bloque(),
+                "b": _bloque_a_dict(cuadrilla),
+                "anio": anio,
+                "semana": semana,
+                "agregar_state": agregar_state,
+            },
+            request=request,
+        )
+        return HttpResponse(html, status=400)
+
+
 class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Copia los bloques (Cuadrilla + CuadrillaMiembro) de la semana anterior a
     la semana destino como base editable. NO destructivo: si un bloque ya existe
@@ -626,5 +747,11 @@ urlpatterns = [
         "semanal/bloque/<uuid:pk>/editar/",
         ProgramacionSemanalBloqueEditarView.as_view(),
         name="semanal_bloque_editar",
+    ),
+    # Issue #188 (A5) — agregar personal a un bloque in-place.
+    path(
+        "semanal/bloque/<uuid:pk>/miembro/agregar/",
+        ProgramacionSemanalMiembroAgregarView.as_view(),
+        name="semanal_miembro_agregar",
     ),
 ]

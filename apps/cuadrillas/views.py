@@ -533,35 +533,13 @@ class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
 
     @staticmethod
     def _resolver_o_crear_usuario(personal):
-        """Resuelve el Usuario vinculado a un PersonalCuadrilla por documento,
-        o lo crea si es la primera vez que se asigna (mismo patrón de
-        apps.cuadrillas.importers._crear_usuario para altas masivas S18):
-        email sintético determinístico, is_active=False, sin password
-        utilizable -- es solo un registro de vínculo, no una cuenta operativa.
-        """
-        from apps.usuarios.models import Usuario
+        """Issue #188 (A5): extraído a ``apps.cuadrillas.services`` para
+        reusarlo también desde ``ProgramacionSemanalMiembroAgregarView``
+        (grid editable). Este wrapper se conserva tal cual (mismo nombre,
+        mismo comportamiento) para no romper llamadas existentes."""
+        from .services import resolver_o_crear_usuario
 
-        usuario = Usuario.objects.filter(documento=personal.documento).first()
-        if usuario:
-            return usuario
-
-        nombre = personal.nombre or f'Colaborador {personal.documento}'
-        partes = nombre.split()
-        first = partes[0] if partes else nombre
-        last = ' '.join(partes[1:]) if len(partes) > 1 else ''
-        email = f'{personal.documento}@instelec-colaborador.local'
-
-        usuario = Usuario.objects.create(
-            email=email,
-            first_name=first[:150],
-            last_name=last[:150],
-            documento=personal.documento,
-            rol='operario_general',
-            is_active=False,
-        )
-        usuario.set_unusable_password()
-        usuario.save(update_fields=['password'])
-        return usuario
+        return resolver_o_crear_usuario(personal)
 
     def post(self, request, *args, **kwargs):
         from datetime import date
@@ -1361,6 +1339,9 @@ class PersonalCuadrillaAPIView(LoginRequiredMixin, View):
                 'nombre': personal.nombre,
                 'documento': personal.documento,
                 'rol_cuadrilla': personal.rol_cuadrilla_id,
+                # Issue #188 (A5): celular nuevo en el maestro Colaboradores,
+                # expuesto para el autocompletado del grid editable.
+                'celular': personal.celular,
             })
         return JsonResponse({}, status=404)
 

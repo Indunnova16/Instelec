@@ -282,3 +282,73 @@ class TestA4EditarBloqueExistente(TestCase):
         self.assertContains(resp, 'id="form-editar-bloque"', status_code=400)
         self.cuadrilla.refresh_from_db()
         self.assertEqual(self.cuadrilla.nombre, "Bloque A4 Original")
+
+
+# ---------------------------------------------------------------------------
+# A5 — Endpoint agregar personal (reusa maestro Colaboradores) + placa
+# condicional Conductor
+# ---------------------------------------------------------------------------
+class TestA5AgregarPersonalBloque(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.cuadrilla = Cuadrilla.objects.create(
+            codigo="44-2026-0001-A5T", nombre="Bloque A5", activa=True
+        )
+        self.url = reverse("cuadrillas:semanal_miembro_agregar", args=[self.cuadrilla.id])
+
+    def test_happy_agregar_colaborador_existente_con_celular_visible(self):
+        personal = PersonalCuadrilla.objects.create(
+            nombre="Colaborador A5 Feliz",
+            documento="188-A5-0001",
+            rol_cuadrilla_id="LINIERO_I",
+            celular="3009998877",
+            activo=True,
+        )
+        resp = self.client.post(self.url, {"documento": personal.documento})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Colaborador A5 Feliz")
+        self.assertContains(resp, "3009998877")
+        miembro = CuadrillaMiembro.objects.get(cuadrilla=self.cuadrilla)
+        self.assertEqual(miembro.usuario.documento, "188-A5-0001")
+        self.assertTrue(miembro.activo)
+
+    def test_edge_documento_inexistente_muestra_error_inline(self):
+        resp = self.client.post(self.url, {"documento": "NO-EXISTE-188"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "No se encontró", status_code=400)
+        self.assertFalse(CuadrillaMiembro.objects.filter(cuadrilla=self.cuadrilla).exists())
+
+    def test_edge_cargo_conductor_sin_placa_bloqueado(self):
+        PersonalCuadrilla.objects.create(
+            nombre="Conductor A5",
+            documento="188-A5-0002",
+            rol_cuadrilla_id="CONDUCTOR",
+            activo=True,
+        )
+        resp = self.client.post(self.url, {"documento": "188-A5-0002"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "Debe ingresar la placa del vehículo", status_code=400)
+        self.assertFalse(CuadrillaMiembro.objects.filter(cuadrilla=self.cuadrilla).exists())
+
+        # Con placa sí se crea.
+        resp2 = self.client.post(self.url, {"documento": "188-A5-0002", "placa_vehiculo": "XYZ987"})
+        self.assertEqual(resp2.status_code, 200)
+        miembro = CuadrillaMiembro.objects.get(cuadrilla=self.cuadrilla)
+        self.assertEqual(miembro.placa_vehiculo, "XYZ987")
+
+    def test_edge_colaborador_con_usuario_ya_resuelto_no_duplica_usuario(self):
+        usuario_existente = _crear_usuario_miembro("188-A5-0003", "Ya Resuelto A5")
+        PersonalCuadrilla.objects.create(
+            nombre="Ya Resuelto A5",
+            documento="188-A5-0003",
+            rol_cuadrilla_id="LINIERO_I",
+            activo=True,
+        )
+        antes = Usuario.objects.filter(documento="188-A5-0003").count()
+        resp = self.client.post(self.url, {"documento": "188-A5-0003"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Usuario.objects.filter(documento="188-A5-0003").count(), antes)
+        miembro = CuadrillaMiembro.objects.get(cuadrilla=self.cuadrilla)
+        self.assertEqual(miembro.usuario_id, usuario_existente.id)
