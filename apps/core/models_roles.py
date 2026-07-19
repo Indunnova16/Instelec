@@ -15,6 +15,8 @@ asignación de usuarios (apps/usuarios/views.py, A4).
 """
 
 from django.db import models
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 
 from apps.core.models import BaseModel
 
@@ -104,3 +106,30 @@ class RoleModuloPermiso(BaseModel):
     def __str__(self):
         sub = f"/{self.submodulo}" if self.submodulo else ""
         return f"{self.role.codigo} → {self.modulo}{sub} ({self.nivel_acceso})"
+
+
+# === Invalidación de cache (issue #186, A3) ===============================
+# `apps.core.permissions._get_role_permisos` cachea por `Role.codigo`
+# (RBACModuloMiddleware corre en CADA request -- ver PLAN §4). Estas señales
+# garantizan que editar la matriz (A5) tenga efecto INMEDIATO, sin esperar
+# el TTL de 1h. Import de `permissions` diferido (dentro del receiver) para
+# evitar un ciclo de import a nivel de módulo con `permissions.py`.
+
+
+@receiver(post_save, sender=Role)
+@receiver(post_delete, sender=Role)
+def _invalidar_cache_al_cambiar_role(sender, instance, **kwargs):
+    from .permissions import invalidate_role_cache
+
+    invalidate_role_cache(instance.codigo)
+
+
+@receiver(post_save, sender=RoleModuloPermiso)
+@receiver(post_delete, sender=RoleModuloPermiso)
+def _invalidar_cache_al_cambiar_permiso(sender, instance, **kwargs):
+    from .permissions import invalidate_role_cache
+
+    # `instance.role_id` es el valor crudo de la columna FK -- con
+    # to_field='codigo' eso ES el código del rol (no un UUID), ver
+    # verificación manual en el commit de A1.
+    invalidate_role_cache(instance.role_id)

@@ -158,3 +158,52 @@ def nivel_acceso_modulo(codigo_rol):
     """`ver_editar` para nivel admin, `ver` para nivel operario (mapeo binario
     legacy → 3 estados, ver PLAN §2/§3 — este sprint solo puebla estos 2)."""
     return "ver_editar" if ROL_NIVEL.get(codigo_rol) == NIVEL_ADMIN else "ver"
+
+
+def seed_roles_permisos_bd():
+    """Puebla `Role`/`RoleModuloPermiso` vía ORM real (modelos reales, NO
+    `apps.get_model` histórico) reproduciendo EXACTAMENTE la migración
+    `0002_seed_roles_permisos.py`.
+
+    Existe porque `pytest` corre con `--nomigrations` (ver `pyproject.toml`)
+    — la migración de datos real NUNCA se ejecuta en la suite de tests, así
+    que CUALQUIER test que dependa de acceso por rol (RBAC,
+    `RoleRequiredMixin`, `RBACModuloMiddleware`, que ahora leen de BD post
+    A3) necesita este seed. Usado por:
+      - `conftest.py` (`django_db_setup`) — una vez por sesión de pytest,
+        para TODA la suite (issue #186, A3 — blast radius global).
+      - `apps/core/tests_issue_186_paridad_rbac.py` — el Gate de Paridad.
+
+    Import de los modelos diferido (dentro de la función) para que este
+    módulo siga siendo importable sin apps Django cargadas (p.ej. desde la
+    migración 0002, que usa `apps.get_model` en vez de este helper).
+    """
+    from apps.core.models import Role, RoleModuloPermiso
+
+    for codigo, nombre, legacy in ROLES:
+        role, _created = Role.objects.get_or_create(
+            codigo=codigo,
+            defaults={
+                "nombre": nombre,
+                "nivel": ROL_NIVEL.get(codigo),
+                "legacy": legacy,
+                "activo": True,
+            },
+        )
+        nivel_acceso = nivel_acceso_modulo(codigo)
+
+        for modulo in ROL_MODULOS.get(codigo, set()):
+            RoleModuloPermiso.objects.get_or_create(
+                role=role,
+                modulo=modulo,
+                submodulo=None,
+                defaults={"nivel_acceso": nivel_acceso},
+            )
+
+        for submodulo in ROL_SUBMODULOS.get(codigo, set()):
+            RoleModuloPermiso.objects.get_or_create(
+                role=role,
+                modulo=MODULO_CONSTRUCCION,
+                submodulo=submodulo,
+                defaults={"nivel_acceso": nivel_acceso},
+            )

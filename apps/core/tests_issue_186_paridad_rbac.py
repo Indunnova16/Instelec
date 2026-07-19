@@ -26,7 +26,7 @@ roles = **270 aserciones totales** (no 252 — 252 sale de 18×14, el conteo
 de roles equivocado de F2).
 
 Verificación adicional contra BD prod real (requisito de A2, "≥1 usuario
-legaco real de BD prod, no solo fixture"): confirmado 2026-07-18 vía proxy
+legacy real de BD prod, no solo fixture"): confirmado 2026-07-18 vía proxy
 Cloud SQL (127.0.0.1:5434, instelec_db) que los roles REALMENTE en uso en
 prod son {liniero: 90, auxiliar: 30, operario_general: 18, admin: 8,
 supervisor: 2, admin_general: 1} — los 6 están cubiertos 1:1 en
@@ -40,7 +40,7 @@ documenta para A7 (journey de cierre).
 import pytest
 
 from apps.core import rbac_seed_data as _snap
-from apps.core.models import Role, RoleModuloPermiso
+from apps.core.models import Role
 from apps.core.permissions import (
     user_can_access_modulo,
     user_can_access_submodulo,
@@ -60,46 +60,13 @@ _SUBMODULOS = sorted(_snap.TODOS_SUBMODULOS)
 _TODOS_LOS_CODIGOS = _snap.TODOS_LOS_CODIGOS
 
 
-def _seed_roles_bd():
-    """Puebla Role/RoleModuloPermiso vía ORM real para el test.
-
-    pytest corre con `--nomigrations` (ver pyproject.toml) — la migración de
-    datos 0002 NO se ejecuta en la suite de tests, así que el test siembra
-    el mismo estado usando la MISMA fuente de datos (`_snap.*`) que la
-    migración real, para que "NUEVO" (BD-backed) tenga algo que leer.
-    """
-    for codigo, nombre, legacy in _snap.ROLES:
-        role, _created = Role.objects.get_or_create(
-            codigo=codigo,
-            defaults={
-                "nombre": nombre,
-                "nivel": _snap.ROL_NIVEL.get(codigo),
-                "legacy": legacy,
-                "activo": True,
-            },
-        )
-        nivel_acceso = _snap.nivel_acceso_modulo(codigo)
-
-        for modulo in _snap.ROL_MODULOS.get(codigo, set()):
-            RoleModuloPermiso.objects.get_or_create(
-                role=role,
-                modulo=modulo,
-                submodulo=None,
-                defaults={"nivel_acceso": nivel_acceso},
-            )
-
-        for submodulo in _snap.ROL_SUBMODULOS.get(codigo, set()):
-            RoleModuloPermiso.objects.get_or_create(
-                role=role,
-                modulo=_snap.MODULO_CONSTRUCCION,
-                submodulo=submodulo,
-                defaults={"nivel_acceso": nivel_acceso},
-            )
-
-
 @pytest.fixture(autouse=True)
 def _roles_seeded_en_bd(db):
-    _seed_roles_bd()
+    """El seed real ya corre una vez por sesión (ver `conftest.py::
+    django_db_setup`) -- este fixture es un no-op idempotente (get_or_create)
+    que deja el test file auto-explicativo/self-contained si se corre en
+    aislamiento; no duplica datos."""
+    _snap.seed_roles_permisos_bd()
 
 
 def _usuario_con_rol(codigo_rol):
