@@ -181,6 +181,19 @@
             // Hide loading indicator
         });
 
+        document.body.addEventListener('htmx:beforeSwap', function(event) {
+            // Issue #188: varios endpoints de validación (crear/editar bloque,
+            // agregar personal) responden 400 A PROPÓSITO con el HTML del
+            // form/card reabierto + el mensaje de error inline. Por default
+            // htmx descarta el body de cualquier respuesta no-2xx (isError=true,
+            // shouldSwap=false) y solo dispara htmx:responseError -- el usuario
+            // nunca ve el mensaje real, solo el toast genérico de abajo.
+            if (event.detail.xhr.status === 400) {
+                event.detail.shouldSwap = true;
+                event.detail.isError = false;
+            }
+        });
+
         document.body.addEventListener('htmx:responseError', function(event) {
             // Show error toast
             showToast('Error al procesar la solicitud', 'error');
