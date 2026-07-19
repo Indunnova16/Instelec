@@ -443,3 +443,47 @@ class TestA7ValidacionDuplicadoInline(TestCase):
         self.assertEqual(
             CuadrillaMiembro.objects.filter(usuario__documento="188-A7-0001", activo=True).count(), 2
         )
+
+
+# ---------------------------------------------------------------------------
+# A8 — Duplicar semana → editar el duplicado → guardar sin perder datos
+# ---------------------------------------------------------------------------
+class TestA8DuplicarEditarSinPerderDatos(TestCase):
+    """Integración: ProgramacionSemanalDuplicarView (#178, C2, ya validado en
+    prod) + la edición in-place nueva (A2-A7) sobre el MISMO modelo Cuadrilla/
+    CuadrillaMiembro deben convivir sin pérdida de datos."""
+
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_happy_duplicar_editar_duplicado_origen_intacto(self):
+        origen = Cuadrilla.objects.create(
+            codigo="47-2026-0001-A8T", nombre="Bloque A8 Origen", activa=True
+        )
+        usuario = _crear_usuario_miembro("188-A8-0001", "Miembro A8 Origen")
+        CuadrillaMiembro.objects.create(
+            cuadrilla=origen, usuario=usuario, rol_cuadrilla_id="LINIERO_I", fecha_inicio=date.today()
+        )
+
+        dup_url = reverse("cuadrillas:semanal_duplicar", args=[2026, 48])
+        resp = self.client.post(dup_url)
+        self.assertEqual(resp.status_code, 302)
+
+        duplicado = Cuadrilla.objects.get(codigo="48-2026-0001-A8T")
+        self.assertEqual(duplicado.miembros.filter(activo=True).count(), 1)
+
+        editar_url = reverse("cuadrillas:semanal_bloque_editar", args=[duplicado.id])
+        resp2 = self.client.post(editar_url, {"nombre": "Bloque A8 Duplicado Editado"})
+        self.assertEqual(resp2.status_code, 200)
+        self.assertContains(resp2, "Bloque A8 Duplicado Editado")
+
+        # El origen (semana 47) sigue intacto — ni el nombre ni el miembro cambiaron.
+        origen.refresh_from_db()
+        self.assertEqual(origen.nombre, "Bloque A8 Origen")
+        self.assertEqual(origen.miembros.filter(activo=True).count(), 1)
+
+        # El duplicado (semana 48) sí persistió el cambio.
+        duplicado.refresh_from_db()
+        self.assertEqual(duplicado.nombre, "Bloque A8 Duplicado Editado")
