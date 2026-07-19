@@ -34,7 +34,6 @@ from django.urls import reverse
 from apps.cuadrillas.models import Cargo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla
 from tests.factories import (
     ActividadCompletadaFactory,
-    CuadrillaFactory,
     CuadrillaMiembroFactory,
 )
 
@@ -448,3 +447,170 @@ class TestA7CopyDependenciaCargoColaboradores(TestCase):
         idx_cierre_modal = content.index("</form>", idx_modal)
         self.assertLess(idx_modal, idx_copy)
         self.assertLess(idx_copy, idx_cierre_modal)
+
+
+# ---------------------------------------------------------------------------
+# A8 (backfill A1) — CRUD Cargo con salario_base vía UI
+# ---------------------------------------------------------------------------
+class TestA1CargoCRUDSalarioBase(TestCase):
+    """A1: Cargo.salario_base editable desde el CRUD /cuadrillas/cargos/
+    (la migración 0022 y el modelo se verificaron en el commit de A1 contra
+    la suite pre-existente tests_issue_176.py; este archivo consolida la
+    cobertura formal específica de salario_base pedida por el plan)."""
+
+    def setUp(self):
+        self.admin = _crear_admin("176sal-a1")
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_crear_cargo_con_salario_persiste(self):
+        url = reverse("cuadrillas:cargos_crear")
+        resp = self.client.post(
+            url, {"codigo": "QA_A1_SALARIO", "nombre": "Cargo Con Salario", "salario_base": "2100000", "activo": "on"}
+        )
+        self.assertIn(resp.status_code, (200, 302))
+        cargo = Cargo.objects.get(codigo="QA_A1_SALARIO")
+        self.assertEqual(cargo.salario_base, Decimal("2100000"))
+
+    def test_crear_cargo_sin_salario_cae_a_default_cero(self):
+        """Edge case: el campo es opcional (blank=True) -- si se omite del
+        POST, cae al default del modelo (0), no revienta con IntegrityError
+        por intentar guardar NULL."""
+        url = reverse("cuadrillas:cargos_crear")
+        resp = self.client.post(url, {"codigo": "QA_A1_SIN_SALARIO", "nombre": "Sin Salario", "activo": "on"})
+        self.assertIn(resp.status_code, (200, 302))
+        cargo = Cargo.objects.get(codigo="QA_A1_SIN_SALARIO")
+        self.assertEqual(cargo.salario_base, Decimal("0"))
+
+    def test_salario_negativo_rechazado_con_mensaje_dominio(self):
+        """Edge case: el widget pone min=0 (solo HTML) -- el backend debe
+        rechazar un POST directo con salario negativo, no lanzar 500 ni
+        persistir un valor inválido."""
+        url = reverse("cuadrillas:cargos_crear")
+        resp = self.client.post(
+            url, {"codigo": "QA_A1_NEGATIVO", "nombre": "Salario Negativo", "salario_base": "-500", "activo": "on"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Cargo.objects.filter(codigo="QA_A1_NEGATIVO").exists())
+        form = resp.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("salario_base", form.errors)
+
+    def test_editar_cargo_actualiza_salario_base(self):
+        cargo = Cargo.objects.create(codigo="QA_A1_EDITAR", nombre="Editar Salario", salario_base=Decimal("100"))
+        url = reverse("cuadrillas:cargos_editar", args=[cargo.pk])
+        resp = self.client.post(
+            url, {"codigo": "QA_A1_EDITAR", "nombre": "Editar Salario", "salario_base": "9999999", "activo": "on"}
+        )
+        self.assertIn(resp.status_code, (200, 302))
+        cargo.refresh_from_db()
+        self.assertEqual(cargo.salario_base, Decimal("9999999"))
+
+    def test_columna_salario_base_visible_en_lista_con_separador_de_miles(self):
+        Cargo.objects.create(codigo="QA_A1_LISTA", nombre="Cargo Lista", salario_base=Decimal("3500000"))
+        resp = self.client.get(reverse("cuadrillas:cargos_lista"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "3.500.000")
+
+
+# ---------------------------------------------------------------------------
+# A8 (backfill A2) — CostoRolAPIView retrofit, cobertura formal
+# ---------------------------------------------------------------------------
+class TestA2CostoRolAPIRetrofit(TestCase):
+    """A2: costo_rol_api lee Cargo.salario_base (retrofit del dict hardcoded
+    huérfano). Verificado manualmente en el commit de A2 vía test Client
+    directo; este archivo agrega la cobertura formal pytest."""
+
+    def setUp(self):
+        self.admin = _crear_admin("176sal-a2")
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_rol_existente_devuelve_salario_base_correcto(self):
+        Cargo.objects.create(codigo="QA_A2_ROL", nombre="Rol QA A2", salario_base=Decimal("1234567.89"), activo=True)
+        url = reverse("cuadrillas:costo_rol_api")
+        resp = self.client.get(url, {"rol": "QA_A2_ROL"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["costo_dia"], 1234567.89)
+        self.assertIsInstance(data["costo_dia"], float)
+
+    def test_rol_inexistente_devuelve_cero_sin_500(self):
+        url = reverse("cuadrillas:costo_rol_api")
+        resp = self.client.get(url, {"rol": "QA_A2_NO_EXISTE"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["costo_dia"], 0)
+
+    def test_rol_vacio_devuelve_cero_sin_500(self):
+        url = reverse("cuadrillas:costo_rol_api")
+        resp = self.client.get(url, {"rol": ""})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["costo_dia"], 0)
+
+    def test_cargo_inactivo_no_se_usa_para_autocompletar(self):
+        """Edge case: un cargo INACTIVO no debe autocompletar salario (mismo
+        criterio que el resto del maestro: solo activos son elegibles)."""
+        Cargo.objects.create(
+            codigo="QA_A2_INACTIVO", nombre="Rol Inactivo", salario_base=Decimal("5000000"), activo=False
+        )
+        url = reverse("cuadrillas:costo_rol_api")
+        resp = self.client.get(url, {"rol": "QA_A2_INACTIVO"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["costo_dia"], 0)
+
+    def test_conductor_diferencia_interno_externo(self):
+        # "CONDUCTOR" ya viene sembrado por el conftest autouse (14 códigos) --
+        # actualizar en vez de crear, para no chocar con el unique de codigo.
+        Cargo.objects.filter(codigo="CONDUCTOR").update(salario_base=Decimal("480000"), activo=True)
+        url = reverse("cuadrillas:costo_rol_api")
+        resp = self.client.get(url, {"rol": "CONDUCTOR", "conductor_interno": "false"})
+        data = resp.json()
+        self.assertTrue(data["es_conductor"])
+        self.assertFalse(data["conductor_interno"])
+
+
+# ---------------------------------------------------------------------------
+# A8 — Integración: round-trip export -> import de Cargo
+# ---------------------------------------------------------------------------
+class TestA8IntegracionRoundTripCargo(TestCase):
+    """Cross-cutting: exportar el catálogo Cargo y reimportarlo debe dejar
+    los datos exactamente iguales (upsert idempotente sobre el propio
+    export) -- integra A5 (import/export) sin duplicar ni perder datos."""
+
+    def setUp(self):
+        self.admin = _crear_admin("176sal-a8")
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_exportar_y_reimportar_cargo_es_idempotente(self):
+        Cargo.objects.create(codigo="QA_A8_ROUNDTRIP", nombre="Round Trip", salario_base=Decimal("2222222"))
+        total_antes = Cargo.objects.count()
+
+        export_resp = self.client.get(reverse("cuadrillas:cargos_export"))
+        self.assertEqual(export_resp.status_code, 200)
+
+        archivo = BytesIO(export_resp.content)
+        archivo.name = "cargos_export.xlsx"
+        import_resp = self.client.post(reverse("cuadrillas:cargos_upload"), {"archivo": archivo})
+        self.assertIn(import_resp.status_code, (200, 302))
+
+        # Ningún cargo nuevo se creó (upsert por código, no duplica) y el
+        # que ya existía conserva su salario.
+        self.assertEqual(Cargo.objects.count(), total_antes)
+        cargo = Cargo.objects.get(codigo="QA_A8_ROUNDTRIP")
+        self.assertEqual(cargo.salario_base, Decimal("2222222"))
+
+    def test_suite_completa_176_salario_no_deja_estado_cruzado(self):
+        """Meta-test: confirma que el catálogo de Cargo sembrado por el
+        conftest autouse (14 códigos) sigue intacto en cantidad mínima --
+        anti falso-verde de que algún test anterior no lo haya vaciado por
+        accidente (p.ej. un import mal armado que reemplace en vez de
+        upsertear)."""
+        codigos_base = {
+            "SUPERVISOR", "LINIERO_I", "LINIERO_II", "AYUDANTE", "CONDUCTOR",
+            "ADMINISTRADOR_OBRA", "PROFESIONAL_SST", "ING_RESIDENTE",
+            "SERVICIO_GENERAL", "ALMACENISTA", "SUPERVISOR_FOREST",
+            "ASISTENTE_FOREST", "MALACATERO", "COORDINADOR_HSQ",
+        }
+        existentes = set(Cargo.objects.values_list("codigo", flat=True))
+        self.assertTrue(codigos_base.issubset(existentes))
