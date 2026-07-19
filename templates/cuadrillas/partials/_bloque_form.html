@@ -38,6 +38,10 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
     <div>
         <label for="id_linea" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>
         <select name="linea_asignada" id="id_linea"
+                hx-get="{% url 'cuadrillas:tramos_por_linea_api' %}"
+                hx-trigger="change"
+                hx-target="#id_tramo"
+                hx-swap="innerHTML"
                 class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-linea">
             <option value="">— Sin línea —</option>
             {% for l in lineas_bloque %}

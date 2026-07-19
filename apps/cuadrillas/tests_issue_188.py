@@ -157,3 +157,75 @@ class TestA2ShellGridInteractivo(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Trabajador A2 Dos")
         self.assertEqual(resp.content.decode().count('data-bloque-codigo='), 3)
+
+
+# ---------------------------------------------------------------------------
+# A3 — Endpoint crear bloque + cascada Línea→Tramo AJAX
+# ---------------------------------------------------------------------------
+class TestA3CrearBloqueCascadaTramo(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def _crear_linea_con_tramo(self):
+        from apps.lineas.models import Linea, Torre, Tramo
+
+        linea = Linea.objects.create(codigo="188-A3-L1", nombre="Linea A3", cliente="TRANSELCA")
+        t1 = Torre.objects.create(linea=linea, numero="1", latitud="7.0", longitud="-75.5")
+        t2 = Torre.objects.create(linea=linea, numero="2", latitud="7.01", longitud="-75.51")
+        tramo = Tramo.objects.create(
+            linea=linea, codigo="188-A3-TRM1", nombre="Tramo A3 Uno", torre_inicio=t1, torre_fin=t2
+        )
+        return linea, tramo
+
+    def test_happy_crear_bloque_con_tramo_real(self):
+        linea, tramo = self._crear_linea_con_tramo()
+        url = reverse("cuadrillas:semanal_bloque_crear", args=[2026, 40])
+        resp = self.client.post(
+            url,
+            {
+                "nombre": "Bloque A3 Feliz",
+                "linea_asignada": str(linea.id),
+                "tramo": str(tramo.id),
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Bloque A3 Feliz")
+        self.assertContains(resp, "Tramo A3 Uno")
+        creado = Cuadrilla.objects.get(nombre="Bloque A3 Feliz")
+        self.assertEqual(creado.linea_asignada_id, linea.id)
+        self.assertEqual(creado.tramo_id, tramo.id)
+        self.assertTrue(creado.codigo.startswith("40-2026-"))
+
+    def test_edge_linea_sin_tramos_combo_vacio_no_rompe(self):
+        from apps.lineas.models import Linea
+
+        linea = Linea.objects.create(codigo="188-A3-L2", nombre="Linea Sin Tramos", cliente="TRANSELCA")
+        api_url = reverse("cuadrillas:tramos_por_linea_api")
+        resp = self.client.get(api_url, {"linea_id": str(linea.id)})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("— Sin tramo —", resp.content.decode())
+
+        url = reverse("cuadrillas:semanal_bloque_crear", args=[2026, 40])
+        resp = self.client.post(url, {"nombre": "Bloque Linea Sin Tramos", "linea_asignada": str(linea.id)})
+        self.assertEqual(resp.status_code, 200)
+        creado = Cuadrilla.objects.get(nombre="Bloque Linea Sin Tramos")
+        self.assertIsNone(creado.tramo_id)
+
+    def test_edge_tipo_actividad_y_tramo_omitidos_bloque_se_crea_igual(self):
+        url = reverse("cuadrillas:semanal_bloque_crear", args=[2026, 41])
+        resp = self.client.post(url, {"nombre": "Bloque Minimo A3"})
+        self.assertEqual(resp.status_code, 200)
+        creado = Cuadrilla.objects.get(nombre="Bloque Minimo A3")
+        self.assertIsNone(creado.tipo_actividad_id)
+        self.assertIsNone(creado.tramo_id)
+        self.assertIsNone(creado.linea_asignada_id)
+
+    def test_edge_nombre_vacio_no_crea_bloque_y_muestra_error(self):
+        url = reverse("cuadrillas:semanal_bloque_crear", args=[2026, 42])
+        antes = Cuadrilla.objects.count()
+        resp = self.client.post(url, {"nombre": ""})
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "obligatorio", status_code=400)
+        self.assertEqual(Cuadrilla.objects.count(), antes)

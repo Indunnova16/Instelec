@@ -158,6 +158,48 @@ def _bloque_a_dict(cuadrilla):
     }
 
 
+def _siguiente_codigo_bloque(anio, semana, nombre=""):
+    """Genera el próximo código ``WW-YYYY-NNNN-XXX`` para un bloque nuevo de la
+    semana (issue #188, A3), reusando el mismo formato de
+    ``ProgramacionS18CuadrillaImporter._generar_codigo``. Busca el número más
+    alto YA usado en la semana (no solo ``.count()`` — evita colisión si algún
+    bloque fue borrado) y le suma 1."""
+    import re
+
+    prefijo = _prefijo(anio, semana)
+    max_num = 0
+    for codigo in Cuadrilla.objects.filter(codigo__startswith=prefijo).values_list(
+        "codigo", flat=True
+    ):
+        partes = codigo.split("-")
+        if len(partes) >= 3:
+            try:
+                max_num = max(max_num, int(partes[2]))
+            except ValueError:
+                continue
+    iniciales = re.sub(r"[^A-Z]", "", (nombre or "").upper())[:3] or "BLQ"
+    return f"{prefijo}{max_num + 1:04d}-{iniciales}"
+
+
+def _post_a_bloque_dict(request, fecha=None):
+    """Reconstruye un dict "tipo _bloque_a_dict" a partir de un POST fallido
+    (issue #188, A3/A4) — para reusar _bloque_form.html y NO perder lo que el
+    usuario ya había llenado cuando el submit falla por validación."""
+    return {
+        "id": "",
+        "nombre": (request.POST.get("nombre") or "").strip(),
+        "tipo_actividad_id": request.POST.get("tipo_actividad") or "",
+        "linea_id": request.POST.get("linea_asignada") or "",
+        "tramo_id": request.POST.get("tramo") or "",
+        "tramo": "",
+        "tramo_nombre": "",
+        "vehiculo_id": request.POST.get("vehiculo") or "",
+        "supervisor_id": request.POST.get("supervisor") or "",
+        "fecha": fecha,
+        "observaciones": (request.POST.get("observaciones") or "").strip(),
+    }
+
+
 def _choices_form_bloque():
     """Catálogos activos para el form de bloque (crear/editar, issue #188
     A2-A4): tipo de actividad, línea, vehículo, supervisor. El propio Tramo
@@ -259,6 +301,99 @@ class ProgramacionSemanalGridView(LoginRequiredMixin, RoleRequiredMixin, Templat
         # (AJAX) llega en A3 — acá solo se precargan los catálogos activos.
         context.update(_choices_form_bloque())
         return context
+
+
+class TramosPorLineaAPIView(LoginRequiredMixin, View):
+    """GET /cuadrillas/api/tramos-por-linea/?linea_id=<uuid> (issue #188, A3).
+
+    Cascada Línea→Tramo: devuelve <option> ya renderizados para reemplazar el
+    innerHTML del select #id_tramo del form de bloque (HTMX hx-swap=innerHTML).
+    Acepta tanto ``linea_id`` como ``linea_asignada`` (el select del form de
+    bloque usa este último `name`; HTMX serializa el form completo al hacer
+    hx-get sobre un elemento dentro de un <form>)."""
+
+    def get(self, request, *args, **kwargs):
+        from apps.lineas.models import Tramo
+
+        linea_id = (request.GET.get("linea_id") or request.GET.get("linea_asignada") or "").strip()
+        html = '<option value="">— Sin tramo —</option>'
+        if linea_id:
+            tramos = Tramo.objects.filter(linea_id=linea_id).order_by("codigo")
+            for t in tramos:
+                html += f'<option value="{t.pk}">{t.codigo} - {t.nombre}</option>'
+        return HttpResponse(html, content_type="text/html")
+
+
+class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST /cuadrillas/semanal/<anio>/<semana>/bloque/crear/ (issue #188, A3).
+
+    Crea un bloque (Cuadrilla) DENTRO del grid semanal, sin recargar la
+    página. Éxito: responde con un swap out-of-band que agrega la card nueva
+    al final de #bloques-lista + el form de creación reseteado (mismo
+    request, para que el usuario pueda seguir creando bloques). Falla:
+    re-renderiza el mismo form con el error inline, preservando lo ya
+    llenado (`_post_a_bloque_dict`)."""
+
+    allowed_roles = ROLES_CUADRILLAS
+
+    def post(self, request, anio, semana):
+        anio, semana = int(anio), int(semana)
+        nombre = (request.POST.get("nombre") or "").strip()
+        if not nombre:
+            return self._form_con_error(request, anio, semana, "El nombre del bloque es obligatorio.")
+
+        fecha_str = (request.POST.get("fecha") or "").strip()
+        fecha = None
+        if fecha_str:
+            try:
+                fecha = date.fromisoformat(fecha_str)
+            except ValueError:
+                return self._form_con_error(request, anio, semana, "La fecha ingresada no es válida.")
+
+        codigo = _siguiente_codigo_bloque(anio, semana, nombre)
+        try:
+            with transaction.atomic():
+                cuadrilla = Cuadrilla.objects.create(
+                    codigo=codigo,
+                    nombre=nombre,
+                    tipo_actividad_id=request.POST.get("tipo_actividad") or None,
+                    linea_asignada_id=request.POST.get("linea_asignada") or None,
+                    tramo_id=request.POST.get("tramo") or None,
+                    vehiculo_id=request.POST.get("vehiculo") or None,
+                    supervisor_id=request.POST.get("supervisor") or None,
+                    observaciones=(request.POST.get("observaciones") or "").strip(),
+                    fecha=fecha,
+                    activa=True,
+                )
+        except Exception as e:
+            logger.exception("Error creando bloque de programación semanal (issue #188)")
+            return self._form_con_error(request, anio, semana, f"Error al crear el bloque: {e}")
+
+        card_html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            request=request,
+        )
+        form_html = self._render_form(request, anio, semana)
+        return HttpResponse(f'<div hx-swap-oob="beforeend:#bloques-lista">{card_html}</div>{form_html}')
+
+    def _render_form(self, request, anio, semana, form_error=None, valores=None):
+        contexto = {
+            **_choices_form_bloque(),
+            "b": valores,
+            "anio": anio,
+            "semana": semana,
+            "form_id": "form-nuevo-bloque",
+            "post_url": reverse("cuadrillas:semanal_bloque_crear", args=[anio, semana]),
+            "cerrar_expr": "creando=false",
+            "form_error": form_error,
+        }
+        return render_to_string("cuadrillas/partials/_bloque_form.html", contexto, request=request)
+
+    def _form_con_error(self, request, anio, semana, mensaje):
+        valores = _post_a_bloque_dict(request)
+        html = self._render_form(request, anio, semana, form_error=mensaje, valores=valores)
+        return HttpResponse(html, status=400)
 
 
 class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, View):
@@ -394,4 +529,11 @@ urlpatterns = [
         ProgramacionSemanalPDFView.as_view(),
         name="semanal_pdf",
     ),
+    # Issue #188 (A3) — grid editable in-place: crear bloque + cascada Línea→Tramo.
+    path(
+        "semanal/<int:anio>/<int:semana>/bloque/crear/",
+        ProgramacionSemanalBloqueCrearView.as_view(),
+        name="semanal_bloque_crear",
+    ),
+    path("api/tramos-por-linea/", TramosPorLineaAPIView.as_view(), name="tramos_por_linea_api"),
 ]
