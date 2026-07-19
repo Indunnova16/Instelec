@@ -34,6 +34,18 @@ class Cargo(BaseModel):
     codigo = models.CharField("Código", max_length=20, unique=True)
     nombre = models.CharField("Nombre", max_length=100)
     activo = models.BooleanField("Activo", default=True)
+    salario_base = models.DecimalField(
+        "Salario base",
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        blank=True,
+        help_text=(
+            "Salario mensual sugerido para este cargo (default/sugerencia al "
+            "autocompletar el salario de un Colaborador; el valor efectivo para "
+            "costos/reportes sigue siendo PersonalCuadrilla.salario_base, issue #176 A1)."
+        ),
+    )
 
     class Meta:
         db_table = "cargos"
