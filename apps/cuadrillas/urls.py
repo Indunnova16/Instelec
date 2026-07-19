@@ -36,6 +36,7 @@ urlpatterns = [
     path('colaboradores/crear/', views.ColaboradorCreateView.as_view(), name='colaboradores_crear'),
     path('colaboradores/<uuid:pk>/editar/', views.ColaboradorEditView.as_view(), name='colaboradores_editar'),
     path('colaboradores/<uuid:pk>/inactivar/', views.ColaboradorInactivarView.as_view(), name='colaboradores_inactivar'),
+    path('colaboradores/exportar/', views.ColaboradorExportView.as_view(), name='colaboradores_export'),
     # Cargos — CRUD sobre Cargo, Maestro 3 (issue #176, bounce 2)
     path('cargos/', views.CargoListView.as_view(), name='cargos_lista'),
     path('cargos/crear/', views.CargoCreateView.as_view(), name='cargos_crear'),

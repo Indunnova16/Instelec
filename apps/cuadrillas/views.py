@@ -2002,3 +2002,35 @@ class CargoExportView(LoginRequiredMixin, RoleRequiredMixin, View):
         )
         response['Content-Disposition'] = 'attachment; filename="cargos.xlsx"'
         return response
+
+
+class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Exporta el maestro de Colaboradores a xlsx (issue #176, A6)."""
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get(self, request, *args, **kwargs):
+        import openpyxl
+        from io import BytesIO
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Colaboradores'
+        ws.append(['Documento', 'Nombre', 'Cargo', 'Salario Base', 'Fecha Ingreso', 'Fecha Salida'])
+        for p in PersonalCuadrilla.objects.select_related('rol_cuadrilla').all().order_by('nombre'):
+            ws.append([
+                p.documento,
+                p.nombre,
+                p.rol_cuadrilla.nombre if p.rol_cuadrilla_id else '',
+                float(p.salario_base),
+                p.fecha_ingreso.strftime('%Y-%m-%d') if p.fecha_ingreso else '',
+                p.fecha_salida.strftime('%Y-%m-%d') if p.fecha_salida else '',
+            ])
+
+        buffer = BytesIO()
+        wb.save(buffer)
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="colaboradores.xlsx"'
+        return response

@@ -311,3 +311,107 @@ class TestA5ImportExportCargo(TestCase):
         url = reverse("cuadrillas:cargos_upload")
         resp = self.client.post(url, {})
         self.assertIn(resp.status_code, (200, 302))
+
+
+# ---------------------------------------------------------------------------
+# A6 — Exponer import de Colaboradores en su pantalla natural + export
+# ---------------------------------------------------------------------------
+class TestA6ImportColaboradoresExpuestoYExport(TestCase):
+    """El import (PersonalCuadrillaUploadView) YA FUNCIONA -- A6 solo agrega
+    una segunda entrada visual en /cuadrillas/colaboradores/ apuntando al
+    MISMO endpoint (sin tocar su lógica) + el export nuevo."""
+
+    def setUp(self):
+        self.admin = _crear_admin("176sal-a6")
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_modal_importar_visible_en_colaboradores_lista(self):
+        resp = self.client.get(reverse("cuadrillas:colaboradores_lista"))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn("modal-importar-colaboradores", content)
+        self.assertIn(reverse("cuadrillas:personal_upload"), content)
+
+    def test_modal_nuevo_postea_al_mismo_endpoint_ya_validado(self):
+        """El modal nuevo de colaboradores_lista.html debe postear al MISMO
+        personal_upload que ya funciona (validado en vivo por el cliente
+        2026-07-17) -- no se duplica ni se reimplementa la lógica."""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Nombre", "Documento", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"])
+        ws.append(["Via Modal Nuevo", "176sal-a6-001", "AYUDANTE", 1750905, "2025-02-01", ""])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "colaboradores.xlsx"
+
+        url = reverse("cuadrillas:personal_upload")
+        resp = self.client.post(url, {"archivo": buf})
+        self.assertIn(resp.status_code, (200, 302))
+        persona = PersonalCuadrilla.objects.get(documento="176sal-a6-001")
+        self.assertEqual(persona.nombre, "Via Modal Nuevo")
+        self.assertEqual(persona.salario_base, Decimal("1750905"))
+
+    def test_export_descarga_xlsx_con_seis_columnas_incluye_registro_legacy(self):
+        """Test contra dato legacy real: Andrea (documento 43482087,
+        LINIERO_I, salario_base=15000.00) debe aparecer en el export."""
+        cargo = Cargo.objects.filter(codigo="LINIERO_I").first()
+        if cargo is None:
+            cargo = Cargo.objects.create(codigo="LINIERO_I", nombre="Liniero I")
+        PersonalCuadrilla.objects.filter(documento="43482087").delete()
+        PersonalCuadrilla.objects.create(
+            nombre="Andrea",
+            documento="43482087",
+            rol_cuadrilla_id="LINIERO_I",
+            salario_base=Decimal("15000.00"),
+            fecha_ingreso=date(2025, 1, 1),
+        )
+
+        url = reverse("cuadrillas:colaboradores_export")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        import openpyxl
+
+        wb = openpyxl.load_workbook(BytesIO(resp.content))
+        ws = wb.active
+        header = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        self.assertEqual(
+            header,
+            ["Documento", "Nombre", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"],
+        )
+        filas = {row[0]: row for row in ws.iter_rows(min_row=2, values_only=True)}
+        self.assertIn("43482087", filas)
+        fila_andrea = filas["43482087"]
+        self.assertEqual(fila_andrea[1], "Andrea")
+        self.assertEqual(fila_andrea[2], "Liniero I")
+        self.assertEqual(fila_andrea[3], 15000.0)
+
+    def test_export_colaborador_sin_fecha_salida_exporta_celda_vacia(self):
+        """Edge case: colaborador activo (sin fecha_salida) no debe romper
+        el export -- la celda queda en blanco (openpyxl round-tripea '' como
+        None al releer, comportamiento normal de Excel para celda vacía),
+        no lanza excepción ni escribe un string 'None' literal."""
+        PersonalCuadrilla.objects.filter(documento="176sal-a6-002").delete()
+        PersonalCuadrilla.objects.create(
+            nombre="Sin Fecha Salida",
+            documento="176sal-a6-002",
+            rol_cuadrilla_id="AYUDANTE",
+            activo=True,
+        )
+        url = reverse("cuadrillas:colaboradores_export")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        import openpyxl
+
+        wb = openpyxl.load_workbook(BytesIO(resp.content))
+        ws = wb.active
+        filas = {row[0]: row for row in ws.iter_rows(min_row=2, values_only=True)}
+        self.assertIn("176sal-a6-002", filas)
+        self.assertIn(filas["176sal-a6-002"][5], (None, ""))
