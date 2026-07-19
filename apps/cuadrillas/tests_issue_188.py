@@ -1,13 +1,19 @@
 """
 Tests issue #188 — Rediseño Programación Semanal de Cuadrillas (Sprint A).
 
-Cubre A1-A11 (implementación en curso, ver
-Instelec/SPRINTS/PLAN_2026-07-19_188_rediseno_cuadrillas.md). Cada bloque de
-clases corresponde a un sub-item del sprint. A12 (este mismo archivo) es la
-consolidación final del set de tests.
+Cubre A1-A11, ver Instelec/SPRINTS/PLAN_2026-07-19_188_rediseno_cuadrillas.md.
+Cada bloque de clases (TestA1.. TestA11) corresponde a un sub-item del sprint
+con happy path + ≥2 edge cases del dominio (documentado por sub-item en la
+tabla del PLAN). A12 (este archivo, clase final TestA12SuiteConsolidada)
+agrega el flujo de integración end-to-end (crear→agregar personal→editar→
+quitar sobre el MISMO bloque, encadenado) que las clases unitarias de arriba
+no ejercitan por separado, y deja registrado que la suite completa del app
+(tests_issue_176/tests_b3/tests_b4/tests_issue_124/155/178/178_bc/tests_s18/
+tests_pc + este archivo) corre en verde sin regresiones.
 
 Ejecutar con:
     pytest apps/cuadrillas/tests_issue_188.py -v
+    pytest apps/cuadrillas/ -p no:cacheprovider  # suite completa del app (regresión)
 """
 
 from datetime import date
@@ -605,3 +611,89 @@ class TestA11BotonesReubicados(TestCase):
         self.assertTrue(
             PersonalCuadrilla.objects.filter(documento="188-A11-0001").exists()
         )
+
+
+# ---------------------------------------------------------------------------
+# A12 — Suite de tests completa (consolidación end-to-end)
+# ---------------------------------------------------------------------------
+class TestA12SuiteConsolidada(TestCase):
+    """Integración: crear bloque → agregar personal → editar bloque → quitar
+    personal, TODO sobre el MISMO bloque y encadenado en una sola corrida
+    (a diferencia de las clases A3-A6, que ejercitan cada endpoint aislado).
+    Sirve de smoke E2E-en-proceso del epic completo antes del deploy."""
+
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_flujo_completo_crear_agregar_editar_quitar(self):
+        from apps.lineas.models import Linea, Torre, Tramo
+
+        # 1. Crear bloque (A3) con línea + tramo real.
+        linea = Linea.objects.create(codigo="188-A12-L1", nombre="Linea A12", cliente="TRANSELCA")
+        t1 = Torre.objects.create(linea=linea, numero="1", latitud="7.0", longitud="-75.5")
+        t2 = Torre.objects.create(linea=linea, numero="2", latitud="7.01", longitud="-75.51")
+        tramo = Tramo.objects.create(
+            linea=linea, codigo="188-A12-TRM1", nombre="Tramo A12", torre_inicio=t1, torre_fin=t2
+        )
+        crear_url = reverse("cuadrillas:semanal_bloque_crear", args=[2026, 53])
+        resp_crear = self.client.post(
+            crear_url,
+            {"nombre": "Bloque A12 E2E", "linea_asignada": str(linea.id), "tramo": str(tramo.id)},
+        )
+        self.assertEqual(resp_crear.status_code, 200)
+        bloque = Cuadrilla.objects.get(nombre="Bloque A12 E2E")
+        self.assertEqual(bloque.tramo_id, tramo.id)
+
+        # 2. Agregar personal (A5) al bloque recién creado.
+        personal = PersonalCuadrilla.objects.create(
+            nombre="Colaborador A12 E2E",
+            documento="188-A12-0001",
+            rol_cuadrilla_id="LINIERO_I",
+            celular="3011112222",
+            activo=True,
+        )
+        agregar_url = reverse("cuadrillas:semanal_miembro_agregar", args=[bloque.id])
+        resp_agregar = self.client.post(agregar_url, {"documento": personal.documento})
+        self.assertEqual(resp_agregar.status_code, 200)
+        self.assertContains(resp_agregar, "3011112222")
+        miembro = CuadrillaMiembro.objects.get(cuadrilla=bloque, activo=True)
+        self.assertEqual(miembro.usuario.documento, "188-A12-0001")
+
+        # 3. Editar el bloque (A4) — nombre nuevo, el miembro agregado NO se pierde.
+        editar_url = reverse("cuadrillas:semanal_bloque_editar", args=[bloque.id])
+        resp_editar = self.client.post(editar_url, {"nombre": "Bloque A12 E2E Editado"})
+        self.assertEqual(resp_editar.status_code, 200)
+        self.assertContains(resp_editar, "Colaborador A12 E2E")
+        bloque.refresh_from_db()
+        self.assertEqual(bloque.nombre, "Bloque A12 E2E Editado")
+        self.assertEqual(bloque.miembros.filter(activo=True).count(), 1)
+
+        # 4. Quitar el personal (A6) — el bloque queda sin miembros, pero sigue existiendo.
+        quitar_url = reverse("cuadrillas:semanal_miembro_quitar", args=[bloque.id, miembro.id])
+        resp_quitar = self.client.post(quitar_url)
+        self.assertEqual(resp_quitar.status_code, 200)
+        self.assertNotContains(resp_quitar, "Colaborador A12 E2E")
+        miembro.refresh_from_db()
+        self.assertFalse(miembro.activo)
+        bloque.refresh_from_db()
+        self.assertEqual(bloque.nombre, "Bloque A12 E2E Editado")  # sigue existiendo, intacto
+
+    def test_services_resolver_o_crear_usuario_reusado_sin_romper_cuadrillamiembroaddview(self):
+        """A5 extrajo _resolver_o_crear_usuario a services.py -- confirma que
+        el wrapper de CuadrillaMiembroAddView sigue delegando ahí y produce
+        el MISMO resultado (no-regresión del refactor de extracción)."""
+        from apps.cuadrillas.services import resolver_o_crear_usuario
+        from apps.cuadrillas.views import CuadrillaMiembroAddView
+
+        personal = PersonalCuadrilla.objects.create(
+            nombre="Colaborador A12 Servicio",
+            documento="188-A12-0002",
+            rol_cuadrilla_id="LINIERO_I",
+            activo=True,
+        )
+        usuario_directo = resolver_o_crear_usuario(personal)
+        usuario_via_wrapper = CuadrillaMiembroAddView._resolver_o_crear_usuario(personal)
+        self.assertEqual(usuario_directo.id, usuario_via_wrapper.id)
+        self.assertEqual(Usuario.objects.filter(documento="188-A12-0002").count(), 1)
