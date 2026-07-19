@@ -33,7 +33,7 @@ from django.views.generic import TemplateView
 
 from apps.core.mixins import RoleRequiredMixin
 
-from .models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana
+from .models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana, Vehiculo
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +61,8 @@ def _bloques_qs(anio, semana):
     semanal ni duplicarse."""
     return (
         Cuadrilla.objects.filter(codigo__startswith=_prefijo(anio, semana), activa=True)
-        .select_related("linea_asignada", "vehiculo", "supervisor")
-        .prefetch_related("miembros__usuario")
+        .select_related("linea_asignada", "vehiculo", "supervisor", "tipo_actividad", "tramo")
+        .prefetch_related("miembros__usuario", "miembros__rol_cuadrilla")
         .order_by("codigo")
     )
 
@@ -114,27 +114,65 @@ def _bloque_a_dict(cuadrilla):
     """Normaliza una Cuadrilla + miembros a un dict listo para plantilla.
 
     Ordena los miembros con el Jefe de Trabajo (JT/CTA) primero.
+
+    Issue #188 (A2): agrega ``id``/FKs crudos (para hx-post/selects
+    precargados del grid editable) y enriquece cada miembro con
+    ``miembro_pk``/``celular``/``placa_vehiculo``/``es_conductor`` (A5-A7).
     """
     miembros = [
         {
+            "miembro_pk": str(m.pk),
+            "usuario_pk": str(m.usuario_id),
             "nombre": (m.usuario.get_full_name() or m.usuario.get_username()),
             "documento": getattr(m.usuario, "documento", "") or "",
+            "celular": getattr(m.usuario, "telefono", "") or "",
             "rol": m.get_rol_cuadrilla_display(),
+            "rol_codigo": m.rol_cuadrilla_id,
             "cargo": m.get_cargo_display(),
+            "cargo_codigo": m.cargo,
             "es_jt": m.cargo == "JT_CTA",
+            "es_conductor": m.rol_cuadrilla_id == "CONDUCTOR",
+            "placa_vehiculo": m.placa_vehiculo or "",
         }
         for m in cuadrilla.miembros.all()
         if m.activo
     ]
     miembros.sort(key=lambda x: (not x["es_jt"], x["nombre"]))
     return {
+        "id": str(cuadrilla.id),
         "codigo": cuadrilla.codigo,
         "nombre": cuadrilla.nombre,
+        "tipo_actividad_id": str(cuadrilla.tipo_actividad_id) if cuadrilla.tipo_actividad_id else "",
+        "tipo_actividad": getattr(cuadrilla.tipo_actividad, "nombre", "") or "",
+        "linea_id": str(cuadrilla.linea_asignada_id) if cuadrilla.linea_asignada_id else "",
         "linea": getattr(cuadrilla.linea_asignada, "codigo", "") or "",
+        "tramo_id": str(cuadrilla.tramo_id) if cuadrilla.tramo_id else "",
+        "tramo": getattr(cuadrilla.tramo, "codigo", "") or "",
+        "tramo_nombre": getattr(cuadrilla.tramo, "nombre", "") or "",
+        "vehiculo_id": str(cuadrilla.vehiculo_id) if cuadrilla.vehiculo_id else "",
         "vehiculo": getattr(cuadrilla.vehiculo, "placa", "") or "",
+        "supervisor_id": str(cuadrilla.supervisor_id) if cuadrilla.supervisor_id else "",
         "fecha": cuadrilla.fecha,
         "observaciones": cuadrilla.observaciones or "",
         "miembros": miembros,
+    }
+
+
+def _choices_form_bloque():
+    """Catálogos activos para el form de bloque (crear/editar, issue #188
+    A2-A4): tipo de actividad, línea, vehículo, supervisor. El propio Tramo
+    se resuelve por cascada AJAX dependiente de la línea (A3) — no vive acá."""
+    from apps.actividades.models import TipoActividad
+    from apps.lineas.models import Linea
+    from apps.usuarios.models import Usuario
+
+    return {
+        "tipos_actividad_bloque": TipoActividad.objects.filter(activo=True).order_by("nombre"),
+        "lineas_bloque": Linea.objects.filter(activa=True).order_by("codigo"),
+        "vehiculos_bloque": Vehiculo.objects.filter(activo=True).order_by("placa"),
+        "supervisores_bloque": Usuario.objects.filter(rol="supervisor", is_active=True).order_by(
+            "first_name"
+        ),
     }
 
 
@@ -216,6 +254,10 @@ class ProgramacionSemanalGridView(LoginRequiredMixin, RoleRequiredMixin, Templat
         # Cuando la semana destino ya tiene datos, el POST de duplicar pide
         # confirmación redirigiendo aquí con ?confirmar_duplicado=1.
         context["confirmar_duplicado"] = self.request.GET.get("confirmar_duplicado") == "1"
+        # Issue #188 (A2): choices del form de bloque (crear/editar), reusadas
+        # por _bloque_form.html vía include. La cascada Línea→Tramo real
+        # (AJAX) llega en A3 — acá solo se precargan los catálogos activos.
+        context.update(_choices_form_bloque())
         return context
 
 

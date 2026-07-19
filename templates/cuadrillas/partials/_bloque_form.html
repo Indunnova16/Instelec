@@ -1,0 +1,103 @@
+{% comment %}
+Form de crear/editar un bloque de actividad de la programación semanal
+(issue #188, A2). Recibe:
+  - b: dict de _bloque_a_dict (edición) o None (creación)
+  - anio / semana
+  - form_id: "form-nuevo-bloque" o "form-editar-bloque"
+  - post_url: string con la URL de submit (vacía en A2 -- A3/A4 la wirean)
+  - cerrar_expr: expresión Alpine para el botón Cancelar (p.ej. "creando=false")
+  - tipos_actividad_bloque / lineas_bloque / vehiculos_bloque / supervisores_bloque
+
+Los ids de campos NO llevan sufijo por bloque -- solo UN form de este tipo
+está montado en el DOM a la vez (Alpine `x-if`, no `x-show`), por diseño
+del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
+{% endcomment %}
+<form id="{{ form_id }}"
+      {% if post_url %}hx-post="{{ post_url }}"{% endif %}
+      hx-target="closest [data-bloque-codigo], #bloques-lista"
+      hx-swap="outerHTML"
+      class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+    {% csrf_token %}
+    <div class="md:col-span-3">
+        <label for="id_nombre" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del bloque</label>
+        <input type="text" name="nombre" id="id_nombre" required maxlength="100"
+               value="{{ b.nombre|default:'' }}"
+               placeholder="Ej: Poda sector norte"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
+    <div>
+        <label for="id_tipo_actividad" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de actividad</label>
+        <select name="tipo_actividad" id="id_tipo_actividad"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            <option value="">— Sin tipo —</option>
+            {% for ta in tipos_actividad_bloque %}
+            <option value="{{ ta.id }}" {% if b.tipo_actividad_id == ta.id|stringformat:'s' %}selected{% endif %}>{{ ta.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="id_linea" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>
+        <select name="linea_asignada" id="id_linea"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-linea">
+            <option value="">— Sin línea —</option>
+            {% for l in lineas_bloque %}
+            <option value="{{ l.id }}" {% if b.linea_id == l.id|stringformat:'s' %}selected{% endif %}>{{ l.codigo }} - {{ l.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="id_tramo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tramo</label>
+        <select name="tramo" id="id_tramo"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-tramo">
+            <option value="{{ b.tramo_id|default:'' }}">{% if b.tramo_id %}{{ b.tramo }} - {{ b.tramo_nombre }}{% else %}— Sin tramo —{% endif %}</option>
+        </select>
+        <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Se carga según la línea seleccionada.</p>
+    </div>
+    <div>
+        <label for="id_vehiculo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vehículo</label>
+        <select name="vehiculo" id="id_vehiculo"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            <option value="">— Sin vehículo —</option>
+            {% for v in vehiculos_bloque %}
+            <option value="{{ v.id }}" {% if b.vehiculo_id == v.id|stringformat:'s' %}selected{% endif %}>{{ v.placa }} - {{ v.marca }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="id_supervisor" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
+        <select name="supervisor" id="id_supervisor"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            <option value="">— Sin supervisor —</option>
+            {% for s in supervisores_bloque %}
+            <option value="{{ s.id }}" {% if b.supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.get_full_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="id_fecha" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha</label>
+        <input type="date" name="fecha" id="id_fecha"
+               value="{{ b.fecha|date:'Y-m-d'|default:'' }}"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
+    <div class="md:col-span-3">
+        <label for="id_observaciones" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Observaciones</label>
+        <textarea name="observaciones" id="id_observaciones" rows="2"
+                  class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">{{ b.observaciones|default:'' }}</textarea>
+    </div>
+    {% if form_error %}
+    <div class="md:col-span-3">
+        <p class="text-sm text-red-600 dark:text-red-400" role="alert">{{ form_error }}</p>
+    </div>
+    {% endif %}
+    <div class="md:col-span-3 flex items-center gap-2">
+        <span class="htmx-indicator text-xs text-gray-400" role="status" aria-live="polite">Guardando…</span>
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+            Guardar bloque
+        </button>
+        <button type="button" @click="{{ cerrar_expr|default:'editando=false' }}"
+                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
+            Cancelar
+        </button>
+    </div>
+</form>

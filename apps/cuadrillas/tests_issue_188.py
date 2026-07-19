@@ -110,3 +110,50 @@ class TestA1MigracionesAditivas(TestCase):
         cuadrilla.refresh_from_db()
         self.assertEqual(cuadrilla.tipo_actividad_id, tipo.id)
         self.assertEqual(cuadrilla.tramo_id, tramo.id)
+
+
+# ---------------------------------------------------------------------------
+# A2 — Shell interactivo del grid (partials HTMX/Alpine)
+# ---------------------------------------------------------------------------
+class TestA2ShellGridInteractivo(TestCase):
+    """Render-only: el grid renderiza con 0/1/N bloques sin error, usando los
+    nuevos partials _bloque_card.html/_bloque_form.html."""
+
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def _url(self, anio=2026, semana=51):
+        return reverse("cuadrillas:semanal_grid", args=[anio, semana])
+
+    def test_grid_renderiza_sin_bloques(self):
+        resp = self.client.get(self._url(anio=2099, semana=1))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'id="bloques-lista"')
+        self.assertContains(resp, 'id="btn-nuevo-bloque"')
+
+    def test_grid_renderiza_con_un_bloque(self):
+        Cuadrilla.objects.create(codigo="51-2026-0001-A2T", nombre="Bloque A2 Uno", activa=True)
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Bloque A2 Uno")
+        self.assertContains(resp, 'data-bloque-codigo="51-2026-0001-A2T"')
+
+    def test_grid_renderiza_con_n_bloques_y_miembros(self):
+        usuario = _crear_usuario_miembro("188-A2-0001", "Trabajador A2 Dos")
+        for i in range(3):
+            c = Cuadrilla.objects.create(
+                codigo=f"51-2026-000{i + 2}-A2T", nombre=f"Bloque A2 {i}", activa=True
+            )
+            if i == 0:
+                CuadrillaMiembro.objects.create(
+                    cuadrilla=c,
+                    usuario=usuario,
+                    rol_cuadrilla_id="LINIERO_I",
+                    fecha_inicio=date.today(),
+                )
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Trabajador A2 Dos")
+        self.assertEqual(resp.content.decode().count('data-bloque-codigo='), 3)
