@@ -93,4 +93,36 @@
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var selectCargo = document.getElementById('id_rol_cuadrilla');
+    var inputSalario = document.getElementById('id_salario_base');
+    if (!selectCargo || !inputSalario) return;
+
+    {% comment %}
+    Issue #176 (A3): dispara SOLO en el gesto explicito de cambiar el
+    select -- nunca en page load -- para no pisar un valor manual ya
+    guardado en edicion sin que el usuario haya tocado el cargo. Si el
+    usuario despues sobreescribe manualmente el input, ese valor persiste
+    hasta el submit (no hay listener sobre el input, solo sobre el select).
+    {% endcomment %}
+    selectCargo.addEventListener('change', function () {
+        var codigo = selectCargo.value;
+        if (!codigo) return;
+        fetch("{% url 'cuadrillas:costo_rol_api' %}?rol=" + encodeURIComponent(codigo))
+            .then(function (resp) {
+                if (!resp.ok) throw new Error('costo_rol_api respondio ' + resp.status);
+                return resp.json();
+            })
+            .then(function (data) {
+                inputSalario.value = data.costo_dia;
+            })
+            .catch(function () {
+                // Red/JS error: el campo sigue editable manualmente, no se
+                // bloquea nada -- el usuario puede escribir el salario a mano.
+            });
+    });
+});
+</script>
 {% endblock %}
