@@ -9,7 +9,6 @@
     </div>
     <a href="{% url 'construccion:montaje_lista' proyecto.id %}" class="text-sm text-blue-600 hover:underline">← Volver a lista</a>
   </div>
-  {% include 'construccion/_proyecto_tabs.html' %}
 
   {% if request.GET.saved %}
     <div class="px-4 py-2 bg-green-100 text-green-800 rounded">✓ Cambios guardados.</div>
