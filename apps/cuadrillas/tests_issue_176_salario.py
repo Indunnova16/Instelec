@@ -202,3 +202,112 @@ class TestA4SmokeNominaRenderOnly(TestCase):
     def test_nomina_renderiza_sin_error(self):
         resp = self.client.get(reverse("financiero:nomina"))
         self.assertEqual(resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# A5 — Import/export masivo de Cargo (upsert por código)
+# ---------------------------------------------------------------------------
+class TestA5ImportExportCargo(TestCase):
+    """CargoUploadView (upsert por código) + CargoExportView (xlsx)."""
+
+    def setUp(self):
+        self.admin = _crear_admin("176sal-a5")
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    @staticmethod
+    def _build_workbook(rows):
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Código", "Nombre", "Salario Base"])
+        for row in rows:
+            ws.append(row)
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "cargos.xlsx"
+        return buf
+
+    def test_import_crea_codigo_nuevo(self):
+        archivo = self._build_workbook([["QA_A5_NUEVO", "Cargo A5 Nuevo", 2500000]])
+        url = reverse("cuadrillas:cargos_upload")
+        resp = self.client.post(url, {"archivo": archivo})
+        self.assertIn(resp.status_code, (200, 302))
+        cargo = Cargo.objects.get(codigo="QA_A5_NUEVO")
+        self.assertEqual(cargo.nombre, "Cargo A5 Nuevo")
+        self.assertEqual(cargo.salario_base, Decimal("2500000"))
+        self.assertTrue(cargo.activo)
+
+    def test_import_actualiza_nombre_y_salario_de_codigo_existente(self):
+        Cargo.objects.create(codigo="QA_A5_EXISTE", nombre="Nombre Viejo", salario_base=Decimal("1"))
+        archivo = self._build_workbook([["QA_A5_EXISTE", "Nombre Actualizado", 3300000]])
+        url = reverse("cuadrillas:cargos_upload")
+        resp = self.client.post(url, {"archivo": archivo})
+        self.assertIn(resp.status_code, (200, 302))
+        cargo = Cargo.objects.get(codigo="QA_A5_EXISTE")
+        self.assertEqual(cargo.nombre, "Nombre Actualizado")
+        self.assertEqual(cargo.salario_base, Decimal("3300000"))
+        # Sigue siendo UN solo registro (upsert, no duplicado).
+        self.assertEqual(Cargo.objects.filter(codigo="QA_A5_EXISTE").count(), 1)
+
+    def test_import_dos_filas_una_nueva_una_existente_ambas_persisten(self):
+        """Test contra dato legacy real: LINIERO_I (sembrado por el conftest
+        autouse) se actualiza junto con un código nuevo en la MISMA carga --
+        no se aborta el lote por mezclar creación + actualización."""
+        cargo_legacy = Cargo.objects.get(codigo="LINIERO_I")
+        salario_original = cargo_legacy.salario_base
+        archivo = self._build_workbook(
+            [
+                ["LINIERO_I", "Liniero I", 3176095],
+                ["QA_A5_LOTE_NUEVO", "Cargo Lote Nuevo", 1900000],
+            ]
+        )
+        url = reverse("cuadrillas:cargos_upload")
+        resp = self.client.post(url, {"archivo": archivo})
+        self.assertIn(resp.status_code, (200, 302))
+        cargo_legacy.refresh_from_db()
+        self.assertEqual(cargo_legacy.salario_base, Decimal("3176095"))
+        self.assertNotEqual(cargo_legacy.salario_base, salario_original)
+        self.assertTrue(Cargo.objects.filter(codigo="QA_A5_LOTE_NUEVO").exists())
+
+    def test_import_fila_con_salario_invalido_no_aborta_lote_completo(self):
+        """Edge case: una fila con salario no numérico cae a 0 (no revienta
+        el proceso) y la fila siguiente válida igual se procesa."""
+        archivo = self._build_workbook(
+            [
+                ["QA_A5_SALARIO_MALO", "Cargo Salario Malo", "no-es-un-numero"],
+                ["QA_A5_SALARIO_OK", "Cargo Salario OK", 1000000],
+            ]
+        )
+        url = reverse("cuadrillas:cargos_upload")
+        resp = self.client.post(url, {"archivo": archivo})
+        self.assertIn(resp.status_code, (200, 302))
+        malo = Cargo.objects.get(codigo="QA_A5_SALARIO_MALO")
+        self.assertEqual(malo.salario_base, Decimal("0"))
+        ok = Cargo.objects.get(codigo="QA_A5_SALARIO_OK")
+        self.assertEqual(ok.salario_base, Decimal("1000000"))
+
+    def test_export_descarga_xlsx_con_tres_columnas_correctas(self):
+        Cargo.objects.create(codigo="QA_A5_EXPORT", nombre="Cargo Exportable", salario_base=Decimal("4200000"))
+        url = reverse("cuadrillas:cargos_export")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        import openpyxl
+
+        wb = openpyxl.load_workbook(BytesIO(resp.content))
+        ws = wb.active
+        header = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        self.assertEqual(header, ["Código", "Nombre", "Salario Base"])
+        codigos = [row[0] for row in ws.iter_rows(min_row=2, values_only=True)]
+        self.assertIn("QA_A5_EXPORT", codigos)
+
+    def test_import_sin_archivo_muestra_error_no_500(self):
+        url = reverse("cuadrillas:cargos_upload")
+        resp = self.client.post(url, {})
+        self.assertIn(resp.status_code, (200, 302))

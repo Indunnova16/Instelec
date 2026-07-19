@@ -41,6 +41,8 @@ urlpatterns = [
     path('cargos/crear/', views.CargoCreateView.as_view(), name='cargos_crear'),
     path('cargos/<uuid:pk>/editar/', views.CargoEditView.as_view(), name='cargos_editar'),
     path('cargos/<uuid:pk>/inactivar/', views.CargoInactivarView.as_view(), name='cargos_inactivar'),
+    path('cargos/subir/', views.CargoUploadView.as_view(), name='cargos_upload'),
+    path('cargos/exportar/', views.CargoExportView.as_view(), name='cargos_export'),
 ]
 
 # B3 — Cuadrilla auditoria/reactivar routes. Optional import.
