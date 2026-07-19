@@ -105,6 +105,7 @@ montado a la vez). Recibe:
                               hx-post="{{ url_agregar_personal }}"
                               hx-target="closest [data-bloque-codigo]"
                               hx-swap="outerHTML"
+                              x-init="htmx.process($el)"
                               class="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                             {% csrf_token %}
                             <div class="relative">

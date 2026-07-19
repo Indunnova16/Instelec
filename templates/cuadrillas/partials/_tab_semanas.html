@@ -95,7 +95,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
         <template x-if="creando">
             <div class="mt-3">
                 {% url 'cuadrillas:semanal_bloque_crear' anio=anio semana=semana as url_crear_bloque %}
-                {% include 'cuadrillas/partials/_bloque_form.html' with b=None anio=anio semana=semana form_id='form-nuevo-bloque' post_url=url_crear_bloque cerrar_expr='creando=false' %}
+                {% include 'cuadrillas/partials/_bloque_form.html' with b=None anio=anio semana=semana form_id='form-nuevo-bloque' post_url=url_crear_bloque cerrar_expr='creando=false' target_selector='this' %}
             </div>
         </template>
     </div>

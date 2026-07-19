@@ -6,6 +6,10 @@ Form de crear/editar un bloque de actividad de la programación semanal
   - form_id: "form-nuevo-bloque" o "form-editar-bloque"
   - post_url: string con la URL de submit (vacía en A2 -- A3/A4 la wirean)
   - cerrar_expr: expresión Alpine para el botón Cancelar (p.ej. "creando=false")
+  - target_selector: destino del hx-swap -- "this" en creación (la vista
+    devuelve el form reseteado + la card nueva vía OOB) o "closest
+    [data-bloque-codigo]" en edición (la vista devuelve la card completa).
+    Default = closest [data-bloque-codigo] (caso edición).
   - tipos_actividad_bloque / lineas_bloque / vehiculos_bloque / supervisores_bloque
 
 Los ids de campos NO llevan sufijo por bloque -- solo UN form de este tipo
@@ -14,8 +18,9 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
 {% endcomment %}
 <form id="{{ form_id }}"
       {% if post_url %}hx-post="{{ post_url }}"{% endif %}
-      hx-target="closest [data-bloque-codigo], #bloques-lista"
+      hx-target="{{ target_selector|default:'closest [data-bloque-codigo]' }}"
       hx-swap="outerHTML"
+      x-init="htmx.process($el)"
       class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
     {% csrf_token %}
     <div class="md:col-span-3">
