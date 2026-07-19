@@ -2,7 +2,7 @@
 # ROL_MODULOS/ROL_NIVEL/ROL_SUBMODULOS de apps/core/permissions.py (a punto
 # de eliminarse en A3). Puramente aditivo — no toca Usuario ni ninguna otra
 # tabla. La corrección de este mapeo es lo que el Gate de Paridad
-# (apps/core/tests_issue_186_paridad_rbac.py) verifica exhaustivamente.
+# (tests/unit/test_issue_186_paridad_rbac.py) verifica exhaustivamente.
 #
 # Fuente de datos: apps/core/rbac_seed_data.py — snapshot congelado, ÚNICA
 # fuente de verdad compartida con el test de paridad (ver docstring de ese

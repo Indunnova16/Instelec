@@ -4,7 +4,7 @@ Matriz rol → módulos/nivel/sub-módulos, leída desde `Role`/
 `RoleModuloPermiso` (BD) en vez de los dicts hardcodeados `ROL_MODULOS`/
 `ROL_NIVEL`/`ROL_SUBMODULOS` que vivían acá (ELIMINADOS en A3 — snapshot
 congelado verbatim para el Gate de Paridad en `apps/core/rbac_seed_data.py`
-+ `apps/core/tests_issue_186_paridad_rbac.py`, que compara este archivo
++ `tests/unit/test_issue_186_paridad_rbac.py`, que compara este archivo
 contra ese snapshot exhaustivamente).
 
 Cacheado por `Role.codigo` (NO por sesión/usuario — catálogo pequeño,

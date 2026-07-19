@@ -7,7 +7,7 @@ elimine esos dicts. Es la fuente ÚNICA de verdad, reusada por:
 
   1. `apps/core/migrations/0002_seed_roles_permisos.py` — puebla
      `Role`/`RoleModuloPermiso` en BD (prod).
-  2. `apps/core/tests_issue_186_paridad_rbac.py` — snapshot "VIEJO" del Gate
+  2. `tests/unit/test_issue_186_paridad_rbac.py` — snapshot "VIEJO" del Gate
      de Paridad (comparado 1:1 contra el sistema "NUEVO" BD-backed post A3).
 
 Nota de diseño: en vez de transcribir estos dicts dos veces (una en la
@@ -172,7 +172,7 @@ def seed_roles_permisos_bd():
     A3) necesita este seed. Usado por:
       - `conftest.py` (`django_db_setup`) — una vez por sesión de pytest,
         para TODA la suite (issue #186, A3 — blast radius global).
-      - `apps/core/tests_issue_186_paridad_rbac.py` — el Gate de Paridad.
+      - `tests/unit/test_issue_186_paridad_rbac.py` — el Gate de Paridad.
 
     Import de los modelos diferido (dentro de la función) para que este
     módulo siga siendo importable sin apps Django cargadas (p.ej. desde la

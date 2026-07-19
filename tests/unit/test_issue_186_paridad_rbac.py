@@ -35,6 +35,16 @@ supervisor: 2, admin_general: 1} — los 6 están cubiertos 1:1 en
 NO 'admin' legacy como asume el CLAUDE.md del repo) — mismo nivel de acceso
 resultante (MANTENIMIENTO+CONSTRUCCION+CONFIG), no afecta este gate pero se
 documenta para A7 (journey de cierre).
+
+Ubicación del archivo (`tests/unit/`, no `apps/core/`): el F2_OUTPUT/PLAN
+proponían `apps/core/tests_issue_186_paridad_rbac.py`, pero el CI real
+(`.github/workflows/ci.yml`) corre `pytest tests/unit tests/integration`
+literal -- CUALQUIER archivo fuera de `tests/` (o que no matchee
+`python_files = ["test_*.py", "*_test.py"]` de pyproject.toml) NUNCA se
+colecta ahí, gate obligatorio o no. Confirmado con `pytest --collect-only`
+ANTES de mover el archivo: 0 ítems de este módulo. Reubicado acá para que
+el gate corra de verdad en cada CI run futuro, no solo cuando F3 lo invoca
+explícitamente por path.
 """
 
 import pytest
