@@ -141,6 +141,13 @@
             <strong>Nombre | Documento | Cargo | Salario Base | Fecha Ingreso | Fecha Salida</strong><br>
             <span class="text-xs text-gray-500">Las 3 &uacute;ltimas columnas son opcionales. Formato de fecha: AAAA-MM-DD. Si registra Fecha Salida, el colaborador queda inactivo autom&aacute;ticamente.</span>
         </p>
+        <p class="text-xs text-amber-600 dark:text-amber-400 mb-4" role="alert">
+            <!-- Issue #176 (A7): orden de dependencia Cargo -> Colaboradores. -->
+            Los Cargos referenciados en la columna Cargo deben existir primero en
+            <a href="{% url 'cuadrillas:cargos_lista' %}" class="underline">/cuadrillas/cargos/</a>
+            -- si un código no coincide con ningún cargo activo, la fila cae al
+            default (Liniero I).
+        </p>
         <form method="post" action="{% url 'cuadrillas:personal_upload' %}" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="mb-4">

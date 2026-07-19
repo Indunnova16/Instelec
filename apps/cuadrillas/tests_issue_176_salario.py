@@ -415,3 +415,36 @@ class TestA6ImportColaboradoresExpuestoYExport(TestCase):
         filas = {row[0]: row for row in ws.iter_rows(min_row=2, values_only=True)}
         self.assertIn("176sal-a6-002", filas)
         self.assertIn(filas["176sal-a6-002"][5], (None, ""))
+
+
+# ---------------------------------------------------------------------------
+# A7 — Copy de orden de dependencia Cargo -> Colaboradores
+# ---------------------------------------------------------------------------
+class TestA7CopyDependenciaCargoColaboradores(TestCase):
+    """Texto de orden de dependencia visible en el modal de import de
+    Colaboradores (mismo archivo que A6)."""
+
+    def setUp(self):
+        self.admin = _crear_admin("176sal-a7")
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_copy_orden_dependencia_visible_en_modal(self):
+        resp = self.client.get(reverse("cuadrillas:colaboradores_lista"))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn("deben existir primero", content)
+        self.assertIn(reverse("cuadrillas:cargos_lista"), content)
+
+    def test_copy_queda_dentro_del_modal_importar_no_en_otro_lugar(self):
+        """Edge case: el copy debe estar asociado al modal de import, no
+        aparecer suelto en cualquier parte de la página (regresión de
+        ubicación, similar al bounce=1 de #176 donde un boton quedo mezclado
+        con el card equivocado)."""
+        resp = self.client.get(reverse("cuadrillas:colaboradores_lista"))
+        content = resp.content.decode()
+        idx_modal = content.index('id="modal-importar-colaboradores"')
+        idx_copy = content.index("deben existir primero")
+        idx_cierre_modal = content.index("</form>", idx_modal)
+        self.assertLess(idx_modal, idx_copy)
+        self.assertLess(idx_copy, idx_cierre_modal)
