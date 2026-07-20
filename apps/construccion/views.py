@@ -1559,6 +1559,23 @@ class ObraCivilMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             totales = {k: 0 for k in pesos}
             avance_general = 0
 
+        # #171 B7: columnas CUSTOM activas del capítulo Obra Civil — las
+        # columnas de sistema (Cerramiento…Compactación) siguen igual,
+        # cero cambio de comportamiento. Se adjunta `.valores_custom`
+        # (lista de tuplas (columna, valor), MISMO orden que
+        # `columnas_custom_activas`) a cada fila — atributo efímero en
+        # memoria, no persistido, para que el template itere con un simple
+        # `{% for columna, valor in oc.valores_custom %}` sin necesitar un
+        # template filter de lookup por clave dinámica (dict[(a,b)] no es
+        # accesible con la sintaxis de punto de Django templates).
+        columnas_custom_activas = list(proyecto.columnas_configurables.filter(
+            capitulo=ColumnaConfigurable.CAPITULO_OBRA_CIVIL, es_sistema=False, activa=True,
+        ).order_by('orden'))
+        for oc in filas:
+            oc.valores_custom = [
+                (columna, columna.valor_para_torre(oc.torre)) for columna in columnas_custom_activas
+            ]
+
         ctx['proyecto'] = proyecto
         ctx['filas'] = filas
         ctx['pesos'] = pesos
@@ -1567,6 +1584,7 @@ class ObraCivilMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ctx['totales'] = totales
         ctx['avance_general'] = avance_general
         ctx['columnas'] = ObraCivilTorre.COLUMNAS
+        ctx['columnas_custom_activas'] = columnas_custom_activas
         ctx['active_tab'] = 'obra-civil'
         return ctx
 
@@ -1746,6 +1764,17 @@ class MontajeMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             totales = {k: 0 for k in pesos}
             avance_general = 0
 
+        # #171 B7: columnas CUSTOM activas del capítulo Montaje — mismo
+        # patrón que ObraCivilMatrizView (ver ese comentario para el
+        # detalle del diseño de `.valores_custom`).
+        columnas_custom_activas = list(proyecto.columnas_configurables.filter(
+            capitulo=ColumnaConfigurable.CAPITULO_MONTAJE, es_sistema=False, activa=True,
+        ).order_by('orden'))
+        for m in filas:
+            m.valores_custom = [
+                (columna, columna.valor_para_torre(m.torre)) for columna in columnas_custom_activas
+            ]
+
         ctx['proyecto'] = proyecto
         ctx['filas'] = filas
         ctx['pesos'] = pesos
@@ -1754,6 +1783,7 @@ class MontajeMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ctx['totales'] = totales
         ctx['avance_general'] = avance_general
         ctx['columnas'] = MontajeEstructuraTorre.COLUMNAS
+        ctx['columnas_custom_activas'] = columnas_custom_activas
         ctx['active_tab'] = 'montaje'
         return ctx
 
@@ -2138,6 +2168,25 @@ class TendidoMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         else:
             avance_general_conductor = avance_general_fibra = 0
 
+        # #171 B7: columnas CUSTOM activas de Tendido — 2 secciones
+        # independientes (conductor/fibra), mismo patrón que
+        # ObraCivilMatrizView/MontajeMatrizView (`.valores_custom_conductor`/
+        # `.valores_custom_fibra` adjuntos por fila, ver comentario en
+        # ObraCivilMatrizView para el detalle del diseño).
+        columnas_custom_conductor = list(proyecto.columnas_configurables.filter(
+            capitulo=ColumnaConfigurable.CAPITULO_TENDIDO_CONDUCTOR, es_sistema=False, activa=True,
+        ).order_by('orden'))
+        columnas_custom_fibra = list(proyecto.columnas_configurables.filter(
+            capitulo=ColumnaConfigurable.CAPITULO_TENDIDO_FIBRA, es_sistema=False, activa=True,
+        ).order_by('orden'))
+        for t in filas:
+            t.valores_custom_conductor = [
+                (columna, columna.valor_para_torre(t.torre)) for columna in columnas_custom_conductor
+            ]
+            t.valores_custom_fibra = [
+                (columna, columna.valor_para_torre(t.torre)) for columna in columnas_custom_fibra
+            ]
+
         ctx.update({
             'proyecto': proyecto,
             'filas': filas,
@@ -2149,6 +2198,12 @@ class TendidoMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'suma_fibra_ok': suma_f == 100,
             'columnas_conductor': TendidoTorre.COLUMNAS_CONDUCTOR,
             'columnas_fibra': TendidoTorre.COLUMNAS_FIBRA,
+            'columnas_custom_conductor': columnas_custom_conductor,
+            'columnas_custom_fibra': columnas_custom_fibra,
+            # #171 B7: colspan dinámico del <th> agrupador (6/5 columnas de
+            # sistema + N custom activas) para el thead de 2 filas.
+            'colspan_conductor': 6 + len(columnas_custom_conductor),
+            'colspan_fibra': 5 + len(columnas_custom_fibra),
             'avance_general_conductor': avance_general_conductor,
             'avance_general_fibra': avance_general_fibra,
             'active_tab': 'tendido',
@@ -2494,6 +2549,74 @@ class ColumnaReordenarView(LoginRequiredMixin, RoleRequiredMixin, View):
         columna.orden, vecina.orden = vecina.orden, columna.orden
         ColumnaConfigurable.objects.bulk_update([columna, vecina], ['orden'])
         return JsonResponse({'ok': True})
+
+
+class ColumnaValorUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — guarda el valor de una columna CUSTOM para una torre
+    (#171 B7, patrón HochiminhToggleView: get_or_create vía
+    `ColumnaConfigurable.set_valor_para_torre`). Endpoint GENÉRICO único
+    para los 4 capítulos (Obra Civil/Montaje/Tendido conductor/Tendido
+    fibra) — decimal 0-1 o boolean según `columna.tipo_valor`. Columnas de
+    sistema (`es_sistema=True`) siguen editándose por sus endpoints propios
+    ya existentes (ObraCivilFechasUpdateView/TendidoToggleView/etc.), NO
+    por este — se rechaza con 400 si se intenta acá.
+
+    `allowed_roles` = mismo que las matrices (ALL_ADMIN_ROLES +
+    OPERARIO_ROLES) — es operación de campo (llenar el dato), no
+    configuración (eso es B6, admin/director).
+
+    Devuelve el avance recalculado de la torre en el capítulo de la
+    columna para que la UI actualice el % mostrado sin reload completo.
+    """
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
+    def post(self, request, proyecto_id, columna_id, torre_id, *args, **kwargs):
+        from decimal import Decimal, InvalidOperation
+        from django.http import JsonResponse
+
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        columna = get_object_or_404(ColumnaConfigurable, id=columna_id, proyecto=proyecto)
+        torre = get_object_or_404(TorreConstruccion, id=torre_id, proyecto=proyecto)
+
+        if columna.es_sistema:
+            return JsonResponse(
+                {'error': 'Las columnas de sistema se editan por su endpoint propio, no este genérico.'},
+                status=400,
+            )
+
+        if columna.tipo_valor == ColumnaConfigurable.TIPO_BOOLEAN:
+            valor = request.POST.get('valor', '').strip() in ('1', 'true', 'on', 'True')
+        else:
+            valor_raw = request.POST.get('valor', '0').strip()
+            try:
+                valor = Decimal(valor_raw)
+            except InvalidOperation:
+                return JsonResponse({'error': f'Valor decimal inválido: {valor_raw!r}'}, status=400)
+            if valor < 0 or valor > 1:
+                return JsonResponse(
+                    {'error': f'El valor decimal debe estar entre 0 y 1 (recibido: {valor}).'}, status=400,
+                )
+
+        columna.set_valor_para_torre(torre, valor)
+
+        respuesta = {'ok': True}
+        if columna.capitulo == ColumnaConfigurable.CAPITULO_OBRA_CIVIL:
+            oc = ObraCivilTorre.objects.filter(proyecto=proyecto, torre=torre).first()
+            if oc is not None:
+                respuesta['avance_ponderado_pct'] = oc.avance_ponderado_pct
+        elif columna.capitulo == ColumnaConfigurable.CAPITULO_MONTAJE:
+            m = MontajeEstructuraTorre.objects.filter(proyecto=proyecto, torre=torre).first()
+            if m is not None:
+                respuesta['avance_ponderado_pct'] = m.avance_ponderado_pct
+        elif columna.capitulo == ColumnaConfigurable.CAPITULO_TENDIDO_CONDUCTOR:
+            t = TendidoTorre.objects.filter(proyecto=proyecto, torre=torre).first()
+            if t is not None:
+                respuesta['avance_conductor_pct'] = t.avance_conductor_pct
+        elif columna.capitulo == ColumnaConfigurable.CAPITULO_TENDIDO_FIBRA:
+            t = TendidoTorre.objects.filter(proyecto=proyecto, torre=torre).first()
+            if t is not None:
+                respuesta['avance_fibra_pct'] = t.avance_fibra_pct
+        return JsonResponse(respuesta)
 
 
 # ==========================================================================

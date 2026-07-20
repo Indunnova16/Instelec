@@ -195,6 +195,8 @@ urlpatterns = [
          views.ColumnaEliminarView.as_view(), name='columna_eliminar'),
     path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/reordenar/',
          views.ColumnaReordenarView.as_view(), name='columna_reordenar'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/torres/<uuid:torre_id>/valor/',
+         views.ColumnaValorUpdateView.as_view(), name='columna_valor_update'),
 
     # Iteración 2 — deuda técnica
     path('<uuid:proyecto_id>/financiero/categoria/<uuid:categoria_id>/',

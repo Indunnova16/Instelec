@@ -98,6 +98,14 @@ Los avances de las 4 etapas son READ-ONLY: vienen del cache
                    x-text="pesos.{{ slug }} + '%'"></div>
             </th>
             {% endfor %}
+            {% comment %}#171 B7: columnas CUSTOM activas (agregadas vía B6){% endcomment %}
+            {% for columna in columnas_custom_activas %}
+            <th class="px-3 py-2 text-center font-semibold text-gray-700 border-l border-gray-200"
+                data-testid="columna-custom-{{ columna.clave }}">
+              {{ columna.etiqueta }}
+              <div class="text-xs font-normal text-gray-500">{{ columna.peso_pct }}%</div>
+            </th>
+            {% endfor %}
             <th class="px-3 py-2 text-center font-semibold text-gray-700">Avance</th>
             <th class="px-3 py-2 text-center font-semibold text-gray-700">Aplica</th>
             <th class="px-3 py-2 text-center font-semibold text-gray-700">Detalle</th>
@@ -129,6 +137,26 @@ Los avances de las 4 etapas son READ-ONLY: vienen del cache
                   {% if slug == 'revisada' %}{{ fila.avance_revisada|floatformat:0 }}{% endif %}
                 </span>
               </a>
+            </td>
+            {% endfor %}
+            {% comment %}#171 B7: columnas CUSTOM activas — editable inline{% endcomment %}
+            {% for columna, valor in fila.valores_custom %}
+            <td class="px-2 py-1 text-center border-l border-gray-200"
+                data-testid="valor-columna-{{ columna.id }}-torre-{{ fila.torre.id }}"
+                x-data='celdaColumnaCustom({
+                    url: "{% url "construccion:columna_valor_update" proyecto_id=proyecto.id columna_id=columna.id torre_id=fila.torre.id %}",
+                    csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+                    tipoValor: "{{ columna.tipo_valor }}",
+                    valorBooleanInicial: {% if valor %}true{% else %}false{% endif %},
+                    valorDecimalInicial: {{ valor|default:0|unlocalize }}
+                })'>
+              <template x-if="tipoValor === 'BOOLEAN'">
+                <input type="checkbox" :checked="valorBool" @change="guardarBool($event.target.checked)">
+              </template>
+              <template x-if="tipoValor !== 'BOOLEAN'">
+                <input type="number" step="0.01" min="0" max="1" x-model.number="valorDecimal" @change="guardarDecimal()"
+                       class="w-16 px-1 py-0.5 text-xs rounded border border-gray-300">
+              </template>
             </td>
             {% endfor %}
             <td class="px-3 py-2 text-center font-semibold
@@ -244,6 +272,54 @@ function montajeResumen(cfg) {
       setTimeout(() => { this.mensajePesos = ''; }, 4000);
     },
   };
+}
+
+// #171 B7: celda editable de una columna CUSTOM (agregada vía B6) — decimal
+// 0-1 o boolean según columna.tipo_valor, postea al endpoint genérico
+// ColumnaValorUpdateView. Misma implementación que obra_civil_matriz.html.
+function celdaColumnaCustom(cfg) {
+    return {
+        url: cfg.url,
+        csrfToken: cfg.csrfToken,
+        tipoValor: cfg.tipoValor,
+        valorBool: cfg.valorBooleanInicial || false,
+        valorDecimal: cfg.valorDecimalInicial || 0,
+        guardando: false,
+        async _post(valor) {
+            this.guardando = true;
+            try {
+                const fd = new FormData();
+                fd.append('valor', valor);
+                const r = await fetch(this.url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                if (!r.ok) {
+                    const data = await r.json();
+                    alert(data.error || 'Error guardando el valor.');
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                alert('Error de red guardando el valor.');
+                return false;
+            } finally {
+                this.guardando = false;
+            }
+        },
+        async guardarBool(valor) {
+            const previo = this.valorBool;
+            this.valorBool = valor;
+            const ok = await this._post(valor ? '1' : '0');
+            if (!ok) this.valorBool = previo;
+        },
+        async guardarDecimal() {
+            if (this.valorDecimal < 0) this.valorDecimal = 0;
+            if (this.valorDecimal > 1) this.valorDecimal = 1;
+            await this._post(this.valorDecimal);
+        },
+    };
 }
 </script>
 {% include "construccion/_toggle_aplica_torre_script.html" %}

@@ -115,6 +115,14 @@
                             </div>
                         </th>
                         {% endfor %}
+                        {% comment %}#171 B7: columnas CUSTOM activas (agregadas vía B6){% endcomment %}
+                        {% for columna in columnas_custom_activas %}
+                        <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200 border-l border-gray-200 dark:border-gray-700"
+                            data-testid="columna-custom-{{ columna.clave }}">
+                            {{ columna.etiqueta }}
+                            <div class="text-xs font-normal text-gray-500 dark:text-gray-400">{{ columna.peso_pct }}%</div>
+                        </th>
+                        {% endfor %}
                         <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Avance</th>
                         <th class="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">Fechas</th>
                     </tr>
@@ -145,6 +153,10 @@
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=acero" data-celda="acero" data-torre="{{ torre.id }}">{{ oc.avance_acero|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=vaciado" data-celda="vaciado" data-torre="{{ torre.id }}">{{ oc.avance_vaciado|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=compactacion" data-celda="compactacion" data-torre="{{ torre.id }}">{{ oc.avance_compactacion|unlocalize|floatformat:2 }}</a></td>
+                            {% comment %}#171 B7: rama "torre_legacy" (ObraCivilResumenView, no cableada a la URL live hoy) — placeholders sin datos, ver rama {% verbatim %}{% else %}{% endverbatim %} para la implementación real.{% endcomment %}
+                            {% for columna in columnas_custom_activas %}
+                            <td class="px-2 py-1 text-center text-gray-400 dark:text-gray-500 text-xs">—</td>
+                            {% endfor %}
                             <td class="px-3 py-1 text-center font-semibold {% if oc.avance_ponderado >= 0.75 %}text-green-600 dark:text-green-400{% elif oc.avance_ponderado >= 0.5 %}text-amber-600 dark:text-amber-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ fila.avance_ponderado_pct }}%</td>
                             <td class="px-3 py-1 text-center text-gray-400 dark:text-gray-500 text-xs">—</td>
                         </tr>
@@ -169,6 +181,26 @@
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=acero" data-celda="acero" data-torre="{{ torre.id }}">{{ oc.avance_acero|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=vaciado" data-celda="vaciado" data-torre="{{ torre.id }}">{{ oc.avance_vaciado|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=compactacion" data-celda="compactacion" data-torre="{{ torre.id }}">{{ oc.avance_compactacion|unlocalize|floatformat:2 }}</a></td>
+                            {% comment %}#171 B7: columnas CUSTOM activas — editable inline, postea a endpoint genérico{% endcomment %}
+                            {% for columna, valor in oc.valores_custom %}
+                            <td class="px-2 py-1 text-center border-l border-gray-200 dark:border-gray-700"
+                                data-testid="valor-columna-{{ columna.id }}-torre-{{ torre.id }}"
+                                x-data='celdaColumnaCustom({
+                                    url: "{% url "construccion:columna_valor_update" proyecto_id=proyecto.id columna_id=columna.id torre_id=torre.id %}",
+                                    csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+                                    tipoValor: "{{ columna.tipo_valor }}",
+                                    valorBooleanInicial: {% if valor %}true{% else %}false{% endif %},
+                                    valorDecimalInicial: {{ valor|default:0|unlocalize }}
+                                })'>
+                                <template x-if="tipoValor === 'BOOLEAN'">
+                                    <input type="checkbox" :checked="valorBool" @change="guardarBool($event.target.checked)">
+                                </template>
+                                <template x-if="tipoValor !== 'BOOLEAN'">
+                                    <input type="number" step="0.01" min="0" max="1" x-model.number="valorDecimal" @change="guardarDecimal()"
+                                           class="w-16 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                </template>
+                            </td>
+                            {% endfor %}
                             <td class="px-3 py-1 text-center font-semibold {% if oc.avance_ponderado >= 0.75 %}text-green-600 dark:text-green-400{% elif oc.avance_ponderado >= 0.5 %}text-amber-600 dark:text-amber-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ oc.avance_ponderado_pct }}%</td>
                             <td class="px-3 py-1 align-top" x-data='fechasTorre({
                                     url: "{% url "construccion:obra_civil_fechas_update" proyecto_id=proyecto.id torre_id=torre.id %}",
@@ -406,6 +438,54 @@ function aplicaTorre(cfg) {
                 this.mensajeAplicaTipo = 'error';
             }
             setTimeout(() => { this.mensajeAplica = ''; }, 4000);
+        },
+    };
+}
+
+// #171 B7: celda editable de una columna CUSTOM (agregada vía B6) — decimal
+// 0-1 o boolean según columna.tipo_valor, postea al endpoint genérico
+// ColumnaValorUpdateView. Reusado igual en montaje_matriz.html/tendido_matriz.html.
+function celdaColumnaCustom(cfg) {
+    return {
+        url: cfg.url,
+        csrfToken: cfg.csrfToken,
+        tipoValor: cfg.tipoValor,
+        valorBool: cfg.valorBooleanInicial || false,
+        valorDecimal: cfg.valorDecimalInicial || 0,
+        guardando: false,
+        async _post(valor) {
+            this.guardando = true;
+            try {
+                const fd = new FormData();
+                fd.append('valor', valor);
+                const r = await fetch(this.url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                if (!r.ok) {
+                    const data = await r.json();
+                    alert(data.error || 'Error guardando el valor.');
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                alert('Error de red guardando el valor.');
+                return false;
+            } finally {
+                this.guardando = false;
+            }
+        },
+        async guardarBool(valor) {
+            const previo = this.valorBool;
+            this.valorBool = valor;
+            const ok = await this._post(valor ? '1' : '0');
+            if (!ok) this.valorBool = previo;
+        },
+        async guardarDecimal() {
+            if (this.valorDecimal < 0) this.valorDecimal = 0;
+            if (this.valorDecimal > 1) this.valorDecimal = 1;
+            await this._post(this.valorDecimal);
         },
     };
 }
