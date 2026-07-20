@@ -1602,6 +1602,11 @@ class ObraCivilPesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
 
         for campo, valor in valores.items():
             setattr(proyecto, campo, valor)
+        # #171 B3: avance_ponderado ahora lee el peso desde ColumnaConfigurable
+        # (no de proyecto.peso_*_pct) — el signal post_save de
+        # ProyectoConstruccion (signals.py) re-sincroniza automáticamente en
+        # cada save(), así que este panel legacy sigue teniendo efecto sobre
+        # el avance calculado sin llamada explícita acá.
         proyecto.save(update_fields=list(valores.keys()))
         return JsonResponse({'ok': True, 'suma': sum(valores.values())})
 
@@ -1777,6 +1782,9 @@ class MontajePesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
                 status=400)
         for campo, valor in valores.items():
             setattr(proyecto, campo, valor)
+        # #171 B3: mismo motivo que ObraCivilPesosUpdateView — el signal
+        # post_save de ProyectoConstruccion re-sincroniza ColumnaConfigurable
+        # automáticamente, este panel legacy sigue surtiendo efecto.
         proyecto.save(update_fields=list(valores.keys()))
         return JsonResponse({'ok': True})
 

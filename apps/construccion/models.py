@@ -816,6 +816,47 @@ def crear_columnas_configurables_default(proyecto):
     return creadas
 
 
+def sync_columnas_sistema_pesos_proyecto(proyecto):
+    """Sincroniza ``peso_pct`` de las 21 columnas ColumnaConfigurable
+    ``es_sistema=True`` del proyecto (los 4 capítulos) con los valores
+    ACTUALES de ``proyecto.peso_*_pct``. 1 SELECT + 1 `bulk_update` (solo
+    si hay cambios) — no 21 queries individuales.
+
+    #171 B3/B4 (hueco encontrado durante el refactor, fuera del scope
+    original de F2 pero necesario para no romper comportamiento ya
+    desplegado): desde B3/B4, `avance_ponderado`/`avance_conductor`/
+    `avance_fibra` leen el peso desde `ColumnaConfigurable`, NO de
+    `proyecto.peso_*_pct` directo. Sin esto, CUALQUIER código que edite
+    `proyecto.peso_*_pct` y llame a `.save()` — los paneles legacy
+    (`ObraCivilPesosUpdateView`/`MontajePesosUpdateView`/
+    `TendidoPesosUpdateView`), el admin, tests, scripts futuros — dejaría
+    de tener efecto sobre el avance calculado (regresión silenciosa,
+    detectada en
+    `tests/unit/test_obra_civil_matriz.py::test_avance_ponderado_respeta_cambio_de_pesos_del_proyecto`).
+
+    Llamada desde el signal `post_save` de `ProyectoConstruccion` en cada
+    UPDATE (`created=False`, ver signals.py) — cubre TODO save(), no solo
+    las 3 vistas legacy conocidas hoy.
+    """
+    peso_field_por_clave = {
+        (capitulo, clave): peso_field
+        for capitulo, columnas in COLUMNAS_CONFIGURABLES_ESPEC.items()
+        for clave, etiqueta, peso_field, tipo_valor in columnas
+    }
+    filas = list(ColumnaConfigurable.objects.filter(proyecto=proyecto, es_sistema=True))
+    cambiadas = []
+    for fila in filas:
+        peso_field = peso_field_por_clave.get((fila.capitulo, fila.clave))
+        if peso_field is None:
+            continue  # columna de sistema desconocida (drift) — no se toca
+        nuevo_peso = getattr(proyecto, peso_field)
+        if fila.peso_pct != nuevo_peso:
+            fila.peso_pct = nuevo_peso
+            cambiadas.append(fila)
+    if cambiadas:
+        ColumnaConfigurable.objects.bulk_update(cambiadas, ['peso_pct'])
+
+
 class PataObra(BaseModel):
     """
     Civil work tracking per tower leg (Pata A, B, C, D).
@@ -1151,25 +1192,51 @@ class ObraCivilTorre(BaseModel):
 
     @property
     def avance_ponderado(self):
-        """SUMPRODUCT(pesos del proyecto, avances de la torre).
+        """SUMPRODUCT(peso de columnas activas, avances de la torre) / SUM(pesos activos).
+
+        #171 B3: el peso y qué columnas participan del cálculo ahora salen
+        de `ColumnaConfigurable` (proyecto → capítulo OBRA_CIVIL,
+        `activa=True`) en vez de los campos hardcodeados `peso_*_pct` de
+        `ProyectoConstruccion`. Columnas `es_sistema=True` (las 21 "de
+        fábrica") siguen leyendo su `DecimalField` real vía `avances_dict`
+        — el dato NO se migró a EAV. Columnas custom (`es_sistema=False`,
+        agregadas vía B6) leen su valor a través de
+        `columna.valor_para_torre()` (helper que agrega B5); si el proyecto
+        aún no tiene B5/B6 desplegado, o no existe fila de valor, el aporte
+        es 0 (no participa en el SUMPRODUCT).
+
+        Si una columna se desactiva (`activa=False`), su peso se excluye
+        del total y por tanto se redistribuye entre las columnas activas
+        restantes — mismo comportamiento matemático que "no contarla".
+
+        Itera `self.proyecto.columnas_configurables.all()` (no `.filter()`
+        directo) para poder aprovechar `prefetch_related` desde las vistas
+        de matriz (B7) sin N+1 queries por torre.
 
         Devuelve un valor 0–1. El cliente ve el % multiplicando por 100.
         """
         from decimal import Decimal
-        pesos = {
-            'cerramiento': self.proyecto.peso_cerramiento_pct,
-            'excavacion': self.proyecto.peso_excavacion_pct,
-            'solado': self.proyecto.peso_solado_pct,
-            'acero': self.proyecto.peso_acero_pct,
-            'vaciado': self.proyecto.peso_vaciado_pct,
-            'compactacion': self.proyecto.peso_compactacion_pct,
-        }
-        total_peso = sum(pesos.values()) or 1
         avances = self.avances_dict
+        columnas_activas = [
+            c for c in self.proyecto.columnas_configurables.all()
+            if c.capitulo == ColumnaConfigurable.CAPITULO_OBRA_CIVIL and c.activa
+        ]
+        total_peso = Decimal('0')
         suma = Decimal('0')
-        for columna, peso in pesos.items():
-            suma += avances[columna] * Decimal(peso)
-        return suma / Decimal(total_peso)
+        for columna in columnas_activas:
+            peso = Decimal(columna.peso_pct)
+            if columna.es_sistema:
+                avance = avances.get(columna.clave)
+                if avance is None:
+                    continue  # columna de sistema desconocida (drift) — no participa
+            else:
+                valor_para_torre = getattr(columna, 'valor_para_torre', None)
+                avance = Decimal(str(valor_para_torre(self.torre))) if valor_para_torre else Decimal('0')
+            total_peso += peso
+            suma += Decimal(avance) * peso
+        if total_peso == 0:
+            return Decimal('0')
+        return suma / total_peso
 
     @property
     def avance_ponderado_pct(self):
@@ -1278,20 +1345,36 @@ class MontajeEstructuraTorre(BaseModel):
 
     @property
     def avance_ponderado(self):
-        """SUMPRODUCT(pesos del proyecto, avances de la torre). Valor 0-1."""
+        """SUMPRODUCT(peso de columnas activas, avances de la torre) / SUM(pesos activos).
+
+        #171 B3: mismo refactor que `ObraCivilTorre.avance_ponderado`
+        (también B3) pero sobre el capítulo MONTAJE — ver docstring de esa
+        property para el detalle completo del diseño (columnas es_sistema
+        vs custom, redistribución de peso al desactivar, prefetch-friendly).
+        Valor 0-1.
+        """
         from decimal import Decimal
-        pesos = {
-            'estructura_sitio': self.proyecto.peso_mont_estructura_sitio_pct,
-            'prearamada': self.proyecto.peso_mont_prearamada_pct,
-            'torre_montada': self.proyecto.peso_mont_torre_montada_pct,
-            'revisada': self.proyecto.peso_mont_revisada_pct,
-        }
-        total = sum(pesos.values()) or 1
         avances = self.avances_dict
+        columnas_activas = [
+            c for c in self.proyecto.columnas_configurables.all()
+            if c.capitulo == ColumnaConfigurable.CAPITULO_MONTAJE and c.activa
+        ]
+        total_peso = Decimal('0')
         suma = Decimal('0')
-        for col, peso in pesos.items():
-            suma += avances[col] * Decimal(peso)
-        return suma / Decimal(total)
+        for columna in columnas_activas:
+            peso = Decimal(columna.peso_pct)
+            if columna.es_sistema:
+                avance = avances.get(columna.clave)
+                if avance is None:
+                    continue
+            else:
+                valor_para_torre = getattr(columna, 'valor_para_torre', None)
+                avance = Decimal(str(valor_para_torre(self.torre))) if valor_para_torre else Decimal('0')
+            total_peso += peso
+            suma += Decimal(avance) * peso
+        if total_peso == 0:
+            return Decimal('0')
+        return suma / total_peso
 
     @property
     def avance_ponderado_pct(self):
