@@ -740,6 +740,101 @@ class ColumnaConfigurable(BaseModel):
     def __str__(self):
         return f"{self.get_capitulo_display()} · {self.etiqueta} ({self.proyecto.nombre})"
 
+    def valor_para_torre(self, torre):
+        """#171 B5 — EAV: devuelve el valor ACTUAL de esta columna para
+        ``torre``. Solo tiene sentido para columnas custom (``es_sistema=
+        False``) — las 21 columnas de fábrica NO usan
+        `ColumnaConfigurableValor`, su dato vive en el campo real
+        (`DecimalField`/`BooleanField`) del modelo de avance
+        correspondiente (`ObraCivilTorre`/`MontajeEstructuraTorre`/
+        `TendidoTorre`).
+
+        Default si la torre TODAVÍA no tiene fila de valor para esta
+        columna (nunca la tocó): `Decimal('0')` si `tipo_valor=DECIMAL`,
+        `False` si `tipo_valor=BOOLEAN` — mismo comportamiento "no
+        participa" que una columna recién creada sin datos, para que
+        `avance_ponderado`/`avance_conductor`/`avance_fibra` (B3/B4) no
+        exploten con columnas custom nuevas sin valores todavía.
+
+        Este método es lo que B3/B4 detectan vía
+        `getattr(columna, 'valor_para_torre', None)` — antes de B5 esa
+        llamada no existía y esas properties usaban 0/False como fallback.
+        """
+        try:
+            fila = self.valores.get(torre=torre)
+        except ColumnaConfigurableValor.DoesNotExist:
+            return Decimal('0') if self.tipo_valor == self.TIPO_DECIMAL else False
+        if self.tipo_valor == self.TIPO_BOOLEAN:
+            return bool(fila.valor_boolean)
+        return fila.valor_decimal if fila.valor_decimal is not None else Decimal('0')
+
+    def set_valor_para_torre(self, torre, valor):
+        """#171 B5 — EAV: crea o actualiza (idempotente,
+        `update_or_create`) el valor de esta columna para ``torre``. Usa
+        `valor_decimal` o `valor_boolean` según `tipo_valor`. Pensado para
+        el endpoint genérico de guardado de B7
+        (`ColumnaValorUpdateView`, patrón `HochiminhToggleView`)."""
+        defaults = {}
+        if self.tipo_valor == self.TIPO_BOOLEAN:
+            defaults = {'valor_boolean': bool(valor), 'valor_decimal': None}
+        else:
+            defaults = {'valor_decimal': Decimal(str(valor)), 'valor_boolean': None}
+        fila, _created = ColumnaConfigurableValor.objects.update_or_create(
+            columna=self, torre=torre, defaults=defaults,
+        )
+        return fila
+
+
+class ColumnaConfigurableValor(BaseModel):
+    """#171 B5 — EAV (Entity-Attribute-Value): valor de una columna CUSTOM
+    (`ColumnaConfigurable.es_sistema=False`) para una torre específica.
+
+    Las 21 columnas "de fábrica" (`es_sistema=True`) NO usan este modelo —
+    su dato sigue viviendo en los campos reales (`DecimalField`/
+    `BooleanField`) de `ObraCivilTorre`/`MontajeEstructuraTorre`/
+    `TendidoTorre`, sin migración de datos existentes a EAV (decisión de
+    diseño de B2, ver `ColumnaConfigurable.es_sistema` help_text). Este
+    modelo solo entra en juego cuando el cliente agrega una columna nueva
+    vía la UI de administración (B6).
+
+    `unique_together` en (`columna`, `torre`) — una torre tiene a lo sumo
+    UN valor por columna custom. `valor_decimal`/`valor_boolean` son
+    nullable (solo uno de los dos se usa, según `columna.tipo_valor`) —
+    NO hay un `CheckConstraint` de "exactamente uno no-nulo" a propósito:
+    `set_valor_para_torre` es el único punto de escritura previsto y ya
+    garantiza esa invariante aplicativa; agregar el constraint de BD sería
+    sobre-ingeniería para un EAV de 2 columnas con un solo writer conocido.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    columna = models.ForeignKey(
+        ColumnaConfigurable,
+        on_delete=models.CASCADE,
+        related_name='valores',
+    )
+    torre = models.ForeignKey(
+        'TorreConstruccion',
+        on_delete=models.CASCADE,
+        related_name='valores_columnas_configurables',
+    )
+    valor_decimal = models.DecimalField(
+        'Valor decimal', max_digits=5, decimal_places=4, null=True, blank=True,
+        help_text='0 a 1 (1 = 100%) — usado si columna.tipo_valor=DECIMAL.',
+    )
+    valor_boolean = models.BooleanField(
+        'Valor boolean', null=True, blank=True,
+        help_text='Check hecho/no hecho — usado si columna.tipo_valor=BOOLEAN.',
+    )
+
+    class Meta:
+        db_table = 'construccion_columna_configurable_valor'
+        verbose_name = 'Valor de Columna Configurable'
+        verbose_name_plural = 'Valores de Columnas Configurables'
+        unique_together = [['columna', 'torre']]
+
+    def __str__(self):
+        valor = self.valor_boolean if self.columna.tipo_valor == ColumnaConfigurable.TIPO_BOOLEAN else self.valor_decimal
+        return f"{self.columna.etiqueta} · {self.torre.numero_display}: {valor}"
+
 
 # Especificación literal de las 21 columnas "de fábrica" — copiada 1:1 de
 # ObraCivilTorre.COLUMNAS / MontajeEstructuraTorre.COLUMNAS /
