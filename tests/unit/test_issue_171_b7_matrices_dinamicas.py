@@ -256,6 +256,53 @@ def test_montaje_matriz_renderiza_data_testid_columna_custom(authenticated_clien
 
 
 @pytest.mark.django_db
+def test_montaje_matriz_renderiza_avance_ponderado_con_punto_decimal_no_coma(
+    authenticated_client, proyecto,
+):
+    """Regresión (#171, detectada por el gate E2E post-deploy de PR #189):
+    la celda "Avance" de la matriz Montaje usa `{{ ...|floatformat:1 }}` —
+    el filtro `floatformat` de Django SIEMPRE formatea con el separador
+    decimal del locale activo salvo que se le pase el sufijo `u`
+    (`floatformat:"1u"`, ver docstring de Django `defaultfilters.floatformat`)
+    — el `{% localize off %}` que envuelve el resto de la matriz NO alcanza
+    a `floatformat` (ni tampoco un `|unlocalize` encadenado ANTES del
+    filtro: `unlocalize` solo hace `str(value)`, y `floatformat` vuelve a
+    parsear y re-localizar ese string). Con locale es-CO activo esto
+    renderizaba "80,0%" (coma) en vez de "80.0%" (punto) — inconsistente
+    con el resto de la matriz y con Obra Civil (que no aplica `floatformat`
+    a esta misma celda). Bug preexistente desde 2026-05-26 (la línea nunca
+    se tocó), expuesto recién ahora porque este es el primer journey E2E
+    que compara el string exacto de esta celda.
+    """
+    torre_local = TorreConstruccion.objects.create(proyecto=proyecto, numero='T-B7-LOCALE-M')
+    montaje = MontajeEstructuraTorre.objects.create(
+        proyecto=proyecto, torre=torre_local,
+        avance_estructura_sitio=Decimal('1'), avance_prearamada=Decimal('1'),
+        avance_torre_montada=Decimal('1'), avance_revisada=Decimal('1'),
+    )
+    # Las 4 columnas de SISTEMA (suma=100%, defaults 10/20/45/25 del Excel del
+    # cliente) ya existen — el signal `crear_columnas_configurables_proyecto_nuevo`
+    # las crea al guardar `proyecto` (fixture). Solo agregamos 1 CUSTOM boolean
+    # sin marcar (peso 25%, sin ColumnaConfigurableValor) → total_peso=125,
+    # suma=100 → avance_ponderado_pct = 100/125*100 = 80.0 (mismo caso que prod: m6).
+    ColumnaConfigurable.objects.create(
+        proyecto=proyecto, capitulo=ColumnaConfigurable.CAPITULO_MONTAJE,
+        clave='custom_sin_marcar', etiqueta='Custom sin marcar', orden=99,
+        peso_pct=25, tipo_valor=ColumnaConfigurable.TIPO_BOOLEAN,
+        es_sistema=False, activa=True,
+    )
+
+    assert montaje.avance_ponderado_pct == pytest.approx(80.0)
+
+    url = reverse('construccion:montaje_lista', kwargs={'proyecto_id': proyecto.id})
+    resp = authenticated_client.get(url)
+    assert resp.status_code == 200
+    html = resp.content.decode()
+    assert '80.0%' in html
+    assert '80,0%' not in html
+
+
+@pytest.mark.django_db
 def test_tendido_matriz_renderiza_data_testid_columna_custom_conductor(authenticated_client, proyecto):
     torre_local = TorreConstruccion.objects.create(proyecto=proyecto, numero='T-B7-RENDER-T')
     TendidoTorre.objects.create(proyecto=proyecto, torre=torre_local)
