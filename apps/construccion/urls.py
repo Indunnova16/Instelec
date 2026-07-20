@@ -49,6 +49,8 @@ urlpatterns = [
 
     # Entrega
     path('<uuid:proyecto_id>/entrega/', views.EntregaView.as_view(), name='entrega'),
+    path('<uuid:proyecto_id>/entrega/<uuid:torre_id>/editar/',
+         views.EntregaTorreView.as_view(), name='entrega_torre'),
 
     # Pendientes
     path('<uuid:proyecto_id>/pendientes/', views.PendientesView.as_view(), name='pendientes'),

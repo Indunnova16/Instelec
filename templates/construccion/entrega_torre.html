@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}Entrega — {{ torre.numero_display }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">
+      Entrega Electromecánica — {{ torre.numero_display }}
+    </h1>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{{ proyecto.nombre }}</p>
+  </div>
+
+  {% if form.errors %}
+  <div class="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4 text-sm text-red-700 dark:text-red-300">
+    Revisá los campos marcados abajo — hay errores que impiden guardar.
+  </div>
+  {% endif %}
+
+  <form method="post" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-8">
+    {% csrf_token %}
+
+    {% comment %} Formato / observaciones generales {% endcomment %}
+    <fieldset class="space-y-4">
+      <legend class="text-sm font-semibold text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 w-full">
+        Observaciones de formato
+      </legend>
+      {% for field in form %}
+        {% if field.name == 'observacion_formato' or field.name == 'obs_spt' or field.name == 'obs_estructura' %}
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ field.label }}</label>
+          <div class="w-full">{{ field }}</div>
+          {% if field.errors %}<p class="text-xs text-red-600">{{ field.errors.0 }}</p>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </fieldset>
+
+    {% comment %} Conductor A/B/C {% endcomment %}
+    <fieldset class="space-y-4">
+      <legend class="text-sm font-semibold text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 w-full">
+        Observaciones conductor (fases A / B / C)
+      </legend>
+      {% for field in form %}
+        {% if field.name == 'obs_conductor_a' or field.name == 'obs_conductor_b' or field.name == 'obs_conductor_c' %}
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ field.label }}</label>
+          <div class="w-full">{{ field }}</div>
+          {% if field.errors %}<p class="text-xs text-red-600">{{ field.errors.0 }}</p>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </fieldset>
+
+    {% comment %} OPGW izquierda/derecha {% endcomment %}
+    <fieldset class="space-y-4">
+      <legend class="text-sm font-semibold text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 w-full">
+        Observaciones OPGW (izquierda / derecha)
+      </legend>
+      {% for field in form %}
+        {% if field.name == 'obs_opgw_izq' or field.name == 'obs_opgw_der' %}
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ field.label }}</label>
+          <div class="w-full">{{ field }}</div>
+          {% if field.errors %}<p class="text-xs text-red-600">{{ field.errors.0 }}</p>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </fieldset>
+
+    {% comment %} Firmas, cajas, fechas {% endcomment %}
+    <fieldset class="space-y-4">
+      <legend class="text-sm font-semibold text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 w-full">
+        Firmas y visitas
+      </legend>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {% for field in form %}
+          {% if field.name == 'firmo_hmv' or field.name == 'firmo_wsp' or field.name == 'cajas_opgw' or field.name == 'fecha_primera_visita' or field.name == 'fecha_segunda_visita' %}
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ field.label }}</label>
+            <div class="w-full">{{ field }}</div>
+            {% if field.errors %}<p class="text-xs text-red-600">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    {% comment %} Avance, estado, observaciones adicionales {% endcomment %}
+    <fieldset class="space-y-4">
+      <legend class="text-sm font-semibold text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 w-full">
+        Avance y estado
+      </legend>
+      {% for field in form %}
+        {% if field.name == 'avance' or field.name == 'estado' or field.name == 'observaciones_adicionales' %}
+        <div>
+          <label class="block text-sm font-medium mb-1">{{ field.label }}</label>
+          <div class="w-full">{{ field }}</div>
+          {% if field.help_text %}<p class="text-xs text-gray-500">{{ field.help_text }}</p>{% endif %}
+          {% if field.errors %}<p class="text-xs text-red-600">{{ field.errors.0 }}</p>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </fieldset>
+
+    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+      <a href="{% url 'construccion:entrega' proyecto.id %}"
+         class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200">Cancelar</a>
+      <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Guardar</button>
+    </div>
+  </form>
+</div>
+<style>
+input, select, textarea { width:100%; padding:.5rem .75rem; border:1px solid #d1d5db; border-radius:.5rem; }
+textarea { min-height: 60px; }
+input[type=checkbox] { width:auto; }
+</style>
+{% endblock %}

@@ -411,6 +411,50 @@ class EntregaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         return context
 
 
+class EntregaTorreView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Detalle editable de la Entrega Electromecánica de UNA torre (#171 B8).
+
+    Mismo patrón que TorreEditView / torre_form.html: ModelForm genérico
+    (sin HTML a mano), renderizado con {% for field in form %}. get_object()
+    usa get_or_create — EntregaElectromecanica ya se crea automáticamente al
+    crear la torre (TorreCreateView.form_valid), pero el get_or_create acá
+    cubre torres legacy pre-existentes a ese wiring."""
+    model = EntregaElectromecanica
+    template_name = 'construccion/entrega_torre.html'
+    allowed_roles = ['admin', 'director', 'coordinador', 'interventor']
+    fields = [
+        'observacion_formato',
+        'obs_spt', 'obs_estructura',
+        'obs_conductor_a', 'obs_conductor_b', 'obs_conductor_c',
+        'obs_opgw_izq', 'obs_opgw_der',
+        'firmo_hmv', 'firmo_wsp', 'cajas_opgw',
+        'fecha_primera_visita', 'fecha_segunda_visita',
+        'avance', 'estado', 'observaciones_adicionales',
+    ]
+
+    def _get_torre(self):
+        return get_object_or_404(
+            TorreConstruccion,
+            id=self.kwargs['torre_id'],
+            proyecto_id=self.kwargs['proyecto_id'],
+        )
+
+    def get_object(self, queryset=None):
+        torre = self._get_torre()
+        obj, _ = EntregaElectromecanica.objects.get_or_create(torre=torre)
+        return obj
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        torre = self._get_torre()
+        context['torre'] = torre
+        context['proyecto'] = torre.proyecto
+        return context
+
+    def get_success_url(self):
+        return reverse_lazy('construccion:entrega', kwargs={'proyecto_id': self.kwargs['proyecto_id']})
+
+
 class PendientesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Post-delivery corrections punch-list."""
     template_name = 'construccion/pendientes.html'
