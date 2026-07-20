@@ -1,11 +1,29 @@
 """Signals para el módulo construccion (#69, #65, #78)."""
-from django.db.models.signals import pre_save, post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 from .models import (
-    MovimientoFinanciero, PeriodoFinanciero, KitCerramiento, MovimientoKit,
-    PinturaAeronauticaTorre, PinturaFranja,
+    KitCerramiento,
+    MovimientoFinanciero,
+    MovimientoKit,
+    PeriodoFinanciero,
+    PinturaAeronauticaTorre,
+    PinturaFranja,
+    ProyectoConstruccion,
+    crear_columnas_configurables_default,
 )
+
+
+@receiver(post_save, sender=ProyectoConstruccion)
+def crear_columnas_configurables_proyecto_nuevo(sender, instance, created, **kwargs):
+    """#171 B2: al crear un ProyectoConstruccion NUEVO, genera las 21 filas
+    ColumnaConfigurable 'de fábrica' (mismos pesos que hoy rigen por default
+    en el modelo, ya que un proyecto recién creado trae los peso_*_pct
+    default). Idempotente — get_or_create por (proyecto, capitulo, clave),
+    mismo patrón que crear_franjas_pintura_aeronautica de abajo."""
+    if not created:
+        return
+    crear_columnas_configurables_default(instance)
 
 
 @receiver(post_save, sender=PinturaAeronauticaTorre)

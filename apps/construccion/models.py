@@ -657,6 +657,153 @@ class TorreConstruccion(BaseModel):
         return en_curso
 
 
+# ==========================================================================
+# Columnas configurables (#171 B2) — fundamento del refactor de columnas
+# configurables por capítulo (Obra Civil / Montaje / Tendido conductor /
+# Tendido fibra). Generaliza la arquitectura YA existente en código (3 clases
+# con COLUMNAS/COLUMNAS_CONDUCTOR/COLUMNAS_FIBRA + pesos en
+# ProyectoConstruccion) en un modelo único proyecto→capítulo→columna, para
+# que B6 (UI de administración) pueda agregar/quitar/reordenar columnas sin
+# tocar el modelo. Las 21 columnas "de fábrica" (es_sistema=True) siguen
+# leyendo/escribiendo sus DecimalField/BooleanField reales de siempre — este
+# modelo es la fuente de verdad de PESOS + QUÉ COLUMNAS ESTÁN ACTIVAS, no un
+# reemplazo del dato. B3/B4 (sub-items futuros) refactorizan
+# avance_ponderado/avance_conductor/avance_fibra para leer de acá.
+# ==========================================================================
+
+class ColumnaConfigurable(BaseModel):
+    """Una columna (actividad ponderada) de un capítulo de avance, por
+    proyecto. es_sistema=True = una de las 21 columnas hardcodeadas
+    originales (no se puede eliminar, solo desactivar). es_sistema=False =
+    columna custom agregada por el cliente vía UI (B6), su dato vive en
+    ColumnaConfigurableValor (B5, EAV) — este modelo solo define la columna
+    en sí (etiqueta/peso/tipo/orden/activa), no el valor por torre.
+    """
+    CAPITULO_OBRA_CIVIL = 'OBRA_CIVIL'
+    CAPITULO_MONTAJE = 'MONTAJE'
+    CAPITULO_TENDIDO_CONDUCTOR = 'TENDIDO_CONDUCTOR'
+    CAPITULO_TENDIDO_FIBRA = 'TENDIDO_FIBRA'
+    CAPITULO_CHOICES = [
+        (CAPITULO_OBRA_CIVIL, 'Obra Civil'),
+        (CAPITULO_MONTAJE, 'Montaje'),
+        (CAPITULO_TENDIDO_CONDUCTOR, 'Tendido — Conductor'),
+        (CAPITULO_TENDIDO_FIBRA, 'Tendido — Fibra/OPGW'),
+    ]
+
+    TIPO_DECIMAL = 'DECIMAL'
+    TIPO_BOOLEAN = 'BOOLEAN'
+    TIPO_VALOR_CHOICES = [
+        (TIPO_DECIMAL, 'Avance % (0-100)'),
+        (TIPO_BOOLEAN, 'Check (hecho/no hecho)'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion,
+        on_delete=models.CASCADE,
+        related_name='columnas_configurables',
+    )
+    capitulo = models.CharField('Capítulo', max_length=20, choices=CAPITULO_CHOICES)
+    clave = models.SlugField('Clave interna', max_length=40)
+    etiqueta = models.CharField('Etiqueta visible', max_length=100)
+    orden = models.PositiveSmallIntegerField('Orden', default=0)
+    peso_pct = models.PositiveSmallIntegerField('Peso %', default=0)
+    tipo_valor = models.CharField('Tipo de valor', max_length=10, choices=TIPO_VALOR_CHOICES)
+    es_sistema = models.BooleanField(
+        'Es de sistema', default=False,
+        help_text='True = una de las columnas originales hardcodeadas (Cerramiento, '
+                  'Excavación, etc.) — no se puede ELIMINAR, solo desactivar (activa=False). '
+                  'False = columna nueva agregada por el cliente vía UI (B6), usa '
+                  'ColumnaConfigurableValor (EAV) para su dato.',
+    )
+    activa = models.BooleanField('Activa', default=True)
+
+    class Meta:
+        db_table = 'construccion_columna_configurable'
+        verbose_name = 'Columna Configurable'
+        verbose_name_plural = 'Columnas Configurables'
+        unique_together = [['proyecto', 'capitulo', 'clave']]
+        ordering = ['proyecto', 'capitulo', 'orden']
+
+    def __str__(self):
+        return f"{self.get_capitulo_display()} · {self.etiqueta} ({self.proyecto.nombre})"
+
+
+# Especificación literal de las 21 columnas "de fábrica" — copiada 1:1 de
+# ObraCivilTorre.COLUMNAS / MontajeEstructuraTorre.COLUMNAS /
+# TendidoTorre.COLUMNAS_CONDUCTOR / TendidoTorre.COLUMNAS_FIBRA (clave,
+# etiqueta) + el nombre del campo peso_*_pct real de ProyectoConstruccion que
+# hoy gobierna esa columna. NO se importa desde las clases *.COLUMNAS para
+# que este módulo sea la fuente de verdad congelada que también reutiliza la
+# migración de datos 0044 (las migraciones de datos no deben depender de que
+# el código "actual" no cambie las listas COLUMNAS en el futuro).
+COLUMNAS_CONFIGURABLES_ESPEC = {
+    ColumnaConfigurable.CAPITULO_OBRA_CIVIL: [
+        ('cerramiento', 'Cerramiento', 'peso_cerramiento_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('excavacion', 'Excavación', 'peso_excavacion_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('solado', 'Solado', 'peso_solado_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('acero', 'Acero', 'peso_acero_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('vaciado', 'Vaciado', 'peso_vaciado_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('compactacion', 'Compactación', 'peso_compactacion_pct', ColumnaConfigurable.TIPO_DECIMAL),
+    ],
+    ColumnaConfigurable.CAPITULO_MONTAJE: [
+        ('estructura_sitio', 'Estructura en sitio', 'peso_mont_estructura_sitio_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('prearamada', 'Prearmada', 'peso_mont_prearamada_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('torre_montada', 'Torre Montada', 'peso_mont_torre_montada_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('revisada', 'Revisada', 'peso_mont_revisada_pct', ColumnaConfigurable.TIPO_DECIMAL),
+    ],
+    ColumnaConfigurable.CAPITULO_TENDIDO_CONDUCTOR: [
+        ('riega_manila_conductor', 'Riega manila', 'peso_tend_riega_manila_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('riega_guaya_conductor', 'Riega guaya', 'peso_tend_riega_guaya_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('tendido_conductor', 'Tendido conductor', 'peso_tend_tendido_conductor_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('grapado_amarre_conductor', 'Grapado', 'peso_tend_grapado_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('accesorios_puentes', 'Accesorios', 'peso_tend_accesorios_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('balizas_desviadores', 'Balizas', 'peso_tend_balizas_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+    ],
+    ColumnaConfigurable.CAPITULO_TENDIDO_FIBRA: [
+        ('riega_manila_fibra', 'Riega manila fibra', 'peso_tend_riega_manila_fibra_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('riega_guaya_opgw', 'Riega guaya OPGW', 'peso_tend_riega_guaya_opgw_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('tendido_opgw', 'Tendido OPGW', 'peso_tend_tendido_opgw_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('grapado_amarre_fibra', 'Grapado fibra', 'peso_tend_grapado_fibra_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('empalmes_opgw', 'Empalmes OPGW', 'peso_tend_empalmes_opgw_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+    ],
+}
+
+
+def crear_columnas_configurables_default(proyecto):
+    """Crea (idempotente, get_or_create) las 21 filas ColumnaConfigurable
+    'de fábrica' para ``proyecto``, una por columna de
+    COLUMNAS_CONFIGURABLES_ESPEC. ``peso_pct`` se toma del valor REAL de
+    ``proyecto.peso_*_pct`` EN ESTE MOMENTO (no un default distinto) — así el
+    refactor de avance_ponderado/avance_conductor/avance_fibra (B3/B4, fuera
+    de este dispatch) es matemáticamente idéntico antes/después (#171).
+
+    Usada por (a) la data migration 0044 para proyectos YA existentes en
+    prod, (b) el signal post_save de ProyectoConstruccion (signals.py) para
+    proyectos NUEVOS creados después del deploy. Devuelve la lista de
+    ColumnaConfigurable efectivamente creadas (vacía si ya existían = no-op).
+    """
+    creadas = []
+    for capitulo, columnas in COLUMNAS_CONFIGURABLES_ESPEC.items():
+        for orden, (clave, etiqueta, peso_field, tipo_valor) in enumerate(columnas):
+            obj, created = ColumnaConfigurable.objects.get_or_create(
+                proyecto=proyecto,
+                capitulo=capitulo,
+                clave=clave,
+                defaults={
+                    'etiqueta': etiqueta,
+                    'orden': orden,
+                    'peso_pct': getattr(proyecto, peso_field),
+                    'tipo_valor': tipo_valor,
+                    'es_sistema': True,
+                    'activa': True,
+                },
+            )
+            if created:
+                creadas.append(obj)
+    return creadas
+
+
 class PataObra(BaseModel):
     """
     Civil work tracking per tower leg (Pata A, B, C, D).
