@@ -1637,36 +1637,55 @@ class TendidoTorre(BaseModel):
             return 'Suspensión'
         return 'Retención'
 
+    def _avance_ponderado_capitulo(self, capitulo):
+        """SUMPRODUCT(peso de columnas activas del capítulo, valores 0/1 de
+        la torre) / SUM(pesos activos). Compartido por `avance_conductor` y
+        `avance_fibra` (#171 B4) — mismo diseño que
+        `ObraCivilTorre.avance_ponderado` (B3), pero con valores booleanos
+        (1 si el check está marcado, 0 si no) en vez de `DecimalField`. Ver
+        docstring de `ObraCivilTorre.avance_ponderado` para el detalle
+        completo (columnas es_sistema vs custom, redistribución de peso al
+        desactivar, prefetch-friendly). Devuelve un valor 0-1 (float).
+        """
+        columnas_activas = [
+            c for c in self.proyecto.columnas_configurables.all()
+            if c.capitulo == capitulo and c.activa
+        ]
+        total_peso = 0
+        suma = 0
+        for columna in columnas_activas:
+            peso = columna.peso_pct
+            if columna.es_sistema:
+                if not hasattr(self, columna.clave):
+                    continue  # columna de sistema desconocida (drift) — no participa
+                valor = 1 if getattr(self, columna.clave) else 0
+            else:
+                valor_para_torre = getattr(columna, 'valor_para_torre', None)
+                valor = 1 if (valor_para_torre and valor_para_torre(self.torre)) else 0
+            total_peso += peso
+            suma += peso * valor
+        if total_peso == 0:
+            return 0
+        return suma / total_peso
+
     @property
     def avance_conductor(self):
-        """SUMPRODUCT(pesos conductor, valores). Valor 0-1."""
-        p = self.proyecto
-        pesos = {
-            'riega_manila_conductor': p.peso_tend_riega_manila_pct,
-            'riega_guaya_conductor': p.peso_tend_riega_guaya_pct,
-            'tendido_conductor': p.peso_tend_tendido_conductor_pct,
-            'grapado_amarre_conductor': p.peso_tend_grapado_pct,
-            'accesorios_puentes': p.peso_tend_accesorios_pct,
-            'balizas_desviadores': p.peso_tend_balizas_pct,
-        }
-        total = sum(pesos.values()) or 1
-        suma = sum(peso * (1 if getattr(self, f) else 0) for f, peso in pesos.items())
-        return suma / total
+        """SUMPRODUCT(pesos conductor activos, valores). Valor 0-1.
+
+        #171 B4: el peso y qué columnas participan ahora salen de
+        `ColumnaConfigurable` (capítulo TENDIDO_CONDUCTOR) en vez de
+        `proyecto.peso_tend_*_pct` hardcodeado.
+        """
+        return self._avance_ponderado_capitulo(ColumnaConfigurable.CAPITULO_TENDIDO_CONDUCTOR)
 
     @property
     def avance_fibra(self):
-        """SUMPRODUCT(pesos fibra, valores). Valor 0-1."""
-        p = self.proyecto
-        pesos = {
-            'riega_manila_fibra': p.peso_tend_riega_manila_fibra_pct,
-            'riega_guaya_opgw': p.peso_tend_riega_guaya_opgw_pct,
-            'tendido_opgw': p.peso_tend_tendido_opgw_pct,
-            'grapado_amarre_fibra': p.peso_tend_grapado_fibra_pct,
-            'empalmes_opgw': p.peso_tend_empalmes_opgw_pct,
-        }
-        total = sum(pesos.values()) or 1
-        suma = sum(peso * (1 if getattr(self, f) else 0) for f, peso in pesos.items())
-        return suma / total
+        """SUMPRODUCT(pesos fibra activos, valores). Valor 0-1.
+
+        #171 B4: mismo refactor que `avance_conductor`, capítulo
+        TENDIDO_FIBRA.
+        """
+        return self._avance_ponderado_capitulo(ColumnaConfigurable.CAPITULO_TENDIDO_FIBRA)
 
     @property
     def avance_conductor_pct(self):

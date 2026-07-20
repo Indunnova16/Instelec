@@ -2197,6 +2197,10 @@ class TendidoPesosUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
 
         for clave, campo in mapeo.items():
             setattr(proyecto, campo, valores[clave])
+        # #171 B4: mismo motivo que ObraCivilPesosUpdateView/MontajePesosUpdateView
+        # — el signal post_save de ProyectoConstruccion re-sincroniza
+        # ColumnaConfigurable automáticamente, este panel legacy sigue
+        # surtiendo efecto.
         proyecto.save(update_fields=list(mapeo.values()))
         return JsonResponse({'ok': True, 'seccion': seccion})
 
