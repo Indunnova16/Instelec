@@ -6,7 +6,7 @@ from django.views.generic import ListView, DetailView, CreateView, UpdateView, D
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404, redirect
-from django.db.models import Q, IntegerField, Value, F, Func
+from django.db.models import Q, IntegerField, Value, F, Func, Max
 from django.db.models.functions import Cast, NullIf
 
 from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
@@ -43,6 +43,7 @@ from .models import (
     PataObra,
     ObraCivilTorre,
     MontajeEstructuraTorre,
+    ColumnaConfigurable,
     SPTTorre,
     PinturaPatasTorre,
     PinturaAeronauticaTorre,
@@ -2327,6 +2328,171 @@ class HochiminhToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
         h, _ = HochiminhMarcacionReplanteo.objects.get_or_create(torre=torre)
         setattr(h, campo, valor)
         h.save(update_fields=[campo, 'updated_at'])
+        return JsonResponse({'ok': True})
+
+
+# ==========================================================================
+# Columnas configurables (#171 B6) — UI de administración por proyecto/
+# capítulo: agregar/quitar (solo custom)/reordenar/activar-desactivar
+# columnas. Configuración, NO operación de campo — allowed_roles
+# restringido a admin/director (más angosto que ALL_ADMIN_ROLES a
+# propósito, ver PLAN_2026-07-19_171_sprint_final.md sección B6).
+# ==========================================================================
+
+COLUMNAS_ADMIN_ROLES = ['admin', 'director']
+
+
+class ColumnasConfigurablesView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Vista de administración de columnas configurables de un proyecto,
+    con tabs por capítulo (server-rendered vía querystring `?capitulo=`,
+    mismo patrón que DashboardCurvaSView/`?fase=`)."""
+    template_name = 'construccion/columnas_configurables.html'
+    allowed_roles = COLUMNAS_ADMIN_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
+
+        capitulo_activo = self.request.GET.get('capitulo', ColumnaConfigurable.CAPITULO_OBRA_CIVIL)
+        capitulos_validos = dict(ColumnaConfigurable.CAPITULO_CHOICES)
+        if capitulo_activo not in capitulos_validos:
+            capitulo_activo = ColumnaConfigurable.CAPITULO_OBRA_CIVIL
+
+        columnas = list(ColumnaConfigurable.objects.filter(
+            proyecto=proyecto, capitulo=capitulo_activo,
+        ).order_by('orden'))
+        suma_pesos_activos = sum(c.peso_pct for c in columnas if c.activa)
+
+        ctx['proyecto'] = proyecto
+        ctx['capitulo_activo'] = capitulo_activo
+        ctx['capitulos'] = ColumnaConfigurable.CAPITULO_CHOICES
+        ctx['columnas'] = columnas
+        ctx['suma_pesos_activos'] = suma_pesos_activos
+        ctx['suma_pesos_ok'] = suma_pesos_activos == 100
+        ctx['tipo_valor_choices'] = ColumnaConfigurable.TIPO_VALOR_CHOICES
+        ctx['active_tab'] = 'columnas'
+        return ctx
+
+
+class ColumnaToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — activa/desactiva una columna (patrón HochiminhToggleView).
+    Columnas de sistema Y custom se pueden desactivar por igual — solo
+    ELIMINAR está restringido a custom (ver ColumnaEliminarView)."""
+    allowed_roles = COLUMNAS_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, columna_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        columna = get_object_or_404(ColumnaConfigurable, id=columna_id, proyecto=proyecto)
+        activa = request.POST.get('activa', '').strip() in ('1', 'true', 'on', 'True')
+        columna.activa = activa
+        columna.save(update_fields=['activa', 'updated_at'])
+        return JsonResponse({'ok': True, 'activa': columna.activa})
+
+
+class ColumnaCrearView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — crea una columna CUSTOM (`es_sistema=False`) nueva en un
+    capítulo. `clave` se genera como slug de `etiqueta` (único por
+    proyecto+capítulo, igual que `unique_together` del modelo)."""
+    allowed_roles = COLUMNAS_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, *args, **kwargs):
+        from django.http import JsonResponse
+        from django.utils.text import slugify
+
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        capitulo = request.POST.get('capitulo', '').strip()
+        etiqueta = request.POST.get('etiqueta', '').strip()
+        tipo_valor = request.POST.get('tipo_valor', '').strip()
+        try:
+            peso_pct = int(request.POST.get('peso_pct', 0))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'El peso debe ser un número entero.'}, status=400)
+
+        if capitulo not in dict(ColumnaConfigurable.CAPITULO_CHOICES):
+            return JsonResponse({'error': 'Capítulo inválido.'}, status=400)
+        if not etiqueta:
+            return JsonResponse({'error': 'La etiqueta es obligatoria.'}, status=400)
+        if tipo_valor not in dict(ColumnaConfigurable.TIPO_VALOR_CHOICES):
+            return JsonResponse({'error': 'Tipo de valor inválido.'}, status=400)
+        if peso_pct < 0 or peso_pct > 100:
+            return JsonResponse({'error': f'Peso fuera de rango: {peso_pct} (debe ser 0-100).'}, status=400)
+
+        clave = slugify(etiqueta)[:40].replace('-', '_')
+        if not clave:
+            return JsonResponse(
+                {'error': 'No se pudo generar una clave interna válida a partir de la etiqueta.'},
+                status=400,
+            )
+        if ColumnaConfigurable.objects.filter(proyecto=proyecto, capitulo=capitulo, clave=clave).exists():
+            return JsonResponse(
+                {'error': f'Ya existe una columna con clave "{clave}" en este capítulo — usa otra etiqueta.'},
+                status=400,
+            )
+
+        max_orden = ColumnaConfigurable.objects.filter(
+            proyecto=proyecto, capitulo=capitulo,
+        ).aggregate(Max('orden'))['orden__max'] or 0
+
+        columna = ColumnaConfigurable.objects.create(
+            proyecto=proyecto, capitulo=capitulo, clave=clave, etiqueta=etiqueta,
+            orden=max_orden + 1, peso_pct=peso_pct, tipo_valor=tipo_valor,
+            es_sistema=False, activa=True,
+        )
+        return JsonResponse({
+            'ok': True, 'id': str(columna.id), 'clave': columna.clave,
+            'etiqueta': columna.etiqueta, 'peso_pct': columna.peso_pct,
+            'tipo_valor': columna.tipo_valor,
+        })
+
+
+class ColumnaEliminarView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — elimina una columna CUSTOM (`es_sistema=False`). Las
+    columnas de sistema NO se pueden eliminar (rechaza con 400), solo
+    desactivar vía ColumnaToggleView."""
+    allowed_roles = COLUMNAS_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, columna_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        columna = get_object_or_404(ColumnaConfigurable, id=columna_id, proyecto=proyecto)
+        if columna.es_sistema:
+            return JsonResponse(
+                {'error': 'Las columnas de sistema no se pueden eliminar — desactívala en su lugar.'},
+                status=400,
+            )
+        columna.delete()
+        return JsonResponse({'ok': True})
+
+
+class ColumnaReordenarView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX — intercambia el `orden` de una columna con su vecina
+    inmediata dentro del mismo capítulo (`direccion` = 'up'/'down').
+    En el extremo (ya es la primera/última) es un no-op silencioso."""
+    allowed_roles = COLUMNAS_ADMIN_ROLES
+
+    def post(self, request, proyecto_id, columna_id, *args, **kwargs):
+        from django.http import JsonResponse
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        columna = get_object_or_404(ColumnaConfigurable, id=columna_id, proyecto=proyecto)
+        direccion = request.POST.get('direccion', '').strip()
+        if direccion not in ('up', 'down'):
+            return JsonResponse({'error': "direccion debe ser 'up' o 'down'."}, status=400)
+
+        hermanas = list(ColumnaConfigurable.objects.filter(
+            proyecto=proyecto, capitulo=columna.capitulo,
+        ).order_by('orden'))
+        idx = next((i for i, c in enumerate(hermanas) if c.id == columna.id), None)
+        if idx is None:
+            return JsonResponse({'error': 'Columna no encontrada en su capítulo.'}, status=400)
+
+        vecino_idx = idx - 1 if direccion == 'up' else idx + 1
+        if vecino_idx < 0 or vecino_idx >= len(hermanas):
+            return JsonResponse({'ok': True, 'sin_cambio': True})
+
+        vecina = hermanas[vecino_idx]
+        columna.orden, vecina.orden = vecina.orden, columna.orden
+        ColumnaConfigurable.objects.bulk_update([columna, vecina], ['orden'])
         return JsonResponse({'ok': True})
 
 

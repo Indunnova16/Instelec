@@ -184,6 +184,18 @@ urlpatterns = [
     path('<uuid:proyecto_id>/tendido/<uuid:torre_id>/',
          views.TendidoTorreView.as_view(), name='tendido_torre'),
 
+    # Columnas configurables (#171 B6) — administración por proyecto/capítulo
+    path('<uuid:proyecto_id>/columnas/',
+         views.ColumnasConfigurablesView.as_view(), name='columnas_configurables'),
+    path('<uuid:proyecto_id>/columnas/crear/',
+         views.ColumnaCrearView.as_view(), name='columna_crear'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/toggle/',
+         views.ColumnaToggleView.as_view(), name='columna_toggle'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/eliminar/',
+         views.ColumnaEliminarView.as_view(), name='columna_eliminar'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/reordenar/',
+         views.ColumnaReordenarView.as_view(), name='columna_reordenar'),
+
     # Iteración 2 — deuda técnica
     path('<uuid:proyecto_id>/financiero/categoria/<uuid:categoria_id>/',
          views.CategoriaDrilldownView.as_view(), name='categoria_drilldown'),
