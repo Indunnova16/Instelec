@@ -1326,7 +1326,16 @@ class ObraCivilTorre(BaseModel):
                     continue  # columna de sistema desconocida (drift) — no participa
             else:
                 valor_para_torre = getattr(columna, 'valor_para_torre', None)
-                avance = Decimal(str(valor_para_torre(self.torre))) if valor_para_torre else Decimal('0')
+                if valor_para_torre:
+                    raw = valor_para_torre(self.torre)
+                    # #171 fix: `raw` puede ser `bool` (tipo_valor=BOOLEAN) —
+                    # str(True)/str(False) no son literales Decimal válidos y
+                    # Decimal(str(raw)) explota con InvalidOperation. Mismo
+                    # criterio que TendidoTorre._avance_ponderado_capitulo:
+                    # True/truthy = peso completo, False/None = sin aporte.
+                    avance = (Decimal('1') if raw else Decimal('0')) if isinstance(raw, bool) else Decimal(str(raw))
+                else:
+                    avance = Decimal('0')
             total_peso += peso
             suma += Decimal(avance) * peso
         if total_peso == 0:
@@ -1464,7 +1473,16 @@ class MontajeEstructuraTorre(BaseModel):
                     continue
             else:
                 valor_para_torre = getattr(columna, 'valor_para_torre', None)
-                avance = Decimal(str(valor_para_torre(self.torre))) if valor_para_torre else Decimal('0')
+                if valor_para_torre:
+                    raw = valor_para_torre(self.torre)
+                    # #171 fix: `raw` puede ser `bool` (tipo_valor=BOOLEAN) —
+                    # str(True)/str(False) no son literales Decimal válidos y
+                    # Decimal(str(raw)) explota con InvalidOperation. Mismo
+                    # criterio que TendidoTorre._avance_ponderado_capitulo:
+                    # True/truthy = peso completo, False/None = sin aporte.
+                    avance = (Decimal('1') if raw else Decimal('0')) if isinstance(raw, bool) else Decimal(str(raw))
+                else:
+                    avance = Decimal('0')
             total_peso += peso
             suma += Decimal(avance) * peso
         if total_peso == 0:

@@ -66,6 +66,7 @@ import pytest
 
 from apps.construccion.models import (
     ColumnaConfigurable,
+    ColumnaConfigurableValor,
     MontajeEstructuraTorre,
     ObraCivilTorre,
     ProyectoConstruccion,
@@ -539,3 +540,162 @@ def test_panel_legacy_pesos_obra_civil_sigue_afectando_avance_ponderado(
         clave='cerramiento',
     )
     assert columna_cerramiento.peso_pct == 50
+
+
+# ==============================================================================
+# 5) FIX regresión post-deploy (revisión instelec-api-00202-hg7 → auto-rollback
+#    del gate E2E): columna custom `tipo_valor=BOOLEAN` en capítulo OBRA_CIVIL
+#    o MONTAJE tiraba HTTP 500 al cargar la matriz.
+#
+#    Root cause: `ColumnaConfigurable.valor_para_torre()` devuelve un `bool`
+#    Python (`True`/`False`) para columnas BOOLEAN — `Decimal(str(True))` /
+#    `Decimal(str(False))` no son literales Decimal válidos
+#    (`decimal.InvalidOperation`). El helper equivalente que SÍ funciona
+#    (`TendidoTorre._avance_ponderado_capitulo`, ya cubierto por
+#    `columna_custom_boolean_tendido` en test_issue_171_b7) evalúa el booleano
+#    directo sin pasar por `Decimal(str(...))` — B3 (este archivo) tenía el
+#    mismo bug copy-pasteado en 2 lugares y NUNCA se probó con
+#    tipo_valor=BOOLEAN en OBRA_CIVIL/MONTAJE (el único boolean custom
+#    cubierto en B7 era TENDIDO_CONDUCTOR, que ya usa el path correcto).
+# ==============================================================================
+
+@pytest.mark.django_db
+def test_columna_custom_boolean_obra_civil_sin_fila_valor_no_explota(proyecto_simple):
+    """Columna custom BOOLEAN en OBRA_CIVIL, torre que NUNCA la tocó (sin
+    ColumnaConfigurableValor) — antes del fix: decimal.InvalidOperation
+    (HTTP 500). Después: no participa, contribuye 0 al SUMPRODUCT."""
+    torre = TorreConstruccion.objects.create(proyecto=proyecto_simple, numero='T-BOOL-OC-1')
+    oc = ObraCivilTorre.objects.create(
+        proyecto=proyecto_simple, torre=torre,
+        avance_cerramiento=Decimal('1.0000'), avance_excavacion=Decimal('1.0000'),
+        avance_solado=Decimal('1.0000'), avance_acero=Decimal('1.0000'),
+        avance_vaciado=Decimal('1.0000'), avance_compactacion=Decimal('1.0000'),
+    )
+    ColumnaConfigurable.objects.create(
+        proyecto=proyecto_simple, capitulo=ColumnaConfigurable.CAPITULO_OBRA_CIVIL,
+        clave='chequeo_extra', etiqueta='Chequeo extra', orden=99,
+        peso_pct=50, tipo_valor=ColumnaConfigurable.TIPO_BOOLEAN,
+        es_sistema=False, activa=True,
+    )
+    # NO se crea ColumnaConfigurableValor — la torre nunca tocó esta columna.
+    # Pesos activos: 6 de sistema (suman 100, default) + custom (50) = 150.
+    # Custom no participa (raw=False) -> suma=100, total_peso=150 -> 66.7%.
+    oc.refresh_from_db()
+    assert oc.avance_ponderado_pct == pytest.approx(66.7, abs=0.05), (
+        f"avance_ponderado explotó o dio un valor inesperado con columna custom "
+        f"BOOLEAN sin fila de valor (obtenido: {oc.avance_ponderado_pct})"
+    )
+
+
+@pytest.mark.django_db
+def test_columna_custom_boolean_obra_civil_con_valor_true_contribuye_peso_completo(proyecto_simple):
+    """Misma columna custom BOOLEAN en OBRA_CIVIL, pero con
+    ColumnaConfigurableValor(valor_boolean=True) creada — debe contribuir el
+    peso completo (no 0, no explotar)."""
+    torre = TorreConstruccion.objects.create(proyecto=proyecto_simple, numero='T-BOOL-OC-2')
+    oc = ObraCivilTorre.objects.create(
+        proyecto=proyecto_simple, torre=torre,
+        avance_cerramiento=Decimal('1.0000'), avance_excavacion=Decimal('1.0000'),
+        avance_solado=Decimal('1.0000'), avance_acero=Decimal('1.0000'),
+        avance_vaciado=Decimal('1.0000'), avance_compactacion=Decimal('1.0000'),
+    )
+    columna = ColumnaConfigurable.objects.create(
+        proyecto=proyecto_simple, capitulo=ColumnaConfigurable.CAPITULO_OBRA_CIVIL,
+        clave='chequeo_extra', etiqueta='Chequeo extra', orden=99,
+        peso_pct=50, tipo_valor=ColumnaConfigurable.TIPO_BOOLEAN,
+        es_sistema=False, activa=True,
+    )
+    ColumnaConfigurableValor.objects.create(columna=columna, torre=torre, valor_boolean=True)
+
+    oc.refresh_from_db()
+    # suma=100+50*1=150, total_peso=150 -> 100.0%
+    assert oc.avance_ponderado_pct == pytest.approx(100.0, abs=0.05), (
+        f"columna custom BOOLEAN con valor True no contribuyó el peso completo "
+        f"(obtenido: {oc.avance_ponderado_pct})"
+    )
+
+
+@pytest.mark.django_db
+def test_columna_custom_boolean_montaje_sin_fila_valor_no_explota(proyecto_simple):
+    """Mismo escenario que OBRA_CIVIL pero para capítulo MONTAJE
+    (`MontajeEstructuraTorre.avance_ponderado` — el otro de los 2 lugares
+    con el mismo bug copy-pasteado)."""
+    torre = TorreConstruccion.objects.create(proyecto=proyecto_simple, numero='T-BOOL-MONT-1')
+    m = MontajeEstructuraTorre.objects.create(
+        proyecto=proyecto_simple, torre=torre,
+        avance_estructura_sitio=Decimal('1.0000'), avance_prearamada=Decimal('1.0000'),
+        avance_torre_montada=Decimal('1.0000'), avance_revisada=Decimal('1.0000'),
+    )
+    ColumnaConfigurable.objects.create(
+        proyecto=proyecto_simple, capitulo=ColumnaConfigurable.CAPITULO_MONTAJE,
+        clave='chequeo_extra_mont', etiqueta='Chequeo extra montaje', orden=99,
+        peso_pct=25, tipo_valor=ColumnaConfigurable.TIPO_BOOLEAN,
+        es_sistema=False, activa=True,
+    )
+    # Pesos activos: 4 de sistema (suman 100, default) + custom (25) = 125.
+    # Custom no participa (raw=False) -> suma=100, total_peso=125 -> 80.0%.
+    m.refresh_from_db()
+    assert m.avance_ponderado_pct == pytest.approx(80.0, abs=0.05), (
+        f"avance_ponderado (Montaje) explotó o dio un valor inesperado con "
+        f"columna custom BOOLEAN sin fila de valor (obtenido: {m.avance_ponderado_pct})"
+    )
+
+
+@pytest.mark.django_db
+def test_columna_custom_boolean_montaje_con_valor_true_contribuye_peso_completo(proyecto_simple):
+    """Misma columna custom BOOLEAN en MONTAJE, pero con
+    ColumnaConfigurableValor(valor_boolean=True) creada — debe contribuir el
+    peso completo."""
+    torre = TorreConstruccion.objects.create(proyecto=proyecto_simple, numero='T-BOOL-MONT-2')
+    m = MontajeEstructuraTorre.objects.create(
+        proyecto=proyecto_simple, torre=torre,
+        avance_estructura_sitio=Decimal('1.0000'), avance_prearamada=Decimal('1.0000'),
+        avance_torre_montada=Decimal('1.0000'), avance_revisada=Decimal('1.0000'),
+    )
+    columna = ColumnaConfigurable.objects.create(
+        proyecto=proyecto_simple, capitulo=ColumnaConfigurable.CAPITULO_MONTAJE,
+        clave='chequeo_extra_mont', etiqueta='Chequeo extra montaje', orden=99,
+        peso_pct=25, tipo_valor=ColumnaConfigurable.TIPO_BOOLEAN,
+        es_sistema=False, activa=True,
+    )
+    ColumnaConfigurableValor.objects.create(columna=columna, torre=torre, valor_boolean=True)
+
+    m.refresh_from_db()
+    # suma=100+25*1=125, total_peso=125 -> 100.0%
+    assert m.avance_ponderado_pct == pytest.approx(100.0, abs=0.05), (
+        f"columna custom BOOLEAN (Montaje) con valor True no contribuyó el "
+        f"peso completo (obtenido: {m.avance_ponderado_pct})"
+    )
+
+
+@pytest.mark.django_db
+def test_columna_custom_decimal_obra_civil_no_regresiona_con_el_fix(proyecto_simple):
+    """Columna custom `tipo_valor=DECIMAL` (el branch NO-bool) debe seguir
+    funcionando exactamente igual que antes del fix — `valor_para_torre`
+    devuelve `Decimal('0')` (sin fila) o el `Decimal` real cargado, nunca
+    `bool`, así que debe seguir yendo por `Decimal(str(raw))`."""
+    torre = TorreConstruccion.objects.create(proyecto=proyecto_simple, numero='T-DEC-OC-1')
+    oc = ObraCivilTorre.objects.create(
+        proyecto=proyecto_simple, torre=torre,
+        avance_cerramiento=Decimal('1.0000'), avance_excavacion=Decimal('1.0000'),
+        avance_solado=Decimal('1.0000'), avance_acero=Decimal('1.0000'),
+        avance_vaciado=Decimal('1.0000'), avance_compactacion=Decimal('1.0000'),
+    )
+    columna = ColumnaConfigurable.objects.create(
+        proyecto=proyecto_simple, capitulo=ColumnaConfigurable.CAPITULO_OBRA_CIVIL,
+        clave='avance_extra_decimal', etiqueta='Avance extra decimal', orden=99,
+        peso_pct=20, tipo_valor=ColumnaConfigurable.TIPO_DECIMAL,
+        es_sistema=False, activa=True,
+    )
+    # Sin fila de valor: valor_para_torre devuelve Decimal('0') -> no aporta.
+    # total_peso=100+20=120, suma=100+20*0=100 -> 83.3%.
+    oc.refresh_from_db()
+    assert oc.avance_ponderado_pct == pytest.approx(83.3, abs=0.05)
+
+    ColumnaConfigurableValor.objects.create(columna=columna, torre=torre, valor_decimal=Decimal('0.6'))
+    oc.refresh_from_db()
+    # suma=100+20*0.6=112, total_peso=120 -> 93.3%.
+    assert oc.avance_ponderado_pct == pytest.approx(93.3, abs=0.05), (
+        "El branch DECIMAL (no-bool) de avance_ponderado regresionó con el fix "
+        "del bug BOOLEAN."
+    )
