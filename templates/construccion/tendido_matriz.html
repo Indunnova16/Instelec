@@ -115,13 +115,13 @@
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold" title="Torre aplica al proyecto (#150/#160)">Aplica</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold">Func.</th>
                         <th rowspan="2" class="px-1 py-2 text-center font-semibold" title="Vestida conductor">Vest.</th>
-                        <th colspan="6" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30">Conductor</th>
+                        <th colspan="{{ colspan_conductor }}" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/30">Conductor</th>
                         <th rowspan="2" class="px-1 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700" title="Placas señalización">PS</th>
                         <th rowspan="2" class="px-1 py-2 text-center font-semibold" title="Facturadas HMV">HMV</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-blue-50 dark:bg-blue-900/30">% Cond.</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (C)</th>
                         <th rowspan="2" class="px-1 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700" title="Vestida fibra">VestF</th>
-                        <th colspan="5" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Cable de guarda</th>
+                        <th colspan="{{ colspan_fibra }}" class="px-2 py-1 text-center font-semibold border-l border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900/30">Cable de guarda</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold bg-purple-50 dark:bg-purple-900/30">% C. guarda</th>
                         <th rowspan="2" class="px-2 py-2 text-center font-semibold border-l border-gray-200 dark:border-gray-700">Realizó (CG)</th>
                     </tr>
@@ -130,8 +130,18 @@
                         <th class="px-1 py-1 text-center font-medium text-gray-500" title="{{ label }}"
                             x-text="abrev('{{ label }}') + ' (' + pesosConductor.{{ slug|cut:'_conductor'|cut:'_amarre'|cut:'_puentes'|cut:'_desviadores' }} + '%)'">{{ label }}</th>
                         {% endfor %}
+                        {% comment %}#171 B7: columnas CUSTOM activas — Conductor{% endcomment %}
+                        {% for columna in columnas_custom_conductor %}
+                        <th class="px-1 py-1 text-center font-medium text-gray-500" title="{{ columna.etiqueta }} ({{ columna.peso_pct }}%)"
+                            data-testid="columna-custom-{{ columna.clave }}">{{ columna.etiqueta|truncatewords:1 }}</th>
+                        {% endfor %}
                         {% for slug, label in columnas_fibra %}
                         <th class="px-1 py-1 text-center font-medium text-gray-500" title="{{ label }}">{{ label|truncatewords:1 }}</th>
+                        {% endfor %}
+                        {% comment %}#171 B7: columnas CUSTOM activas — Fibra/Cable de guarda{% endcomment %}
+                        {% for columna in columnas_custom_fibra %}
+                        <th class="px-1 py-1 text-center font-medium text-gray-500" title="{{ columna.etiqueta }} ({{ columna.peso_pct }}%)"
+                            data-testid="columna-custom-{{ columna.clave }}">{{ columna.etiqueta|truncatewords:1 }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -159,6 +169,10 @@
                         <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">
                             <a href="{% url 'construccion:tendido_torre' proyecto.id fila.torre.id %}"
                                class="hover:underline{% if not fila.torre.aplica %} text-red-600{% else %} text-blue-600 dark:text-blue-400{% endif %}">{{ fila.torre.numero_display }}</a>
+                            {% if fila.torre.anulada %}
+                            <span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white line-through"
+                                  title="Torre anulada del alcance del proyecto (#171)">ANULADA</span>
+                            {% endif %}
                         </td>
                         <td class="px-2 py-1 text-center align-middle">
                             {% include "construccion/_toggle_aplica_torre.html" %}
@@ -167,6 +181,26 @@
                         <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.vestida_conductor" @change="toggle('vestida_conductor', $event.target.checked)"></td>
                         {% for slug, _ in columnas_conductor %}
                         <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.{{ slug }}" @change="toggle('{{ slug }}', $event.target.checked)"></td>
+                        {% endfor %}
+                        {% comment %}#171 B7: columnas CUSTOM activas — Conductor{% endcomment %}
+                        {% for columna, valor in fila.valores_custom_conductor %}
+                        <td class="px-1 py-1 text-center"
+                            data-testid="valor-columna-{{ columna.id }}-torre-{{ fila.torre.id }}"
+                            x-data='celdaColumnaCustom({
+                                url: "{% url "construccion:columna_valor_update" proyecto_id=proyecto.id columna_id=columna.id torre_id=fila.torre.id %}",
+                                csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+                                tipoValor: "{{ columna.tipo_valor }}",
+                                valorBooleanInicial: {% if valor %}true{% else %}false{% endif %},
+                                valorDecimalInicial: {{ valor|default:0|unlocalize }}
+                            })'>
+                            <template x-if="tipoValor === 'BOOLEAN'">
+                                <input type="checkbox" :checked="valorBool" @change="guardarBool($event.target.checked)">
+                            </template>
+                            <template x-if="tipoValor !== 'BOOLEAN'">
+                                <input type="number" step="0.01" min="0" max="1" x-model.number="valorDecimal" @change="guardarDecimal()"
+                                       class="w-12 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                            </template>
+                        </td>
                         {% endfor %}
                         <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.placas_senalizacion" @change="toggle('placas_senalizacion', $event.target.checked)"></td>
                         <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.facturadas_hmv" @change="toggle('facturadas_hmv', $event.target.checked)"></td>
@@ -181,6 +215,26 @@
                         <td class="px-1 py-1 text-center border-l border-gray-200 dark:border-gray-700"><input type="checkbox" :checked="campos.vestida_fibra" @change="toggle('vestida_fibra', $event.target.checked)"></td>
                         {% for slug, _ in columnas_fibra %}
                         <td class="px-1 py-1 text-center"><input type="checkbox" :checked="campos.{{ slug }}" @change="toggle('{{ slug }}', $event.target.checked)"></td>
+                        {% endfor %}
+                        {% comment %}#171 B7: columnas CUSTOM activas — Fibra/Cable de guarda{% endcomment %}
+                        {% for columna, valor in fila.valores_custom_fibra %}
+                        <td class="px-1 py-1 text-center"
+                            data-testid="valor-columna-{{ columna.id }}-torre-{{ fila.torre.id }}"
+                            x-data='celdaColumnaCustom({
+                                url: "{% url "construccion:columna_valor_update" proyecto_id=proyecto.id columna_id=columna.id torre_id=fila.torre.id %}",
+                                csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}",
+                                tipoValor: "{{ columna.tipo_valor }}",
+                                valorBooleanInicial: {% if valor %}true{% else %}false{% endif %},
+                                valorDecimalInicial: {{ valor|default:0|unlocalize }}
+                            })'>
+                            <template x-if="tipoValor === 'BOOLEAN'">
+                                <input type="checkbox" :checked="valorBool" @change="guardarBool($event.target.checked)">
+                            </template>
+                            <template x-if="tipoValor !== 'BOOLEAN'">
+                                <input type="number" step="0.01" min="0" max="1" x-model.number="valorDecimal" @change="guardarDecimal()"
+                                       class="w-12 px-1 py-0.5 text-xs rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                            </template>
+                        </td>
                         {% endfor %}
                         <td class="px-2 py-1 text-center font-semibold"
                             :class="avanceFibra() >= 0.75 ? 'text-green-600' : (avanceFibra() >= 0.5 ? 'text-amber-600' : 'text-red-600')"
@@ -311,6 +365,54 @@ function filaTendido(torreId, campos) {
                     body: fd,
                 });
             } catch (e) { m.mostrar('Error de red'); }
+        },
+    };
+}
+
+// #171 B7: celda editable de una columna CUSTOM (agregada vía B6) — decimal
+// 0-1 o boolean según columna.tipo_valor, postea al endpoint genérico
+// ColumnaValorUpdateView. Misma implementación que obra_civil_matriz.html.
+function celdaColumnaCustom(cfg) {
+    return {
+        url: cfg.url,
+        csrfToken: cfg.csrfToken,
+        tipoValor: cfg.tipoValor,
+        valorBool: cfg.valorBooleanInicial || false,
+        valorDecimal: cfg.valorDecimalInicial || 0,
+        guardando: false,
+        async _post(valor) {
+            this.guardando = true;
+            try {
+                const fd = new FormData();
+                fd.append('valor', valor);
+                const r = await fetch(this.url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': this.csrfToken },
+                    body: fd,
+                });
+                if (!r.ok) {
+                    const data = await r.json();
+                    alert(data.error || 'Error guardando el valor.');
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                alert('Error de red guardando el valor.');
+                return false;
+            } finally {
+                this.guardando = false;
+            }
+        },
+        async guardarBool(valor) {
+            const previo = this.valorBool;
+            this.valorBool = valor;
+            const ok = await this._post(valor ? '1' : '0');
+            if (!ok) this.valorBool = previo;
+        },
+        async guardarDecimal() {
+            if (this.valorDecimal < 0) this.valorDecimal = 0;
+            if (this.valorDecimal > 1) this.valorDecimal = 1;
+            await this._post(this.valorDecimal);
         },
     };
 }

@@ -1,1 +1,104 @@
-{% extends 'base.html' %}{% block content %}<h1>entrega.html - En Desarrollo</h1>{% endblock %}
+{% extends 'base.html' %}
+{% load l10n %}
+
+{% block title %}Entrega Electromecánica — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+
+{% comment %}
+  Entrega Electromecánica (#171 B8) — matriz de solo-listado por torre.
+  EntregaView.get_context_data ya construye `entregas` (queryset existente,
+  sin cambio de backend). Torre es un link a EntregaTorreView (detalle
+  editable), mismo patrón sticky-header que resumen_materiales.html.
+{% endcomment %}
+
+<div class="space-y-6">
+
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                Entrega Electromecánica
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ proyecto.nombre }} — inspección de entrega por torre (formatos, firmas HMV/WSP, avance).
+            </p>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-auto max-h-[70vh]">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 sticky top-0 z-20">
+                <tr>
+                    <th class="px-4 py-3 text-left font-semibold sticky left-0 bg-gray-50 dark:bg-gray-700/50">Torre</th>
+                    <th class="px-4 py-3 text-center font-semibold">Formato obs.</th>
+                    <th class="px-4 py-3 text-center font-semibold">Firmó HMV</th>
+                    <th class="px-4 py-3 text-center font-semibold">Firmó WSP</th>
+                    <th class="px-4 py-3 text-right font-semibold">Cajas OPGW</th>
+                    <th class="px-4 py-3 text-center font-semibold">1ª visita</th>
+                    <th class="px-4 py-3 text-center font-semibold">2ª visita</th>
+                    <th class="px-4 py-3 text-right font-semibold">Avance</th>
+                    <th class="px-4 py-3 text-center font-semibold">Estado</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                {% for entrega in entregas %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40" data-entrega-row data-torre="{{ entrega.torre.id }}">
+                    <td class="px-4 py-2 font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800">
+                        <a href="{% url 'construccion:entrega_torre' proyecto_id=proyecto.id torre_id=entrega.torre.id %}"
+                           class="hover:text-blue-600 dark:hover:text-blue-400 hover:underline">
+                            {{ entrega.torre.numero_display }}
+                        </a>
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if entrega.observacion_formato %}
+                        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-xs"
+                              title="{{ entrega.observacion_formato }}">!</span>
+                        {% else %}
+                        <span class="text-gray-300 dark:text-gray-600">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if entrega.firmo_hmv %}<span class="text-green-600 dark:text-green-400">✓</span>{% else %}<span class="text-gray-300 dark:text-gray-600">—</span>{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if entrega.firmo_wsp %}<span class="text-green-600 dark:text-green-400">✓</span>{% else %}<span class="text-gray-300 dark:text-gray-600">—</span>{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                        {{ entrega.cajas_opgw|default:"—" }}
+                    </td>
+                    <td class="px-4 py-2 text-center text-gray-600 dark:text-gray-400">
+                        {{ entrega.fecha_primera_visita|date:"d/m/Y"|default:"—" }}
+                    </td>
+                    <td class="px-4 py-2 text-center text-gray-600 dark:text-gray-400">
+                        {{ entrega.fecha_segunda_visita|date:"d/m/Y"|default:"—" }}
+                    </td>
+                    <td class="px-4 py-2 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
+                        {{ entrega.avance|floatformat:0 }}%
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if entrega.estado == 'LIBERADA' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 text-xs font-semibold">Liberada</span>
+                        {% elif entrega.estado == 'RECHAZADA' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold">Rechazada</span>
+                        {% elif entrega.estado == 'PENDIENTE' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 text-xs font-semibold">Pendiente</span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 text-xs font-semibold">Sin definir</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="px-4 py-6 text-center text-gray-400">
+                        No hay torres en este proyecto todavía.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endlocalize %}
+{% endblock %}

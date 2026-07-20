@@ -49,6 +49,8 @@ urlpatterns = [
 
     # Entrega
     path('<uuid:proyecto_id>/entrega/', views.EntregaView.as_view(), name='entrega'),
+    path('<uuid:proyecto_id>/entrega/<uuid:torre_id>/editar/',
+         views.EntregaTorreView.as_view(), name='entrega_torre'),
 
     # Pendientes
     path('<uuid:proyecto_id>/pendientes/', views.PendientesView.as_view(), name='pendientes'),
@@ -181,6 +183,20 @@ urlpatterns = [
          views.TendidoTorreView.as_view(), name='tendido_torre_fase'),
     path('<uuid:proyecto_id>/tendido/<uuid:torre_id>/',
          views.TendidoTorreView.as_view(), name='tendido_torre'),
+
+    # Columnas configurables (#171 B6) — administración por proyecto/capítulo
+    path('<uuid:proyecto_id>/columnas/',
+         views.ColumnasConfigurablesView.as_view(), name='columnas_configurables'),
+    path('<uuid:proyecto_id>/columnas/crear/',
+         views.ColumnaCrearView.as_view(), name='columna_crear'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/toggle/',
+         views.ColumnaToggleView.as_view(), name='columna_toggle'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/eliminar/',
+         views.ColumnaEliminarView.as_view(), name='columna_eliminar'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/reordenar/',
+         views.ColumnaReordenarView.as_view(), name='columna_reordenar'),
+    path('<uuid:proyecto_id>/columnas/<uuid:columna_id>/torres/<uuid:torre_id>/valor/',
+         views.ColumnaValorUpdateView.as_view(), name='columna_valor_update'),
 
     # Iteración 2 — deuda técnica
     path('<uuid:proyecto_id>/financiero/categoria/<uuid:categoria_id>/',

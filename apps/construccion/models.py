@@ -537,6 +537,18 @@ class TorreConstruccion(BaseModel):
     aplica = models.BooleanField(
         'Aplica al proyecto', default=True,
         help_text='Si está desmarcada, la torre se excluye de todos los módulos y del % de avance.')
+    # #171 V3 — estado "Anulada", ADITIVO y separado de `aplica`. NO toca
+    # `aplica` ni avance_ponderado (que sigue gobernado 100% por `aplica`) —
+    # es puramente informativo/visual. Default más seguro tras 2 rondas sin
+    # respuesta de Gabriel sobre la semántica exacta de "Anulada": reversible
+    # sin costo (borrar 1 columna) si el cliente pide algo distinto. Ver
+    # PLAN_2026-07-19_171_sprint_final.md sección B1.
+    anulada = models.BooleanField(
+        'Torre anulada', default=False,
+        help_text='Torre cancelada del alcance planeado del proyecto (ej. se decidió no '
+                  'construirla). Distinto de "No aplica" (aplica=False, que excluye del % '
+                  'de avance pero la torre sigue en alcance). NO afecta avance_ponderado ni '
+                  'ningún cálculo — solo informativo (#171 V3).')
     tipo = models.CharField(
         'Tipo de estructura', max_length=20, blank=True,
         choices=[
@@ -655,6 +667,289 @@ class TorreConstruccion(BaseModel):
             if fase and fase.porcentaje_tendido < 100:
                 en_curso.append('TENDIDO')
         return en_curso
+
+
+# ==========================================================================
+# Columnas configurables (#171 B2) — fundamento del refactor de columnas
+# configurables por capítulo (Obra Civil / Montaje / Tendido conductor /
+# Tendido fibra). Generaliza la arquitectura YA existente en código (3 clases
+# con COLUMNAS/COLUMNAS_CONDUCTOR/COLUMNAS_FIBRA + pesos en
+# ProyectoConstruccion) en un modelo único proyecto→capítulo→columna, para
+# que B6 (UI de administración) pueda agregar/quitar/reordenar columnas sin
+# tocar el modelo. Las 21 columnas "de fábrica" (es_sistema=True) siguen
+# leyendo/escribiendo sus DecimalField/BooleanField reales de siempre — este
+# modelo es la fuente de verdad de PESOS + QUÉ COLUMNAS ESTÁN ACTIVAS, no un
+# reemplazo del dato. B3/B4 (sub-items futuros) refactorizan
+# avance_ponderado/avance_conductor/avance_fibra para leer de acá.
+# ==========================================================================
+
+class ColumnaConfigurable(BaseModel):
+    """Una columna (actividad ponderada) de un capítulo de avance, por
+    proyecto. es_sistema=True = una de las 21 columnas hardcodeadas
+    originales (no se puede eliminar, solo desactivar). es_sistema=False =
+    columna custom agregada por el cliente vía UI (B6), su dato vive en
+    ColumnaConfigurableValor (B5, EAV) — este modelo solo define la columna
+    en sí (etiqueta/peso/tipo/orden/activa), no el valor por torre.
+    """
+    CAPITULO_OBRA_CIVIL = 'OBRA_CIVIL'
+    CAPITULO_MONTAJE = 'MONTAJE'
+    CAPITULO_TENDIDO_CONDUCTOR = 'TENDIDO_CONDUCTOR'
+    CAPITULO_TENDIDO_FIBRA = 'TENDIDO_FIBRA'
+    CAPITULO_CHOICES = [
+        (CAPITULO_OBRA_CIVIL, 'Obra Civil'),
+        (CAPITULO_MONTAJE, 'Montaje'),
+        (CAPITULO_TENDIDO_CONDUCTOR, 'Tendido — Conductor'),
+        (CAPITULO_TENDIDO_FIBRA, 'Tendido — Fibra/OPGW'),
+    ]
+
+    TIPO_DECIMAL = 'DECIMAL'
+    TIPO_BOOLEAN = 'BOOLEAN'
+    TIPO_VALOR_CHOICES = [
+        (TIPO_DECIMAL, 'Avance % (0-100)'),
+        (TIPO_BOOLEAN, 'Check (hecho/no hecho)'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proyecto = models.ForeignKey(
+        ProyectoConstruccion,
+        on_delete=models.CASCADE,
+        related_name='columnas_configurables',
+    )
+    capitulo = models.CharField('Capítulo', max_length=20, choices=CAPITULO_CHOICES)
+    clave = models.SlugField('Clave interna', max_length=40)
+    etiqueta = models.CharField('Etiqueta visible', max_length=100)
+    orden = models.PositiveSmallIntegerField('Orden', default=0)
+    peso_pct = models.PositiveSmallIntegerField('Peso %', default=0)
+    tipo_valor = models.CharField('Tipo de valor', max_length=10, choices=TIPO_VALOR_CHOICES)
+    es_sistema = models.BooleanField(
+        'Es de sistema', default=False,
+        help_text='True = una de las columnas originales hardcodeadas (Cerramiento, '
+                  'Excavación, etc.) — no se puede ELIMINAR, solo desactivar (activa=False). '
+                  'False = columna nueva agregada por el cliente vía UI (B6), usa '
+                  'ColumnaConfigurableValor (EAV) para su dato.',
+    )
+    activa = models.BooleanField('Activa', default=True)
+
+    class Meta:
+        db_table = 'construccion_columna_configurable'
+        verbose_name = 'Columna Configurable'
+        verbose_name_plural = 'Columnas Configurables'
+        unique_together = [['proyecto', 'capitulo', 'clave']]
+        ordering = ['proyecto', 'capitulo', 'orden']
+
+    def __str__(self):
+        return f"{self.get_capitulo_display()} · {self.etiqueta} ({self.proyecto.nombre})"
+
+    def valor_para_torre(self, torre):
+        """#171 B5 — EAV: devuelve el valor ACTUAL de esta columna para
+        ``torre``. Solo tiene sentido para columnas custom (``es_sistema=
+        False``) — las 21 columnas de fábrica NO usan
+        `ColumnaConfigurableValor`, su dato vive en el campo real
+        (`DecimalField`/`BooleanField`) del modelo de avance
+        correspondiente (`ObraCivilTorre`/`MontajeEstructuraTorre`/
+        `TendidoTorre`).
+
+        Default si la torre TODAVÍA no tiene fila de valor para esta
+        columna (nunca la tocó): `Decimal('0')` si `tipo_valor=DECIMAL`,
+        `False` si `tipo_valor=BOOLEAN` — mismo comportamiento "no
+        participa" que una columna recién creada sin datos, para que
+        `avance_ponderado`/`avance_conductor`/`avance_fibra` (B3/B4) no
+        exploten con columnas custom nuevas sin valores todavía.
+
+        Este método es lo que B3/B4 detectan vía
+        `getattr(columna, 'valor_para_torre', None)` — antes de B5 esa
+        llamada no existía y esas properties usaban 0/False como fallback.
+        """
+        try:
+            fila = self.valores.get(torre=torre)
+        except ColumnaConfigurableValor.DoesNotExist:
+            return Decimal('0') if self.tipo_valor == self.TIPO_DECIMAL else False
+        if self.tipo_valor == self.TIPO_BOOLEAN:
+            return bool(fila.valor_boolean)
+        return fila.valor_decimal if fila.valor_decimal is not None else Decimal('0')
+
+    def set_valor_para_torre(self, torre, valor):
+        """#171 B5 — EAV: crea o actualiza (idempotente,
+        `update_or_create`) el valor de esta columna para ``torre``. Usa
+        `valor_decimal` o `valor_boolean` según `tipo_valor`. Pensado para
+        el endpoint genérico de guardado de B7
+        (`ColumnaValorUpdateView`, patrón `HochiminhToggleView`)."""
+        defaults = {}
+        if self.tipo_valor == self.TIPO_BOOLEAN:
+            defaults = {'valor_boolean': bool(valor), 'valor_decimal': None}
+        else:
+            defaults = {'valor_decimal': Decimal(str(valor)), 'valor_boolean': None}
+        fila, _created = ColumnaConfigurableValor.objects.update_or_create(
+            columna=self, torre=torre, defaults=defaults,
+        )
+        return fila
+
+
+class ColumnaConfigurableValor(BaseModel):
+    """#171 B5 — EAV (Entity-Attribute-Value): valor de una columna CUSTOM
+    (`ColumnaConfigurable.es_sistema=False`) para una torre específica.
+
+    Las 21 columnas "de fábrica" (`es_sistema=True`) NO usan este modelo —
+    su dato sigue viviendo en los campos reales (`DecimalField`/
+    `BooleanField`) de `ObraCivilTorre`/`MontajeEstructuraTorre`/
+    `TendidoTorre`, sin migración de datos existentes a EAV (decisión de
+    diseño de B2, ver `ColumnaConfigurable.es_sistema` help_text). Este
+    modelo solo entra en juego cuando el cliente agrega una columna nueva
+    vía la UI de administración (B6).
+
+    `unique_together` en (`columna`, `torre`) — una torre tiene a lo sumo
+    UN valor por columna custom. `valor_decimal`/`valor_boolean` son
+    nullable (solo uno de los dos se usa, según `columna.tipo_valor`) —
+    NO hay un `CheckConstraint` de "exactamente uno no-nulo" a propósito:
+    `set_valor_para_torre` es el único punto de escritura previsto y ya
+    garantiza esa invariante aplicativa; agregar el constraint de BD sería
+    sobre-ingeniería para un EAV de 2 columnas con un solo writer conocido.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    columna = models.ForeignKey(
+        ColumnaConfigurable,
+        on_delete=models.CASCADE,
+        related_name='valores',
+    )
+    torre = models.ForeignKey(
+        'TorreConstruccion',
+        on_delete=models.CASCADE,
+        related_name='valores_columnas_configurables',
+    )
+    valor_decimal = models.DecimalField(
+        'Valor decimal', max_digits=5, decimal_places=4, null=True, blank=True,
+        help_text='0 a 1 (1 = 100%) — usado si columna.tipo_valor=DECIMAL.',
+    )
+    valor_boolean = models.BooleanField(
+        'Valor boolean', null=True, blank=True,
+        help_text='Check hecho/no hecho — usado si columna.tipo_valor=BOOLEAN.',
+    )
+
+    class Meta:
+        db_table = 'construccion_columna_configurable_valor'
+        verbose_name = 'Valor de Columna Configurable'
+        verbose_name_plural = 'Valores de Columnas Configurables'
+        unique_together = [['columna', 'torre']]
+
+    def __str__(self):
+        valor = self.valor_boolean if self.columna.tipo_valor == ColumnaConfigurable.TIPO_BOOLEAN else self.valor_decimal
+        return f"{self.columna.etiqueta} · {self.torre.numero_display}: {valor}"
+
+
+# Especificación literal de las 21 columnas "de fábrica" — copiada 1:1 de
+# ObraCivilTorre.COLUMNAS / MontajeEstructuraTorre.COLUMNAS /
+# TendidoTorre.COLUMNAS_CONDUCTOR / TendidoTorre.COLUMNAS_FIBRA (clave,
+# etiqueta) + el nombre del campo peso_*_pct real de ProyectoConstruccion que
+# hoy gobierna esa columna. NO se importa desde las clases *.COLUMNAS para
+# que este módulo sea la fuente de verdad congelada que también reutiliza la
+# migración de datos 0044 (las migraciones de datos no deben depender de que
+# el código "actual" no cambie las listas COLUMNAS en el futuro).
+COLUMNAS_CONFIGURABLES_ESPEC = {
+    ColumnaConfigurable.CAPITULO_OBRA_CIVIL: [
+        ('cerramiento', 'Cerramiento', 'peso_cerramiento_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('excavacion', 'Excavación', 'peso_excavacion_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('solado', 'Solado', 'peso_solado_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('acero', 'Acero', 'peso_acero_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('vaciado', 'Vaciado', 'peso_vaciado_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('compactacion', 'Compactación', 'peso_compactacion_pct', ColumnaConfigurable.TIPO_DECIMAL),
+    ],
+    ColumnaConfigurable.CAPITULO_MONTAJE: [
+        ('estructura_sitio', 'Estructura en sitio', 'peso_mont_estructura_sitio_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('prearamada', 'Prearmada', 'peso_mont_prearamada_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('torre_montada', 'Torre Montada', 'peso_mont_torre_montada_pct', ColumnaConfigurable.TIPO_DECIMAL),
+        ('revisada', 'Revisada', 'peso_mont_revisada_pct', ColumnaConfigurable.TIPO_DECIMAL),
+    ],
+    ColumnaConfigurable.CAPITULO_TENDIDO_CONDUCTOR: [
+        ('riega_manila_conductor', 'Riega manila', 'peso_tend_riega_manila_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('riega_guaya_conductor', 'Riega guaya', 'peso_tend_riega_guaya_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('tendido_conductor', 'Tendido conductor', 'peso_tend_tendido_conductor_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('grapado_amarre_conductor', 'Grapado', 'peso_tend_grapado_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('accesorios_puentes', 'Accesorios', 'peso_tend_accesorios_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('balizas_desviadores', 'Balizas', 'peso_tend_balizas_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+    ],
+    ColumnaConfigurable.CAPITULO_TENDIDO_FIBRA: [
+        ('riega_manila_fibra', 'Riega manila fibra', 'peso_tend_riega_manila_fibra_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('riega_guaya_opgw', 'Riega guaya OPGW', 'peso_tend_riega_guaya_opgw_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('tendido_opgw', 'Tendido OPGW', 'peso_tend_tendido_opgw_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('grapado_amarre_fibra', 'Grapado fibra', 'peso_tend_grapado_fibra_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+        ('empalmes_opgw', 'Empalmes OPGW', 'peso_tend_empalmes_opgw_pct', ColumnaConfigurable.TIPO_BOOLEAN),
+    ],
+}
+
+
+def crear_columnas_configurables_default(proyecto):
+    """Crea (idempotente, get_or_create) las 21 filas ColumnaConfigurable
+    'de fábrica' para ``proyecto``, una por columna de
+    COLUMNAS_CONFIGURABLES_ESPEC. ``peso_pct`` se toma del valor REAL de
+    ``proyecto.peso_*_pct`` EN ESTE MOMENTO (no un default distinto) — así el
+    refactor de avance_ponderado/avance_conductor/avance_fibra (B3/B4, fuera
+    de este dispatch) es matemáticamente idéntico antes/después (#171).
+
+    Usada por (a) la data migration 0044 para proyectos YA existentes en
+    prod, (b) el signal post_save de ProyectoConstruccion (signals.py) para
+    proyectos NUEVOS creados después del deploy. Devuelve la lista de
+    ColumnaConfigurable efectivamente creadas (vacía si ya existían = no-op).
+    """
+    creadas = []
+    for capitulo, columnas in COLUMNAS_CONFIGURABLES_ESPEC.items():
+        for orden, (clave, etiqueta, peso_field, tipo_valor) in enumerate(columnas):
+            obj, created = ColumnaConfigurable.objects.get_or_create(
+                proyecto=proyecto,
+                capitulo=capitulo,
+                clave=clave,
+                defaults={
+                    'etiqueta': etiqueta,
+                    'orden': orden,
+                    'peso_pct': getattr(proyecto, peso_field),
+                    'tipo_valor': tipo_valor,
+                    'es_sistema': True,
+                    'activa': True,
+                },
+            )
+            if created:
+                creadas.append(obj)
+    return creadas
+
+
+def sync_columnas_sistema_pesos_proyecto(proyecto):
+    """Sincroniza ``peso_pct`` de las 21 columnas ColumnaConfigurable
+    ``es_sistema=True`` del proyecto (los 4 capítulos) con los valores
+    ACTUALES de ``proyecto.peso_*_pct``. 1 SELECT + 1 `bulk_update` (solo
+    si hay cambios) — no 21 queries individuales.
+
+    #171 B3/B4 (hueco encontrado durante el refactor, fuera del scope
+    original de F2 pero necesario para no romper comportamiento ya
+    desplegado): desde B3/B4, `avance_ponderado`/`avance_conductor`/
+    `avance_fibra` leen el peso desde `ColumnaConfigurable`, NO de
+    `proyecto.peso_*_pct` directo. Sin esto, CUALQUIER código que edite
+    `proyecto.peso_*_pct` y llame a `.save()` — los paneles legacy
+    (`ObraCivilPesosUpdateView`/`MontajePesosUpdateView`/
+    `TendidoPesosUpdateView`), el admin, tests, scripts futuros — dejaría
+    de tener efecto sobre el avance calculado (regresión silenciosa,
+    detectada en
+    `tests/unit/test_obra_civil_matriz.py::test_avance_ponderado_respeta_cambio_de_pesos_del_proyecto`).
+
+    Llamada desde el signal `post_save` de `ProyectoConstruccion` en cada
+    UPDATE (`created=False`, ver signals.py) — cubre TODO save(), no solo
+    las 3 vistas legacy conocidas hoy.
+    """
+    peso_field_por_clave = {
+        (capitulo, clave): peso_field
+        for capitulo, columnas in COLUMNAS_CONFIGURABLES_ESPEC.items()
+        for clave, etiqueta, peso_field, tipo_valor in columnas
+    }
+    filas = list(ColumnaConfigurable.objects.filter(proyecto=proyecto, es_sistema=True))
+    cambiadas = []
+    for fila in filas:
+        peso_field = peso_field_por_clave.get((fila.capitulo, fila.clave))
+        if peso_field is None:
+            continue  # columna de sistema desconocida (drift) — no se toca
+        nuevo_peso = getattr(proyecto, peso_field)
+        if fila.peso_pct != nuevo_peso:
+            fila.peso_pct = nuevo_peso
+            cambiadas.append(fila)
+    if cambiadas:
+        ColumnaConfigurable.objects.bulk_update(cambiadas, ['peso_pct'])
 
 
 class PataObra(BaseModel):
@@ -992,25 +1287,51 @@ class ObraCivilTorre(BaseModel):
 
     @property
     def avance_ponderado(self):
-        """SUMPRODUCT(pesos del proyecto, avances de la torre).
+        """SUMPRODUCT(peso de columnas activas, avances de la torre) / SUM(pesos activos).
+
+        #171 B3: el peso y qué columnas participan del cálculo ahora salen
+        de `ColumnaConfigurable` (proyecto → capítulo OBRA_CIVIL,
+        `activa=True`) en vez de los campos hardcodeados `peso_*_pct` de
+        `ProyectoConstruccion`. Columnas `es_sistema=True` (las 21 "de
+        fábrica") siguen leyendo su `DecimalField` real vía `avances_dict`
+        — el dato NO se migró a EAV. Columnas custom (`es_sistema=False`,
+        agregadas vía B6) leen su valor a través de
+        `columna.valor_para_torre()` (helper que agrega B5); si el proyecto
+        aún no tiene B5/B6 desplegado, o no existe fila de valor, el aporte
+        es 0 (no participa en el SUMPRODUCT).
+
+        Si una columna se desactiva (`activa=False`), su peso se excluye
+        del total y por tanto se redistribuye entre las columnas activas
+        restantes — mismo comportamiento matemático que "no contarla".
+
+        Itera `self.proyecto.columnas_configurables.all()` (no `.filter()`
+        directo) para poder aprovechar `prefetch_related` desde las vistas
+        de matriz (B7) sin N+1 queries por torre.
 
         Devuelve un valor 0–1. El cliente ve el % multiplicando por 100.
         """
         from decimal import Decimal
-        pesos = {
-            'cerramiento': self.proyecto.peso_cerramiento_pct,
-            'excavacion': self.proyecto.peso_excavacion_pct,
-            'solado': self.proyecto.peso_solado_pct,
-            'acero': self.proyecto.peso_acero_pct,
-            'vaciado': self.proyecto.peso_vaciado_pct,
-            'compactacion': self.proyecto.peso_compactacion_pct,
-        }
-        total_peso = sum(pesos.values()) or 1
         avances = self.avances_dict
+        columnas_activas = [
+            c for c in self.proyecto.columnas_configurables.all()
+            if c.capitulo == ColumnaConfigurable.CAPITULO_OBRA_CIVIL and c.activa
+        ]
+        total_peso = Decimal('0')
         suma = Decimal('0')
-        for columna, peso in pesos.items():
-            suma += avances[columna] * Decimal(peso)
-        return suma / Decimal(total_peso)
+        for columna in columnas_activas:
+            peso = Decimal(columna.peso_pct)
+            if columna.es_sistema:
+                avance = avances.get(columna.clave)
+                if avance is None:
+                    continue  # columna de sistema desconocida (drift) — no participa
+            else:
+                valor_para_torre = getattr(columna, 'valor_para_torre', None)
+                avance = Decimal(str(valor_para_torre(self.torre))) if valor_para_torre else Decimal('0')
+            total_peso += peso
+            suma += Decimal(avance) * peso
+        if total_peso == 0:
+            return Decimal('0')
+        return suma / total_peso
 
     @property
     def avance_ponderado_pct(self):
@@ -1119,20 +1440,36 @@ class MontajeEstructuraTorre(BaseModel):
 
     @property
     def avance_ponderado(self):
-        """SUMPRODUCT(pesos del proyecto, avances de la torre). Valor 0-1."""
+        """SUMPRODUCT(peso de columnas activas, avances de la torre) / SUM(pesos activos).
+
+        #171 B3: mismo refactor que `ObraCivilTorre.avance_ponderado`
+        (también B3) pero sobre el capítulo MONTAJE — ver docstring de esa
+        property para el detalle completo del diseño (columnas es_sistema
+        vs custom, redistribución de peso al desactivar, prefetch-friendly).
+        Valor 0-1.
+        """
         from decimal import Decimal
-        pesos = {
-            'estructura_sitio': self.proyecto.peso_mont_estructura_sitio_pct,
-            'prearamada': self.proyecto.peso_mont_prearamada_pct,
-            'torre_montada': self.proyecto.peso_mont_torre_montada_pct,
-            'revisada': self.proyecto.peso_mont_revisada_pct,
-        }
-        total = sum(pesos.values()) or 1
         avances = self.avances_dict
+        columnas_activas = [
+            c for c in self.proyecto.columnas_configurables.all()
+            if c.capitulo == ColumnaConfigurable.CAPITULO_MONTAJE and c.activa
+        ]
+        total_peso = Decimal('0')
         suma = Decimal('0')
-        for col, peso in pesos.items():
-            suma += avances[col] * Decimal(peso)
-        return suma / Decimal(total)
+        for columna in columnas_activas:
+            peso = Decimal(columna.peso_pct)
+            if columna.es_sistema:
+                avance = avances.get(columna.clave)
+                if avance is None:
+                    continue
+            else:
+                valor_para_torre = getattr(columna, 'valor_para_torre', None)
+                avance = Decimal(str(valor_para_torre(self.torre))) if valor_para_torre else Decimal('0')
+            total_peso += peso
+            suma += Decimal(avance) * peso
+        if total_peso == 0:
+            return Decimal('0')
+        return suma / total_peso
 
     @property
     def avance_ponderado_pct(self):
@@ -1395,36 +1732,55 @@ class TendidoTorre(BaseModel):
             return 'Suspensión'
         return 'Retención'
 
+    def _avance_ponderado_capitulo(self, capitulo):
+        """SUMPRODUCT(peso de columnas activas del capítulo, valores 0/1 de
+        la torre) / SUM(pesos activos). Compartido por `avance_conductor` y
+        `avance_fibra` (#171 B4) — mismo diseño que
+        `ObraCivilTorre.avance_ponderado` (B3), pero con valores booleanos
+        (1 si el check está marcado, 0 si no) en vez de `DecimalField`. Ver
+        docstring de `ObraCivilTorre.avance_ponderado` para el detalle
+        completo (columnas es_sistema vs custom, redistribución de peso al
+        desactivar, prefetch-friendly). Devuelve un valor 0-1 (float).
+        """
+        columnas_activas = [
+            c for c in self.proyecto.columnas_configurables.all()
+            if c.capitulo == capitulo and c.activa
+        ]
+        total_peso = 0
+        suma = 0
+        for columna in columnas_activas:
+            peso = columna.peso_pct
+            if columna.es_sistema:
+                if not hasattr(self, columna.clave):
+                    continue  # columna de sistema desconocida (drift) — no participa
+                valor = 1 if getattr(self, columna.clave) else 0
+            else:
+                valor_para_torre = getattr(columna, 'valor_para_torre', None)
+                valor = 1 if (valor_para_torre and valor_para_torre(self.torre)) else 0
+            total_peso += peso
+            suma += peso * valor
+        if total_peso == 0:
+            return 0
+        return suma / total_peso
+
     @property
     def avance_conductor(self):
-        """SUMPRODUCT(pesos conductor, valores). Valor 0-1."""
-        p = self.proyecto
-        pesos = {
-            'riega_manila_conductor': p.peso_tend_riega_manila_pct,
-            'riega_guaya_conductor': p.peso_tend_riega_guaya_pct,
-            'tendido_conductor': p.peso_tend_tendido_conductor_pct,
-            'grapado_amarre_conductor': p.peso_tend_grapado_pct,
-            'accesorios_puentes': p.peso_tend_accesorios_pct,
-            'balizas_desviadores': p.peso_tend_balizas_pct,
-        }
-        total = sum(pesos.values()) or 1
-        suma = sum(peso * (1 if getattr(self, f) else 0) for f, peso in pesos.items())
-        return suma / total
+        """SUMPRODUCT(pesos conductor activos, valores). Valor 0-1.
+
+        #171 B4: el peso y qué columnas participan ahora salen de
+        `ColumnaConfigurable` (capítulo TENDIDO_CONDUCTOR) en vez de
+        `proyecto.peso_tend_*_pct` hardcodeado.
+        """
+        return self._avance_ponderado_capitulo(ColumnaConfigurable.CAPITULO_TENDIDO_CONDUCTOR)
 
     @property
     def avance_fibra(self):
-        """SUMPRODUCT(pesos fibra, valores). Valor 0-1."""
-        p = self.proyecto
-        pesos = {
-            'riega_manila_fibra': p.peso_tend_riega_manila_fibra_pct,
-            'riega_guaya_opgw': p.peso_tend_riega_guaya_opgw_pct,
-            'tendido_opgw': p.peso_tend_tendido_opgw_pct,
-            'grapado_amarre_fibra': p.peso_tend_grapado_fibra_pct,
-            'empalmes_opgw': p.peso_tend_empalmes_opgw_pct,
-        }
-        total = sum(pesos.values()) or 1
-        suma = sum(peso * (1 if getattr(self, f) else 0) for f, peso in pesos.items())
-        return suma / total
+        """SUMPRODUCT(pesos fibra activos, valores). Valor 0-1.
+
+        #171 B4: mismo refactor que `avance_conductor`, capítulo
+        TENDIDO_FIBRA.
+        """
+        return self._avance_ponderado_capitulo(ColumnaConfigurable.CAPITULO_TENDIDO_FIBRA)
 
     @property
     def avance_conductor_pct(self):

@@ -75,6 +75,27 @@ El ruteo raíz vive en `config/urls.py`. Cada app declara su `app_name`
 | **Tendido** (matriz) | `/construccion/{proyecto_uuid}/tendido/` | `construccion:tendido_lista` |
 | Tendido — detalle torre | `/construccion/{proyecto_uuid}/tendido/{torre_uuid}/` | `construccion:tendido_torre` |
 | Dashboard Avance (global) | `/construccion/{proyecto_uuid}/dashboard-avance/` | `construccion:dashboard_avance` |
+| **Hochiminh Fase 1** (matriz Marcación/Replanteo) | `/construccion/{proyecto_uuid}/hochiminh/` | `construccion:hochiminh_lista` |
+
+> **Hochiminh — flujo clic-torre (#171, confirmado con el cliente el
+> 2026-07-14, NO es un bug):** el clic en el **número de torre** de la matriz
+> Hochiminh abre "Editar torre" general (Tipo / Cimentación / Peso /
+> Cuadrillas — `torre_form.html`, mismo form que `torres_lista`). Las 4
+> columnas propias de Hochiminh (**Marcación** A/B/C/D, **Replanteo** A/B/C/D,
+> **Estado Predial**, **Estado Ambiental**) se editan **directo en la
+> matriz** con checks inline (AJAX, `HochiminhToggleView`) — no tienen ni
+> necesitan una pantalla de detalle dedicada. Si un usuario reporta "no
+> encuentro dónde editar Marcación/Replanteo desde el detalle de la torre",
+> la respuesta es: se edita desde la matriz, no desde "Editar torre".
+>
+> **Backlog Tipo/Cimentación vacíos (#171): declarado ❌ fuera de alcance de
+> este issue.** El QA de Hochiminh Fase 1 (2026-07-14) encontró 64/65 torres
+> del proyecto QA con `tipo`/`tipo_cimentacion` vacíos (diligenciamiento
+> pendiente, no un bug de datos). El issue #171 no pidió explícitamente una
+> carga masiva de estos 2 campos — el diligenciamiento manual torre-por-torre
+> ya es posible hoy vía "Editar torre" (Sprint A, `torre_form.html`). Si
+> Gabriel pide carga masiva (import Excel) para estos campos, es un **issue
+> nuevo aparte**, no un follow-up de #171.
 
 #### Actividades Finales y Obras de Protección  *(antes "⚠️ por confirmar")*
 | Módulo | Ruta | Name |
