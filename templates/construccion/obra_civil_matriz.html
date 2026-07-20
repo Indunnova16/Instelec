@@ -134,6 +134,10 @@
                                    title="Abrir detalle por pata × sección">
                                     {{ torre.numero_display }}
                                 </a>
+                                {% if torre.anulada %}
+                                <span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white line-through"
+                                      title="Torre anulada del alcance del proyecto (#171)">ANULADA</span>
+                                {% endif %}
                             </td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento" data-celda="cerramiento" data-torre="{{ torre.id }}">{{ oc.avance_cerramiento|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=excavacion" data-celda="excavacion" data-torre="{{ torre.id }}">{{ oc.avance_excavacion|unlocalize|floatformat:2 }}</a></td>
@@ -154,6 +158,10 @@
                                    title="Abrir detalle por pata × sección">
                                     {{ torre.numero_display }}
                                 </a>
+                                {% if torre.anulada %}
+                                <span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white line-through"
+                                      title="Torre anulada del alcance del proyecto (#171)">ANULADA</span>
+                                {% endif %}
                             </td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=cerramiento" data-celda="cerramiento" data-torre="{{ torre.id }}">{{ oc.avance_cerramiento|unlocalize|floatformat:2 }}</a></td>
                             <td class="px-3 py-1 text-center"><a class="block px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-900 dark:text-white" href="{% url 'construccion:obra_civil_detalle' proyecto_id=proyecto.id torre_id=torre.id %}?pata=A&seccion=excavacion" data-celda="excavacion" data-torre="{{ torre.id }}">{{ oc.avance_excavacion|unlocalize|floatformat:2 }}</a></td>

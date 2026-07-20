@@ -159,6 +159,10 @@
                         <td class="px-2 py-1 font-medium sticky left-0 bg-white dark:bg-gray-800 z-10{% if not fila.torre.aplica %} text-red-600{% endif %}">
                             <a href="{% url 'construccion:tendido_torre' proyecto.id fila.torre.id %}"
                                class="hover:underline{% if not fila.torre.aplica %} text-red-600{% else %} text-blue-600 dark:text-blue-400{% endif %}">{{ fila.torre.numero_display }}</a>
+                            {% if fila.torre.anulada %}
+                            <span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white line-through"
+                                  title="Torre anulada del alcance del proyecto (#171)">ANULADA</span>
+                            {% endif %}
                         </td>
                         <td class="px-2 py-1 text-center align-middle">
                             {% include "construccion/_toggle_aplica_torre.html" %}

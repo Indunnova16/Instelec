@@ -111,6 +111,10 @@ Los avances de las 4 etapas son READ-ONLY: vienen del cache
                  class="hover:text-blue-600{% if not fila.torre.aplica %} text-red-600{% endif %}">
                 {{ fila.torre.numero_display }}
               </a>
+              {% if fila.torre.anulada %}
+              <span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white line-through"
+                    title="Torre anulada del alcance del proyecto (#171)">ANULADA</span>
+              {% endif %}
             </td>
             {% for slug, _label in columnas %}
             <td class="px-3 py-2 text-center">

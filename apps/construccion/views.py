@@ -127,7 +127,7 @@ class TorreCreateView(LoginRequiredMixin, RoleRequiredMixin, CreateView):
     model = TorreConstruccion
     template_name = 'construccion/torre_form.html'
     fields = [
-        'numero', 'tipo', 'tipo_cimentacion', 'peso_kg', 'tramo_tendido',
+        'numero', 'tipo', 'tipo_cimentacion', 'anulada', 'peso_kg', 'tramo_tendido',
         'latitud', 'longitud', 'cuadrilla_civil', 'cuadrilla_montaje',
         'cuadrilla_tendido', 'observaciones'
     ]
@@ -163,7 +163,7 @@ class TorreEditView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
     model = TorreConstruccion
     template_name = 'construccion/torre_form.html'
     fields = [
-        'numero', 'tipo', 'tipo_cimentacion', 'peso_kg', 'tramo_tendido',
+        'numero', 'tipo', 'tipo_cimentacion', 'anulada', 'peso_kg', 'tramo_tendido',
         'latitud', 'longitud', 'cuadrilla_civil', 'cuadrilla_montaje',
         'cuadrilla_tendido', 'observaciones'
     ]

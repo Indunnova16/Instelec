@@ -537,6 +537,18 @@ class TorreConstruccion(BaseModel):
     aplica = models.BooleanField(
         'Aplica al proyecto', default=True,
         help_text='Si está desmarcada, la torre se excluye de todos los módulos y del % de avance.')
+    # #171 V3 — estado "Anulada", ADITIVO y separado de `aplica`. NO toca
+    # `aplica` ni avance_ponderado (que sigue gobernado 100% por `aplica`) —
+    # es puramente informativo/visual. Default más seguro tras 2 rondas sin
+    # respuesta de Gabriel sobre la semántica exacta de "Anulada": reversible
+    # sin costo (borrar 1 columna) si el cliente pide algo distinto. Ver
+    # PLAN_2026-07-19_171_sprint_final.md sección B1.
+    anulada = models.BooleanField(
+        'Torre anulada', default=False,
+        help_text='Torre cancelada del alcance planeado del proyecto (ej. se decidió no '
+                  'construirla). Distinto de "No aplica" (aplica=False, que excluye del % '
+                  'de avance pero la torre sigue en alcance). NO afecta avance_ponderado ni '
+                  'ningún cálculo — solo informativo (#171 V3).')
     tipo = models.CharField(
         'Tipo de estructura', max_length=20, blank=True,
         choices=[
