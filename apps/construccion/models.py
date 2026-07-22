@@ -1707,11 +1707,11 @@ class TendidoTorre(BaseModel):
 
     # Fibra OPGW — 6 actividades (5 ponderadas + Vestida gate)
     vestida_fibra = models.BooleanField('Vestida (fibra)', default=False)
-    riega_manila_fibra = models.BooleanField('Riega manila (fibra)', default=False)
-    riega_guaya_opgw = models.BooleanField('Riega guaya OPGW', default=False)
-    tendido_opgw = models.BooleanField('Tendido OPGW', default=False)
-    grapado_amarre_fibra = models.BooleanField('Grapado / amarre fibra', default=False)
-    empalmes_opgw = models.BooleanField('Empalmes OPGW', default=False)
+    riega_manila_fibra = models.BooleanField('Riega manila (cable de guarda)', default=False)
+    riega_guaya_opgw = models.BooleanField('Riega guaya (cable de guarda)', default=False)
+    tendido_opgw = models.BooleanField('Tendido (cable de guarda)', default=False)
+    grapado_amarre_fibra = models.BooleanField('Grapado / amarre (cable de guarda)', default=False)
+    empalmes_opgw = models.BooleanField('Empalmes (cable de guarda)', default=False)
 
     # Cuadrilla
     realizo_conductor = models.CharField('Realizó (conductor)', max_length=100, blank=True)
