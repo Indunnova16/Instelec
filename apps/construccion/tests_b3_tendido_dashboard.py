@@ -239,7 +239,7 @@ def test_b3_secciones_independientes_conductor_lleno_fibra_vacia(proyecto, admin
     assert fila['pct'] == 50.0
     assert fila['completa'] is False
     # Las pendientes contienen las etiquetas de fibra, NO las de conductor.
-    assert 'Empalmes OPGW' in fila['pendientes']
+    assert 'Empalmes cable de guarda' in fila['pendientes']
     assert 'Tendido conductor' not in fila['pendientes']
 
 
@@ -391,7 +391,7 @@ def test_a2_heading_generico_avance_por_etapa_ausente_en_tendido(proyecto, admin
     assert 'Avance por etapa — Tendido' not in html
     # Los 2 charts propios de B3 SÍ siguen presentes (no se rompió nada).
     assert 'Avance por etapa — Conductor' in html
-    assert 'Avance por etapa — Fibra OPGW' in html
+    assert 'Avance por etapa — Cable de guarda' in html
 
 
 # ---------------------------------------------------------------------------

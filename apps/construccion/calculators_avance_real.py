@@ -82,10 +82,10 @@ ETAPAS_TENDIDO_CONDUCTOR_PESOS = [
 #: Tendido Fibra OPGW — 5 etapas booleanas (paridad TendidoTorre.COLUMNAS_FIBRA).
 ETAPAS_TENDIDO_FIBRA_PESOS = [
     ('RIEGA_MANILA_FIBRA', 'Riega manila fibra', 'riega_manila_fibra', 'peso_tend_riega_manila_fibra_pct', 10),
-    ('RIEGA_GUAYA_OPGW', 'Riega guaya OPGW', 'riega_guaya_opgw', 'peso_tend_riega_guaya_opgw_pct', 20),
-    ('TENDIDO_OPGW', 'Tendido OPGW', 'tendido_opgw', 'peso_tend_tendido_opgw_pct', 40),
+    ('RIEGA_GUAYA_OPGW', 'Riega guaya cable de guarda', 'riega_guaya_opgw', 'peso_tend_riega_guaya_opgw_pct', 20),
+    ('TENDIDO_OPGW', 'Tendido cable de guarda', 'tendido_opgw', 'peso_tend_tendido_opgw_pct', 40),
     ('GRAPADO_FIBRA', 'Grapado fibra', 'grapado_amarre_fibra', 'peso_tend_grapado_fibra_pct', 20),
-    ('EMPALMES_OPGW', 'Empalmes OPGW', 'empalmes_opgw', 'peso_tend_empalmes_opgw_pct', 10),
+    ('EMPALMES_OPGW', 'Empalmes cable de guarda', 'empalmes_opgw', 'peso_tend_empalmes_opgw_pct', 10),
 ]
 
 #: Mapeo sección ProgramacionFase -> (fase dashboard, label) para serie_planeado
