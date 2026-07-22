@@ -240,6 +240,52 @@ class Linea(BaseModel):
             Vano.objects.bulk_create(nuevos, batch_size=500, ignore_conflicts=True)
         return len(nuevos)
 
+    def sincronizar_vanos_set(self, numeros):
+        """Materializa filas ``Vano`` para un ``set``/iterable arbitrario de
+        números de esta línea (no solo ``range(1, N+1)``).
+
+        Generaliza ``sincronizar_vanos`` (#101, que solo soporta "primeros N
+        vanos consecutivos") para #102: la lista REAL de vanos por semestre
+        que reportó el cliente no es necesariamente contigua desde 1 (ej.
+        LN734 S2 arranca en 3, o LN842 S1 es el rango 141-240). Mismo patrón
+        idempotente y NO destructivo que ``sincronizar_vanos``: solo crea los
+        vanos faltantes (``bulk_create`` + ``ignore_conflicts``, respeta el
+        mismo tope defensivo ``MAX_VANOS_AUTOGENERADOS``), nunca borra ni
+        modifica vanos existentes.
+
+        Args:
+            numeros: iterable de enteros positivos (números de vano a
+                asegurar que existan). Valores no convertibles a ``int``
+                positivo se ignoran silenciosamente (mismo criterio laxo que
+                ``sincronizar_vanos`` para entradas inválidas).
+
+        Devuelve la cantidad de vanos efectivamente creados.
+        """
+        limpios = set()
+        for n in numeros or ():
+            try:
+                iv = int(n)
+            except (TypeError, ValueError):
+                continue
+            if iv > 0:
+                limpios.add(iv)
+        if not limpios:
+            return 0
+        if len(limpios) > self.MAX_VANOS_AUTOGENERADOS:
+            # Tope defensivo — mismo criterio que sincronizar_vanos: nunca
+            # materializar más de MAX_VANOS_AUTOGENERADOS de una sola vez.
+            limpios = set(sorted(limpios)[: self.MAX_VANOS_AUTOGENERADOS])
+
+        existentes = set(self.vanos.values_list('numero', flat=True))
+        nuevos = [
+            Vano(linea=self, numero=str(n))
+            for n in limpios
+            if str(n) not in existentes
+        ]
+        if nuevos:
+            Vano.objects.bulk_create(nuevos, batch_size=500, ignore_conflicts=True)
+        return len(nuevos)
+
 
 class Torre(BaseModel):
     """

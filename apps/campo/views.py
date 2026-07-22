@@ -821,7 +821,8 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         from django.db.models import Count
 
         from apps.cuadrillas.models import CuadrillaMiembro
-        from apps.lineas.models import Linea, Vano
+        from apps.lineas.models import Linea, Vano, VanoSemestre
+        from apps.lineas.models_b21 import filter_vanos_by_semestre
 
         context = super().get_context_data(**kwargs)
         usuario = self.request.user
@@ -903,6 +904,17 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         # att_04). No requiere ``distinct=True``: el ``prefetch_related`` de
         # abajo corre como queries separadas (no JOIN), asi que esta
         # anotacion es el unico JOIN/GROUP BY sobre esta queryset.
+        #
+        # #102 (bounce=2) — ``?semestre=S1|S2|TA`` filtra el grid vía
+        # ``filter_vanos_by_semestre`` (ya existía en apps/lineas/models_b21.py
+        # pero 0 callers en apps/campo — el dropdown de la vista era un
+        # gancho visual sin efecto real). Sin el parámetro (o inválido), el
+        # queryset queda IDÉNTICO al comportamiento anterior — backward
+        # compatible, 0 cambio para requests históricos sin ?semestre=.
+        semestre = self.request.GET.get('semestre', '').strip().upper()
+        if semestre not in dict(VanoSemestre.Semestre.choices):
+            semestre = ''
+
         vanos = (
             Vano.objects
             .filter(linea=linea)
@@ -911,6 +923,8 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
             .annotate(num_novedades=Count('historial'))
             .order_by('numero')
         )
+        if semestre:
+            vanos = filter_vanos_by_semestre(vanos, semestre)
 
         # Materializar para reusar y para que ``{% if vanos %}`` del template
         # no dispare un COUNT(*) adicional. Orden numérico real: ``numero`` es
@@ -924,31 +938,64 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
         context['linea'] = linea
         context['vanos'] = vanos_list
+        context['semestre'] = semestre
 
-        # Calculate stats — usar el QuerySet base (no la lista) para que el
-        # GROUP BY corra en la BD.
-        estados = (
-            Vano.objects
-            .filter(linea=linea)
-            .values('estado')
-            .annotate(count=Count('estado'))
-        )
-        stats = {e['estado']: e['count'] for e in estados}
+        if semestre:
+            # #102 — con filtro activo, las 4 stats principales se calculan
+            # desde VanoSemestre (estado POR SEMESTRE), no desde Vano.estado
+            # global — es justo el gap que #102 reportó: antes S1 y S2
+            # mostraban el mismo número porque estas 4 líneas seguían
+            # leyendo el queryset global sin filtrar.
+            estados = (
+                VanoSemestre.objects
+                .filter(vano__linea=linea, semestre=semestre)
+                .values('estado')
+                .annotate(count=Count('estado'))
+            )
+            stats = {e['estado']: e['count'] for e in estados}
+            total = sum(stats.values())
+            context['total_vanos'] = total
+            context['vanos_ejecutados'] = stats.get(VanoSemestre.Estado.EJECUTADO, 0)
+            context['vanos_pendientes'] = stats.get(VanoSemestre.Estado.PENDIENTE, 0)
+            # SIN_PERMISO y EN_ESPERA existen como choices en VanoSemestre.Estado
+            # (mismos valores string que Vano.Estado) — se pueden leer de la
+            # misma agregación filtrada por semestre.
+            context['vanos_sin_permiso'] = stats.get(VanoSemestre.Estado.SIN_PERMISO, 0)
+            context['vanos_en_espera'] = stats.get(VanoSemestre.Estado.EN_ESPERA, 0)
+            # SECCIONADO/ESPECIAL (#177) son estados de ``Vano`` que NO
+            # existen como choice en ``VanoSemestre.Estado`` — el modelo
+            # B2.1 no traqueó esa clasificación por semestre (gap de
+            # modelo pre-existente, fuera de alcance de #102). Se dejan en
+            # 0 en vez de mezclar con el conteo global (que rompería la
+            # suma total_vanos = Σ categorías del donut).
+            context['vanos_seccionados'] = 0
+            context['vanos_especiales'] = 0
+        else:
+            # Sin filtro — comportamiento IDÉNTICO al actual (backward
+            # compatible). Usa el QuerySet base (no la lista) para que el
+            # GROUP BY corra en la BD.
+            estados = (
+                Vano.objects
+                .filter(linea=linea)
+                .values('estado')
+                .annotate(count=Count('estado'))
+            )
+            stats = {e['estado']: e['count'] for e in estados}
 
-        total = len(vanos_list)
-        context['total_vanos'] = total
-        context['vanos_ejecutados'] = stats.get(Vano.Estado.EJECUTADO, 0)
-        context['vanos_pendientes'] = stats.get(Vano.Estado.PENDIENTE, 0)
-        context['vanos_sin_permiso'] = stats.get(Vano.Estado.SIN_PERMISO, 0)
-        context['vanos_en_espera'] = stats.get(Vano.Estado.EN_ESPERA, 0)
-        # Issue #177 (sub-item A8) — Seccionado/Especial reemplazan a
-        # "No Ejecutado" en el resumen de 6 categorías. El dato legacy
-        # 'no_ejecutado' (1 vano en prod) NO se cuenta en ninguna tarjeta
-        # ni en el donut — se preserva sin migrar (PLAN.md Decisión HITL
-        # #1), simplemente queda fuera del resumen hasta que alguien de
-        # campo lo reclasifique manualmente vía el modal nuevo.
-        context['vanos_seccionados'] = stats.get(Vano.Estado.SECCIONADO, 0)
-        context['vanos_especiales'] = stats.get(Vano.Estado.ESPECIAL, 0)
+            total = len(vanos_list)
+            context['total_vanos'] = total
+            context['vanos_ejecutados'] = stats.get(Vano.Estado.EJECUTADO, 0)
+            context['vanos_pendientes'] = stats.get(Vano.Estado.PENDIENTE, 0)
+            context['vanos_sin_permiso'] = stats.get(Vano.Estado.SIN_PERMISO, 0)
+            context['vanos_en_espera'] = stats.get(Vano.Estado.EN_ESPERA, 0)
+            # Issue #177 (sub-item A8) — Seccionado/Especial reemplazan a
+            # "No Ejecutado" en el resumen de 6 categorías. El dato legacy
+            # 'no_ejecutado' (1 vano en prod) NO se cuenta en ninguna tarjeta
+            # ni en el donut — se preserva sin migrar (PLAN.md Decisión HITL
+            # #1), simplemente queda fuera del resumen hasta que alguien de
+            # campo lo reclasifique manualmente vía el modal nuevo.
+            context['vanos_seccionados'] = stats.get(Vano.Estado.SECCIONADO, 0)
+            context['vanos_especiales'] = stats.get(Vano.Estado.ESPECIAL, 0)
 
         context['porcentaje'] = (
             round(context['vanos_ejecutados'] / total * 100) if total > 0 else 0

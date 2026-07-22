@@ -213,9 +213,215 @@ def importar_tabla(texto: str, dry_run: bool = False) -> ResultadoImportacion:
     return resultado
 
 
-# Tabla embebida del issue #102 (snapshot mayo 2026). Persistida acá para que
-# el management command funcione offline. Si Sofi actualiza el issue, el
-# command acepta `--from-issue` para refrescar via gh.
+class VanoParseError(Exception):
+    """#102 — ``parse_vano_list`` no pudo interpretar el texto de vanos de
+    una fila del Excel real del cliente (att_01.xlsx, columna "Torres /
+    Vanos"). Fail-loud por diseño (F2 parser_spec): la función NUNCA debe
+    devolver un set vacío en silencio ni continuar con datos parciales sin
+    loggear — mejor romper ruidoso y que la migración capture el error por
+    fila que cargar datos incompletos sin que nadie se entere."""
+
+
+# #102 — Overrides manuales para filas irresolubles por regex puro (F2,
+# investigación BD prod). Único caso real detectado: LN 807/808 S1, texto
+# literal "Torre 5 (propiedad EEB) a la 42 y de la 42 a la 148" (~144 vanos
+# si se tomara literal) pero el Total declarado en el Excel es 108. F2
+# adoptó el rango 5-112 (108 vanos EXACTOS: 112-5+1=108) porque 112 coincide
+# EXACTO con el conteo real de torres de LN807 en BD (fuerte evidencia de
+# que "148" es un error de trascripción por "112"). Se aplica el mismo
+# rango numérico a LN808 también (113 torres reales, 1 de más, tolerable).
+CASOS_ESPECIALES: dict[tuple[str, str], set[int]] = {
+    ('LN 807/808', 'S1'): set(range(5, 113)),  # 108 vanos exactos
+}
+
+
+def parse_vano_list(
+    texto: str,
+    etiqueta_excel: str = '',
+    semestre: str = '',
+):
+    """
+    #102 — Parsea texto libre en español (columna "Torres / Vanos" del
+    Excel real del cliente, att_01.xlsx) a un ``set[int]`` de números de
+    vano — o, para el único caso de sub-grupos etiquetados del dataset, a
+    un ``dict[str, set[int]]`` (ver paso de sub-grupos abajo).
+
+    Reemplaza la heurística vieja de "primeros N vanos" (``_asignar_semestre``
+    original, issue #101/#102 bounce): ahora se consume la LISTA REAL de
+    vanos que el cliente reportó por semestre, no solo un conteo.
+
+    Fallback ordenado (parser_spec, F2 — el chequeo de sub-grupos etiquetados
+    se hace ANTES que el de lista explícita aunque el spec los enumere 3→4:
+    el único texto del dataset con sub-grupos también tiene comas DENTRO de
+    cada sub-grupo, así que si el split-por-coma corriera primero
+    fragmentaría los sub-grupos en vez de detectarlos):
+
+      1. Quitar sufijo de unidad conocido ("postes", case-insensitive).
+      2. RANGO SIMPLE: ``"1 al 104"``, ``"3 a 11"``, ``"1 a la 35"``,
+         ``"141 a la 240"`` (incluye rangos con offset que no arrancan en 1).
+      3. SUB-GRUPOS ETIQUETADOS: si el texto contiene ``";"`` Y ``"("`` (único
+         caso real del dataset: fila S2 de "LN 821/822, LN 821/826, LN
+         838/826, LN 822/826") → split por ``";"``, cada segmento matchea
+         ``r'^\\(([\\w/]+)\\)\\s*(.+)$'`` → ``{sub_etiqueta: parse_vano_list(resto)}``
+         recursivo. Devuelve ``dict[str, set[int]]`` — el caller (la
+         migración) decide a qué Línea(s) mapear cada sub-etiqueta según
+         ``MAPEO_EXCEL_A_LINEAS``.
+      4. LISTA EXPLÍCITA: normaliza ``" y "`` → ``", "``, split por coma,
+         cada token se intenta ``int()``; tokens no-numéricos (ej. "S/E
+         Sabana Portico", "Torre 5 (propiedad EEB)") se DESCARTAN de la
+         lista de números pero se registran en un log de warning (no
+         fatal — el resto de números válidos de la fila SÍ se cargan).
+      5. CASOS_ESPECIALES: override manual hardcodeado para overrides de
+         filas irresolubles por regex (ver arriba). Si ninguno de los pasos
+         2-5 matchea, la función FALLA RUIDOSO con ``VanoParseError``.
+    """
+    original = texto
+    if texto is None or not str(texto).strip():
+        raise VanoParseError(
+            f"texto vacío para línea={etiqueta_excel!r} semestre={semestre!r}"
+        )
+    t = str(texto).strip()
+
+    # (1) Sufijo de unidad conocido.
+    t = re.sub(r'\bpostes\b', '', t, flags=re.IGNORECASE).strip().rstrip('.').strip()
+
+    # (2) Rango simple (incluye offsets que no arrancan en 1, ej. "141 a la 240").
+    m = re.match(r'^(\d+)\s*al?\s*(?:la\s*)?(\d+)$', t, flags=re.IGNORECASE)
+    if m:
+        start, end = int(m.group(1)), int(m.group(2))
+        if start > end:
+            start, end = end, start
+        return set(range(start, end + 1))
+
+    # (3) Sub-grupos etiquetados ";" + "(...)" — chequeado ANTES de la lista
+    # explícita, ver docstring.
+    if ';' in t and '(' in t:
+        subgrupos: dict[str, set[int]] = {}
+        for segmento in t.split(';'):
+            segmento = segmento.strip()
+            if not segmento:
+                continue
+            sm = re.match(r'^\(([\w/]+)\)\s*(.+)$', segmento)
+            if not sm:
+                raise VanoParseError(
+                    f"sub-grupo no reconocido {segmento!r} en línea={etiqueta_excel!r} "
+                    f"semestre={semestre!r}: texto={original!r}"
+                )
+            sub_etiqueta, resto = sm.group(1), sm.group(2)
+            subgrupos[sub_etiqueta] = parse_vano_list(
+                resto,
+                etiqueta_excel=f"{etiqueta_excel} ({sub_etiqueta})",
+                semestre=semestre,
+            )
+        return subgrupos
+
+    # (4) Lista explícita: normalizar " y " -> ", ", descartar no-numéricos.
+    normalizado = re.sub(r'\s+y\s+', ', ', t, flags=re.IGNORECASE)
+    numeros: set[int] = set()
+    descartados: list[str] = []
+    for tok in normalizado.split(','):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            numeros.add(int(tok))
+        except ValueError:
+            descartados.append(tok)
+    if descartados:
+        logger.warning(
+            "parse_vano_list: tokens no numéricos descartados en línea=%r "
+            "semestre=%r: %s (texto=%r)",
+            etiqueta_excel, semestre, descartados, original,
+        )
+    if numeros:
+        return numeros
+
+    # (5) CASOS_ESPECIALES — override manual final antes de fallar.
+    key = (etiqueta_excel, semestre)
+    if key in CASOS_ESPECIALES:
+        return CASOS_ESPECIALES[key]
+
+    raise VanoParseError(
+        f"no se pudo parsear vanos para línea={etiqueta_excel!r} "
+        f"semestre={semestre!r}: texto={original!r}"
+    )
+
+
+# #102 — Mapeo etiqueta-del-Excel-real -> códigos de Línea reales en BD.
+# Hardcodeado (``codigo_transelca`` está VACÍO en las 40 filas de BD, no
+# sirve como mecanismo de resolución — ver F2 causa_raiz). Confianza y
+# exclusiones documentadas por fila (mismo detalle en la migración 0017 y
+# en el JSON de salida de F2/F3). Etiquetas con lista vacía = Línea NO
+# EXISTE en BD (bloqueada, ver ``bloqueos`` en el output de F3) — NO se
+# crea ningún stub (violaría "nunca inventar evidencia").
+MAPEO_EXCEL_A_LINEAS: dict[str, list[str]] = {
+    'LN 5114': ['LN5114'],                            # alta
+    'LN 733': ['LN733'],                              # alta
+    'LN 734': ['LN734'],                              # alta
+    'LN 764/765': ['LN764', 'LN765'],                 # alta — doble circuito 33/33 EXACTO
+    'LN 801/802': ['LN801', 'LN802'],                 # alta — doble circuito 91/91
+    'LN 803/804': ['LN803', 'LN804'],                 # alta — doble circuito 14/16
+    'LN 805': ['LN805'],                              # alta
+    'LN 806/816': ['LN806', 'LN816'],                 # alta — doble circuito 201/202
+    'LN 839/840': ['LN839', 'LN840'],                 # alta — doble circuito 46/47
+    'LN 807/808': ['LN807', 'LN808'],                 # media — S1 requiere CASOS_ESPECIALES
+    'LN 809': ['LN809'],                              # alta
+    'LN 810': ['LN810'],                              # alta
+    'LN 811/812 y LN 812/813': ['LN811', 'LN812'],    # media/alta — LN813 EXCLUIDA (69 torres vs 178 pedidos, desproporción severa)
+    'LN 814/815 y LN 834/815': ['LN815', 'LN834'],    # alta/media — LN814 EXCLUIDA (23 torres vs 171 pedidos)
+    'LN 817/818': ['LN817', 'LN818'],                 # alta — doble circuito 177/177 EXACTO
+    'LN 819': ['LN819'],                              # alta
+    'LN 842': [],                                     # BLOQUEADA — Línea no existe en BD
+    'LN 821/822, LN 821/826, LN 838/826, LN 822/826': ['LN826', 'LN838'],  # ver reglas S1/S2 especiales en migración 0017 — LN821/LN822 EXCLUIDAS (torres≈0)
+    'LN 824/825': ['LN824', 'LN825'],                 # alta — doble circuito 50/50 EXACTO
+    'LN 827/828': ['LN827', 'LN828'],                 # alta — doble circuito 125/125 EXACTO
+    'LN 829/830': ['LN829', 'LN830'],                 # alta — doble circuito 13/11
+    'LN 5156/5157': ['LN5156', 'LN5157'],             # alta — doble circuito de POSTES 264/264 EXACTO
+    'LN 792': [],                                     # BLOQUEADA — Línea no existe en BD
+}
+
+
+def _resolver_lineas(etiqueta_excel: str) -> list:
+    """
+    #102 — Resuelve 1 etiqueta del Excel real a la lista de ``Linea`` reales
+    que representa (0, 1 o varias — patrón "doble circuito": misma
+    estructura física compartida por 2-4 líneas). Usa ``MAPEO_EXCEL_A_LINEAS``
+    (hardcodeado, ver arriba) en vez del split-by-"/" heurístico de
+    ``_resolver_linea`` (que estructuralmente sólo podía devolver 1 sola
+    Línea — incapaz de distribuir datos a las líneas adicionales de un
+    grupo "doble circuito").
+
+    NO lanza excepción si la etiqueta está bloqueada o no mapeada — el
+    caller decide cómo reportarlo (devuelve lista vacía).
+    """
+    from .models import Linea
+
+    lineas = []
+    for codigo in MAPEO_EXCEL_A_LINEAS.get(etiqueta_excel, []):
+        try:
+            lineas.append(Linea.objects.get(codigo=codigo))
+        except Linea.DoesNotExist:
+            logger.warning(
+                "_resolver_lineas: código %r (etiqueta=%r) no existe en BD",
+                codigo, etiqueta_excel,
+            )
+    return lineas
+
+
+# Tabla embebida del issue #102 (snapshot mayo 2026, formato conteo-por-
+# semestre). Persistida acá para que el management command
+# ``cargar_semestres_vanos`` funcione offline con el formato ORIGINAL de la
+# tabla del cuerpo del issue. Si Sofi actualiza el issue, el command acepta
+# `--from-issue` para refrescar via gh.
+#
+# NOTA (F2, jul-2026): esta tabla es un snapshot APROXIMADO de mayo 2026 —
+# solo tiene CONTEOS por semestre, no la lista real de qué vanos van en cada
+# uno (esa granularidad solo la trajo el Excel real del cliente, att_01.xlsx,
+# en julio). La carga masiva real de datos de #102 usa la migración
+# ``0017_carga_vanos_semestre_completa`` (parser ``parse_vano_list`` +
+# ``MAPEO_EXCEL_A_LINEAS`` arriba), NO esta tabla ni ``importar_tabla``.
+# Se conserva sin cambios (con sus tests existentes) como herramienta manual
+# de datafix aproximado para cuando no se tiene el Excel real a mano.
 TABLA_ISSUE_102 = """
 LÍNEA          | S1 Total | S2 Total | Todo Año | Total
 LN 5114        |   104    |   104    |    0     |  104
