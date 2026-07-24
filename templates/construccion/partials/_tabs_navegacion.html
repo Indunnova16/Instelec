@@ -7,12 +7,20 @@ Contexto esperado:
       - label (str): texto visible
       - url (str): href destino
       - active (bool): si es la pestaña actual
+      - color_clase (str, OPCIONAL): nombre de color Tailwind (ej. "amber",
+        "blue") para un punto de acento antes del label — diferenciación
+        visual por tipo de pestaña (#190). Si se omite (o viene vacío/no
+        existe la key), NO se renderiza nada extra — comportamiento 100%
+        idéntico al de antes de #190.
   - orientacion: "horizontal" (default) | "vertical"
 
 Uso:
   {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas orientacion="horizontal" %}
 
 Plantado por F2 (scaffolding /modulo excel_paridad_oc_montaje). Reusado por B2b y B3b.
+CUIDADO: cualquier cambio acá debe ser backward-compatible — Montaje (B2b)
+y Tendido no pasan `color_clase` y deben seguir renderizando exactamente
+igual.
 {% endcomment %}
 {% if orientacion == "vertical" %}
 <nav class="flex flex-col gap-1 border-r border-gray-200 pr-2" aria-label="Tabs">
@@ -33,8 +41,9 @@ Plantado por F2 (scaffolding /modulo excel_paridad_oc_montaje). Reusado por B2b 
     <a href="{{ p.url }}"
        data-seccion="{{ p.slug }}"
        data-tab="{{ p.slug }}"
-       class="px-4 py-2 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px {% if p.active %}border-blue-600 text-blue-700 font-semibold{% else %}border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300{% endif %}"
+       class="px-4 py-2 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px inline-flex items-center gap-1.5 {% if p.active %}border-blue-600 text-blue-700 font-semibold{% else %}border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300{% endif %}"
        {% if p.active %}aria-current="page"{% endif %}>
+      {% if p.color_clase %}<span class="inline-block w-2 h-2 rounded-full bg-{{ p.color_clase }}-500" aria-hidden="true"></span>{% endif %}
       {{ p.label }}
     </a>
   {% endfor %}
