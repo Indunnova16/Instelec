@@ -54,6 +54,21 @@ def _filtrar_torres_por_cuadrilla(qs, user):
 
 PATA_SLUGS = [p[0] for p in PATA_CHOICES]  # ['A','B','C','D']
 
+# #190 — diferenciación visual por sección (color de acento en la pestaña
+# horizontal). Puramente cosmético/UX (ayuda a distinguir Excavación de
+# Vaciado de un vistazo al navegar entre torres) — no hay una convención de
+# color-por-sección previa en el repo (la matriz usa color por AVANCE, no
+# por sección). `_tabs_navegacion.html` trata `color_clase` como opcional
+# (ver ese partial): si no viene, renderiza igual que antes.
+SECCION_COLOR_CLASE = {
+    'cerramiento': 'slate',
+    'excavacion': 'amber',
+    'solado': 'stone',
+    'acero': 'zinc',
+    'vaciado': 'blue',
+    'compactacion': 'emerald',
+}
+
 
 # ===========================================================================
 # 1. ObraCivilResumenView — re-propósito de la matriz legacy (read-only)
@@ -230,8 +245,31 @@ class ObraCivilDetalleView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                     ) + f'?pata={pata_qs}&seccion={s[0]}'
                 ),
                 'active': s[0] == seccion,
+                'color_clase': SECCION_COLOR_CLASE.get(s[0], ''),
             }
             for s in SECCIONES
+        ]
+
+        # #190 — selector de Torre (independiente de las tabs de Pata): antes
+        # solo existía "Volver al resumen", sin forma de saltar directo a
+        # otra torre desde el detalle. Mismo filtro por cuadrilla que el
+        # resto de las vistas de este módulo (operarios solo ven sus torres).
+        torres_qs = _filtrar_torres_por_cuadrilla(
+            TorreConstruccion.objects.filter(proyecto=proyecto), self.request.user,
+        ).order_by('numero')
+        torres_proyecto = [
+            {
+                'id': str(t.id),
+                'numero_display': t.numero_display,
+                'url': (
+                    reverse(
+                        'construccion:obra_civil_detalle',
+                        kwargs={'proyecto_id': proyecto.id, 'torre_id': t.id},
+                    ) + f'?pata={pata_qs}&seccion={seccion}'
+                ),
+                'active': t.id == torre.id,
+            }
+            for t in torres_qs
         ]
 
         # URL POST de la sección
@@ -256,6 +294,7 @@ class ObraCivilDetalleView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'avance_ponderado_pct': detalle.avance_ponderado_pct,
             'pestanas_patas': pestanas_patas,
             'pestanas_secciones': pestanas_secciones,
+            'torres_proyecto': torres_proyecto,
             'partial_template': f'construccion/partials/oc_seccion_{seccion}.html',
             'url_post_seccion': url_post_seccion,
             'url_resumen': reverse(
