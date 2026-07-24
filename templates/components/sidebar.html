@@ -18,7 +18,7 @@
     <!-- Module Selector (for admin users) -->
     {% if not request.user.is_campo %}
     <div x-data="{
-        modulo: '{{ unidad_negocio_actual|default:"TODOS"|lower }}' === 'construccion' ? 'construccion' : (localStorage.getItem('modulo_activo') || 'mantenimiento'),
+        modulo: (window.location.pathname.match(/^\/construccion\//) || '{{ unidad_negocio_actual|default:"TODOS"|lower }}' === 'construccion') ? 'construccion' : (localStorage.getItem('modulo_activo') || 'mantenimiento'),
         async persistir(modulo) {
             this.modulo = modulo;
             localStorage.setItem('modulo_activo', modulo);
@@ -91,7 +91,7 @@
 
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-4" role="navigation" aria-label="Menu principal"
-         x-data="{ modulo: localStorage.getItem('modulo_activo') || 'mantenimiento' }"
+         x-data="{ modulo: window.location.pathname.match(/^\/construccion\//) ? 'construccion' : (localStorage.getItem('modulo_activo') || 'mantenimiento') }"
          @modulo-changed.window="modulo = $event.detail.modulo">
         <ul class="space-y-1 px-3" role="menubar">
 
