@@ -32,6 +32,9 @@ def admin_client(client, admin_user, user_password):
 
 SIDEBAR_NUEVOS_MODULOS = [
     # (url_name, label visible en sidebar)
+    # #68: Cronograma existía como vista desde mayo pero nunca se agregó al
+    # sidebar (único acceso era una tarjeta del dashboard del proyecto).
+    ("construccion:cronograma", "Cronograma"),
     ("construccion:obra_civil_lista", "Obra Civil"),
     ("construccion:dashboard_obra_civil", "Dashboard Obra Civil"),
     ("construccion:montaje_lista", "Montaje"),
