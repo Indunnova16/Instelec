@@ -35,7 +35,7 @@
     <label class="flex flex-col">
       <span class="text-sm text-gray-700 dark:text-gray-200 mb-1">{{ form.ace_instalacion_pct.label }}</span>
       {{ form.ace_instalacion_pct }}
-      <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">0–1</span>
+      <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">0–1 — peso de avance ponderado de esta sección, NO es la desviación de acero.</span>
       {% if form.ace_instalacion_pct.errors %}
         <span class="text-xs text-red-600 dark:text-red-400 mt-1">{{ form.ace_instalacion_pct.errors|join:", " }}</span>
       {% endif %}
@@ -43,9 +43,15 @@
   </div>
 
   {% if detalle %}
-  <div class="text-xs text-gray-500 dark:text-gray-400">
-    Desviación kg (instalado − solicitado): <span data-desv="acero">{{ detalle.ace_desviacion_kg|default:"—" }}</span>
+  {% localize off %}
+  <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-4">
+    <span data-desv="acero">Desviación (instalado − solicitado): {{ detalle.ace_desviacion_kg|default:"—" }} kg</span>
+    <span class="{% if detalle.ace_supera_umbral_desv %}text-red-600 dark:text-red-400 font-semibold{% else %}text-gray-500 dark:text-gray-400{% endif %}"
+          data-desv-pct="acero" data-supera-umbral="{% if detalle.ace_supera_umbral_desv %}true{% else %}false{% endif %}">
+      {% if detalle.ace_desviacion_pct is not None %}{{ detalle.ace_desviacion_pct }}%{% else %}—{% endif %}
+    </span>
   </div>
+  {% endlocalize %}
   {% endif %}
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

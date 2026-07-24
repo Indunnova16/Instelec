@@ -62,6 +62,11 @@ VAC_TIPO_CONCRETO_CHOICES = [
 # configurable, no hardcode disperso en plantilla/vista.
 UMBRAL_DESVIACION_VACIADO_PCT = Decimal('5')
 
+# Umbral de alerta de desviación de Acero (#191) — a diferencia de Vaciado
+# (tolerancia de 5%), el cliente exige EXACTITUD: cualquier desviación != 0%
+# entre ace_solicitado_kg/ace_instalado_kg debe marcarse en rojo, sin rango.
+UMBRAL_DESVIACION_ACERO_PCT = Decimal('0')
+
 
 class ObraCivilTorreDetalle(BaseModel):
     """Detalle CANT OOCC paridad Excel — torre × pata, ~110 campos en 7 secciones.
@@ -589,3 +594,25 @@ class ObraCivilTorreDetalle(BaseModel):
     def ace_desviacion_kg(self):
         """Acero instalado - solicitado (kg). None si falta alguno."""
         return self._desv(self.ace_instalado_kg, self.ace_solicitado_kg)
+
+    @property
+    def ace_desviacion_pct(self):
+        """% de desviación acero (instalado - solicitado) / solicitado * 100.
+
+        Mismo helper `_desv_pct` que Solado/Vaciado (#140). None si falta
+        `ace_instalado_kg`/`ace_solicitado_kg` o si `ace_solicitado_kg` es 0.
+        """
+        return self._desv_pct(self.ace_instalado_kg, self.ace_solicitado_kg)
+
+    @property
+    def ace_supera_umbral_desv(self):
+        """Cero tolerancia (#191): True si la desviación % es distinta de 0.
+
+        A diferencia de `_supera_umbral_desv` (Vaciado, tolera hasta 5%),
+        el cliente exige exactitud para Acero — cualquier desviación != 0
+        es alerta, sin rango. False si no hay dato (kg incompletos).
+        """
+        pct = self.ace_desviacion_pct
+        if pct is None:
+            return False
+        return pct != UMBRAL_DESVIACION_ACERO_PCT
