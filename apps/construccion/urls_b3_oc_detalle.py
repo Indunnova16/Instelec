@@ -36,6 +36,20 @@ urlpatterns = [
         name='obra_civil_detalle_seccion',
     ),
 
+    # #190 (reopen 2026-07-25, bounce=1) — pestaña "Torre": único lugar
+    # editable de los 17 formatos técnicos únicos por torre. Persiste
+    # siempre sobre la pata canónica 'A'; el signal de A1 propaga a B/C/D.
+    path(
+        '<uuid:proyecto_id>/obra-civil/<uuid:torre_id>/torre/',
+        v.ObraCivilTorreFormatosView.as_view(),
+        name='obra_civil_torre_formatos',
+    ),
+    path(
+        '<uuid:proyecto_id>/obra-civil/<uuid:torre_id>/torre/guardar/',
+        v.ObraCivilTorreFormatosGuardarView.as_view(),
+        name='obra_civil_torre_formatos_guardar',
+    ),
+
     # RETIRO: misma path que la legacy `obra_civil_avance_update` —
     # se mantiene aquí para tests + futuro F4 que remueva la legacy.
     path(

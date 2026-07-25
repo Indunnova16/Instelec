@@ -273,6 +273,38 @@ class OCSeccionCompactacionForm(forms.ModelForm):
         return v if v is not None else Decimal('0')
 
 
+class OCTorreFormatosForm(forms.ModelForm):
+    """#190 (reopen 2026-07-25, bounce=1) — Form único de los 17 formatos
+    técnicos (FT) que son ÚNICOS por torre (no por pata).
+
+    Único lugar editable de estos 17 campos — ya NO viven en los 4 forms de
+    sección de Pata (`OCSeccionExcavacionForm`/`OCSeccionAceroForm`/
+    `OCSeccionVaciadoForm`/`OCSeccionCompactacionForm`, ver remoción abajo).
+    Se persiste SIEMPRE sobre la pata canónica 'A' (`ObraCivilTorreFormatosView`
+    / `ObraCivilTorreFormatosGuardarView`); el signal
+    `sincronizar_formatos_unicos_por_torre` (`signals_b3_oc_detalle.py`,
+    `CAMPOS_SYNC_TORRE`) propaga a B/C/D — este form NO reimplementa esa
+    propagación, la reusa vía `post_save`.
+    """
+
+    class Meta:
+        model = ObraCivilTorreDetalle
+        fields = [
+            # Excavación (11) — etiqueta cliente "Cerramiento" en la pestaña Torre
+            'exc_ft022_ok', 'exc_ft023_ok', 'exc_ft058_ok', 'exc_ft922_ok',
+            'exc_ft929_ok', 'exc_ft923_ok', 'exc_ft924_ok', 'exc_ft925_ok',
+            'exc_ft926_ok', 'exc_ft927_ok', 'exc_ft928_ok',
+            # Acero (1) — etiqueta cliente "Acero"
+            'ace_ft028_ok',
+            # ace_ft930_ok (modelo=Acero) + vac_ft916_ok/vac_it380_ok (modelo=Vaciado)
+            # — etiqueta cliente "Vaciado" (desalineamiento cliente↔modelo, ver PLAN)
+            'ace_ft930_ok', 'vac_ft916_ok', 'vac_it380_ok',
+            # vac_ft056_ok (modelo=Vaciado) + com_ft914_ok (modelo=Compactación)
+            # — etiqueta cliente "Compactación" (desalineamiento cliente↔modelo)
+            'vac_ft056_ok', 'com_ft914_ok',
+        ]
+
+
 # ---------------------------------------------------------------------------
 # Factory + registry
 # ---------------------------------------------------------------------------
