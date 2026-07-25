@@ -13,13 +13,11 @@
 
   <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
     <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Pre-vaciado</legend>
+    {# #190 — vac_ft916_ok/vac_it380_ok/vac_ft056_ok removidos: viven SOLO en la pestaña "Torre" #}
     <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ft916_ok }}<span>{{ form.vac_ft916_ok.label }}</span></label>
       <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_nivelacion_stub_ok }}<span>{{ form.vac_nivelacion_stub_ok.label }}</span></label>
       <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_encofrado_ok }}<span>{{ form.vac_encofrado_ok.label }}</span></label>
       <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ingreso_materiales }}<span>{{ form.vac_ingreso_materiales.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_it380_ok }}<span>{{ form.vac_it380_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ft056_ok }}<span>{{ form.vac_ft056_ok.label }}</span></label>
     </div>
   </fieldset>
 

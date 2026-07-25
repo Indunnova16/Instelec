@@ -81,15 +81,18 @@ class OCSeccionCerramientoForm(forms.ModelForm):
 
 
 class OCSeccionExcavacionForm(forms.ModelForm):
-    """Sección 3 — Excavación (16 campos: cuadrilla + 8 FT + tipo + m3 + 4 más)."""
+    """Sección 3 — Excavación (5 campos).
+
+    #190 (reopen 2026-07-25, bounce=1): los 11 `exc_ft0XX_ok` (formatos
+    técnicos únicos por torre) se removieron de este form — viven SOLO en
+    `OCTorreFormatosForm` (pestaña "Torre", único lugar editable). Antes de
+    este cambio este form exponía 16 campos (incluía los 11 FT).
+    """
 
     class Meta:
         model = ObraCivilTorreDetalle
         fields = [
             'exc_cuadrilla',
-            'exc_ft022_ok', 'exc_ft023_ok', 'exc_ft058_ok', 'exc_ft922_ok',
-            'exc_ft929_ok', 'exc_ft923_ok', 'exc_ft924_ok',
-            'exc_ft925_ok', 'exc_ft926_ok', 'exc_ft927_ok', 'exc_ft928_ok',
             'exc_tipo',
             'exc_clase_cimentacion',
             'exc_metros_m3',
@@ -156,13 +159,18 @@ class OCSeccionSoladoForm(forms.ModelForm):
 
 
 class OCSeccionAceroForm(forms.ModelForm):
-    """Sección 5 — Acero (12 campos)."""
+    """Sección 5 — Acero (10 campos).
+
+    #190 (reopen 2026-07-25, bounce=1): `ace_ft028_ok`/`ace_ft930_ok`
+    (formatos técnicos únicos por torre) se removieron de este form — viven
+    SOLO en `OCTorreFormatosForm` (pestaña "Torre"). Antes de este cambio
+    este form exponía 12 campos.
+    """
 
     class Meta:
         model = ObraCivilTorreDetalle
         fields = [
             'ace_ingreso',
-            'ace_ft028_ok', 'ace_ft930_ok',
             'ace_corte_flejado_ok',
             'ace_armado_sitio_ok',
             'ace_spt_herramientas_ok',
@@ -190,13 +198,19 @@ class OCSeccionAceroForm(forms.ModelForm):
 
 
 class OCSeccionVaciadoForm(forms.ModelForm):
-    """Sección 6 — Vaciado (32 campos)."""
+    """Sección 6 — Vaciado (29 campos).
+
+    #190 (reopen 2026-07-25, bounce=1): `vac_ft916_ok`/`vac_it380_ok`/
+    `vac_ft056_ok` (formatos técnicos únicos por torre) se removieron de
+    este form — viven SOLO en `OCTorreFormatosForm` (pestaña "Torre"). Antes
+    de este cambio este form exponía 32 campos.
+    """
 
     class Meta:
         model = ObraCivilTorreDetalle
         fields = [
-            'vac_ft916_ok', 'vac_nivelacion_stub_ok', 'vac_encofrado_ok',
-            'vac_ingreso_materiales', 'vac_it380_ok', 'vac_ft056_ok',
+            'vac_nivelacion_stub_ok', 'vac_encofrado_ok',
+            'vac_ingreso_materiales',
             'vac_tipo_concreto', 'vac_mpa_teorica',
             # Agua
             'vac_agua_calc', 'vac_agua_real', 'vac_agua_obs',
@@ -247,12 +261,17 @@ class OCSeccionVaciadoForm(forms.ModelForm):
 
 
 class OCSeccionCompactacionForm(forms.ModelForm):
-    """Sección 7 — Compactación (7 campos)."""
+    """Sección 7 — Compactación (6 campos).
+
+    #190 (reopen 2026-07-25, bounce=1): `com_ft914_ok` (formato técnico
+    único por torre) se removió de este form — vive SOLO en
+    `OCTorreFormatosForm` (pestaña "Torre"). Antes de este cambio este form
+    exponía 7 campos.
+    """
 
     class Meta:
         model = ObraCivilTorreDetalle
         fields = [
-            'com_ft914_ok',
             'com_suelo_natural_ok',
             'com_suelo_cemento_ok',
             'com_suelo_prestamo_ok',

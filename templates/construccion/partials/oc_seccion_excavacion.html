@@ -32,22 +32,11 @@
     </label>
   </div>
 
-  <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-    <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Formatos técnicos (FT)</legend>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft022_ok }}<span>{{ form.exc_ft022_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft023_ok }}<span>{{ form.exc_ft023_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft058_ok }}<span>{{ form.exc_ft058_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft922_ok }}<span>{{ form.exc_ft922_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft929_ok }}<span>{{ form.exc_ft929_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft923_ok }}<span>{{ form.exc_ft923_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft924_ok }}<span>{{ form.exc_ft924_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft925_ok }}<span>{{ form.exc_ft925_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft926_ok }}<span>{{ form.exc_ft926_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft927_ok }}<span>{{ form.exc_ft927_ok.label }}</span></label>
-      <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft928_ok }}<span>{{ form.exc_ft928_ok.label }}</span></label>
-    </div>
-  </fieldset>
+  {% comment %}
+    #190 (reopen 2026-07-25, bounce=1) — el fieldset "Formatos técnicos (FT)"
+    (11 exc_ft0XX_ok) se removió de acá: esos campos ahora viven SOLO en la
+    pestaña "Torre" (OCTorreFormatosForm), único lugar editable.
+  {% endcomment %}
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
     <label class="flex flex-col">
