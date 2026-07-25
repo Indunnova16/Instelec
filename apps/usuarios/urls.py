@@ -14,5 +14,6 @@ urlpatterns = [
     path('gestion/', views.GestionUsuariosView.as_view(), name='gestion'),
     path('gestion/crear/', views.CrearUsuarioAdminView.as_view(), name='crear_admin'),
     path('gestion/reset-password/', views.ResetPasswordView.as_view(), name='reset_password'),
+    path('gestion/<uuid:pk>/editar/', views.EditarUsuarioView.as_view(), name='editar_usuario'),
     path('campo/upload/', views.CargaMasivaUsuariosCampoView.as_view(), name='campo_upload'),
 ]

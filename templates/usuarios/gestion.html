@@ -65,7 +65,10 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ u.cargo }}</td>
-                    <td class="px-6 py-4 text-sm">
+                    <td class="px-6 py-4 text-sm space-x-3 whitespace-nowrap">
+                        <a href="{% url 'usuarios:editar_usuario' u.pk %}" class="text-blue-600 hover:text-blue-800 text-xs">
+                            Editar
+                        </a>
                         <form method="post" action="{% url 'usuarios:reset_password' %}" class="inline">
                             {% csrf_token %}
                             <input type="hidden" name="usuario_id" value="{{ u.pk }}">

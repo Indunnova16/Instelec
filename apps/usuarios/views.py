@@ -12,7 +12,7 @@ from django.contrib import messages
 from apps.core.mixins import RoleRequiredMixin
 from apps.core.models import Role
 from .models import Usuario
-from .forms import LoginForm, PerfilForm
+from .forms import LoginForm, PerfilForm, UsuarioChangeForm
 
 
 class CustomLoginView(LoginView):
@@ -83,6 +83,35 @@ class GestionUsuariosView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         context['rol_actual'] = self.request.GET.get('rol', '')
         context['buscar'] = self.request.GET.get('buscar', '')
         return context
+
+
+class EditarUsuarioView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
+    """Edit an existing user (#194 -- el form ya existia, faltaba cablear urls+view)."""
+    model = Usuario
+    form_class = UsuarioChangeForm
+    template_name = 'usuarios/editar_usuario.html'
+    context_object_name = 'usuario'
+    allowed_roles = ['admin', 'director']
+    success_url = reverse_lazy('usuarios:gestion')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Mismo patron BD-backed que GestionUsuariosView/CrearUsuarioAdminView
+        # (issue #186 A4): un rol creado/desactivado desde la matriz RBAC
+        # queda disponible/no-disponible aqui sin deploy.
+        context['roles'] = Role.objects.filter(activo=True).values_list('codigo', 'nombre')
+        return context
+
+    def form_valid(self, form):
+        messages.success(
+            self.request,
+            f'Usuario {form.instance.get_full_name()} actualizado exitosamente.'
+        )
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Corrija los errores del formulario.')
+        return super().form_invalid(form)
 
 
 class CrearUsuarioAdminView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
