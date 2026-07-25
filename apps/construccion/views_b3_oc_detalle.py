@@ -284,6 +284,21 @@ class ObraCivilDetalleView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             },
         )
 
+        # #190 (reopen 2026-07-25, bounce=1) — ítem de navegación "Torre",
+        # ANTES del bloque "Patas" en el menú lateral (ver
+        # obra_civil_detalle.html). Lista de 1 solo ítem — reusa
+        # _tabs_navegacion.html sin modificar ese partial compartido con
+        # Montaje/Tendido. NO activo acá (estamos en la vista de Patas).
+        pestanas_torre = [{
+            'slug': 'torre',
+            'label': 'Torre',
+            'url': reverse(
+                'construccion:obra_civil_torre_formatos',
+                kwargs={'proyecto_id': proyecto.id, 'torre_id': torre.id},
+            ),
+            'active': False,
+        }]
+
         ctx.update({
             'proyecto': proyecto,
             'torre': torre,
@@ -293,6 +308,7 @@ class ObraCivilDetalleView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'detalle': detalle,
             'form': form,
             'avance_ponderado_pct': detalle.avance_ponderado_pct,
+            'pestanas_torre': pestanas_torre,
             'pestanas_patas': pestanas_patas,
             'pestanas_secciones': pestanas_secciones,
             'torres_proyecto': torres_proyecto,

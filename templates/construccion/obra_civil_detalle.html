@@ -83,10 +83,23 @@
   {% comment %}Layout 2-col: tabs verticales patas + contenido (tabs secciones + partial){% endcomment %}
   <div class="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4">
 
-    {% comment %}Tabs verticales: patas A/B/C/D — sticky-left{% endcomment %}
-    <div class="md:sticky md:top-4 md:self-start">
-      <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Patas</p>
-      {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas_patas orientacion="vertical" %}
+    {% comment %}
+      #190 (reopen 2026-07-25, bounce=1) — "Torre" ANTES de "Patas" en el
+      menú lateral: único lugar editable de los 17 formatos técnicos (FT)
+      únicos por torre. Reusa _tabs_navegacion.html con una lista de 1
+      ítem, SIN modificar ese partial compartido con Montaje/Tendido.
+    {% endcomment %}
+    <div class="md:sticky md:top-4 md:self-start space-y-4">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Torre</p>
+        {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas_torre orientacion="vertical" %}
+      </div>
+
+      {% comment %}Tabs verticales: patas A/B/C/D{% endcomment %}
+      <div>
+        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Patas</p>
+        {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas_patas orientacion="vertical" %}
+      </div>
     </div>
 
     {% comment %}Contenido: tabs secciones (horizontal sticky-top) + partial activo{% endcomment %}
