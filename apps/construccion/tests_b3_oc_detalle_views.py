@@ -179,7 +179,16 @@ def test_post_cerramiento_finalizado_ok_recalcula_resumen(
 def test_post_excavacion_metros_m3_persiste(
     authenticated_client, proyecto_oc_b2b, torre_oc_b2b,
 ):
-    """POST excavación: exc_metros_m3 y exc_ejecutada_pct se persisten."""
+    """POST excavación: exc_metros_m3 y exc_ejecutada_pct se persisten.
+
+    #190 (reopen 2026-07-25, bounce=1): este test incluía
+    `'exc_ft022_ok': 'on'` + `assert det.exc_ft022_ok is True` — con A4
+    aplicado, `exc_ft022_ok` ya NO está en `OCSeccionExcavacionForm.Meta.fields`
+    (vive SOLO en `OCTorreFormatosForm`, pestaña "Torre"), así que Django
+    ignora ese campo del POST y la aserción original fallaría (queda en su
+    default False). Se quita el campo del POST y la aserción — el resto del
+    test (exc_metros_m3/exc_ejecutada_pct/exc_cuadrilla) sigue válido sin
+    cambios."""
     from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
 
     url = reverse(
@@ -198,7 +207,6 @@ def test_post_excavacion_metros_m3_persiste(
         'exc_monitoreo_arq': 'LIBERADA',
         'exc_ejecutada_pct': '0.45',
         'exc_observaciones': 'Test obs',
-        'exc_ft022_ok': 'on',
     })
     assert resp.status_code == 200, resp.content[:500]
     data = resp.json()
@@ -210,7 +218,6 @@ def test_post_excavacion_metros_m3_persiste(
     assert det.exc_metros_m3 == Decimal('25.75')
     assert det.exc_ejecutada_pct == Decimal('0.4500')
     assert det.exc_cuadrilla == 'Cuadrilla 1'
-    assert det.exc_ft022_ok is True
 
 
 # ===========================================================================

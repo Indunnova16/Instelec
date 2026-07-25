@@ -653,18 +653,40 @@ def test_oc_detalle_excavacion_ft_023_058_922_persisten(proyecto_oc, torre_oc):
 
 
 @pytest.mark.django_db
-def test_oc_seccion_excavacion_form_expone_ft_023_058_922(proyecto_oc, torre_oc):
-    """#146: el form de la sección Excavación expone los 3 FT nuevos y los
-    guarda vía POST simulado (paridad UI CANT OOCC)."""
+def test_oc_seccion_excavacion_form_ya_no_expone_ft_023_058_922_ahora_en_torre(
+    proyecto_oc, torre_oc,
+):
+    """#190 (reopen 2026-07-25, bounce=1) — REESCRITO: hasta A4, este test
+    (#146) esperaba que `exc_ft023_ok`/`exc_ft058_ok`/`exc_ft922_ok`
+    siguieran en `OCSeccionExcavacionForm.Meta.fields` y se guardaran vía
+    ese form. El reopen de Indunnova pidió sacar los 17 FT COMPLETAMENTE de
+    los 4 forms de sección de Pata — ya NO están en `Meta.fields` y un POST
+    con esos campos a través de ese form los IGNORA (Django descarta
+    cualquier dato de un campo que no está en el form).
+
+    El nuevo contrato: esos campos viven ÚNICAMENTE en
+    `OCTorreFormatosForm` (pestaña "Torre", A2/A3) y se persisten sobre la
+    pata canónica 'A' — ver `test_los_17_campos_ft_estan_en_oc_torre_formatos_form`
+    y `test_torre_formatos_view_post_persiste_y_dispara_signal` en
+    `tests_issue_190_sync_formatos_torre.py`."""
+    from apps.construccion.forms_b3_oc_detalle import (
+        OCSeccionExcavacionForm, OCTorreFormatosForm,
+    )
     from apps.construccion.models_b3_oc_detalle import ObraCivilTorreDetalle
-    from apps.construccion.forms_b3_oc_detalle import OCSeccionExcavacionForm
 
     det = ObraCivilTorreDetalle.objects.create(
         proyecto=proyecto_oc, torre=torre_oc, pata='B',
     )
     for f in ('exc_ft023_ok', 'exc_ft058_ok', 'exc_ft922_ok'):
-        assert f in OCSeccionExcavacionForm.Meta.fields
+        assert f not in OCSeccionExcavacionForm.Meta.fields, (
+            f'{f} NO debía seguir en OCSeccionExcavacionForm.Meta.fields '
+            '(A4) — ahora vive en OCTorreFormatosForm'
+        )
+        assert f in OCTorreFormatosForm.Meta.fields
 
+    # Un POST con esos campos a través del form de Pata los ignora (no están
+    # en el form) — el resto de la sección (exc_ejecutada_pct) sigue
+    # funcionando normalmente.
     form = OCSeccionExcavacionForm(
         data={'exc_ft023_ok': 'on', 'exc_ft922_ok': 'on', 'exc_ejecutada_pct': '0'},
         instance=det,
@@ -672,6 +694,17 @@ def test_oc_seccion_excavacion_form_expone_ft_023_058_922(proyecto_oc, torre_oc)
     assert form.is_valid(), form.errors
     saved = form.save()
     saved.refresh_from_db()
-    assert saved.exc_ft023_ok is True
-    assert saved.exc_ft058_ok is False  # no marcado en el POST
-    assert saved.exc_ft922_ok is True
+    assert saved.exc_ft023_ok is False  # ignorado por el form de Pata
+    assert saved.exc_ft058_ok is False
+    assert saved.exc_ft922_ok is False  # ignorado por el form de Pata
+
+    # El único lugar que SÍ los persiste es OCTorreFormatosForm.
+    torre_form = OCTorreFormatosForm(
+        data={'exc_ft023_ok': 'on', 'exc_ft922_ok': 'on'}, instance=det,
+    )
+    assert torre_form.is_valid(), torre_form.errors
+    saved_torre = torre_form.save()
+    saved_torre.refresh_from_db()
+    assert saved_torre.exc_ft023_ok is True
+    assert saved_torre.exc_ft058_ok is False
+    assert saved_torre.exc_ft922_ok is True
