@@ -182,13 +182,25 @@ class CargaMasivaUsuariosCampoView(LoginRequiredMixin, RoleRequiredMixin, Templa
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['cargos_validos'] = self.CARGOS_VALIDOS
+        # Issue #194: mismo catalogo BD-backed usado para validar la columna Rol en post().
+        context['roles_validos'] = Role.objects.filter(activo=True).values_list('codigo', 'nombre')
         return context
+
+    # Issue #194: valores reconocidos para la columna Estado (F=6ta columna).
+    ESTADOS_ACTIVO = {'activo', 'active', 'true', '1', 'si', 'sí', 'x', ''}
+    ESTADOS_INACTIVO = {'inactivo', 'inactive', 'false', '0', 'no'}
 
     def post(self, request, *args, **kwargs):
         archivo = request.FILES.get('archivo')
         if not archivo:
             messages.error(request, 'Debe seleccionar un archivo Excel.')
             return self.get(request, *args, **kwargs)
+
+        # Issue #194: catalogo BD-backed de roles validos (mismo patron #186 A4
+        # que el dropdown de EditarUsuarioView/GestionUsuariosView/CrearUsuarioAdminView).
+        roles_validos = set(
+            Role.objects.filter(activo=True).values_list('codigo', flat=True)
+        )
 
         try:
             import openpyxl
@@ -204,13 +216,43 @@ class CargaMasivaUsuariosCampoView(LoginRequiredMixin, RoleRequiredMixin, Templa
                     continue
 
                 try:
+                    # Issue #194: 6 columnas -- Nombre, Documento, Email, Cargo, Rol, Estado
+                    # (antes: Nombre, Documento, Cargo, Telefono -- 4 columnas, sin email/rol
+                    # explicito). El nuevo orden alinea la plantilla con los campos que ya
+                    # se pueden editar uno-por-uno desde EditarUsuarioView.
                     nombre = str(row[0]).strip()
-                    documento = str(row[1]).strip() if row[1] else ''
-                    cargo = str(row[2]).strip().upper() if row[2] else ''
-                    telefono = str(row[3]).strip() if len(row) > 3 and row[3] else ''
+                    documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                    email = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                    cargo = str(row[3]).strip().upper() if len(row) > 3 and row[3] else ''
+                    rol = str(row[4]).strip().lower() if len(row) > 4 and row[4] else ''
+                    estado_raw = str(row[5]).strip().lower() if len(row) > 5 and row[5] is not None else ''
 
                     if not nombre or not documento:
                         errores.append(f'Fila {row_num}: nombre y documento son obligatorios.')
+                        continue
+
+                    # Rol explicito y validado -- ya NO se infiere por keyword del cargo.
+                    # Un codigo no reconocido rechaza la fila (no asume un default silencioso).
+                    if not rol:
+                        errores.append(f'Fila {row_num}: la columna Rol es obligatoria.')
+                        continue
+                    if rol not in roles_validos:
+                        errores.append(
+                            f"Fila {row_num}: rol '{rol}' no reconocido. "
+                            f"Roles validos: {', '.join(sorted(roles_validos))}."
+                        )
+                        continue
+
+                    # Estado -> is_active. Vacio se toma como Activo (default del modelo).
+                    if estado_raw in self.ESTADOS_ACTIVO:
+                        is_active = True
+                    elif estado_raw in self.ESTADOS_INACTIVO:
+                        is_active = False
+                    else:
+                        errores.append(
+                            f"Fila {row_num}: estado '{estado_raw}' no reconocido "
+                            f"(use 'Activo' o 'Inactivo')."
+                        )
                         continue
 
                     # Split name into first/last
@@ -221,15 +263,10 @@ class CargaMasivaUsuariosCampoView(LoginRequiredMixin, RoleRequiredMixin, Templa
                     # Generate password: cedula + 3 first letters of first name lowercase
                     password = _generar_password_campo(documento, first_name)
 
-                    # Determine rol based on cargo
-                    rol = 'liniero'
-                    if 'SUPERVISOR' in cargo:
-                        rol = 'supervisor'
-                    elif 'AUXILIAR' in cargo or 'AYUDANTE' in cargo:
-                        rol = 'auxiliar'
-
-                    # Generate a placeholder email from documento
-                    email = f'{documento}@campo.instelec.co'
+                    # Email real si vino en la columna; fallback autogenerado SOLO si
+                    # vino vacio (antes siempre se regeneraba, ignorando un email real).
+                    if not email:
+                        email = f'{documento}@campo.instelec.co'
 
                     usuario, created = Usuario.objects.get_or_create(
                         documento=documento,
@@ -239,7 +276,7 @@ class CargaMasivaUsuariosCampoView(LoginRequiredMixin, RoleRequiredMixin, Templa
                             'last_name': last_name,
                             'rol': rol,
                             'cargo': cargo,
-                            'telefono': telefono,
+                            'is_active': is_active,
                         }
                     )
 
@@ -248,12 +285,17 @@ class CargaMasivaUsuariosCampoView(LoginRequiredMixin, RoleRequiredMixin, Templa
                         usuario.save(update_fields=['password'])
                         creados += 1
                     else:
+                        # Issue #194: antes este branch NUNCA tocaba rol/is_active --
+                        # justo el gap principal que reporto el issue ("nunca el rol,
+                        # y no permite inactivarla").
                         usuario.first_name = first_name
                         usuario.last_name = last_name
                         usuario.cargo = cargo
-                        if telefono:
-                            usuario.telefono = telefono
-                        usuario.save(update_fields=['first_name', 'last_name', 'cargo', 'telefono', 'updated_at'])
+                        usuario.rol = rol
+                        usuario.is_active = is_active
+                        usuario.save(update_fields=[
+                            'first_name', 'last_name', 'cargo', 'rol', 'is_active', 'updated_at',
+                        ])
                         actualizados += 1
 
                 except Exception as e:
