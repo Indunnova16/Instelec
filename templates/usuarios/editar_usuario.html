@@ -62,13 +62,22 @@
                    class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
         </div>
 
-        <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rol</label>
-            <select name="rol" class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                {% for value, label in roles %}
-                <option value="{{ value }}" {% if value == usuario.rol %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rol</label>
+                <select name="rol" class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    {% for value, label in roles %}
+                    <option value="{{ value }}" {% if value == usuario.rol %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+                <select name="is_active" class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="true" {% if usuario.is_active %}selected{% endif %}>Activo</option>
+                    <option value="false" {% if not usuario.is_active %}selected{% endif %}>Inactivo</option>
+                </select>
+            </div>
         </div>
 
         <div class="flex items-center space-x-4 pt-2">

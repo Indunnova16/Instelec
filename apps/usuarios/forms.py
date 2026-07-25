@@ -59,8 +59,16 @@ class UsuarioCreationForm(UserCreationForm):
 
 
 class UsuarioChangeForm(UserChangeForm):
-    """Form for updating users."""
+    """Form for updating users.
+
+    Issue #194: agrega 'is_active' -- Requerimiento 1 pide poder editar
+    nombre/correo/cargo/rol Y estado (activo/inactivo) desde la vista de
+    edicion individual, no solo desde la carga masiva.
+    """
 
     class Meta:
         model = Usuario
-        fields = ('email', 'first_name', 'last_name', 'rol', 'telefono', 'documento', 'cargo')
+        fields = (
+            'email', 'first_name', 'last_name', 'rol',
+            'telefono', 'documento', 'cargo', 'is_active',
+        )
