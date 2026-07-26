@@ -871,6 +871,31 @@ class ProgramacionSemanalPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
         return resp
 
 
+class ProgramacionSemanalExportarHorizontalView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """GET /cuadrillas/semanal/<anio>/<semana>/exportar/ (issue #178, A2).
+
+    Exporta la programación semanal en el MISMO formato horizontal que
+    Alcides ya usa (pedido A de la demo 2026-07-25) — ver
+    ``ProgramacionSemanalHorizontalExporter`` en ``apps.actividades.exporters``
+    para el detalle de columnas y el mapeo CARGO/ROL."""
+
+    allowed_roles = ROLES_CUADRILLAS
+
+    def get(self, request, anio, semana):
+        from apps.actividades.exporters import ProgramacionSemanalHorizontalExporter
+
+        anio, semana = int(anio), int(semana)
+        output = ProgramacionSemanalHorizontalExporter().generar_excel(anio, semana)
+        resp = HttpResponse(
+            output.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = (
+            f'attachment; filename="programacion_semana_{semana:02d}_{anio}.xlsx"'
+        )
+        return resp
+
+
 urlpatterns = [
     path("semanal/", ProgramacionSemanalIndexView.as_view(), name="semanal_index"),
     path(
@@ -887,6 +912,12 @@ urlpatterns = [
         "semanal/<int:anio>/<int:semana>/pdf/",
         ProgramacionSemanalPDFView.as_view(),
         name="semanal_pdf",
+    ),
+    # Issue #178 (A2) — export Excel horizontal exacto (pedido A, demo 2026-07-25).
+    path(
+        "semanal/<int:anio>/<int:semana>/exportar/",
+        ProgramacionSemanalExportarHorizontalView.as_view(),
+        name="semanal_exportar_horizontal",
     ),
     # Issue #188 (A3) — grid editable in-place: crear bloque + cascada Línea→Tramo.
     path(

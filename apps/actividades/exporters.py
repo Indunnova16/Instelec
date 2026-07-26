@@ -241,6 +241,219 @@ class ProgramacionSemanalExporter:
             resumen_sheet.column_dimensions[get_column_letter(col_idx)].width = width
 
 
+def _parsear_avisos_orden_ptsap(observaciones):
+    """Reverso de ``ProgramacionS18CuadrillaImporter._construir_observaciones``
+    (issue #178, A2). Esa función antepone ``"Avisos: X | Orden: Y | PT SAP:
+    Z | <obs original>"`` a ``Cuadrilla.observaciones`` porque el modelo no
+    tiene columnas propias para avisos/orden/pt_sap. Este helper separa esas
+    3 columnas + el remanente de Comentarios para el exportador horizontal.
+
+    Reconoce CUALQUIER subconjunto de los 3 prefijos, en cualquier orden (el
+    importer solo antepone los que vienen no vacíos en el Excel -- no asume
+    que estén los 3). Bloques creados desde el grid editable (issue #188) NO
+    tienen ningún prefijo -- degrada limpio: todo el texto va a Comentarios,
+    AVISOS/ORDEN/PT SAP quedan vacíos.
+
+    Retorna ``(avisos, orden, pt_sap, comentarios)``.
+    """
+    observaciones = (observaciones or "").strip()
+    if not observaciones:
+        return "", "", "", ""
+
+    prefijos = (
+        ("Avisos: ", "avisos"),
+        ("Orden: ", "orden"),
+        ("PT SAP: ", "pt_sap"),
+    )
+    valores = {"avisos": "", "orden": "", "pt_sap": ""}
+    resto = []
+    for parte in observaciones.split(" | "):
+        for prefijo, campo in prefijos:
+            if parte.startswith(prefijo):
+                valores[campo] = parte[len(prefijo):]
+                break
+        else:
+            resto.append(parte)
+    comentarios = " | ".join(resto)
+    return valores["avisos"], valores["orden"], valores["pt_sap"], comentarios
+
+
+class ProgramacionSemanalHorizontalExporter:
+    """
+    Exporta la programación semanal de Cuadrillas en el MISMO formato
+    horizontal que Alcides ya usa (issue #178, pedido A, demo 2026-07-25):
+    columnas EXACTAS ``#|ACTIVIDAD|LINEA|TRAMO|INICIO|FIN|PERSONAL|CEDULA|
+    CELULAR|CARGO|ROL|PLACA|AVISOS|ORDEN|PT SAP|Comentarios`` -- MISMO layout
+    que ``ProgramacionS18CuadrillaImporter`` ya parsea (ver
+    ``apps.cuadrillas.tests_s18.S18_HEADERS``): la fila del primer miembro de
+    cada bloque trae los datos de la actividad (+ AVISOS/ORDEN/PT SAP); las
+    filas de los miembros siguientes del MISMO bloque dejan esas columnas en
+    blanco -- exactamente como el archivo real que el cliente ya trabaja, lo
+    que además deja el archivo exportado re-importable con el mismo importer.
+
+    1 fila por persona, SIN celdas combinadas (``merge_cells``) -- a
+    diferencia de ``ProgramacionSemanalExporter._formatear_personal``, que
+    agrupa todo el personal de una actividad en una sola celda con saltos de
+    línea (el formato que el cliente pidió reemplazar).
+
+    Reusa ``_bloques_qs``/``_bloque_a_dict`` de ``apps.cuadrillas.views_semanal``
+    -- MISMA fuente de verdad que el grid editable y el export PDF, sin query
+    paralelo.
+
+    ⚠️ Mapeo CARGO/ROL respecto a las claves del dict de ``_bloque_a_dict``:
+    la columna Excel ``CARGO`` es el puesto real (dict ``miembro['rol']`` --
+    ``RolCuadrilla``/``Cargo``, ej. "Liniero I") y la columna Excel ``ROL`` es
+    la jerarquía JT/CTA (dict ``miembro['cargo']`` -- ``CargoJerarquico``).
+    Es el INVERSO de los nombres de clave del dict -- NO copiarlos 1:1 (ver
+    ``ProgramacionS18CuadrillaImporter`` docstring y el PLAN del sprint).
+    """
+
+    HEADERS = [
+        "#",
+        "ACTIVIDAD",
+        "LINEA",
+        "TRAMO",
+        "INICIO",
+        "FIN",
+        "PERSONAL",
+        "CEDULA",
+        "CELULAR",
+        "CARGO",
+        "ROL",
+        "PLACA",
+        "AVISOS",
+        "ORDEN",
+        "PT SAP",
+        "Comentarios",
+    ]
+
+    HEADER_FILL = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+    HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
+    CELL_BORDER = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
+    )
+    LEFT_ALIGNMENT = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    def __init__(self):
+        self.workbook = None
+        self.sheet = None
+
+    def generar_excel(self, anio, semana):
+        """
+        Genera el Excel horizontal de la semana ``anio``/``semana``.
+
+        Args:
+            anio: int
+            semana: int (semana ISO)
+
+        Returns:
+            BytesIO con el contenido del .xlsx
+        """
+        from apps.cuadrillas.views_semanal import _bloque_a_dict, _bloques_qs
+
+        self.workbook = Workbook()
+        self.sheet = self.workbook.active
+        self.sheet.title = f"Sem {semana:02d}-{anio}"[:31]
+
+        for col_idx, header in enumerate(self.HEADERS, start=1):
+            cell = self.sheet.cell(row=1, column=col_idx, value=header)
+            cell.fill = self.HEADER_FILL
+            cell.font = self.HEADER_FONT
+            cell.border = self.CELL_BORDER
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        row_num = 2
+        for numero, cuadrilla in enumerate(_bloques_qs(anio, semana), start=1):
+            b = _bloque_a_dict(cuadrilla)
+            row_num = self._escribir_bloque(numero, cuadrilla.fecha_fin, b, row_num)
+
+        column_widths = [5, 28, 12, 20, 12, 12, 28, 14, 14, 18, 18, 10, 30, 16, 12, 30]
+        for col_idx, width in enumerate(column_widths, start=1):
+            self.sheet.column_dimensions[get_column_letter(col_idx)].width = width
+
+        output = BytesIO()
+        self.workbook.save(output)
+        output.seek(0)
+        return output
+
+    def _escribir_bloque(self, numero, fecha_fin, b, row_num):
+        """Escribe TODAS las filas de un bloque (1 por miembro activo). Si el
+        bloque no tiene ningún miembro activo, igual escribe 1 fila con los
+        datos de la actividad y las columnas de personal en blanco -- no lo
+        omite del export (issue #178, robustez ante bloques sin personal,
+        mismo caso que puede producir C1/reprogramar). Devuelve el siguiente
+        ``row_num`` libre."""
+        avisos, orden, pt_sap, comentarios = _parsear_avisos_orden_ptsap(b["observaciones"])
+        # ACTIVIDAD: tipo_actividad (moderno, issue #188) si está seteado, si
+        # no cae a nombre -- los bloques importados por S18 NUNCA setean
+        # tipo_actividad (el importer no lo toca), así que sin este fallback
+        # TODA la programación legacy de Alcides saldría con ACTIVIDAD vacía.
+        actividad = b["tipo_actividad"] or b["nombre"] or ""
+        linea = b["linea"] or ""
+        tramo = b["tramo"] or ""
+        inicio = b["fecha"].strftime("%d/%m/%Y") if b["fecha"] else ""
+        fin = fecha_fin.strftime("%d/%m/%Y") if fecha_fin else ""
+
+        miembros = b["miembros"]
+        if not miembros:
+            self._escribir_fila(
+                row_num,
+                numero,
+                actividad,
+                linea,
+                tramo,
+                inicio,
+                fin,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                avisos,
+                orden,
+                pt_sap,
+                comentarios,
+            )
+            return row_num + 1
+
+        for idx, m in enumerate(miembros):
+            primera = idx == 0
+            self._escribir_fila(
+                row_num,
+                numero if primera else "",
+                actividad if primera else "",
+                linea if primera else "",
+                tramo if primera else "",
+                inicio if primera else "",
+                fin if primera else "",
+                m["nombre"],
+                m["documento"],
+                m["celular"],
+                # Mapeo obligatorio (ver docstring de la clase): Excel CARGO
+                # = puesto real -> dict 'rol'. NO invertir.
+                m["rol"],
+                # Excel ROL = JT/CTA -> dict 'cargo'. NO invertir.
+                m["cargo"],
+                m["placa_vehiculo"],
+                avisos if primera else "",
+                orden if primera else "",
+                pt_sap if primera else "",
+                comentarios if primera else "",
+            )
+            row_num += 1
+        return row_num
+
+    def _escribir_fila(self, row_num, *valores):
+        for col_idx, valor in enumerate(valores, start=1):
+            cell = self.sheet.cell(row=row_num, column=col_idx, value=valor)
+            cell.border = self.CELL_BORDER
+            cell.alignment = self.LEFT_ALIGNMENT
+
+
 class ReporteAvanceExporter:
     """
     Genera Excel con reporte de avance de servidumbre:
