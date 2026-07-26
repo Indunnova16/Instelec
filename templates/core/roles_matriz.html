@@ -23,15 +23,31 @@
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
                 <thead class="bg-gray-50 dark:bg-gray-900">
+                    {# issue #186 (186-M2): thead de 2 filas -- fila 1 agrupa las 3 columnas
+                       de módulo (Mantenimiento/Construcción/Configuración) con colspan; los
+                       N sub-módulos anidan bajo Construcción en la fila 2 (única con
+                       sub-módulos hoy), en vez de pintarse todos en una sola fila plana. #}
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 dark:bg-gray-900">
+                        <th rowspan="2" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 dark:bg-gray-900 align-bottom">
                             Rol
                         </th>
                         {% for codigo, etiqueta in columnas_modulo %}
-                        <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{{ etiqueta }}</th>
+                            {% if codigo == 'CONSTRUCCION' %}
+                        <th colspan="{{ columnas_submodulo|length|add:1 }}"
+                            class="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase whitespace-nowrap border-l border-gray-200 dark:border-gray-700">
+                            {{ etiqueta }}
+                        </th>
+                            {% else %}
+                        <th rowspan="2" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-l border-gray-200 dark:border-gray-700 align-bottom">{{ etiqueta }}</th>
+                            {% endif %}
                         {% endfor %}
+                    </tr>
+                    <tr>
+                        {# Fila 2: leaf de "Construcción" en general (acceso al módulo completo) +
+                           cada sub-módulo, todos anidados visualmente bajo el th de Construcción. #}
+                        <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-l border-gray-200 dark:border-gray-700">General</th>
                         {% for codigo, etiqueta in columnas_submodulo %}
-                        <th class="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase whitespace-nowrap">{{ etiqueta }}</th>
+                        <th class="px-2 py-2 text-center text-xs font-medium text-gray-400 uppercase whitespace-nowrap">{{ etiqueta }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -43,14 +59,16 @@
                             <span class="block text-xs font-mono text-gray-400">{{ fila.role.codigo }}</span>
                         </td>
                         {% for codigo, etiqueta in columnas_modulo %}
-                        <td class="px-2 py-2 text-center">
+                        <td class="px-2 py-2 text-center border-l border-gray-100 dark:border-gray-700">
                             {% include "core/partials/_matriz_celda.html" with role=fila.role columna=codigo nivel_actual=fila.permisos|get_item:codigo|default:sin_acceso nivel_choices=nivel_choices %}
                         </td>
-                        {% endfor %}
-                        {% for codigo, etiqueta in columnas_submodulo %}
+                            {% if codigo == 'CONSTRUCCION' %}
+                                {% for scodigo, setiqueta in columnas_submodulo %}
                         <td class="px-2 py-2 text-center">
-                            {% include "core/partials/_matriz_celda.html" with role=fila.role columna=codigo nivel_actual=fila.permisos|get_item:codigo|default:sin_acceso nivel_choices=nivel_choices %}
+                            {% include "core/partials/_matriz_celda.html" with role=fila.role columna=scodigo nivel_actual=fila.permisos|get_item:scodigo|default:sin_acceso nivel_choices=nivel_choices %}
                         </td>
+                                {% endfor %}
+                            {% endif %}
                         {% endfor %}
                     </tr>
                     {% empty %}
@@ -67,8 +85,9 @@
 
     <p class="text-xs text-gray-500 dark:text-gray-400">
         Las columnas de módulo (Mantenimiento/Construcción/Configuración) controlan el acceso al
-        bloque completo. Las columnas de sub-módulo (a la derecha) afinan el acceso DENTRO de
-        Construcción -- solo tienen efecto si el rol también tiene acceso al módulo Construcción.
+        bloque completo. Las columnas de sub-módulo, anidadas bajo Construcción, afinan el acceso
+        DENTRO de ese módulo -- solo tienen efecto si el rol también tiene acceso al módulo
+        Construcción.
     </p>
 </div>
 {% endblock %}
