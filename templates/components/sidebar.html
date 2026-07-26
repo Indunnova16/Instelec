@@ -3,6 +3,26 @@
 {% puede_acceder 'CONSTRUCCION' as ok_cons %}
 {% puede_acceder 'CONFIG' as ok_config %}
 {% es_admin_rbac as es_admin %}
+{% comment %}
+issue #186 (186-M3): navbar dinámico -- cada item de Construcción se conecta
+a user_can_access_submodulo() vía el tag `puede_submodulo` (ya existía en
+core_tags.py desde #62 pero nunca se cableó acá). Si el rol tiene 'Ver'/
+'Ver y editar' en el sub-módulo el link aparece; si tiene 'Sin acceso' (o no
+tiene fila), NO se renderiza -- ni siquiera oculto por CSS, queda fuera del
+HTML. Nota: comentario multilínea real (no `{# #}`) a propósito -- `{# #}`
+multilínea se renderiza literal en prod (memoria del portafolio).
+{% endcomment %}
+{% puede_submodulo 'INGENIERIA' as ok_ingenieria %}
+{% puede_submodulo 'PRELIMINARES' as ok_preliminares %}
+{% puede_submodulo 'OBRA_CIVIL' as ok_obra_civil %}
+{% puede_submodulo 'PROTECCIONES' as ok_protecciones %}
+{% puede_submodulo 'MONTAJE' as ok_montaje %}
+{% puede_submodulo 'SPT' as ok_spt %}
+{% puede_submodulo 'TENDIDO' as ok_tendido %}
+{% puede_submodulo 'FINANCIERO' as ok_fin_construccion %}
+{% puede_submodulo 'PROGRAMACION' as ok_programacion %}
+{% puede_submodulo 'ACTIVIDADES_FINALES' as ok_actividades_finales %}
+{% puede_submodulo 'INDICADORES_CONSTRUCCION' as ok_indicadores_construccion %}
 <!-- Sidebar component -->
 <div class="flex flex-col h-full">
     <!-- Logo -->
@@ -324,18 +344,22 @@
                             Proyectos
                         </a>
                     </li>
+                    {% if ok_ingenieria %}
                     <li role="none">
                         <a href="{% url 'ingenieria:seleccionar' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
                             Ingeniería
                         </a>
                     </li>
+                    {% endif %}
+                    {% if ok_preliminares %}
                     <li role="none">
                         <a href="{% url 'preliminares:seleccionar' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
                             Actividades Preliminares
                         </a>
                     </li>
+                    {% endif %}
 
                     {# === Módulos del proyecto activo (issue #73) === #}
                     {# Aviso de selección de proyecto (visible solo si no hay proyecto activo) #}
@@ -354,7 +378,8 @@
                         </a>
                     </li>
 
-                    {# 1. Obra Civil — submenú expandible (issue #183 item 1: navbar agrupado) #}
+                    {# 1. Obra Civil — submenú expandible (issue #183 item 1: navbar agrupado). issue #186 (186-M3): el bloque entero se oculta si el rol no tiene NI OBRA_CIVIL NI PROTECCIONES; cada leaf se gatea por su propio sub-módulo. #}
+                    {% if ok_obra_civil or ok_protecciones %}
                     <li x-data="{ open: false }" role="none">
                         <button @click="open = !open"
                                 :class="proyectoId ? 'w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'w-full flex items-center justify-between px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'"
@@ -370,13 +395,19 @@
                             </svg>
                         </button>
                         <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Obra Civil Construccion">
+                            {% if ok_obra_civil %}
                             <li role="none"><a :href="catUrl('obra-civil')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">Obra Civil</a></li>
                             <li role="none"><a :href="catUrl('dashboard-obra-civil')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">Dashboard Obra Civil</a></li>
+                            {% endif %}
+                            {% if ok_protecciones %}
                             <li role="none"><a :href="catUrl('obras-proteccion')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">Obras de Protección</a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
 
-                    {# 3. Montaje — submenú expandible (issue #183 item 1: navbar agrupado) #}
+                    {# 3. Montaje — submenú expandible (issue #183 item 1: navbar agrupado). issue #186 (186-M3): igual patrón que Obra Civil -- MONTAJE/SPT. #}
+                    {% if ok_montaje or ok_spt %}
                     <li x-data="{ open: false }" role="none">
                         <button @click="open = !open"
                                 :class="proyectoId ? 'w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'w-full flex items-center justify-between px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'"
@@ -392,13 +423,19 @@
                             </svg>
                         </button>
                         <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Montaje Construccion">
+                            {% if ok_montaje %}
                             <li role="none"><a :href="catUrl('montaje')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">Montaje</a></li>
                             <li role="none"><a :href="catUrl('dashboard-montaje')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">Dashboard Montaje</a></li>
+                            {% endif %}
+                            {% if ok_spt %}
                             <li role="none"><a :href="catUrl('spt-pintura')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">SPT y Pintura</a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
 
-                    {# 6. Tendido — submenú expandible (issue #183 item 1: navbar agrupado; #147 Cambio 3: renombrado desde "CANT Tendido"; #166: Dashboard Tendido junto a Tendido) #}
+                    {# 6. Tendido — submenú expandible (issue #183 item 1: navbar agrupado; #147 Cambio 3: renombrado desde "CANT Tendido"; #166: Dashboard Tendido junto a Tendido). issue #186 (186-M3): bloque completo gateado por TENDIDO. #}
+                    {% if ok_tendido %}
                     <li x-data="{ open: false }" role="none">
                         <button @click="open = !open"
                                 :class="proyectoId ? 'w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'w-full flex items-center justify-between px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'"
@@ -418,6 +455,7 @@
                             <li role="none"><a :href="catUrl('dashboard-tendido')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">Dashboard Tendido</a></li>
                         </ul>
                     </li>
+                    {% endif %}
 
                     {# 6c. Hochiminh (#171 Fase 1: matriz Marcación/Replanteo por torre) — NO forma parte de los grupos del #183, se deja plano junto a Tendido #}
                     <li role="none">
@@ -437,7 +475,8 @@
                         </a>
                     </li>
 
-                    {# 8. Actividades Finales (placeholder) #}
+                    {# 8. Actividades Finales (placeholder). issue #186 (186-M3): gateado por ACTIVIDADES_FINALES. #}
+                    {% if ok_actividades_finales %}
                     <li role="none">
                         <a :href="catUrl('actividades-finales')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
@@ -445,8 +484,10 @@
                             Actividades Finales
                         </a>
                     </li>
+                    {% endif %}
 
-                    {# 8.5 Financiero — módulo financiero del proyecto (B4, #123) — submenú expandible por-proyecto #}
+                    {# 8.5 Financiero — módulo financiero del proyecto (B4, #123) — submenú expandible por-proyecto. issue #186 (186-M3): gateado por FINANCIERO (sub-módulo de Construcción). #}
+                    {% if ok_fin_construccion %}
                     <li x-data="{ open: false }" role="none">
                         <button @click="open = !open"
                                 :class="proyectoId ? 'w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'w-full flex items-center justify-between px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'"
@@ -472,8 +513,10 @@
                             <li role="none"><a :href="catUrl('financiero/facturacion')" @click="catClick($event)" role="menuitem" :class="proyectoId ? 'block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'block px-4 py-2 text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed'">Facturación</a></li>
                         </ul>
                     </li>
+                    {% endif %}{# ok_fin_construccion #}
 
-                    {# 9. Indicadores en General — dashboard ejecutivo B3 (slug 'indicadores-financieros' conservada) #}
+                    {# 9. Indicadores en General — dashboard ejecutivo B3 (slug 'indicadores-financieros' conservada). issue #186 (186-M3): gateado por INDICADORES_CONSTRUCCION. #}
+                    {% if ok_indicadores_construccion %}
                     <li role="none">
                         <a :href="catUrl('indicadores-financieros')" @click="catClick($event)" role="menuitem"
                            :class="proyectoId ? 'flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' : 'flex items-center px-4 py-2 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed'">
@@ -481,9 +524,12 @@
                             Indicadores en General
                         </a>
                     </li>
+                    {% endif %}
 
-                    {# 10. Programación de Cuadrillas — subsección administrativa (#155, B1) #}
+                    {# 10. Programación de Cuadrillas — subsección administrativa (#155, B1). issue #186 (186-M3): gateado por PROGRAMACION. #}
+                    {% if ok_programacion %}
                     {% include "construccion/_nav_admin_programacion.html" %}
+                    {% endif %}
                 </div>
             </template>
             {% endif %}{# ok_cons #}
