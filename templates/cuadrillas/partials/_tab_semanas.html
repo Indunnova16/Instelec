@@ -152,6 +152,36 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
     </section>
     {% endif %}
 
+    {% if personal_sin_asignar %}
+    <!-- Personal sin programar en la semana (issue #178, B1) -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" aria-label="Personal sin programar en la semana">
+        <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+            <h2 class="font-semibold text-gray-900 dark:text-white">Personal sin programar ({{ total_personal_sin_asignar }})</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Colaboradores activos del maestro que aún no están asignados a ningún bloque de esta semana.</p>
+        </div>
+        <div class="p-4 overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                        <th class="py-2 pr-4 font-medium">Nombre</th>
+                        <th class="py-2 pr-4 font-medium">Documento</th>
+                        <th class="py-2 pr-4 font-medium">Cargo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in personal_sin_asignar %}
+                    <tr class="border-b border-gray-50 dark:border-gray-700/50">
+                        <td class="py-2 pr-4 text-gray-900 dark:text-gray-100">{{ p.nombre|default:"—" }}</td>
+                        <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ p.documento|default:"—" }}</td>
+                        <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ p.rol_cuadrilla.nombre|default:"—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
     <!-- Datalist global de Colaboradores activos (issue #188, A5) -- compartido
          por el mini-form "agregar personal" de todas las cards de la semana. -->
     <datalist id="personal_disponible_datalist">

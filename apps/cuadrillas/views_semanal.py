@@ -251,12 +251,43 @@ def _choices_form_bloque():
     }
 
 
+def _personal_sin_asignar(anio, semana):
+    """``PersonalCuadrilla`` activo del maestro Colaboradores que NO tiene
+    ningún ``CuadrillaMiembro`` activo en los bloques (``Cuadrilla``) de la
+    semana indicada (issue #178, B1 — Gabriel: manejan hasta 120 personas,
+    "se le queda a uno por ahí volando").
+
+    ``CuadrillaMiembro`` no tiene FK directa a ``PersonalCuadrilla`` — se
+    cruza por documento, MISMO patrón de join que ya usa ``_bloque_a_dict``
+    para resolver ``celular`` (``PersonalCuadrilla.documento`` ==
+    ``CuadrillaMiembro.usuario.documento``). Scoped a la semana vía el mismo
+    prefijo ``codigo`` ``WW-YYYY-`` que usa ``_bloques_qs`` — un colaborador
+    asignado en OTRA semana SÍ aparece acá (no es "sin asignar en general",
+    es "sin asignar EN ESTA semana")."""
+    documentos_asignados = (
+        CuadrillaMiembro.objects.filter(
+            cuadrilla__codigo__startswith=_prefijo(anio, semana),
+            cuadrilla__activa=True,
+            activo=True,
+        )
+        .exclude(usuario__documento__isnull=True)
+        .exclude(usuario__documento="")
+        .values_list("usuario__documento", flat=True)
+    )
+    return (
+        PersonalCuadrilla.objects.filter(activo=True)
+        .exclude(documento__in=list(documentos_asignados))
+        .order_by("nombre")
+    )
+
+
 def _contexto_semana(anio, semana):
     """Contexto compartido por la vista grid y el export PDF."""
     bloques = [_bloque_a_dict(c) for c in _bloques_qs(anio, semana)]
     novedades = list(
         NovedadPersonalSemana.objects.filter(anio=anio, semana=semana).order_by("nombre")
     )
+    personal_sin_asignar = list(_personal_sin_asignar(anio, semana))
     total_miembros = sum(len(b["miembros"]) for b in bloques)
     lunes, domingo = _rango_calendario(anio, semana)
     origen_anio, origen_semana = _semana_anterior(anio, semana)
@@ -267,9 +298,11 @@ def _contexto_semana(anio, semana):
         "semana": semana,
         "bloques": bloques,
         "novedades": novedades,
+        "personal_sin_asignar": personal_sin_asignar,
         "total_bloques": len(bloques),
         "total_miembros": total_miembros,
         "total_novedades": len(novedades),
+        "total_personal_sin_asignar": len(personal_sin_asignar),
         "tiene_datos": bool(bloques) or bool(novedades),
         "lunes": lunes,
         "domingo": domingo,
