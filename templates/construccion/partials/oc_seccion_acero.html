@@ -52,6 +52,63 @@
     </span>
   </div>
   {% endlocalize %}
+  <script>
+  (function () {
+    // #191 (reproceso bounce=1) — recálculo JS in-place de la desviación de
+    // Acero MIENTRAS se escribe, sin depender de "Guardar sección" + reload.
+    // Replica _desv_pct del backend (models_b3_oc_detalle.py) para no
+    // divergir; el flag de alerta usa igualdad EXACTA (no % redondeado) para
+    // evitar divergencia de redondeo half-even (Python Decimal.quantize) vs
+    // JS toFixed en el límite de tolerancia cero.
+    var solicitadoInput = document.getElementById('id_ace_solicitado_kg');
+    var instaladoInput = document.getElementById('id_ace_instalado_kg');
+    var desvKgSpan = document.querySelector('[data-desv="acero"]');
+    var desvPctSpan = document.querySelector('[data-desv-pct="acero"]');
+    if (!solicitadoInput || !instaladoInput || !desvKgSpan || !desvPctSpan) {
+      return;
+    }
+
+    function parseNum(v) {
+      if (v === null || v === undefined || v === '') {
+        return null;
+      }
+      var n = parseFloat(v);
+      return isNaN(n) ? null : n;
+    }
+
+    function recalcularDesviacionAcero() {
+      var solicitado = parseNum(solicitadoInput.value);
+      var instalado = parseNum(instaladoInput.value);
+
+      if (solicitado === null || instalado === null || solicitado === 0) {
+        desvKgSpan.textContent = 'Desviación (instalado − solicitado): — kg';
+        desvPctSpan.textContent = '—';
+        desvPctSpan.dataset.superaUmbral = 'false';
+        desvPctSpan.classList.remove('text-red-600', 'dark:text-red-400', 'font-semibold');
+        desvPctSpan.classList.add('text-gray-500', 'dark:text-gray-400');
+        return;
+      }
+
+      var desvKg = instalado - solicitado;
+      var desvPct = (desvKg / solicitado) * 100;
+      var superaUmbral = instalado !== solicitado;
+
+      desvKgSpan.textContent = 'Desviación (instalado − solicitado): ' + desvKg.toFixed(2) + ' kg';
+      desvPctSpan.textContent = desvPct.toFixed(1) + '%';
+      desvPctSpan.dataset.superaUmbral = superaUmbral ? 'true' : 'false';
+      if (superaUmbral) {
+        desvPctSpan.classList.remove('text-gray-500', 'dark:text-gray-400');
+        desvPctSpan.classList.add('text-red-600', 'dark:text-red-400', 'font-semibold');
+      } else {
+        desvPctSpan.classList.remove('text-red-600', 'dark:text-red-400', 'font-semibold');
+        desvPctSpan.classList.add('text-gray-500', 'dark:text-gray-400');
+      }
+    }
+
+    solicitadoInput.addEventListener('input', recalcularDesviacionAcero);
+    instaladoInput.addEventListener('input', recalcularDesviacionAcero);
+  })();
+  </script>
   {% endif %}
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
