@@ -231,6 +231,42 @@ class Cuadrilla(BaseModel):
         blank=True,
         help_text='Fecha de operacion de la cuadrilla'
     )
+    fecha_fin = models.DateField(
+        'Fecha de fin',
+        null=True,
+        blank=True,
+        help_text='Issue #178 (M1/A1): fecha de fin real del bloque, ya se parseaba del '
+        'Excel S18 pero se descartaba. Nullable — filas legacy importadas antes de A1 '
+        'quedan en None sin romper.',
+    )
+    reprogramado_desde = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reprogramaciones',
+        verbose_name='Reprogramado desde',
+        help_text='Issue #178 (M1/C1): si este bloque nació de reprogramar un bloque '
+        'existente (botón Reprogramar, pedido C), apunta al bloque origen. El bloque '
+        'origen NO se borra ni pierde su personal histórico — queda como registro '
+        'truncado. SET_NULL: si el bloque origen se elimina, esta referencia no rompe.',
+    )
+    hora_inicio_planeada = models.TimeField(
+        'Hora de inicio planeada',
+        null=True,
+        blank=True,
+        help_text='Issue #178 (M1/D1): hora de inicio PLANEADA del bloque (distinta de '
+        'la asistencia real registrada por miembro). Nullable — no todos los bloques la '
+        'traen.',
+    )
+    hora_fin_planeada = models.TimeField(
+        'Hora de fin planeada',
+        null=True,
+        blank=True,
+        help_text='Issue #178 (M1/D1): hora de fin PLANEADA del bloque (distinta de la '
+        'asistencia real registrada por miembro). Nullable — no todos los bloques la '
+        'traen.',
+    )
 
     class Meta:
         db_table = 'cuadrillas'
@@ -347,6 +383,10 @@ class TrackingUbicacion(BaseModel):
     Real-time location tracking for crews.
     """
 
+    class OrigenUbicacion(models.TextChoices):
+        AUTO = 'auto', 'Automático (GPS)'
+        MANUAL = 'manual', 'Manual'
+
     cuadrilla = models.ForeignKey(
         Cuadrilla,
         on_delete=models.CASCADE,
@@ -387,6 +427,16 @@ class TrackingUbicacion(BaseModel):
         'Nivel batería (%)',
         null=True,
         blank=True
+    )
+    origen = models.CharField(
+        'Origen',
+        max_length=10,
+        choices=OrigenUbicacion.choices,
+        default=OrigenUbicacion.AUTO,
+        help_text='Issue #178 (M1/F2): distingue una ubicación reportada automáticamente '
+        '(GPS del dispositivo) de una entrada MANUAL del usuario (pedido F, parte 2 — '
+        'sitios sin señal). Default auto preserva el comportamiento de todas las filas '
+        'existentes (tracking hoy siempre viene de GPS).',
     )
 
     class Meta:
