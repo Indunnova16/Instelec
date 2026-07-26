@@ -12,6 +12,7 @@ from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from .models import Asistencia, Cargo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
 from .forms_personal import PersonalCuadrillaForm
 from .forms_cargo import CargoForm
+from .utils_semana import _prefijo
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -452,6 +453,29 @@ class MapaCuadrillasPartialView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
 
         # Get latest location for each active crew
         cuadrillas = Cuadrilla.objects.filter(activa=True)
+
+        # Issue #178 (F1): filtro opcional por semana ISO (?anio=&semana=),
+        # MISMO criterio `codigo` WW-YYYY- que usa TODO el resto del módulo
+        # Cuadrillas (`_bloques_qs`/`_prefijo` de views_semanal.py, ahora en
+        # utils_semana.py) -- sin inventar un filtro de rango de fechas
+        # nuevo (`TrackingUbicacion` no tiene campo de "semana de trabajo",
+        # solo `created_at` del ping GPS; la semana vive en la FK a
+        # `Cuadrilla` vía su `codigo`). Sin parámetros -> comportamiento
+        # actual (todas las cuadrillas activas, sin filtrar).
+        anio_param = (self.request.GET.get('anio') or '').strip()
+        semana_param = (self.request.GET.get('semana') or '').strip()
+        if anio_param and semana_param:
+            try:
+                anio_filtro = int(anio_param)
+                semana_filtro = int(semana_param)
+                cuadrillas = cuadrillas.filter(
+                    codigo__startswith=_prefijo(anio_filtro, semana_filtro)
+                )
+            except (TypeError, ValueError):
+                # Parámetros no numéricos: se ignora el filtro (comportamiento
+                # actual) en vez de romper con un 500.
+                pass
+
         ubicaciones = []
 
         for cuadrilla in cuadrillas:

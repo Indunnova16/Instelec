@@ -34,6 +34,7 @@ from django.views.generic import TemplateView
 from apps.core.mixins import RoleRequiredMixin
 
 from .models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana, PersonalCuadrilla, Vehiculo
+from .utils_semana import _prefijo
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +48,10 @@ ROLES_CUADRILLAS = ["admin", "director", "coordinador", "ing_residente", "superv
 # ---------------------------------------------------------------------------
 # Helpers de semana
 # ---------------------------------------------------------------------------
-
-
-def _prefijo(anio, semana):
-    """Prefijo de código que identifica una semana: ``WW-YYYY-``."""
-    return f"{int(semana):02d}-{int(anio)}-"
+# _prefijo ahora vive en utils_semana.py (issue #178, F1: solo mover, para
+# que views.py/MapaCuadrillasPartialView la reuse sin importar función
+# privada de este módulo) — se importa arriba y queda disponible acá tal
+# cual con el mismo nombre, sin cambiar ningún caller de este archivo.
 
 
 def _bloques_qs(anio, semana):

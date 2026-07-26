@@ -65,6 +65,32 @@
         </div>
     </div>
 
+    <!-- Filtro por semana (issue #178, F1) -->
+    <div class="flex flex-wrap items-end gap-3 bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+         aria-label="Filtrar mapa por semana">
+        <div>
+            <label for="filtro-anio" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Año</label>
+            <input type="number" id="filtro-anio" min="2000" max="2100" placeholder="2026"
+                   class="w-24 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm">
+        </div>
+        <div>
+            <label for="filtro-semana" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Semana ISO</label>
+            <input type="number" id="filtro-semana" min="1" max="53" placeholder="1-53"
+                   class="w-24 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm">
+        </div>
+        <button type="button" id="btn-aplicar-filtro-semana"
+                class="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                aria-label="Aplicar filtro de semana al mapa">
+            Filtrar por semana
+        </button>
+        <button type="button" id="btn-limpiar-filtro-semana"
+                class="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition text-sm"
+                aria-label="Quitar filtro de semana y ver todas las cuadrillas">
+            Ver todas
+        </button>
+        <span id="filtro-semana-status" class="text-sm text-gray-500 dark:text-gray-400" role="status" aria-live="polite"></span>
+    </div>
+
     <!-- Map Container -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden relative">
         <div id="map-cuadrillas"></div>
@@ -108,19 +134,50 @@
         loadCrewLocations();
     }
 
-    // Load crew locations
+    // Filtro de semana (issue #178, F1): lee los inputs #filtro-anio/#filtro-semana.
+    // Devuelve null si alguno está vacío (sin filtro = comportamiento actual).
+    function filtroSemanaActual() {
+        const anioEl = document.getElementById('filtro-anio');
+        const semanaEl = document.getElementById('filtro-semana');
+        if (!anioEl || !semanaEl) return null;
+        const anio = anioEl.value.trim();
+        const semana = semanaEl.value.trim();
+        return (anio && semana) ? {anio: anio, semana: semana} : null;
+    }
+
+    // Load crew locations. Issue #178 (F1): incluye ?anio=&semana= en el
+    // fetch cuando hay filtro activo -- MapaCuadrillasPartialView filtra
+    // server-side por el mismo criterio `codigo` WW-YYYY- que el resto del
+    // módulo. Estados de carga/éxito/error visibles en #filtro-semana-status.
     function loadCrewLocations() {
-        fetch('{% url "cuadrillas:mapa_partial" %}', {
+        const filtro = filtroSemanaActual();
+        let url = '{% url "cuadrillas:mapa_partial" %}';
+        if (filtro) {
+            url += '?anio=' + encodeURIComponent(filtro.anio) + '&semana=' + encodeURIComponent(filtro.semana);
+        }
+        const statusEl = document.getElementById('filtro-semana-status');
+        if (statusEl) statusEl.textContent = 'Cargando...';
+
+        fetch(url, {
             headers: {'Accept': 'application/json'}
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+        })
         .then(data => {
             updateMarkers(data.ubicaciones);
             updateCrewsList(data.ubicaciones);
             document.getElementById('last-update').textContent = 'Actualizado: ' + new Date().toLocaleTimeString();
+            if (statusEl) {
+                statusEl.textContent = filtro
+                    ? 'Semana ' + filtro.semana + '/' + filtro.anio + ': ' + data.ubicaciones.length + ' cuadrilla(s) con ubicación.'
+                    : '';
+            }
         })
         .catch(error => {
             console.error('Error loading locations:', error);
+            if (statusEl) statusEl.textContent = 'No se pudo actualizar el mapa. Intentá de nuevo.';
         });
     }
 
@@ -192,11 +249,49 @@
     // Event listeners
     document.getElementById('refresh-btn').addEventListener('click', loadCrewLocations);
 
+    // Filtro de semana (issue #178, F1): aplica/limpia sin recargar la
+    // página (fetch nuevo con/sin querystring) y refleja el filtro en la
+    // URL (history.replaceState) para que sea compartible/testable por URL
+    // directa (ej. /cuadrillas/mapa/?anio=2099&semana=1).
+    document.getElementById('btn-aplicar-filtro-semana').addEventListener('click', function () {
+        const filtro = filtroSemanaActual();
+        const statusEl = document.getElementById('filtro-semana-status');
+        if (!filtro) {
+            if (statusEl) statusEl.textContent = 'Ingresá año y semana para filtrar.';
+            return;
+        }
+        const url = new URL(window.location);
+        url.searchParams.set('anio', filtro.anio);
+        url.searchParams.set('semana', filtro.semana);
+        window.history.replaceState({}, '', url);
+        loadCrewLocations();
+    });
+
+    document.getElementById('btn-limpiar-filtro-semana').addEventListener('click', function () {
+        document.getElementById('filtro-anio').value = '';
+        document.getElementById('filtro-semana').value = '';
+        const url = new URL(window.location);
+        url.searchParams.delete('anio');
+        url.searchParams.delete('semana');
+        window.history.replaceState({}, '', url);
+        loadCrewLocations();
+    });
+
     // Auto-refresh every 30 seconds
     setInterval(loadCrewLocations, 30000);
 
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
+        // Issue #178 (F1): precarga #filtro-anio/#filtro-semana desde
+        // window.location.search (ej. /cuadrillas/mapa/?anio=2099&semana=1,
+        // testable por URL directa) ANTES de initMap() -- así el primer
+        // fetch de loadCrewLocations() ya sale con el filtro aplicado.
+        const paramsIniciales = new URLSearchParams(window.location.search);
+        const anioInicial = paramsIniciales.get('anio');
+        const semanaInicial = paramsIniciales.get('semana');
+        if (anioInicial) document.getElementById('filtro-anio').value = anioInicial;
+        if (semanaInicial) document.getElementById('filtro-semana').value = semanaInicial;
+
         // Asegurar que el contenedor del mapa tenga altura antes de inicializar
         const mapContainer = document.getElementById('map-cuadrillas');
         if (mapContainer) {
