@@ -973,6 +973,11 @@ class ProgramacionS18CuadrillaImporter:
                         linea_asignada=linea,
                         vehiculo=vehiculo,
                         fecha=bloque['fecha_inicio'],
+                        # Issue #178 (A1): fecha_fin ya se parseaba del Excel S18
+                        # (línea 855, self.fecha_fin) pero se descartaba — ahora se
+                        # persiste. Nullable (M1): filas sin columna FIN quedan en
+                        # None sin romper.
+                        fecha_fin=bloque['fecha_fin'],
                         activa=True,
                         observaciones=observaciones,
                     )
@@ -990,6 +995,9 @@ class ProgramacionS18CuadrillaImporter:
             existente.linea_asignada = linea
             existente.vehiculo = vehiculo
             existente.fecha = bloque['fecha_inicio']
+            # Issue #178 (A1): idem create() — persistir fecha_fin en el
+            # re-import/actualización de una fila ya existente.
+            existente.fecha_fin = bloque['fecha_fin']
             if observaciones:
                 existente.observaciones = observaciones
             existente.save()
