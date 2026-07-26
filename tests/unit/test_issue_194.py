@@ -252,7 +252,10 @@ class TestCargaMasivaSeisColumnas:
             reverse("usuarios:campo_upload"), data={"archivo": archivo}
         )
 
-        assert response.status_code == 302
+        # CargaMasivaUsuariosCampoView.post() siempre re-renderiza la misma
+        # pagina (TemplateView, no redirect) -- comportamiento preexistente,
+        # no modificado por este fix.
+        assert response.status_code == 200
         creado = Usuario.objects.get(documento="1122334455")
         assert creado.email == "carlos.ramirez@instelec.co"  # email REAL, no autogenerado
         assert creado.rol == "liniero"
