@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% load l10n %}
+
+{% comment %}
+  #190 (reopen 2026-07-25, bounce=1) — Pestaña "Torre": único lugar editable
+  de los 17 formatos técnicos (FT) que son ÚNICOS por torre (no por pata).
+
+  Se persiste SIEMPRE sobre la pata canónica 'A' (ver
+  ObraCivilTorreFormatosView/GuardarView); el signal
+  `sincronizar_formatos_unicos_por_torre` (CAMPOS_SYNC_TORRE,
+  signals_b3_oc_detalle.py) propaga el valor a las patas B/C/D.
+
+  IMPORTANTE — agrupamiento de las 4 sub-secciones de abajo sigue la
+  ETIQUETA DEL CLIENTE (reopen 2026-07-25), NO el prefijo/sección del
+  modelo `ObraCivilTorreDetalle` (ver PLAN_2026-07-25_190_torre_formatos_17.md,
+  tabla de desalineamiento):
+    - "Cerramiento" (etiqueta cliente) = los 11 exc_ft0XX_ok (sección modelo:
+      Excavación). NO CONFUNDIR con la sección "Cerramiento" REAL del modelo
+      (cerr_madera_un/cerr_lona_m/cerr_senalizacion_ok/cerr_notas/
+      cerr_finalizado_ok) — esa sección NO tiene campos FT y no se toca acá.
+    - "Acero" (etiqueta cliente) = ace_ft028_ok (sección modelo: Acero).
+    - "Vaciado" (etiqueta cliente) = ace_ft930_ok (sección modelo: Acero) +
+      vac_ft916_ok + vac_it380_ok (sección modelo: Vaciado).
+    - "Compactación" (etiqueta cliente) = vac_ft056_ok (sección modelo:
+      Vaciado) + com_ft914_ok (sección modelo: Compactación).
+{% endcomment %}
+
+{% block title %}Torre — T{{ torre.numero_display }} — {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+{% localize off %}
+<div class="space-y-4"
+     x-data='ocTorreFormatos({
+         urlPost: "{{ url_post_torre|escapejs }}",
+         csrfToken: document.cookie.split("csrftoken=")[1]?.split(";")[0] || "{{ csrf_token }}"
+     })'>
+
+  {% include "construccion/_proyecto_tabs.html" %}
+
+  {% comment %}Header{% endcomment %}
+  <div class="flex items-center gap-4 flex-wrap">
+    <a href="{{ url_resumen }}"
+       class="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+      &larr; Volver al resumen
+    </a>
+    <a href="{{ url_volver_patas }}"
+       class="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+      &larr; Ver Patas (A/B/C/D)
+    </a>
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+        Torre Nº {{ torre.numero_display }} — Formatos técnicos (FT)
+      </h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        Proyecto: <span class="font-medium">{{ proyecto.nombre }}</span>
+        · Único lugar editable — se sincroniza automáticamente en las 4 patas
+        (A/B/C/D) al guardar.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}Toast{% endcomment %}
+  <div x-show="toast.visible"
+       x-transition.opacity
+       :class="toast.tipo === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300'"
+       class="rounded border px-4 py-2 text-sm"
+       style="display:none"
+       x-text="toast.mensaje"></div>
+
+  {% comment %}Layout 2-col: menú lateral (Torre activo) + contenido{% endcomment %}
+  <div class="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4">
+
+    <div class="md:sticky md:top-4 md:self-start">
+      <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Torre</p>
+      {% include "construccion/partials/_tabs_navegacion.html" with pestanas=pestanas_torre orientacion="vertical" %}
+    </div>
+
+    <div class="space-y-3">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <form @submit.prevent="submitForm($event.target)" class="space-y-6"
+              data-section-form="torre">
+          {% csrf_token %}
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Cerramiento</legend>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft022_ok }}<span>{{ form.exc_ft022_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft023_ok }}<span>{{ form.exc_ft023_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft058_ok }}<span>{{ form.exc_ft058_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft922_ok }}<span>{{ form.exc_ft922_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft929_ok }}<span>{{ form.exc_ft929_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft923_ok }}<span>{{ form.exc_ft923_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft924_ok }}<span>{{ form.exc_ft924_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft925_ok }}<span>{{ form.exc_ft925_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft926_ok }}<span>{{ form.exc_ft926_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft927_ok }}<span>{{ form.exc_ft927_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.exc_ft928_ok }}<span>{{ form.exc_ft928_ok.label }}</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Acero</legend>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ft028_ok }}<span>{{ form.ace_ft028_ok.label }}</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Vaciado</legend>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ft930_ok }}<span>{{ form.ace_ft930_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ft916_ok }}<span>{{ form.vac_ft916_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_it380_ok }}<span>{{ form.vac_it380_ok.label }}</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Compactación</legend>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.vac_ft056_ok }}<span>{{ form.vac_ft056_ok.label }}</span></label>
+              <label class="inline-flex items-center gap-2 text-sm">{{ form.com_ft914_ok }}<span>{{ form.com_ft914_ok.label }}</span></label>
+            </div>
+          </fieldset>
+
+          {% if form.non_field_errors %}
+            <div class="text-xs text-red-600 dark:text-red-400">{{ form.non_field_errors|join:", " }}</div>
+          {% endif %}
+
+          <div class="flex justify-end">
+            <button type="submit"
+                    :disabled="enviando"
+                    :class="enviando ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition"
+                    data-action="guardar-torre">
+              <span x-text="enviando ? 'Guardando…' : 'Guardar (sincroniza las 4 patas)'"></span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function ocTorreFormatos(cfg) {
+  return {
+    urlPost: cfg.urlPost,
+    csrfToken: cfg.csrfToken,
+    enviando: false,
+    toast: { visible: false, mensaje: '', tipo: 'ok' },
+    showToast(mensaje, tipo) {
+      this.toast = { visible: true, mensaje: mensaje, tipo: tipo };
+      setTimeout(() => { this.toast.visible = false; }, 3500);
+    },
+    async submitForm(formEl) {
+      if (this.enviando) return;
+      this.enviando = true;
+      try {
+        const fd = new FormData(formEl);
+        const r = await fetch(this.urlPost, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          this.showToast('Cambios guardados — sincronizado en las 4 patas.', 'ok');
+        } else {
+          const errs = data.errors || {};
+          const msg = data.error || ('Validación: ' + Object.keys(errs).join(', '));
+          this.showToast(msg, 'error');
+        }
+      } catch (e) {
+        this.showToast('Error de red.', 'error');
+      } finally {
+        this.enviando = false;
+      }
+    },
+  };
+}
+</script>
+{% endlocalize %}
+{% endblock %}

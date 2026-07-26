@@ -10,8 +10,7 @@
 
   <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
     <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ingreso }}<span>{{ form.ace_ingreso.label }}</span></label>
-    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ft028_ok }}<span>{{ form.ace_ft028_ok.label }}</span></label>
-    <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_ft930_ok }}<span>{{ form.ace_ft930_ok.label }}</span></label>
+    {# #190 — ace_ft028_ok/ace_ft930_ok removidos: viven SOLO en la pestaña "Torre" #}
     <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_corte_flejado_ok }}<span>{{ form.ace_corte_flejado_ok.label }}</span></label>
     <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_armado_sitio_ok }}<span>{{ form.ace_armado_sitio_ok.label }}</span></label>
     <label class="inline-flex items-center gap-2 text-sm">{{ form.ace_spt_herramientas_ok }}<span>{{ form.ace_spt_herramientas_ok.label }}</span></label>

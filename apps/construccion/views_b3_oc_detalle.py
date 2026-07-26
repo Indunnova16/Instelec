@@ -29,7 +29,8 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from apps.construccion.forms_b3_oc_detalle import (
-    SECCIONES, SECCION_LABELS, SECCION_SLUGS, form_para_seccion,
+    SECCIONES, SECCION_LABELS, SECCION_SLUGS, OCTorreFormatosForm,
+    form_para_seccion,
 )
 from apps.construccion.models import (
     ObraCivilTorre, ProyectoConstruccion, TorreConstruccion,
@@ -283,6 +284,21 @@ class ObraCivilDetalleView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             },
         )
 
+        # #190 (reopen 2026-07-25, bounce=1) — ítem de navegación "Torre",
+        # ANTES del bloque "Patas" en el menú lateral (ver
+        # obra_civil_detalle.html). Lista de 1 solo ítem — reusa
+        # _tabs_navegacion.html sin modificar ese partial compartido con
+        # Montaje/Tendido. NO activo acá (estamos en la vista de Patas).
+        pestanas_torre = [{
+            'slug': 'torre',
+            'label': 'Torre',
+            'url': reverse(
+                'construccion:obra_civil_torre_formatos',
+                kwargs={'proyecto_id': proyecto.id, 'torre_id': torre.id},
+            ),
+            'active': False,
+        }]
+
         ctx.update({
             'proyecto': proyecto,
             'torre': torre,
@@ -292,6 +308,7 @@ class ObraCivilDetalleView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'detalle': detalle,
             'form': form,
             'avance_ponderado_pct': detalle.avance_ponderado_pct,
+            'pestanas_torre': pestanas_torre,
             'pestanas_patas': pestanas_patas,
             'pestanas_secciones': pestanas_secciones,
             'torres_proyecto': torres_proyecto,
@@ -370,6 +387,122 @@ class ObraCivilDetalleSeccionView(LoginRequiredMixin, RoleRequiredMixin, View):
             'avance_ponderado': float(detalle.avance_ponderado),
             'avance_ponderado_pct': detalle.avance_ponderado_pct,
         })
+
+
+# ===========================================================================
+# 3.5. ObraCivilTorreFormatosView / ObraCivilTorreFormatosGuardarView (#190)
+# ===========================================================================
+
+
+class ObraCivilTorreFormatosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """#190 (reopen 2026-07-25, bounce=1) — pestaña "Torre": único lugar
+    editable de los 17 formatos técnicos (FT) que son ÚNICOS por torre (no
+    por pata).
+
+    Lee/escribe SIEMPRE sobre la pata canónica 'A' — el signal
+    `sincronizar_formatos_unicos_por_torre` (`CAMPOS_SYNC_TORRE`,
+    `signals_b3_oc_detalle.py`) propaga a B/C/D en el `post_save` disparado
+    por `ObraCivilTorreFormatosGuardarView.post()`. Esta vista NO reimplementa
+    esa propagación.
+    """
+    template_name = 'construccion/obra_civil_torre_formatos.html'
+
+    @property
+    def allowed_roles(self):
+        admins, operarios = _roles()
+        return admins + operarios
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        proyecto = get_object_or_404(
+            ProyectoConstruccion, id=self.kwargs['proyecto_id'],
+        )
+        torre = get_object_or_404(
+            TorreConstruccion, id=self.kwargs['torre_id'], proyecto=proyecto,
+        )
+
+        # Pata canónica 'A' — ya sincronizada por el signal (A1/A5), sirve
+        # como fuente de verdad para poblar el form.
+        detalle, _ = ObraCivilTorreDetalle.objects.get_or_create(
+            torre=torre, pata='A',
+            defaults={'proyecto': proyecto},
+        )
+        form = OCTorreFormatosForm(instance=detalle)
+
+        url_torre = reverse(
+            'construccion:obra_civil_torre_formatos',
+            kwargs={'proyecto_id': proyecto.id, 'torre_id': torre.id},
+        )
+        # "menú lateral" de 1 solo ítem, reusando _tabs_navegacion.html tal
+        # como en obra_civil_detalle.html (mismo contrato, sin modificar el
+        # partial compartido con Montaje/Tendido) — activo en ESTA página.
+        pestanas_torre = [{
+            'slug': 'torre',
+            'label': 'Torre',
+            'url': url_torre,
+            'active': True,
+        }]
+
+        ctx.update({
+            'proyecto': proyecto,
+            'torre': torre,
+            'detalle': detalle,
+            'form': form,
+            'pestanas_torre': pestanas_torre,
+            'url_post_torre': reverse(
+                'construccion:obra_civil_torre_formatos_guardar',
+                kwargs={'proyecto_id': proyecto.id, 'torre_id': torre.id},
+            ),
+            'url_volver_patas': reverse(
+                'construccion:obra_civil_detalle',
+                kwargs={'proyecto_id': proyecto.id, 'torre_id': torre.id},
+            ),
+            'url_resumen': reverse(
+                'construccion:obra_civil_lista',
+                kwargs={'proyecto_id': proyecto.id},
+            ),
+            'active_tab': 'obra-civil',
+        })
+        return ctx
+
+
+class ObraCivilTorreFormatosGuardarView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST AJAX: persiste los 17 FT sobre la pata canónica 'A'.
+
+    URL: `/<proyecto>/obra-civil/<torre>/torre/guardar/`
+
+    El signal `sincronizar_formatos_unicos_por_torre` (B2a/#190) propaga el
+    valor guardado a las patas B/C/D en el `post_save` de `form.save()` —
+    mismo contrato/mismo mecanismo que `ObraCivilDetalleSeccionView`, NO un
+    `update()` manual paralelo.
+    """
+
+    @property
+    def allowed_roles(self):
+        admins, operarios = _roles()
+        return admins + operarios
+
+    def post(self, request, proyecto_id, torre_id, *args, **kwargs):
+        proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+        torre = get_object_or_404(
+            TorreConstruccion, id=torre_id, proyecto=proyecto,
+        )
+
+        detalle, _ = ObraCivilTorreDetalle.objects.get_or_create(
+            torre=torre, pata='A',
+            defaults={'proyecto': proyecto},
+        )
+
+        form = OCTorreFormatosForm(request.POST, instance=detalle)
+        if not form.is_valid():
+            return JsonResponse(
+                {'ok': False, 'errors': form.errors.get_json_data()},
+                status=400,
+            )
+
+        form.save()  # post_save -> sincronizar_formatos_unicos_por_torre propaga B/C/D
+
+        return JsonResponse({'ok': True})
 
 
 # ===========================================================================

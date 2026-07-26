@@ -9,9 +9,12 @@ Es idempotente: si solo existen 1-3 patas todavía, promedia las que haya.
 Si no existe `ObraCivilTorre` se crea para mantener el cache fresco.
 
 #190 — además, un segundo receiver (`sincronizar_formatos_unicos_por_torre`,
-abajo) sincroniza entre las 4 patas de la torre los 4 campos que representan
-un formato técnico ÚNICO por torre en la realidad (FT-023/058/922 de
-Excavación y FT-914 de Compactación) — ver docstring del receiver.
+abajo) sincroniza entre las 4 patas de la torre los 17 campos que representan
+un formato técnico ÚNICO por torre en la realidad (11 exc_ft0XX_ok de
+Excavación, ace_ft028_ok/ace_ft930_ok de Acero, vac_ft916_ok/vac_it380_ok/
+vac_ft056_ok de Vaciado y com_ft914_ok de Compactación) — ver docstring del
+receiver. Reopen de Indunnova (2026-07-25, bounce=1): el fix anterior solo
+cubría 4 de los 17 campos reales — ver PLAN_2026-07-25_190_torre_formatos_17.md.
 """
 from decimal import Decimal
 
@@ -69,25 +72,45 @@ def recalcular_obra_civil_torre(sender, instance, **kwargs):
     )
 
 
-# #190 — 4 campos que son un formato técnico ÚNICO por torre en la realidad
-# (se diligencia una sola vez para las 4 patas), pero hoy viven en el modelo
-# torre×pata sin ningún mecanismo que los mantenga sincronizados entre filas.
-CAMPOS_SYNC_TORRE = ['exc_ft023_ok', 'exc_ft058_ok', 'exc_ft922_ok', 'com_ft914_ok']
+# #190 (reopen 2026-07-25, bounce=1) — 17 campos que son un formato técnico
+# ÚNICO por torre en la realidad (se diligencia una sola vez para las 4
+# patas), pero hoy viven en el modelo torre×pata sin ningún mecanismo que
+# los mantenga sincronizados entre filas. El fix anterior (4715f85) solo
+# cubría 4 de los 17 — esta lista es la extensión completa (ver PLAN
+# PLAN_2026-07-25_190_torre_formatos_17.md, tabla de desalineamiento de
+# etiquetas cliente↔modelo).
+CAMPOS_SYNC_TORRE = [
+    # Excavación (11)
+    'exc_ft022_ok', 'exc_ft023_ok', 'exc_ft058_ok', 'exc_ft922_ok',
+    'exc_ft929_ok', 'exc_ft923_ok', 'exc_ft924_ok', 'exc_ft925_ok',
+    'exc_ft926_ok', 'exc_ft927_ok', 'exc_ft928_ok',
+    # Acero (2)
+    'ace_ft028_ok', 'ace_ft930_ok',
+    # Vaciado (3)
+    'vac_ft916_ok', 'vac_it380_ok', 'vac_ft056_ok',
+    # Compactación (1)
+    'com_ft914_ok',
+]
 
 
 @receiver(post_save, sender=ObraCivilTorreDetalle)
 def sincronizar_formatos_unicos_por_torre(sender, instance, **kwargs):
-    """Propaga FT-023/058/922 (Excavación) y FT-914 (Compactación) a las
-    otras 3 patas de la misma torre.
+    """Propaga los 17 formatos técnicos únicos por torre (`CAMPOS_SYNC_TORRE`)
+    a las otras 3 patas de la misma torre.
 
-    Estos 4 booleanos representan un formato técnico ÚNICO por torre (no por
+    Estos 17 booleanos representan un formato técnico ÚNICO por torre (no por
     pata) — el usuario lo marca en la pata que está viendo en ese momento, y
     sin este signal las otras 3 patas quedaban con el valor previo (bug
-    reportado por Gabriel Valencia, ver Instelec#190).
+    reportado por Gabriel Valencia, ver Instelec#190). A partir de #190
+    (reopen), la escritura primaria pasa a ser la pestaña "Torre" (único
+    lugar editable, vía `ObraCivilTorreFormatosGuardarView` sobre la pata
+    canónica 'A'), pero este signal sigue siendo la defensa/idempotencia
+    real que hace la propagación — la vista Torre no reimplementa un
+    `update()` manual paralelo, reusa este mismo mecanismo.
 
     `form.save()` siempre persiste la fila COMPLETA (todos los campos del
     modelo, no solo los de la sección activa) — así que `instance` ya trae
-    el valor vigente de los 4 campos sea cual sea la sección que el usuario
+    el valor vigente de los 17 campos sea cual sea la sección que el usuario
     editó. Propagar siempre es idempotente y barato (1 UPDATE de ≤3 filas).
 
     `QuerySet.update()` NO dispara señales Django (post_save/pre_save no se
