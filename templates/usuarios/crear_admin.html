@@ -58,6 +58,17 @@
             </select>
         </div>
 
+        <div>
+            <!-- Issue #186 (186-M4): campo Área -- opcional, filtro de vista en el listado. -->
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Área</label>
+            <select name="area" class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                <option value="" selected>Sin asignar</option>
+                {% for value, label in areas %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
         <div class="flex items-center space-x-4 pt-2">
             <button type="submit"
                     class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">

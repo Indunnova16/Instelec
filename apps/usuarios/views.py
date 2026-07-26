@@ -11,6 +11,7 @@ from django.contrib import messages
 
 from apps.core.mixins import RoleRequiredMixin
 from apps.core.models import Role
+from apps.core.permissions import AREA_CHOICES
 from .models import Usuario
 from .forms import LoginForm, PerfilForm, UsuarioChangeForm
 
@@ -63,6 +64,15 @@ class GestionUsuariosView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         rol = self.request.GET.get('rol')
         if rol:
             qs = qs.filter(rol=rol)
+        # Issue #186 (186-M4): filtro DE VISTA por área (Construcción/
+        # Mantenimiento/Financiero) -- pedido de Gabriel Valencia para no ver
+        # "todo el listado de mantenimiento" al estar parado en Construcción.
+        # El listado SIN filtrar sigue mostrando TODOS los usuarios (Financiero
+        # los necesita a todos también) -- esto no segmenta la BD, solo acota
+        # el queryset cuando se pasa `?area=`.
+        area = self.request.GET.get('area', '').strip()
+        if area:
+            qs = qs.filter(area=area)
         buscar = self.request.GET.get('buscar', '').strip()
         if buscar:
             from django.db.models import Q
@@ -82,6 +92,9 @@ class GestionUsuariosView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         context['roles'] = Role.objects.filter(activo=True).values_list('codigo', 'nombre')
         context['rol_actual'] = self.request.GET.get('rol', '')
         context['buscar'] = self.request.GET.get('buscar', '')
+        # Issue #186 (186-M4): catálogo de áreas para el dropdown de filtro.
+        context['areas'] = AREA_CHOICES
+        context['area_actual'] = self.request.GET.get('area', '')
         return context
 
 
@@ -100,6 +113,8 @@ class EditarUsuarioView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         # (issue #186 A4): un rol creado/desactivado desde la matriz RBAC
         # queda disponible/no-disponible aqui sin deploy.
         context['roles'] = Role.objects.filter(activo=True).values_list('codigo', 'nombre')
+        # Issue #186 (186-M4): catálogo de áreas para editar el campo Área.
+        context['areas'] = AREA_CHOICES
         return context
 
     def form_valid(self, form):
@@ -123,6 +138,8 @@ class CrearUsuarioAdminView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
         context = super().get_context_data(**kwargs)
         # Issue #186 (A4): dropdown dinámico BD-backed -- ver GestionUsuariosView arriba.
         context['roles'] = Role.objects.filter(activo=True).values_list('codigo', 'nombre')
+        # Issue #186 (186-M4): catálogo de áreas para asignar al crear.
+        context['areas'] = AREA_CHOICES
         return context
 
     def post(self, request, *args, **kwargs):
@@ -131,6 +148,11 @@ class CrearUsuarioAdminView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
         last_name = request.POST.get('last_name', '').strip()
         rol = request.POST.get('rol', 'coordinador')
         password = request.POST.get('password', '').strip()
+        # Issue #186 (186-M4): área opcional -- valor no reconocido cae a
+        # '' (mismo comportamiento que un usuario legacy sin área asignada).
+        area = request.POST.get('area', '').strip()
+        if area not in dict(AREA_CHOICES):
+            area = ''
 
         if not email or not first_name or not password:
             messages.error(request, 'Email, nombre y contrasena son obligatorios.')
@@ -146,6 +168,7 @@ class CrearUsuarioAdminView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
             first_name=first_name,
             last_name=last_name,
             rol=rol,
+            area=area,
         )
         messages.success(request, f'Usuario {first_name} {last_name} creado exitosamente.')
         return redirect('usuarios:gestion')

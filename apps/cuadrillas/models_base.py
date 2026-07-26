@@ -4,6 +4,7 @@ Models for work crews (cuadrillas) management.
 from django.db import models
 
 from apps.core.models import BaseModel
+from apps.core.permissions import AREA_CHOICES
 
 from .models_cargo import Cargo
 
@@ -106,6 +107,18 @@ class PersonalCuadrilla(BaseModel):
         blank=True,
         help_text='Issue #188 (A1): celular del colaborador, expuesto en el autocompletado '
         'de PersonalCuadrillaAPIView para el grid editable de programación semanal.',
+    )
+    area = models.CharField(
+        'Área',
+        max_length=20,
+        choices=AREA_CHOICES,
+        blank=True,
+        default='',
+        help_text=(
+            'Área del colaborador (Construcción/Mantenimiento/Financiero) -- issue #186 '
+            '(186-M4), mismo catálogo que Usuario.area (apps.core.permissions.AREA_CHOICES). '
+            'blank/default vacío para no romper colaboradores legacy sin área asignada.'
+        ),
     )
     salario_base = models.DecimalField(
         'Salario base',

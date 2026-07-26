@@ -53,6 +53,17 @@
                 </div>
 
                 <div>
+                    <!-- Issue #186 (186-M4): campo Área (Construcción/Mantenimiento/Financiero) -- opcional, vive en la persona, no en el Cargo. -->
+                    <label for="{{ form.area.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Área
+                    </label>
+                    {{ form.area }}
+                    {% if form.area.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.area.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
                     <label for="{{ form.salario_base.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Salario base
                     </label>

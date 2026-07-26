@@ -71,4 +71,7 @@ class UsuarioChangeForm(UserChangeForm):
         fields = (
             'email', 'first_name', 'last_name', 'rol',
             'telefono', 'documento', 'cargo', 'is_active',
+            # Issue #186 (186-M4): campo Área -- editable desde la vista
+            # individual de edición, igual que rol/estado.
+            'area',
         )

@@ -28,6 +28,7 @@ class PersonalCuadrillaForm(forms.ModelForm):
             "nombre",
             "documento",
             "rol_cuadrilla",
+            "area",
             "salario_base",
             "fecha_ingreso",
             "fecha_salida",
@@ -46,6 +47,7 @@ class PersonalCuadrillaForm(forms.ModelForm):
                 }
             ),
             "rol_cuadrilla": forms.Select(attrs={"class": INPUT_CLS}),
+            "area": forms.Select(attrs={"class": INPUT_CLS}),
             "salario_base": forms.NumberInput(
                 attrs={
                     "class": INPUT_CLS,

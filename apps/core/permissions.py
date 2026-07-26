@@ -29,6 +29,25 @@ MODULO_CONFIG = 'CONFIG'  # gestión de usuarios, parametrización, sistema
 NIVEL_ADMIN = 'admin'
 NIVEL_OPERARIO = 'operario'
 
+# === Área de la persona (issue #186, 186-M4) ==============================
+# Catálogo compartido por `Usuario` (apps/usuarios/models.py) y
+# `PersonalCuadrilla` (apps/cuadrillas/models_base.py) -- decisión de diseño
+# del revisor: el Área vive en la PERSONA, NO en el Cargo (cargos como
+# "Liniero I"/"Conductor"/"Supervisor" existen en ambas áreas; ponerlo en el
+# Cargo hubiera obligado a duplicarlo por área). Es un filtro DE VISTA sobre
+# el listado de Usuarios (Parametrización) -- el listado completo sigue
+# existiendo sin filtrar, no segmenta la BD en tablas separadas. Centralizado
+# acá (no un TextChoices por-app) para que ambos modelos usen exactamente
+# los mismos 3 valores sin riesgo de divergencia.
+AREA_CONSTRUCCION = 'CONSTRUCCION'
+AREA_MANTENIMIENTO = 'MANTENIMIENTO'
+AREA_FINANCIERO = 'FINANCIERO'
+AREA_CHOICES = [
+    (AREA_CONSTRUCCION, 'Construcción'),
+    (AREA_MANTENIMIENTO, 'Mantenimiento'),
+    (AREA_FINANCIERO, 'Financiero'),
+]
+
 # Debe coincidir con RoleModuloPermiso.SIN_ACCESO (apps/core/models_roles.py).
 # Literal (no import) para evitar un ciclo de import a nivel de módulo entre
 # permissions.py y models_roles.py -- _get_role_permisos() abajo sí importa

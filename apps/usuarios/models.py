@@ -5,6 +5,8 @@ import uuid
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
+from apps.core.permissions import AREA_CHOICES
+
 
 class UsuarioManager(BaseUserManager):
     """Custom manager for Usuario model."""
@@ -109,6 +111,19 @@ class Usuario(AbstractUser):
         'Cargo',
         max_length=100,
         blank=True
+    )
+    area = models.CharField(
+        'Área',
+        max_length=20,
+        choices=AREA_CHOICES,
+        blank=True,
+        default='',
+        help_text=(
+            'Área de la persona (Construcción/Mantenimiento/Financiero) -- issue #186 '
+            '(186-M4). Filtro DE VISTA en el listado de Usuarios de Parametrización: '
+            'el listado completo sigue existiendo sin filtrar, esto no segmenta la BD. '
+            'blank/default vacío para no romper usuarios legacy sin área asignada.'
+        ),
     )
     salario_mensual = models.DecimalField(
         'Salario mensual',
