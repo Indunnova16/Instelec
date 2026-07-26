@@ -29,6 +29,9 @@ montado a la vez). Recibe:
                     <h2 class="font-semibold text-gray-900 dark:text-white">{{ b.nombre }}</h2>
                     <p class="text-xs text-gray-500 dark:text-gray-400">
                         {{ b.codigo }}{% if b.fecha %} · {{ b.fecha|date:"d/m/Y" }}{% endif %}
+                        {% if b.hora_inicio_planeada and b.hora_fin_planeada %}
+                        · <span title="Hora planeada del bloque, distinta de la asistencia real">Horario planeado: {{ b.hora_inicio_planeada }}–{{ b.hora_fin_planeada }}</span>
+                        {% endif %}
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">

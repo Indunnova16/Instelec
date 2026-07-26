@@ -18,7 +18,7 @@ masiva S18 vertical existente (#124).
 """
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -110,6 +110,22 @@ def _rango_calendario(anio, semana):
         return None, None
 
 
+def _parse_hora_planeada(valor):
+    """Parsea el valor de un input ``type="time"`` (``HH:MM`` o ``HH:MM:SS``,
+    según soporte de segundos del navegador) a ``datetime.time``. Cadena
+    vacía/None -> None (campo opcional). Issue #178 (D1) — hora de
+    inicio/fin PLANEADA de un bloque, distinta de la asistencia real."""
+    valor = (valor or "").strip()
+    if not valor:
+        return None
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(valor, fmt).time()
+        except ValueError:
+            continue
+    raise ValueError(f"Hora inválida: {valor}")
+
+
 def _bloque_a_dict(cuadrilla):
     """Normaliza una Cuadrilla + miembros a un dict listo para plantilla.
 
@@ -165,6 +181,15 @@ def _bloque_a_dict(cuadrilla):
         "vehiculo": getattr(cuadrilla.vehiculo, "placa", "") or "",
         "supervisor_id": str(cuadrilla.supervisor_id) if cuadrilla.supervisor_id else "",
         "fecha": cuadrilla.fecha,
+        # Issue #178 (D1): hora PLANEADA a nivel de bloque, separada de la
+        # asistencia real (Asistencia.hora_entrada/hora_salida, otro modelo
+        # / otra pantalla). Se formatea a "HH:MM" acá (no se deja el objeto
+        # time crudo) para que el input type="time" del form y el texto de
+        # la card usen el mismo dict sin necesitar un filtro de plantilla.
+        "hora_inicio_planeada": cuadrilla.hora_inicio_planeada.strftime("%H:%M")
+        if cuadrilla.hora_inicio_planeada else "",
+        "hora_fin_planeada": cuadrilla.hora_fin_planeada.strftime("%H:%M")
+        if cuadrilla.hora_fin_planeada else "",
         "observaciones": cuadrilla.observaciones or "",
         "miembros": miembros,
     }
@@ -224,6 +249,12 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
         "vehiculo_id": request.POST.get("vehiculo") or "",
         "supervisor_id": request.POST.get("supervisor") or "",
         "fecha": fecha,
+        # Issue #178 (D1): a diferencia de `fecha` (que llega ya parseada por
+        # el caller), estos se leen crudos del POST — el input type="time"
+        # espera directamente el string "HH:MM" como value, y así el usuario
+        # no pierde lo tipeado si el submit falla por OTRO campo.
+        "hora_inicio_planeada": (request.POST.get("hora_inicio_planeada") or "").strip(),
+        "hora_fin_planeada": (request.POST.get("hora_fin_planeada") or "").strip(),
         "observaciones": (request.POST.get("observaciones") or "").strip(),
     }
 
@@ -426,6 +457,20 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
             except ValueError:
                 return self._form_con_error(request, anio, semana, "La fecha ingresada no es válida.")
 
+        # Issue #178 (D1): hora de inicio/fin PLANEADA — ambas opcionales,
+        # nullable (M1). Si ambas vienen y fin < inicio, error inline (no
+        # bloquea el resto del form, mismo patrón que la validación de fecha).
+        try:
+            hora_inicio_planeada = _parse_hora_planeada(request.POST.get("hora_inicio_planeada"))
+            hora_fin_planeada = _parse_hora_planeada(request.POST.get("hora_fin_planeada"))
+        except ValueError:
+            return self._form_con_error(request, anio, semana, "La hora planeada ingresada no es válida.")
+        if hora_inicio_planeada and hora_fin_planeada and hora_fin_planeada < hora_inicio_planeada:
+            return self._form_con_error(
+                request, anio, semana,
+                "La hora de fin planeada no puede ser anterior a la hora de inicio planeada.",
+            )
+
         codigo = _siguiente_codigo_bloque(anio, semana, nombre)
         try:
             with transaction.atomic():
@@ -439,6 +484,8 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
                     supervisor_id=request.POST.get("supervisor") or None,
                     observaciones=(request.POST.get("observaciones") or "").strip(),
                     fecha=fecha,
+                    hora_inicio_planeada=hora_inicio_planeada,
+                    hora_fin_planeada=hora_fin_planeada,
                     activa=True,
                 )
         except Exception as e:
@@ -500,6 +547,20 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
             except ValueError:
                 return self._card_con_error(request, cuadrilla, anio, semana, "La fecha ingresada no es válida.")
 
+        # Issue #178 (D1): idem ProgramacionSemanalBloqueCrearView.
+        try:
+            hora_inicio_planeada = _parse_hora_planeada(request.POST.get("hora_inicio_planeada"))
+            hora_fin_planeada = _parse_hora_planeada(request.POST.get("hora_fin_planeada"))
+        except ValueError:
+            return self._card_con_error(
+                request, cuadrilla, anio, semana, "La hora planeada ingresada no es válida."
+            )
+        if hora_inicio_planeada and hora_fin_planeada and hora_fin_planeada < hora_inicio_planeada:
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                "La hora de fin planeada no puede ser anterior a la hora de inicio planeada.",
+            )
+
         try:
             with transaction.atomic():
                 cuadrilla.nombre = nombre
@@ -510,6 +571,8 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
                 cuadrilla.supervisor_id = request.POST.get("supervisor") or None
                 cuadrilla.observaciones = (request.POST.get("observaciones") or "").strip()
                 cuadrilla.fecha = fecha
+                cuadrilla.hora_inicio_planeada = hora_inicio_planeada
+                cuadrilla.hora_fin_planeada = hora_fin_planeada
                 cuadrilla.save()
         except Exception as e:
             logger.exception("Error editando bloque de programación semanal (issue #188)")

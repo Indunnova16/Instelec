@@ -88,6 +88,23 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
                value="{{ b.fecha|date:'Y-m-d'|default:'' }}"
                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
     </div>
+    <div>
+        {% comment %}
+        Issue #178 (D1): hora PLANEADA del bloque -- separada de la
+        asistencia real (Asistencia.hora_entrada/hora_salida, otra
+        pantalla). Ambas opcionales -- no todos los bloques la traen.
+        {% endcomment %}
+        <label for="id_hora_inicio_planeada" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hora inicio planeada</label>
+        <input type="time" name="hora_inicio_planeada" id="id_hora_inicio_planeada"
+               value="{{ b.hora_inicio_planeada|default:'' }}"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
+    <div>
+        <label for="id_hora_fin_planeada" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hora fin planeada</label>
+        <input type="time" name="hora_fin_planeada" id="id_hora_fin_planeada"
+               value="{{ b.hora_fin_planeada|default:'' }}"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
     <div class="md:col-span-3">
         <label for="id_observaciones" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Observaciones</label>
         <textarea name="observaciones" id="id_observaciones" rows="2"
