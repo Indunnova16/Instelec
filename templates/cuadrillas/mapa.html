@@ -18,6 +18,18 @@
         height: 24px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     }
+    /* Issue #178 (F2): marcador de entrada MANUAL de coordenadas (sitios sin
+       señal) -- distinto en forma Y color del punto azul del GPS automático,
+       para que nadie lo confunda con la posición real reportada por el
+       dispositivo. */
+    .crew-marker-manual {
+        background: #F59E0B;
+        border: 3px solid #fff;
+        border-radius: 4px;
+        width: 22px;
+        height: 22px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
     #map-empty-overlay {
         position: absolute;
         top: 50%;
@@ -89,6 +101,43 @@
             Ver todas
         </button>
         <span id="filtro-semana-status" class="text-sm text-gray-500 dark:text-gray-400" role="status" aria-live="polite"></span>
+    </div>
+
+    <!-- Entrada manual de coordenadas (issue #178, F2 -- sitios sin señal) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4" aria-label="Reportar ubicación manual">
+        <button type="button" id="btn-toggle-ubicacion-manual"
+                class="px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition text-sm"
+                aria-expanded="false" aria-controls="form-ubicacion-manual">
+            📍 Coordenada manual
+        </button>
+        <span id="ubicacion-manual-status" class="ml-2 text-sm text-gray-500 dark:text-gray-400" role="status" aria-live="polite"></span>
+
+        <div id="form-ubicacion-manual" class="hidden mt-3 flex flex-wrap items-end gap-3">
+            <div>
+                <label for="ubicacion-manual-cuadrilla" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Cuadrilla</label>
+                <select id="ubicacion-manual-cuadrilla"
+                        class="w-56 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm">
+                    <option value="">— Seleccionar —</option>
+                    {% for c in cuadrillas_activas %}
+                    <option value="{{ c.id }}">{{ c.codigo }} - {{ c.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ubicacion-manual-lat" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Latitud</label>
+                <input type="number" step="any" min="-90" max="90" id="ubicacion-manual-lat" placeholder="4.5709"
+                       class="w-28 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm">
+            </div>
+            <div>
+                <label for="ubicacion-manual-lng" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Longitud</label>
+                <input type="number" step="any" min="-180" max="180" id="ubicacion-manual-lng" placeholder="-74.2973"
+                       class="w-28 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm">
+            </div>
+            <button type="button" id="btn-guardar-ubicacion-manual"
+                    class="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+                Guardar ubicación
+            </button>
+        </div>
     </div>
 
     <!-- Map Container -->
@@ -190,10 +239,19 @@
         const bounds = [];
 
         ubicaciones.forEach(ubi => {
-            const marker = L.marker([ubi.lat, ubi.lng])
+            // Issue #178 (F2): marcador distinto para origen='manual' -- evita
+            // que una coordenada tecleada a mano (sitio sin señal) se
+            // confunda con un ping GPS real del dispositivo. Las
+            // automáticas (mayoría de los casos) conservan el pin default
+            // de Leaflet tal cual estaba antes de F2 -- sin regresión visual.
+            const esManual = ubi.origen === 'manual';
+            const markerOpts = esManual
+                ? { icon: L.divIcon({ className: 'crew-marker-manual', iconSize: [22, 22] }) }
+                : {};
+            const marker = L.marker([ubi.lat, ubi.lng], markerOpts)
                 .addTo(map)
                 .bindPopup(`
-                    <strong>${ubi.cuadrilla_codigo}</strong><br>
+                    <strong>${ubi.cuadrilla_codigo}</strong>${esManual ? ' <em>(ubicación manual)</em>' : ''}<br>
                     ${ubi.cuadrilla_nombre}<br>
                     <small>Actualizado: ${new Date(ubi.timestamp).toLocaleString()}</small>
                 `);
@@ -246,8 +304,70 @@
         }
     }
 
+    // Issue #178 (F2): entrada manual de coordenadas (sitios sin señal).
+    // Mismo patrón de fetch() + CSRF vía cookie que el resto del portafolio
+    // (ver templates/ingenieria/tabla.html, templates/preliminares/ambiental.html).
+    function getCsrfTokenCookie() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? match[1] : '';
+    }
+
+    function guardarUbicacionManual() {
+        const statusEl = document.getElementById('ubicacion-manual-status');
+        const cuadrillaId = document.getElementById('ubicacion-manual-cuadrilla').value;
+        const lat = document.getElementById('ubicacion-manual-lat').value.trim();
+        const lng = document.getElementById('ubicacion-manual-lng').value.trim();
+
+        if (!cuadrillaId) {
+            if (statusEl) statusEl.textContent = 'Seleccioná una cuadrilla.';
+            return;
+        }
+        if (!lat || !lng) {
+            if (statusEl) statusEl.textContent = 'Ingresá latitud y longitud.';
+            return;
+        }
+
+        if (statusEl) statusEl.textContent = 'Guardando…';
+
+        const body = new FormData();
+        body.append('lat', lat);
+        body.append('lng', lng);
+
+        fetch('/cuadrillas/' + encodeURIComponent(cuadrillaId) + '/ubicacion/manual/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfTokenCookie() },
+            body: body,
+        })
+        .then(response => response.json().then(data => ({ status: response.status, data: data })))
+        .then(({ status, data }) => {
+            if (status !== 200 || !data.ok) {
+                if (statusEl) statusEl.textContent = (data && data.error) || 'No se pudo guardar la ubicación.';
+                return;
+            }
+            if (statusEl) {
+                statusEl.textContent = 'Ubicación manual guardada para ' + data.ubicacion.cuadrilla_codigo + '.';
+            }
+            document.getElementById('ubicacion-manual-lat').value = '';
+            document.getElementById('ubicacion-manual-lng').value = '';
+            loadCrewLocations();
+        })
+        .catch(error => {
+            console.error('Error guardando ubicación manual:', error);
+            if (statusEl) statusEl.textContent = 'No se pudo guardar la ubicación (error de red).';
+        });
+    }
+
     // Event listeners
     document.getElementById('refresh-btn').addEventListener('click', loadCrewLocations);
+
+    document.getElementById('btn-toggle-ubicacion-manual').addEventListener('click', function () {
+        const form = document.getElementById('form-ubicacion-manual');
+        const abierto = !form.classList.contains('hidden');
+        form.classList.toggle('hidden');
+        this.setAttribute('aria-expanded', String(!abierto));
+    });
+
+    document.getElementById('btn-guardar-ubicacion-manual').addEventListener('click', guardarUbicacionManual);
 
     // Filtro de semana (issue #178, F1): aplica/limpia sin recargar la
     // página (fetch nuevo con/sin querystring) y refleja el filtro en la

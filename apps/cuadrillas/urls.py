@@ -66,3 +66,10 @@ try:
     urlpatterns += views_semanal.urlpatterns
 except ImportError:
     pass
+
+# #178 F2 — Entrada manual de coordenadas (mapa, sitios sin señal). Optional import.
+try:
+    from . import views_mapa  # noqa: F401
+    urlpatterns += views_mapa.urlpatterns
+except ImportError:
+    pass

@@ -442,6 +442,16 @@ class MapaCuadrillasView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     template_name = 'cuadrillas/mapa.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero', 'auxiliar']
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Issue #178 (F2): catálogo de cuadrillas activas para el selector
+        # del mini-form de "Coordenada manual" -- a diferencia de
+        # `ubicaciones` (JSON de MapaCuadrillasPartialView, solo cuadrillas
+        # que YA tienen tracking), acá se necesita CUALQUIER cuadrilla
+        # activa para poder reportarle una ubicación manual por primera vez.
+        context['cuadrillas_activas'] = Cuadrilla.objects.filter(activa=True).order_by('codigo')
+        return context
+
 
 class MapaCuadrillasPartialView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Partial view for HTMX polling of crew locations."""
@@ -492,6 +502,11 @@ class MapaCuadrillasPartialView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
                     'lng': float(ultima.longitud),
                     'precision': float(ultima.precision_metros) if ultima.precision_metros else None,
                     'timestamp': ultima.created_at.isoformat(),
+                    # Issue #178 (F2): distingue un ping GPS automático de una
+                    # entrada MANUAL (sitios sin señal) -- el frontend usa
+                    # esto para pintar un marcador distinto, evita confundir
+                    # una coordenada tecleada a mano con la posición real.
+                    'origen': ultima.origen,
                 })
 
         context['ubicaciones'] = ubicaciones

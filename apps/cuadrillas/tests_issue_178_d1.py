@@ -113,7 +113,9 @@ class TestD1CrearBloqueConHoraPlaneada(TestCase):
             "La hora de fin planeada no puede ser anterior a la hora de inicio planeada.",
             resp.content.decode(),
         )
-        self.assertFalse(Cuadrilla.objects.filter(nombre="QA_E2E_ Bloque horario invalido").exists())
+        self.assertFalse(
+            Cuadrilla.objects.filter(nombre="QA_E2E_ Bloque horario invalido").exists()
+        )
         # El valor ya tipeado por el usuario NO se pierde (se re-renderiza en el input).
         self.assertIn('value="15:00"', resp.content.decode())
 
