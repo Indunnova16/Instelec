@@ -1,19 +1,19 @@
 """
 User views.
 """
-from django.contrib.auth import login, logout
-from django.contrib.auth.views import LoginView, LogoutView
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import TemplateView, UpdateView, ListView
-from django.urls import reverse_lazy
-from django.shortcuts import redirect
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import LoginView, LogoutView
+from django.shortcuts import redirect
+from django.urls import reverse_lazy
+from django.views.generic import ListView, TemplateView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
 from apps.core.models import Role
 from apps.core.permissions import AREA_CHOICES
-from .models import Usuario
+
 from .forms import LoginForm, PerfilForm, UsuarioChangeForm
+from .models import Usuario
 
 
 class CustomLoginView(LoginView):

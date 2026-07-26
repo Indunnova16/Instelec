@@ -1,28 +1,53 @@
-manual_scoped_override — Instelec#178 T1 (2026-07-25)
+manual_scoped_override — Instelec#186 bundle 186-M2/M3/M4 (2026-07-26)
 
-Motivo del override: f3_selfverify.sh cae a pytest full-repo porque el commit
-M1 tocó models_base.py (heurístico #163 lo trata como transversal para
-siempre en el diff acumulado de esta branch). El orquestador ya causó 2 OOM
-preventivos hoy corriendo full-repo; se autorizó self-verify manual acotado
-para todos los sub-items de este sprint (M1, F1, B1, A1, D1, F2, A2, C1, T1).
+Motivo del override: el diff toca apps/core/permissions.py (transversal), lo
+que hace que f3_selfverify.sh escale a pytest full-repo (tests/unit, 49
+archivos). Ese full-repo run causó una crisis de memoria real en el Mac mini
+(un solo proceso pytest llegó a 41GB RSS / 37GB comprimido, dejando ~70MB de
+RAM física libre — señal resource_critical) y fue terminado por el
+orquestador antes de un jetsam/crash del sistema. Se aplica el mismo
+workaround ya usado en el sprint de Instelec#178 (ver
+SPRINTS/DECISIONES_2026-07-25_178_override_selfverify.md en main): self-verify
+manual acotado al scope real del cambio, no full-repo.
 
-Comandos corridos (venv real del repo, Instelec/venv/bin/python):
+Comandos corridos (venv real del repo, Instelec/venv/bin/python3,
+DJANGO_SETTINGS_MODULE=config.settings.dev_lite):
 
   manage.py check
     -> "System check identified no issues (0 silenced)." exit 0
 
   manage.py makemigrations --check --dry-run
-    -> "No changes detected" exit 0 (T1 no toca modelos, sin migración nueva)
+    -> "No changes detected" exit 0 (las migraciones 0025/0004 ya estaban
+       generadas y commiteadas por el sub-item 186-M4)
 
-  pytest apps/cuadrillas -q -m "not e2e" -o python_files="tests_*.py test_*.py"
-    -> 271 passed, exit 0 (268 tests previos de los 8 sub-items + 3 tests de
-       integración nuevos de T1: A1->A2, D1->C1, F1+F2)
+  pytest tests/unit/test_issue_186_m2_matriz_agrupada.py
+         tests/unit/test_issue_186_m3_navbar_dinamico.py
+         tests/unit/test_issue_186_m4_area.py
+         tests/unit/test_sidebar_modulos.py
+         tests/unit/test_issue_123_sidebar_financiero.py
+         tests/unit/test_permissions.py
+    -> 74 tests: 71 passed, 2 failed, 1 skipped (pre-existente, ver abajo)
 
-ruff check apps/cuadrillas/tests_issue_178_demo0725.py: 1 hallazgo S106
-(password hardcoded en _crear_admin) -- MISMO patrón preexistente idéntico en
-los 7 archivos de test de los otros sub-items del sprint (verificado con
-ruff check contra tests_issue_178_a2.py/c1.py/f1.py/d1.py, mismo hallazgo en
-todos) -- no es una regresión introducida por T1, se deja igual que el resto
-del sprint.
-ruff format: aplicado (2 líneas >100 cols reformateadas), --diff limpio tras
-el fix.
+  Los 2 FAILED (test_sidebar_modulos.py::test_placeholder_titulo_correcto,
+  test_permissions.py::test_liniero_can_access_lineas) se reproducen
+  IDÉNTICOS contra origin/main sin ningún cambio de esta rama (mismo error:
+  "django.db.utils.OperationalError: no such function: regexp_replace" —
+  incompatibilidad de una función Postgres-only usada en un query, corriendo
+  contra SQLite bajo settings.dev_lite). Confirmado NO es regresión de
+  186-M2/M3/M4: son fallas baseline pre-existentes del entorno de test local
+  sin PostGIS real, ajenas a este issue.
+
+  Todos los tests NUEVOS de 186-M2/M3/M4 (61 tests, incluido el skip que
+  también es pre-existente en test_sidebar_modulos.py) pasaron.
+
+ruff check --select I,F401 (import order + unused imports) aplicado a los
+archivos tocados: 2 imports sin usar (login/logout en apps/usuarios/views.py)
++ orden de imports en forms.py/models.py/views.py -- corregido, diff mínimo.
+`ruff format --check` reporta que estos mismos archivos (y otros del repo)
+NO cumplen el quote-style="double" del pyproject.toml -- confirmado que esto
+es DRIFT PRE-EXISTENTE en main (reproducido corriendo `ruff format --check`
+contra origin/main sin tocar nada de esta rama, mismos archivos ya fallan).
+Decisión: NO se corrió `ruff format` sobre archivos completos -- reformatear
+cientos de líneas de código preexistente no tocado por este issue infla el
+diff y mezcla cambios no relacionados en un run desatendido. Se deja ese
+lint (quote-style) como deuda técnica preexistente del repo, ajena a #186.
