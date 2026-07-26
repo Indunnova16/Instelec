@@ -1,0 +1,100 @@
+{% comment %}
+Mini-form embebido "Reprogramar" (issue #178, C1) — mueve un bloque a una
+nueva actividad/línea/tramo desde una fecha específica DENTRO de la misma
+semana, sin romper el bloque origen (que queda truncado en fecha_fin; su
+personal se copia al bloque nuevo, no se toca). Separado a propósito de
+_bloque_form.html (minimiza colisión de archivo con D1, que también toca
+_bloque_card.html) — mismo patrón visual/estructural que el mini-form
+"agregar personal" ya embebido en la card (toggle Alpine, HTMX
+hx-target=closest [data-bloque-codigo]).
+
+Recibe:
+  - b: dict de _bloque_a_dict del bloque ORIGEN (para el post_url)
+  - anio / semana
+  - tipos_actividad_bloque / lineas_bloque
+  - reprogramar_state: {open, nombre, fecha_desde, motivo, tipo_actividad_id,
+    linea_id, error} — preserva lo ya llenado si el submit falla.
+{% endcomment %}
+{% url 'cuadrillas:semanal_bloque_reprogramar' pk=b.id as url_reprogramar %}
+<form id="form-reprogramar-bloque"
+      hx-post="{{ url_reprogramar }}"
+      hx-target="closest [data-bloque-codigo]"
+      hx-swap="outerHTML"
+      x-init="htmx.process($el)"
+      class="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 mt-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+    {% csrf_token %}
+    <div class="md:col-span-3">
+        <p class="text-xs text-orange-700 dark:text-orange-300">
+            Mueve este bloque a una nueva actividad/línea desde la fecha indicada. El bloque
+            original queda intacto hasta el día anterior — su personal NO se modifica.
+        </p>
+    </div>
+    <div>
+        <label for="id_reprogramar_nombre" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del bloque nuevo</label>
+        <input type="text" name="nombre" id="id_reprogramar_nombre" required maxlength="100"
+               value="{{ reprogramar_state.nombre|default:'' }}"
+               placeholder="Ej: Emergencia sector sur"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
+    <div>
+        <label for="id_reprogramar_fecha_desde" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reprogramar desde</label>
+        <input type="date" name="fecha_desde" id="id_reprogramar_fecha_desde" required
+               value="{{ reprogramar_state.fecha_desde|default:'' }}"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
+    <div>
+        <label for="id_reprogramar_tipo_actividad" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nueva actividad</label>
+        <select name="tipo_actividad" id="id_reprogramar_tipo_actividad"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            <option value="">— Sin tipo —</option>
+            {% for ta in tipos_actividad_bloque %}
+            <option value="{{ ta.id }}" {% if reprogramar_state.tipo_actividad_id == ta.id|stringformat:'s' %}selected{% endif %}>{{ ta.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="id_reprogramar_linea" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nueva línea</label>
+        <select name="linea_asignada" id="id_reprogramar_linea"
+                hx-get="{% url 'cuadrillas:tramos_por_linea_api' %}"
+                hx-trigger="change"
+                hx-target="#id_reprogramar_tramo"
+                hx-swap="innerHTML"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            <option value="">— Sin línea —</option>
+            {% for l in lineas_bloque %}
+            <option value="{{ l.id }}" {% if reprogramar_state.linea_id == l.id|stringformat:'s' %}selected{% endif %}>{{ l.codigo }} - {{ l.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="id_reprogramar_tramo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nuevo tramo</label>
+        <select name="tramo" id="id_reprogramar_tramo"
+                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            <option value="">— Sin tramo —</option>
+        </select>
+        <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Se carga según la línea seleccionada.</p>
+    </div>
+    <div class="md:col-span-3">
+        <label for="id_reprogramar_motivo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Motivo (opcional)</label>
+        <input type="text" name="motivo" id="id_reprogramar_motivo" maxlength="255"
+               value="{{ reprogramar_state.motivo|default:'' }}"
+               placeholder="Ej: Emergencia reportada por el cliente"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
+    {% if reprogramar_state.error %}
+    <div class="md:col-span-3">
+        <p class="text-sm text-red-600 dark:text-red-400" role="alert">{{ reprogramar_state.error }}</p>
+    </div>
+    {% endif %}
+    <div class="md:col-span-3 flex items-center gap-2">
+        <span class="htmx-indicator text-xs text-gray-400" role="status" aria-live="polite">Reprogramando…</span>
+        <button type="submit"
+                class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm">
+            Reprogramar
+        </button>
+        <button type="button" @click="reprogramando = false"
+                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
+            Cancelar
+        </button>
+    </div>
+</form>

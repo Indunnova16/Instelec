@@ -61,7 +61,16 @@ def _bloques_qs(anio, semana):
     semanal ni duplicarse."""
     return (
         Cuadrilla.objects.filter(codigo__startswith=_prefijo(anio, semana), activa=True)
-        .select_related("linea_asignada", "vehiculo", "supervisor", "tipo_actividad", "tramo")
+        .select_related(
+            "linea_asignada",
+            "vehiculo",
+            "supervisor",
+            "tipo_actividad",
+            "tramo",
+            # Issue #178 (C1): _bloque_a_dict expone reprogramado_desde_codigo
+            # -- select_related evita un N+1 por bloque reprogramado.
+            "reprogramado_desde",
+        )
         .prefetch_related("miembros__usuario", "miembros__rol_cuadrilla")
         .order_by("codigo")
     )
@@ -181,6 +190,17 @@ def _bloque_a_dict(cuadrilla):
         "vehiculo": getattr(cuadrilla.vehiculo, "placa", "") or "",
         "supervisor_id": str(cuadrilla.supervisor_id) if cuadrilla.supervisor_id else "",
         "fecha": cuadrilla.fecha,
+        # Issue #178 (M1/C1): fecha de fin real del bloque -- se trunca a
+        # `fecha_desde - 1` cuando se reprograma (ver
+        # ProgramacionSemanalBloqueReprogramarView). No tiene UI propia
+        # todavía (fuera de alcance de C1), pero la card la muestra junto a
+        # `fecha` cuando está seteada para que el truncado sea visible.
+        "fecha_fin": cuadrilla.fecha_fin,
+        # Issue #178 (C1): si este bloque nació de reprogramar uno existente,
+        # el código del bloque ORIGEN -- la card lo muestra como referencia.
+        "reprogramado_desde_codigo": cuadrilla.reprogramado_desde.codigo
+        if cuadrilla.reprogramado_desde_id
+        else "",
         # Issue #178 (D1): hora PLANEADA a nivel de bloque, separada de la
         # asistencia real (Asistencia.hora_entrada/hora_salida, otro modelo
         # / otra pantalla). Se formatea a "HH:MM" acá (no se deja el objeto
@@ -755,6 +775,163 @@ class ProgramacionSemanalMiembroQuitarView(LoginRequiredMixin, RoleRequiredMixin
         return HttpResponse(html)
 
 
+class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """POST /cuadrillas/semanal/bloque/<uuid:pk>/reprogramar/ (issue #178, C1).
+
+    Mueve un bloque a una nueva actividad/línea/tramo desde un día específico
+    de la semana en adelante, SIN romper el bloque original (pedido C, demo
+    2026-07-25 — ejemplo real del cliente: cuadrilla movida el 26/07 tras una
+    emergencia). En una transacción:
+
+      1. Valida que ``fecha_desde`` caiga DENTRO de la semana ISO del bloque
+         origen (mismo criterio ``codigo`` ``WW-YYYY-`` que el resto del
+         módulo — reprogramar CRUZANDO de semana queda fuera de alcance de
+         este pedido, ver el PLAN del sprint) y sea posterior a ``fecha`` del
+         origen (si está seteada).
+      2. Trunca ``fecha_fin`` del bloque origen a ``fecha_desde - 1 día`` — el
+         origen queda como registro histórico de lo que pasó ANTES del
+         cambio, su personal NO se toca.
+      3. Crea un bloque nuevo con la actividad/línea/tramo indicados,
+         ``fecha=fecha_desde``, ``fecha_fin=<fecha_fin original del origen>``,
+         ``reprogramado_desde=origen``.
+      4. Copia los ``CuadrillaMiembro`` ACTIVOS del origen al bloque nuevo
+         (mismo usuario/rol/cargo/placa) — el origen NO pierde su personal
+         histórico.
+
+    Éxito: responde con OOB swap (card nueva agregada a #bloques-lista) + la
+    card del origen actualizada como contenido principal (hx-target de
+    ``_bloque_reprogramar_form.html`` apunta al origen) — mismo patrón que
+    ``ProgramacionSemanalBloqueCrearView``. Falla: re-renderiza la card del
+    origen con el mini-form de reprogramar abierto + el error inline,
+    preservando lo ya llenado.
+    """
+
+    allowed_roles = ROLES_CUADRILLAS
+
+    def post(self, request, pk):
+        origen = get_object_or_404(Cuadrilla, pk=pk)
+        anio, semana = _anio_semana_desde_codigo(origen.codigo)
+        if anio is None:
+            return self._form_con_error(
+                request,
+                origen,
+                None,
+                None,
+                "No se pudo determinar la semana del bloque origen a partir de su código.",
+            )
+
+        nombre = (request.POST.get("nombre") or "").strip()
+        if not nombre:
+            return self._form_con_error(
+                request, origen, anio, semana, "El nombre del bloque nuevo es obligatorio."
+            )
+
+        fecha_desde_str = (request.POST.get("fecha_desde") or "").strip()
+        try:
+            fecha_desde = date.fromisoformat(fecha_desde_str)
+        except ValueError:
+            return self._form_con_error(
+                request, origen, anio, semana, "La fecha desde ingresada no es válida."
+            )
+
+        lunes, domingo = _rango_calendario(anio, semana)
+        if not lunes or not (lunes <= fecha_desde <= domingo):
+            rango = f" ({lunes:%d/%m/%Y} — {domingo:%d/%m/%Y})" if lunes else ""
+            return self._form_con_error(
+                request,
+                origen,
+                anio,
+                semana,
+                f"La fecha debe estar dentro de la semana {semana:02d}/{anio}{rango} del "
+                f"bloque origen; reprogramar hacia otra semana no está soportado.",
+            )
+        if origen.fecha and fecha_desde <= origen.fecha:
+            return self._form_con_error(
+                request,
+                origen,
+                anio,
+                semana,
+                f"La fecha debe ser posterior al inicio del bloque origen "
+                f"({origen.fecha:%d/%m/%Y}).",
+            )
+
+        motivo = (request.POST.get("motivo") or "").strip()
+
+        try:
+            with transaction.atomic():
+                fecha_fin_original = origen.fecha_fin
+                origen.fecha_fin = fecha_desde - timedelta(days=1)
+                origen.save(update_fields=["fecha_fin", "updated_at"])
+
+                nuevo = Cuadrilla.objects.create(
+                    codigo=_siguiente_codigo_bloque(anio, semana, nombre),
+                    nombre=nombre,
+                    tipo_actividad_id=request.POST.get("tipo_actividad") or None,
+                    linea_asignada_id=request.POST.get("linea_asignada") or None,
+                    tramo_id=request.POST.get("tramo") or None,
+                    vehiculo=origen.vehiculo,
+                    supervisor=origen.supervisor,
+                    observaciones=motivo,
+                    fecha=fecha_desde,
+                    fecha_fin=fecha_fin_original,
+                    reprogramado_desde=origen,
+                    activa=True,
+                )
+                for m in origen.miembros.filter(activo=True):
+                    CuadrillaMiembro.objects.create(
+                        cuadrilla=nuevo,
+                        usuario=m.usuario,
+                        rol_cuadrilla=m.rol_cuadrilla,
+                        cargo=m.cargo,
+                        costo_dia=m.costo_dia,
+                        fecha_inicio=fecha_desde,
+                        activo=True,
+                        es_conductor_interno=m.es_conductor_interno,
+                        placa_vehiculo=m.placa_vehiculo,
+                    )
+        except Exception as e:
+            logger.exception("Error reprogramando bloque (issue #178, C1)")
+            return self._form_con_error(request, origen, anio, semana, f"Error al reprogramar: {e}")
+
+        origen.refresh_from_db()
+        card_nueva_html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {**_choices_form_bloque(), "b": _bloque_a_dict(nuevo), "anio": anio, "semana": semana},
+            request=request,
+        )
+        card_origen_html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {**_choices_form_bloque(), "b": _bloque_a_dict(origen), "anio": anio, "semana": semana},
+            request=request,
+        )
+        return HttpResponse(
+            f'<div hx-swap-oob="beforeend:#bloques-lista">{card_nueva_html}</div>{card_origen_html}'
+        )
+
+    def _form_con_error(self, request, origen, anio, semana, mensaje):
+        reprogramar_state = {
+            "open": True,
+            "nombre": (request.POST.get("nombre") or "").strip(),
+            "fecha_desde": (request.POST.get("fecha_desde") or "").strip(),
+            "motivo": (request.POST.get("motivo") or "").strip(),
+            "tipo_actividad_id": request.POST.get("tipo_actividad") or "",
+            "linea_id": request.POST.get("linea_asignada") or "",
+            "error": mensaje,
+        }
+        html = render_to_string(
+            "cuadrillas/partials/_bloque_card.html",
+            {
+                **_choices_form_bloque(),
+                "b": _bloque_a_dict(origen),
+                "anio": anio,
+                "semana": semana,
+                "reprogramar_state": reprogramar_state,
+            },
+            request=request,
+        )
+        return HttpResponse(html, status=400)
+
+
 class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Copia los bloques (Cuadrilla + CuadrillaMiembro) de la semana anterior a
     la semana destino como base editable. NO destructivo: si un bloque ya existe
@@ -943,5 +1120,11 @@ urlpatterns = [
         "semanal/bloque/<uuid:pk>/miembro/<uuid:miembro_pk>/quitar/",
         ProgramacionSemanalMiembroQuitarView.as_view(),
         name="semanal_miembro_quitar",
+    ),
+    # Issue #178 (C1) — reprogramar bloque desde una fecha específica.
+    path(
+        "semanal/bloque/<uuid:pk>/reprogramar/",
+        ProgramacionSemanalBloqueReprogramarView.as_view(),
+        name="semanal_bloque_reprogramar",
     ),
 ]
