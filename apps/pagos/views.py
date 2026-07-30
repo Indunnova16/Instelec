@@ -202,7 +202,7 @@ class PagoPortalView(LoginRequiredMixin, TemplateView):
         # Generate WOMPI integrity signature (unique per month)
         if plan and suscripcion:
             now = timezone.now()
-            reference = f"{settings.WOMPI_REFERENCE_PREFIX}-{suscripcion.id}-{plan.id}-{now:%Y%m}-{meses_adeudados}M"
+            reference = f"{settings.WOMPI_REFERENCE_PREFIX}-{suscripcion.id}-{plan.id}-{now:%Y%m%d%H%M%S%f}-{meses_adeudados}M"
             amount_cents = int(plan.precio * 100 * meses_adeudados)
             currency = 'COP'
             integrity_key = settings.WOMPI_INTEGRITY_KEY
@@ -262,11 +262,16 @@ class WompiWebhookView(View):
                 }
             )
 
+            # Guard de idempotencia: si el Pago YA estaba APROBADO antes de este
+            # evento, una redelivery del mismo webhook (o un reprocesamiento por
+            # otra via) no debe re-avanzar fecha_proximo_pago ni re-facturar.
+            ya_estaba_aprobado = (not created) and (pago.estado == 'APROBADO')
+
             pago.estado = local_status
             pago.detalle_respuesta = transaction
             pago.save()
 
-            if status == 'APPROVED':
+            if status == 'APPROVED' and not ya_estaba_aprobado:
                 if pago.suscripcion:
                     pago.suscripcion.estado = 'ACTIVA'
                     _avanzar_fecha_proximo_pago(pago.suscripcion, pago.monto)
@@ -276,6 +281,9 @@ class WompiWebhookView(View):
                     except Exception as e:
                         logger.error(f'Error generando factura Alegra: {e}')
 
-            logger.info(f'WOMPI webhook: tx={transaction_id} status={status} created={created}')
+            logger.info(
+                f'WOMPI webhook: tx={transaction_id} status={status} '
+                f'created={created} ya_estaba_aprobado={ya_estaba_aprobado}'
+            )
 
         return JsonResponse({'status': 'ok'})

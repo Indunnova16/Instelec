@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 
 
 class PlanServicio(models.Model):
@@ -109,6 +110,18 @@ class Pago(models.Model):
         verbose_name = 'Pago'
         verbose_name_plural = 'Pagos'
         ordering = ['-fecha_pago']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['wompi_reference'],
+                condition=~Q(wompi_reference=''),
+                name='uniq_wompi_reference_no_vacio',
+            ),
+            models.UniqueConstraint(
+                fields=['wompi_transaction_id'],
+                condition=~Q(wompi_transaction_id=''),
+                name='uniq_wompi_transaction_id_no_vacio',
+            ),
+        ]
 
     def __str__(self):
         return f"Pago ${float(self.monto):,.0f} - {self.get_estado_display()}"
