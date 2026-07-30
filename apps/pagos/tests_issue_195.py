@@ -20,7 +20,12 @@ class WompiReferenceGranularidadTests(TestCase):
     WOMPI distintas (antes usaban `%Y%m`, colisionaban)."""
 
     def setUp(self):
-        self.user = User.objects.create_user(email='qa_pagos_195@test.com', password='x')
+        # Issue #197: el portal de pagos ahora es admin-only (is_admin) -- este
+        # test siempre necesito un usuario logueado con acceso, no exercitaba el
+        # gate en si (eso lo cubre tests_issue_197.py), asi que se vuelve admin.
+        self.user = User.objects.create_user(
+            email='qa_pagos_195@test.com', password='x', rol='admin',
+        )
         self.plan = PlanServicio.objects.create(nombre='Plan QA', precio=Decimal('150000'))
         self.suscripcion = Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE')
         self.client.force_login(self.user)
