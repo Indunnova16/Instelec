@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.pagos.alegra import crear_factura
-from apps.pagos.models import Pago, PlanServicio, Suscripcion, calcular_n_meses
+from apps.pagos.models import DatosFacturacion, Pago, PlanServicio, Suscripcion, calcular_n_meses
 
 User = get_user_model()
 
@@ -389,3 +389,90 @@ class GrillaEstadoPorMesContextTests(TestCase):
         resp = self.client.get(reverse('pagos:portal'))
         self.assertNotContains(resp, 'name="n_meses_pago"')
         self.assertNotContains(resp, "name='n_meses_pago'")
+
+
+class FlujoCompletoPagoMultiMesTests(TestCase):
+    """A6 -- integracion end-to-end de A1-A5 juntos, SIN mockear la logica
+    interna del propio modulo (solo la llamada HTTP real a Alegra). Cierra
+    localmente el angulo "atraso multi-mes" que F2 marco DATA_SEED_ABSENT
+    contra prod (0 Pago historicos hoy en la Suscripcion real, no se puede
+    fabricar atraso mutando el singleton real -- ver PLAN_2026-07-30_199
+    seccion "Verificacion BD prod"). F2 indico explicitamente que ese
+    angulo queda "cubierto por tests unitarios locales
+    (tests_issue_199.py::MesesAtrasoPropertyTests) con fixtures, NO por E2E
+    prod" -- esta clase es esa cobertura, extendida a TODO el flujo (no
+    solo la property aislada).
+    """
+
+    def setUp(self):
+        self.admin = User.objects.create_user(email='admin_199_flujo@test.com', password='x', rol='admin')
+        self.plan = PlanServicio.objects.create(nombre='Plan Instelec', precio=Decimal('150000'))
+        self.fecha_vencida = timezone.localdate() - timezone.timedelta(days=65)  # meses_atraso=3
+        self.datos_facturacion = DatosFacturacion.objects.create(
+            tipo_persona='JURIDICA', razon_social='Instelec SAS', tipo_identificacion='NIT',
+            numero_identificacion='900123456', email='facturacion@instelec.com.co',
+            telefono='3001234567', direccion='Calle 1', ciudad='Medellin', departamento='Antioquia',
+            alegra_contacto_id='999',  # pre-seteado -- evita el lookup HTTP de contacto.
+        )
+        self.suscripcion = Suscripcion.objects.create(
+            plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=self.fecha_vencida,
+            datos_facturacion=self.datos_facturacion,
+        )
+        self.client.force_login(self.admin)
+
+    def test_pago_3_meses_atraso_se_propaga_correctamente_end_to_end(self):
+        import json
+
+        # Precondicion: 3 meses de atraso ANTES del pago (A3).
+        self.assertEqual(self.suscripcion.meses_atraso, 3)
+
+        monto_3_meses = self.plan.precio * 3  # $450,000
+        payload = {
+            'event': 'transaction.updated',
+            'data': {
+                'transaction': {
+                    'id': 'TX-199-FLUJO-COMPLETO',
+                    'reference': 'REF-199-FLUJO-COMPLETO',
+                    'status': 'APPROVED',
+                    'amount_in_cents': int(monto_3_meses * 100),
+                }
+            },
+        }
+        with patch('apps.pagos.views.wompi.verify_webhook_signature', return_value=True), \
+                patch('apps.pagos.alegra.requests.post') as mock_alegra_post:
+            mock_alegra_post.return_value.status_code = 201
+            mock_alegra_post.return_value.json.return_value = {'id': 5001}
+            resp = self.client.post(
+                reverse('pagos:webhook'), data=json.dumps(payload), content_type='application/json',
+            )
+        self.assertEqual(resp.status_code, 200)
+
+        # A2: n_meses persistido correctamente al crear el Pago (no
+        # recalculado en otro punto del flujo).
+        pago = Pago.objects.get(wompi_transaction_id='TX-199-FLUJO-COMPLETO')
+        self.assertEqual(pago.n_meses, 3)
+
+        # A2: fecha_proximo_pago avanzo exactamente 3 meses desde la fecha
+        # vencida ORIGINAL (no desde hoy).
+        self.suscripcion.refresh_from_db()
+        meses_avanzados = (
+            (self.suscripcion.fecha_proximo_pago.year - self.fecha_vencida.year) * 12
+            + (self.suscripcion.fecha_proximo_pago.month - self.fecha_vencida.month)
+        )
+        self.assertEqual(meses_avanzados, 3)
+        self.assertEqual(self.suscripcion.estado, 'ACTIVA')
+
+        # A3: meses_atraso vuelve a 0 -- ya no hay atraso tras el pago.
+        self.assertEqual(self.suscripcion.meses_atraso, 0)
+
+        # A4: la factura Alegra se creo con quantity=3 (pago.n_meses), sin
+        # recalculo independiente.
+        _, kwargs = mock_alegra_post.call_args
+        self.assertEqual(kwargs['json']['items'][0]['quantity'], 3)
+
+        # A5: la grilla del portal, en la SIGUIENTE vista, refleja los 3
+        # meses recien pagados como cubiertos.
+        resp_portal = self.client.get(reverse('pagos:portal'))
+        grid = resp_portal.context['grid_meses']
+        pagados = [mes for mes in grid if mes['pagado']]
+        self.assertEqual(len(pagados), 3)
