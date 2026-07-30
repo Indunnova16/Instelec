@@ -10,7 +10,8 @@ MESES_ES = [
 
 
 def recordatorio_pago(request):
-    if not getattr(request, 'user', None) or not request.user.is_authenticated:
+    user = getattr(request, 'user', None)
+    if not user or not user.is_authenticated:
         return {}
 
     try:
@@ -18,18 +19,29 @@ def recordatorio_pago(request):
     except Exception:
         return {}
 
-    if not suscripcion or suscripcion.estado == 'CANCELADA':
+    if not suscripcion:
         return {}
+
+    ctx = {}
+
+    if suscripcion.estado == 'CANCELADA':
+        return ctx
+
+    # Issue #197: banner de alerta de pago vencido -- SOLO expuesto a admins
+    # (`request.user.is_admin`), independiente del recordatorio de abajo (que
+    # sigue siendo visible a cualquier usuario autenticado).
+    if getattr(user, 'is_admin', False) and suscripcion.alerta_pago_vencido:
+        ctx['alerta_pago_vencido'] = True
 
     fecha_venc = suscripcion.fecha_proximo_pago
     if not fecha_venc:
-        return {}
+        return ctx
 
     today = timezone.localdate()
     delta = (today - fecha_venc).days
 
     if delta < -5:
-        return {}
+        return ctx
 
     if delta < 0:
         estado = 'proximo'
@@ -52,14 +64,13 @@ def recordatorio_pago(request):
             m = 1
             y += 1
 
-    return {
-        'recordatorio_pago': {
-            'estado': estado,
-            'fecha_vencimiento': fecha_venc,
-            'horas_entre_avisos': horas,
-            'meses_adeudados': meses,
-            'monto_total': monto_total,
-            'periodos': periodos,
-            'plan_nombre': plan.nombre if plan else '',
-        }
+    ctx['recordatorio_pago'] = {
+        'estado': estado,
+        'fecha_vencimiento': fecha_venc,
+        'horas_entre_avisos': horas,
+        'meses_adeudados': meses,
+        'monto_total': monto_total,
+        'periodos': periodos,
+        'plan_nombre': plan.nombre if plan else '',
     }
+    return ctx

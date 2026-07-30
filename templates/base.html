@@ -131,6 +131,23 @@
                 <!-- Breadcrumb -->
                 {% block breadcrumb %}{% endblock %}
 
+                <!-- Issue #197: banner de pago vencido 5+ dias -- solo admin.
+                     `alerta_pago_vencido` ya viene gateado por is_admin desde
+                     apps.pagos.context_processors.recordatorio_pago, el chequeo
+                     de user.is_admin de abajo es defensa en profundidad. -->
+                {% if alerta_pago_vencido and user.is_admin %}
+                <div class="mb-4 p-4 rounded-lg bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 flex items-center"
+                     role="alert" aria-live="assertive">
+                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <span>
+                        El pago de la suscripcion lleva <strong>5 o mas dias vencido</strong>.
+                        <a href="{% url 'pagos:portal' %}" class="underline font-medium">Ir al Portal de Pagos</a>
+                    </span>
+                </div>
+                {% endif %}
+
                 <!-- Flash messages -->
                 {% if messages %}
                 <div class="mb-4 space-y-2" role="region" aria-label="Mensajes del sistema">
