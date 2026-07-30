@@ -50,7 +50,13 @@ def recordatorio_pago(request):
     else:
         estado = 'vencido'
         horas = 6
-        meses = max(1, (delta // 30) + 1)
+        # Issue #199 (A3): fuente unica -- Suscripcion.meses_atraso.
+        meses = suscripcion.meses_atraso
+        if meses <= 0:
+            # ACTIVA con fecha_proximo_pago vencida por dato manual
+            # inconsistente (ver docstring de meses_atraso) -- no hay
+            # atraso real, no mostrar el aviso de "vencido".
+            return ctx
 
     plan = suscripcion.plan
     monto_total = float(plan.precio) * meses if plan else 0.0

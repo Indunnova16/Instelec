@@ -130,6 +130,30 @@ class Suscripcion(models.Model):
         return self.estado != 'ACTIVA' and self.fecha_proximo_pago is not None
 
     @property
+    def meses_atraso(self):
+        """Meses REALES de atraso (>=1 si vencida y no ACTIVA, 0 si no).
+
+        Centraliza el calculo `delta_dias // 30 + 1` (issue #199, sub-item
+        A3) que antes vivia duplicado de forma independiente en
+        `context_processors.recordatorio_pago` y en
+        `views.PagoPortalView.get_context_data` -- ambos pasan a leer esta
+        property en vez de recalcular cada uno. Gatea en `estado=='ACTIVA'`
+        (igual que ya hacia `views.get_context_data`): una suscripcion
+        ACTIVA (pagada) nunca debe reportar atraso aunque su
+        `fecha_proximo_pago` quede en el pasado por una edicion manual
+        inconsistente -- en el flujo normal de la app, `estado='ACTIVA'` y
+        el avance de `fecha_proximo_pago` siempre se guardan juntos en el
+        mismo `.save()` (ver `_avanzar_fecha_proximo_pago`), asi que esa
+        combinacion no ocurre via pago real, solo por dato manual.
+        """
+        if self.estado == 'ACTIVA' or not self.fecha_proximo_pago:
+            return 0
+        delta = (timezone.localdate() - self.fecha_proximo_pago).days
+        if delta < 0:
+            return 0
+        return max(1, (delta // 30) + 1)
+
+    @property
     def alerta_pago_vencido(self):
         """True cuando el pago lleva 5+ dias vencido sin realizarse -- dispara
         el banner de aviso al admin."""

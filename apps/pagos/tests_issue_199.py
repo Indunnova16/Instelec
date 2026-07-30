@@ -187,3 +187,58 @@ class PagoNMesesPersistenceTests(TestCase):
         # creada por un flujo no cubierto) debe caer en el default seguro.
         pago = Pago.objects.create(suscripcion=self.suscripcion, monto=Decimal('150000'), estado='PENDIENTE')
         self.assertEqual(pago.n_meses, 1)
+
+
+class MesesAtrasoPropertyTests(TestCase):
+    """A3 -- Suscripcion.meses_atraso centraliza el calculo delta_dias//30+1
+    (delta>=0) que antes vivia duplicado en context_processors.recordatorio_pago
+    y en views.PagoPortalView.get_context_data."""
+
+    def setUp(self):
+        self.plan = PlanServicio.objects.create(nombre='Plan QA', precio=Decimal('150000'))
+
+    def test_none_fecha_proximo_pago_retorna_cero(self):
+        s = Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=None)
+        self.assertEqual(s.meses_atraso, 0)
+
+    def test_estado_activa_retorna_cero_aunque_fecha_este_vencida(self):
+        fecha = timezone.localdate() - timezone.timedelta(days=60)
+        s = Suscripcion.objects.create(plan=self.plan, estado='ACTIVA', fecha_proximo_pago=fecha)
+        self.assertEqual(s.meses_atraso, 0)
+
+    def test_delta_negativo_no_vencida_retorna_cero(self):
+        # Caso real de prod hoy: fecha_proximo_pago=2026-08-01, delta<0.
+        fecha = timezone.localdate() + timezone.timedelta(days=2)
+        s = Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=fecha)
+        self.assertEqual(s.meses_atraso, 0)
+
+    def test_delta_cero_el_dia_del_vencimiento_retorna_1(self):
+        fecha = timezone.localdate()
+        s = Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=fecha)
+        self.assertEqual(s.meses_atraso, 1)
+
+    def test_delta_positivo_multiples_meses(self):
+        fecha = timezone.localdate() - timezone.timedelta(days=65)
+        s = Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=fecha)
+        self.assertEqual(s.meses_atraso, 3)  # 65//30 + 1 = 3
+
+    def test_context_processor_no_muestra_aviso_si_activa_con_fecha_vencida(self):
+        # Regresion del edge case documentado en meses_atraso: si por dato
+        # manual una Suscripcion queda ACTIVA con fecha_proximo_pago vencida,
+        # el context processor NO debe mostrar el banner "vencido" con
+        # meses=0 (antes de A3 esto no se chequeaba y podria mostrar un
+        # aviso de "$0 COP" degenerado).
+        from django.contrib.auth import get_user_model
+        from django.test import RequestFactory
+
+        from apps.pagos.context_processors import recordatorio_pago
+
+        User = get_user_model()
+        user = User.objects.create_user(email='admin_199_ctxproc@test.com', password='x', rol='admin')
+        fecha = timezone.localdate() - timezone.timedelta(days=10)
+        Suscripcion.objects.create(plan=self.plan, estado='ACTIVA', fecha_proximo_pago=fecha)
+
+        request = RequestFactory().get('/')
+        request.user = user
+        ctx = recordatorio_pago(request)
+        self.assertNotIn('recordatorio_pago', ctx)

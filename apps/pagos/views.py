@@ -213,11 +213,9 @@ class PagoPortalView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
         context['wompi_sandbox'] = getattr(settings, 'WOMPI_SANDBOX', True)
         plan = context['plan']
 
-        meses_adeudados = 1
-        if suscripcion and suscripcion.fecha_proximo_pago and suscripcion.estado != 'ACTIVA':
-            delta = (timezone.localdate() - suscripcion.fecha_proximo_pago).days
-            if delta >= 0:
-                meses_adeudados = max(1, (delta // 30) + 1)
+        # Issue #199 (A3): fuente unica -- Suscripcion.meses_atraso (ya
+        # gatea estado != 'ACTIVA' y fecha_proximo_pago vacia/no vencida).
+        meses_adeudados = suscripcion.meses_atraso if suscripcion and suscripcion.meses_atraso else 1
         context['meses_adeudados'] = meses_adeudados
 
         if plan:
