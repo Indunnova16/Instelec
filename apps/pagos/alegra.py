@@ -83,18 +83,20 @@ def crear_factura(contacto_id, plan, pago):
     hoy = date.today()
     vencimiento = hoy + timedelta(days=30)
     monto_pago = float(pago.monto)
-    precio_mes = float(plan.precio)
-    if precio_mes > 0:
-        meses = max(1, round(monto_pago / precio_mes))
-        if abs(meses * precio_mes - monto_pago) < 0.01:
-            quantity = meses
-            price = precio_mes
-        else:
-            quantity = 1
-            price = monto_pago
-    else:
-        quantity = 1
-        price = monto_pago
+    # Issue #199 (A4): quantity viene de pago.n_meses (fuente unica ya
+    # persistida por calcular_n_meses al crear el Pago -- A2), NO se
+    # recalcula aca desde monto/plan.precio. El recalculo independiente
+    # podia divergir del n_meses real cobrado si el precio del plan cambio
+    # entre el pago y la facturacion, o por redondeo (ej. monto=$299,999
+    # con precio=$150,000/mes: pago.n_meses=2 via calcular_n_meses, pero el
+    # recalculo viejo con tolerancia estricta <0.01 caia al fallback
+    # quantity=1 -- una factura de 2 meses mostrando "quantity: 1",
+    # sub-facturacion potencial). El precio unitario se deriva del monto
+    # REAL cobrado (no del precio del plan) para que quantity*price
+    # reconcilie exacto con el monto recibido, sin depender de que el
+    # precio del plan no haya cambiado desde el pago.
+    quantity = max(1, pago.n_meses)
+    price = monto_pago / quantity
 
     payload = {
         'date': hoy.isoformat(),

@@ -22,6 +22,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.pagos.alegra import crear_factura
 from apps.pagos.models import Pago, PlanServicio, Suscripcion, calcular_n_meses
 
 User = get_user_model()
@@ -242,3 +243,77 @@ class MesesAtrasoPropertyTests(TestCase):
         request.user = user
         ctx = recordatorio_pago(request)
         self.assertNotIn('recordatorio_pago', ctx)
+
+
+class AlegraFacturaNMesesTests(TestCase):
+    """A4 -- crear_factura lee pago.n_meses (fuente unica ya persistida) en
+    vez de recalcular quantity/price de forma independiente desde
+    monto/plan.precio."""
+
+    def setUp(self):
+        self.plan = PlanServicio.objects.create(nombre='Plan Instelec', precio=Decimal('150000'))
+        self.suscripcion = Suscripcion.objects.create(plan=self.plan, estado='ACTIVA')
+
+    @patch('apps.pagos.alegra.requests.post')
+    def test_caso_exacto_quantity_y_price_reconcilian_con_precio_plan(self, mock_post):
+        mock_post.return_value.status_code = 201
+        mock_post.return_value.json.return_value = {'id': 1000}
+
+        pago = Pago.objects.create(
+            suscripcion=self.suscripcion, monto=Decimal('150000'), estado='APROBADO',
+            wompi_transaction_id='TX-ALEGRA-199-EXACTO', n_meses=1,
+        )
+        crear_factura(contacto_id='123', plan=self.plan, pago=pago)
+
+        _, kwargs = mock_post.call_args
+        item = kwargs['json']['items'][0]
+        self.assertEqual(item['quantity'], 1)
+        self.assertEqual(item['price'], 150000.0)
+        self.assertIn('Plan Instelec', item['description'])
+        self.assertEqual(kwargs['json']['payments'][0]['amount'], 150000.0)
+
+    @patch('apps.pagos.alegra.requests.post')
+    def test_caso_fallback_monto_no_divisible_ya_no_sub_factura(self, mock_post):
+        # Regresion del bug que A4 corrige: monto=$299,999 a $150,000/mes.
+        # pago.n_meses=2 (calculado por calcular_n_meses -- A2, al momento
+        # del pago). El calculo VIEJO de crear_factura (round + tolerancia
+        # estricta <0.01) caia al fallback quantity=1 -- una factura de 2
+        # meses mostrando "quantity: 1" (sub-facturacion potencial). Ahora
+        # quantity SIEMPRE viene de pago.n_meses, sin ese fallback.
+        mock_post.return_value.status_code = 201
+        mock_post.return_value.json.return_value = {'id': 1001}
+
+        pago = Pago.objects.create(
+            suscripcion=self.suscripcion, monto=Decimal('299999'), estado='APROBADO',
+            wompi_transaction_id='TX-ALEGRA-199-FALLBACK', n_meses=calcular_n_meses(Decimal('299999'), self.plan.precio),
+        )
+        self.assertEqual(pago.n_meses, 2, 'precondicion del test: calcular_n_meses debia dar 2')
+
+        crear_factura(contacto_id='123', plan=self.plan, pago=pago)
+
+        _, kwargs = mock_post.call_args
+        item = kwargs['json']['items'][0]
+        self.assertEqual(item['quantity'], 2, 'ya no debe caer al fallback quantity=1')
+        self.assertAlmostEqual(item['price'] * item['quantity'], 299999.0, places=2)
+
+    @patch('apps.pagos.alegra.requests.post')
+    def test_precio_plan_cambio_no_afecta_n_meses_facturado(self, mock_post):
+        # El pago se hizo cuando el plan costaba $150,000 (n_meses=2 ya
+        # persistido). Si el precio del plan sube DESPUES (ej. a $180,000)
+        # antes de facturar, la factura debe seguir mostrando 2 meses (el
+        # dato historico real), no recalcular con el precio nuevo.
+        mock_post.return_value.status_code = 201
+        mock_post.return_value.json.return_value = {'id': 1002}
+
+        pago = Pago.objects.create(
+            suscripcion=self.suscripcion, monto=Decimal('300000'), estado='APROBADO',
+            wompi_transaction_id='TX-ALEGRA-199-PRECIO-CAMBIO', n_meses=2,
+        )
+        self.plan.precio = Decimal('180000')
+        self.plan.save(update_fields=['precio'])
+
+        crear_factura(contacto_id='123', plan=self.plan, pago=pago)
+
+        _, kwargs = mock_post.call_args
+        item = kwargs['json']['items'][0]
+        self.assertEqual(item['quantity'], 2)
