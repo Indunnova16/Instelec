@@ -6,9 +6,10 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.shortcuts import redirect
 from django.utils.decorators import method_decorator
@@ -20,6 +21,24 @@ from . import wompi
 from . import alegra
 
 logger = logging.getLogger(__name__)
+
+
+class AdminRequiredMixin(UserPassesTestMixin):
+    """Exige que el usuario autenticado sea admin -- issue #197 (Datos de
+    Facturacion / Portal de Pagos / Historial son admin-only, el pago de la
+    suscripcion Instelec-Indunnova no le compete a cualquier usuario
+    logueado). Sigue el mismo patron UserPassesTestMixin + PermissionDenied
+    de `apps.core.mixins.NivelAdminRequiredMixin`, pero gateando por la
+    property legacy `Usuario.is_admin` (rol == ADMIN o is_superuser) en vez
+    del nivel RBAC v2 (`user_es_admin`), tal como pide el issue."""
+
+    def test_func(self):
+        return getattr(self.request.user, 'is_admin', False)
+
+    def handle_no_permission(self):
+        if not self.request.user.is_authenticated:
+            return super().handle_no_permission()
+        raise PermissionDenied('Esta seccion es exclusiva para administradores.')
 
 
 def _avanzar_fecha_proximo_pago(suscripcion, monto_pagado):
@@ -43,7 +62,7 @@ def _avanzar_fecha_proximo_pago(suscripcion, monto_pagado):
     )
 
 
-class DatosFacturacionView(LoginRequiredMixin, TemplateView):
+class DatosFacturacionView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
     template_name = 'pagos/datos_facturacion.html'
 
     def get_context_data(self, **kwargs):
@@ -117,7 +136,7 @@ class DatosFacturacionView(LoginRequiredMixin, TemplateView):
         return redirect('pagos:portal')
 
 
-class PagoPortalView(LoginRequiredMixin, TemplateView):
+class PagoPortalView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
     template_name = 'pagos/portal.html'
 
     def get(self, request, *args, **kwargs):
@@ -214,7 +233,7 @@ class PagoPortalView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class HistorialPagosView(LoginRequiredMixin, ListView):
+class HistorialPagosView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     template_name = 'pagos/historial.html'
     context_object_name = 'pagos'
     paginate_by = 20
