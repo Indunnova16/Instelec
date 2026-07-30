@@ -568,6 +568,24 @@ multilínea se renderiza literal en prod (memoria del portafolio).
             </li>
             {% endif %}
 
+            {% if user.is_admin %}
+            {% comment %}
+            Issue #197: Suscripcion y Pagos -- solo admin (Usuario.is_admin), no
+            depende del RBAC v2 de modulo CONFIG (`ok_config`) sino de la property
+            legacy pedida por el issue. Comentario multilinea REAL (no `{# #}`) a
+            proposito -- `{# #}` multilinea se renderiza literal en prod (memoria
+            del portafolio).
+            {% endcomment %}
+            <li role="none">
+                <a href="{% url 'pagos:portal' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    Suscripcion y Pagos
+                </a>
+            </li>
+            {% endif %}
+
             {% endif %}
         </ul>
     </nav>
