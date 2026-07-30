@@ -15,10 +15,16 @@ forma incremental (1 clase de tests por sub-item, en orden de dependencia):
   (journeys/Instelec_199.yaml, corrido por F5 contra prod).
 """
 from decimal import Decimal
+from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
 
-from apps.pagos.models import calcular_n_meses
+from apps.pagos.models import Pago, PlanServicio, Suscripcion, calcular_n_meses
+
+User = get_user_model()
 
 
 class CalcularNMesesTests(TestCase):
@@ -52,3 +58,132 @@ class CalcularNMesesTests(TestCase):
         # WOMPI entrega amount_in_cents/100 como float -- el helper debe
         # aceptarlo igual que un Decimal (via str() interno).
         self.assertEqual(calcular_n_meses(300000.0, 150000.0), 2)
+
+
+class AvanzarFechaProximoPagoHelperTests(TestCase):
+    """A2 -- _avanzar_fecha_proximo_pago ahora recibe el `pago` (con n_meses
+    ya calculado) en vez de un monto suelto que recalculaba internamente."""
+
+    def setUp(self):
+        self.plan = PlanServicio.objects.create(nombre='Plan QA', precio=Decimal('150000'))
+        self.suscripcion = Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE')
+
+    def test_avanza_1_mes_manteniendo_dia_20(self):
+        from apps.pagos.views import _avanzar_fecha_proximo_pago
+
+        self.suscripcion.fecha_proximo_pago = timezone.localdate().replace(day=20)
+        self.suscripcion.save(update_fields=['fecha_proximo_pago'])
+        fecha_antes = self.suscripcion.fecha_proximo_pago
+
+        pago = Pago.objects.create(
+            suscripcion=self.suscripcion, monto=Decimal('150000'), estado='APROBADO', n_meses=1,
+        )
+        _avanzar_fecha_proximo_pago(self.suscripcion, pago)
+        self.suscripcion.refresh_from_db()
+
+        self.assertEqual(self.suscripcion.fecha_proximo_pago.day, 20)
+        meses_avanzados = (
+            (self.suscripcion.fecha_proximo_pago.year - fecha_antes.year) * 12
+            + (self.suscripcion.fecha_proximo_pago.month - fecha_antes.month)
+        )
+        self.assertEqual(meses_avanzados, 1)
+
+    def test_avanza_n_meses_segun_pago_n_meses_no_segun_monto(self):
+        # Regresion clave de A2: la fuente de verdad pasa a ser pago.n_meses
+        # (ya persistido), NO un recalculo desde pago.monto en este helper.
+        from apps.pagos.views import _avanzar_fecha_proximo_pago
+
+        self.suscripcion.fecha_proximo_pago = timezone.localdate().replace(day=20)
+        self.suscripcion.save(update_fields=['fecha_proximo_pago'])
+        fecha_antes = self.suscripcion.fecha_proximo_pago
+
+        # monto no coincide con 3 meses exactos, pero n_meses ya viene fijo.
+        pago = Pago.objects.create(
+            suscripcion=self.suscripcion, monto=Decimal('449999'), estado='APROBADO', n_meses=3,
+        )
+        _avanzar_fecha_proximo_pago(self.suscripcion, pago)
+        self.suscripcion.refresh_from_db()
+
+        meses_avanzados = (
+            (self.suscripcion.fecha_proximo_pago.year - fecha_antes.year) * 12
+            + (self.suscripcion.fecha_proximo_pago.month - fecha_antes.month)
+        )
+        self.assertEqual(meses_avanzados, 3)
+
+    def test_plan_sin_precio_configurado_no_avanza_fecha(self):
+        # Edge case real (Suscripcion.plan es FK obligatoria -- "sin plan" no
+        # es alcanzable en la practica): un PlanServicio mal configurado con
+        # precio=0 no debe avanzar fecha_proximo_pago ni reventar.
+        from apps.pagos.views import _avanzar_fecha_proximo_pago
+
+        plan_roto = PlanServicio.objects.create(nombre='Plan roto', precio=Decimal('0'))
+        suscripcion = Suscripcion.objects.create(plan=plan_roto, estado='PENDIENTE')
+        fecha_antes = suscripcion.fecha_proximo_pago
+        pago = Pago.objects.create(suscripcion=suscripcion, monto=Decimal('0'), estado='APROBADO', n_meses=1)
+
+        _avanzar_fecha_proximo_pago(suscripcion, pago)
+        suscripcion.refresh_from_db()
+        self.assertEqual(suscripcion.fecha_proximo_pago, fecha_antes)
+
+
+class PagoNMesesPersistenceTests(TestCase):
+    """A2 -- ambos call sites que crean Pago (redirect WOMPI + webhook)
+    calculan y persisten n_meses con calcular_n_meses al crear el registro."""
+
+    def setUp(self):
+        self.plan = PlanServicio.objects.create(nombre='Plan Instelec', precio=Decimal('150000'))
+        self.suscripcion = Suscripcion.objects.create(
+            plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=timezone.localdate(),
+        )
+        self.admin = User.objects.create_user(email='admin_199@test.com', password='x', rol='admin')
+
+    def test_redirect_wompi_persiste_n_meses_calculado(self):
+        from apps.pagos import views as pagos_views
+
+        tx_data = {
+            'data': {
+                'id': 'TX-199-REDIRECT',
+                'status': 'APPROVED',
+                # 2 meses exactos a $150,000/mes.
+                'amount_in_cents': 30000000,
+                'reference': 'REF-199-REDIRECT',
+            }
+        }
+        with patch.object(pagos_views.wompi, 'get_transaction', return_value=tx_data), \
+                patch.object(pagos_views.alegra, 'generar_factura_desde_pago', return_value=None):
+            self.client.force_login(self.admin)
+            self.client.get(reverse('pagos:portal'), {'id': 'TX-199-REDIRECT'})
+
+        pago = Pago.objects.get(wompi_transaction_id='TX-199-REDIRECT')
+        self.assertEqual(pago.n_meses, 2)
+
+    def test_webhook_persiste_n_meses_calculado(self):
+        import json
+
+        payload = {
+            'event': 'transaction.updated',
+            'data': {
+                'transaction': {
+                    'id': 'TX-199-WEBHOOK',
+                    'reference': 'REF-199-WEBHOOK',
+                    'status': 'APPROVED',
+                    # 3 meses exactos a $150,000/mes.
+                    'amount_in_cents': 45000000,
+                }
+            },
+        }
+        with patch('apps.pagos.views.wompi.verify_webhook_signature', return_value=True), \
+                patch('apps.pagos.views.alegra.generar_factura_desde_pago', return_value=None):
+            resp = self.client.post(
+                reverse('pagos:webhook'), data=json.dumps(payload), content_type='application/json',
+            )
+        self.assertEqual(resp.status_code, 200)
+        pago = Pago.objects.get(wompi_transaction_id='TX-199-WEBHOOK')
+        self.assertEqual(pago.n_meses, 3)
+
+    def test_n_meses_default_1_para_pagos_sin_calculo_explicito(self):
+        # Cubre el dato legacy real: los 0 Pago historicos de prod no tenian
+        # esta columna -- cualquier fila nueva sin n_meses explicito (ej.
+        # creada por un flujo no cubierto) debe caer en el default seguro.
+        pago = Pago.objects.create(suscripcion=self.suscripcion, monto=Decimal('150000'), estado='PENDIENTE')
+        self.assertEqual(pago.n_meses, 1)

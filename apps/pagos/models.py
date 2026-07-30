@@ -148,6 +148,10 @@ class Pago(models.Model):
     ]
     suscripcion = models.ForeignKey(Suscripcion, on_delete=models.CASCADE, related_name='pagos', verbose_name='Suscripcion')
     monto = models.DecimalField('Monto (COP)', max_digits=12, decimal_places=2)
+    n_meses = models.PositiveSmallIntegerField(
+        'Numero de meses cubiertos', default=1,
+        help_text='Calculado con calcular_n_meses(monto, plan.precio) al crear el pago (issue #199).',
+    )
     estado = models.CharField('Estado', max_length=20, choices=ESTADO_CHOICES, default='PENDIENTE')
     wompi_transaction_id = models.CharField('WOMPI Transaction ID', max_length=100, blank=True, db_index=True)
     wompi_reference = models.CharField('Referencia WOMPI', max_length=100, blank=True)

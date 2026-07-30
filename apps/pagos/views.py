@@ -4,7 +4,6 @@ import logging
 import uuid
 from calendar import monthrange
 from datetime import date
-from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.utils import timezone
@@ -16,7 +15,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView, ListView
-from .models import PlanServicio, Suscripcion, Pago, DatosFacturacion
+from .models import PlanServicio, Suscripcion, Pago, DatosFacturacion, calcular_n_meses
 from . import wompi
 from . import alegra
 
@@ -41,12 +40,19 @@ class AdminRequiredMixin(UserPassesTestMixin):
         raise PermissionDenied('Esta seccion es exclusiva para administradores.')
 
 
-def _avanzar_fecha_proximo_pago(suscripcion, monto_pagado):
-    """Avanza fecha_proximo_pago N meses segun monto/precio plan. Mantiene dia 20."""
+def _avanzar_fecha_proximo_pago(suscripcion, pago):
+    """Avanza fecha_proximo_pago `pago.n_meses` meses. Mantiene dia 20.
+
+    Issue #199 (sub-item A2): antes recibia el monto pagado suelto y
+    recalculaba `meses` por su cuenta (duplicando la logica que hoy vive en
+    `calcular_n_meses`). Ahora recibe el `Pago` ya creado -- `n_meses` fue
+    calculado y persistido en el momento de crear el registro (unica fuente
+    de verdad, ver `calcular_n_meses` en models.py), asi que aca solo se lee.
+    """
     plan = suscripcion.plan
     if not plan or plan.precio <= 0:
         return
-    meses = max(1, int(round(Decimal(str(monto_pagado)) / plan.precio)))
+    meses = max(1, pago.n_meses)
     actual = suscripcion.fecha_proximo_pago or timezone.localdate()
     y, m = actual.year, actual.month
     m += meses
@@ -171,9 +177,15 @@ class PagoPortalView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
                 'VOIDED': 'RECHAZADO',
             }
 
+            n_meses = (
+                calcular_n_meses(amount, suscripcion.plan.precio)
+                if suscripcion.plan_id else 1
+            )
+
             pago = Pago.objects.create(
                 suscripcion=suscripcion,
                 monto=amount,
+                n_meses=n_meses,
                 estado=estado_map.get(status, 'PENDIENTE'),
                 wompi_transaction_id=tx_id,
                 wompi_reference=reference,
@@ -182,7 +194,7 @@ class PagoPortalView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
 
             if status == 'APPROVED':
                 suscripcion.estado = 'ACTIVA'
-                _avanzar_fecha_proximo_pago(suscripcion, amount)
+                _avanzar_fecha_proximo_pago(suscripcion, pago)
                 try:
                     alegra.generar_factura_desde_pago(pago)
                 except Exception as e:
@@ -271,11 +283,19 @@ class WompiWebhookView(View):
             }
             local_status = status_map.get(status, 'PENDIENTE')
 
+            suscripcion = Suscripcion.objects.first()
+            monto = amount_in_cents / 100
+            n_meses = (
+                calcular_n_meses(monto, suscripcion.plan.precio)
+                if suscripcion and suscripcion.plan_id else 1
+            )
+
             pago, created = Pago.objects.get_or_create(
                 wompi_transaction_id=transaction_id,
                 defaults={
-                    'suscripcion': Suscripcion.objects.first(),
-                    'monto': amount_in_cents / 100,
+                    'suscripcion': suscripcion,
+                    'monto': monto,
+                    'n_meses': n_meses,
                     'estado': 'PENDIENTE',
                     'wompi_reference': reference,
                 }
@@ -293,7 +313,7 @@ class WompiWebhookView(View):
             if status == 'APPROVED' and not ya_estaba_aprobado:
                 if pago.suscripcion:
                     pago.suscripcion.estado = 'ACTIVA'
-                    _avanzar_fecha_proximo_pago(pago.suscripcion, pago.monto)
+                    _avanzar_fecha_proximo_pago(pago.suscripcion, pago)
                 if not pago.alegra_invoice_id:
                     try:
                         alegra.generar_factura_desde_pago(pago)
