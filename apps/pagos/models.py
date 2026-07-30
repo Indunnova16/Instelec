@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 
 class PlanServicio(models.Model):
@@ -84,6 +85,24 @@ class Suscripcion(models.Model):
 
     def __str__(self):
         return f"Suscripcion {self.plan.nombre} - {self.get_estado_display()}"
+
+    @property
+    def requiere_pago(self):
+        """True cuando la suscripcion no esta ACTIVA y tiene una fecha de proximo
+        pago fijada -- controla el widget de pago inmediato al vencer (issue #197).
+        Extraida de la logica que ya vivia inline en
+        `PagoPortalView.get_context_data` (calculo de `meses_adeudados`); no existia
+        como property antes de #197, se agrega para poder construir
+        `alerta_pago_vencido` encima sin duplicar la condicion."""
+        return self.estado != 'ACTIVA' and self.fecha_proximo_pago is not None
+
+    @property
+    def alerta_pago_vencido(self):
+        """True cuando el pago lleva 5+ dias vencido sin realizarse -- dispara
+        el banner de aviso al admin."""
+        if not self.requiere_pago or not self.fecha_proximo_pago:
+            return False
+        return (timezone.localdate() - self.fecha_proximo_pago).days >= 5
 
 
 class Pago(models.Model):
