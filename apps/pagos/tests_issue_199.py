@@ -476,3 +476,76 @@ class FlujoCompletoPagoMultiMesTests(TestCase):
         grid = resp_portal.context['grid_meses']
         pagados = [mes for mes in grid if mes['pagado']]
         self.assertEqual(len(pagados), 3)
+
+
+class RegresionLocalE2ETests(TestCase):
+    """A7 -- proxy LOCAL (Django test client, sin navegador real) de las 4
+    aserciones del journey E2E `journeys/Instelec_199.yaml` (ya autorado
+    por F2, journey_lint_pass=true; el run REAL con Playwright contra prod
+    lo hace F5 -- Kaizen #305: un test de HTML server-renderizado NO
+    reemplaza el E2E de navegador para wiring JS/Alpine/HTMX, pero estos 4
+    elementos son 100% server-rendered sin JS de por medio, asi que SI dan
+    evidencia real de la regresion antes de llegar a F5).
+
+    Reconstruye localmente el escenario real de prod que confirmo F2
+    (Suscripcion PENDIENTE, fecha_proximo_pago a futuro cercano -- sin
+    atraso hoy, 0 Pago historicos) para no fabricar un estado que no
+    existe.
+    """
+
+    def setUp(self):
+        self.admin = User.objects.create_user(email='admin_199_e2e@test.com', password='x', rol='admin')
+        self.plan = PlanServicio.objects.create(nombre='Plan Instelec', precio=Decimal('150000'))
+        # El widget WOMPI solo se renderiza si la Suscripcion ya tiene
+        # datos_facturacion (ver portal.html) -- el journey real (i199_a1,
+        # confirmado por F2 contra el codigo real) asume que el widget SI
+        # es visible en prod, asi que el dato real debe tenerlo configurado.
+        self.datos_facturacion = DatosFacturacion.objects.create(
+            tipo_persona='JURIDICA', razon_social='Instelec SAS', tipo_identificacion='NIT',
+            numero_identificacion='900123456', email='facturacion@instelec.com.co',
+            telefono='3001234567', direccion='Calle 1', ciudad='Medellin', departamento='Antioquia',
+        )
+        self.client.force_login(self.admin)
+
+    def test_i199_a1_sin_selector_de_meses_un_solo_boton_wompi(self):
+        Suscripcion.objects.create(
+            plan=self.plan, estado='PENDIENTE',
+            fecha_proximo_pago=timezone.localdate() + timezone.timedelta(days=2),
+            datos_facturacion=self.datos_facturacion,
+        )
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertContains(resp, 'Portal de Pagos')
+        self.assertContains(resp, 'Plan Instelec')
+        self.assertContains(resp, 'checkout.wompi.co/widget.js')
+        self.assertNotContains(resp, 'name="n_meses_pago"')
+        self.assertNotContains(resp, "name='n_meses_pago'")
+
+    def test_i199_a2_grilla_estado_por_mes_presente(self):
+        Suscripcion.objects.create(
+            plan=self.plan, estado='PENDIENTE',
+            fecha_proximo_pago=timezone.localdate() + timezone.timedelta(days=2),
+        )
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertContains(resp, 'Estado por mes')
+
+    def test_i199_a3_historial_vacio_dato_real_cero_pagos(self):
+        # 0 Pago en prod hoy (confirmado por F2) -- el historial debe seguir
+        # mostrando el estado vacio, no romper por la columna n_meses nueva.
+        self.assertEqual(Pago.objects.count(), 0)
+        resp = self.client.get(reverse('pagos:historial'))
+        self.assertContains(resp, 'Historial de Pagos')
+        self.assertContains(resp, 'No hay pagos registrados')
+
+    def test_i199_a4_no_falso_atraso_suscripcion_no_vencida(self):
+        # Espejo del dato real de prod (Suscripcion id=2, fecha_proximo_pago
+        # 2026-08-01, hoy 2026-07-30 -> delta=-2, aun NO vencida).
+        suscripcion = Suscripcion.objects.create(
+            plan=self.plan, estado='PENDIENTE',
+            fecha_proximo_pago=timezone.localdate() + timezone.timedelta(days=2),
+        )
+        self.assertEqual(suscripcion.meses_atraso, 0)
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertEqual(resp.context['meses_adeudados'], 1)
+        # #tourAlertaMeses solo se muestra si meses_adeudados > 1 -- no debe
+        # aparecer (assert_visible_count esperado 0 en el journey real).
+        self.assertNotContains(resp, 'id="tourAlertaMeses"')
