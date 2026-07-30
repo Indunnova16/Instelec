@@ -16,6 +16,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView, ListView
 from .models import PlanServicio, Suscripcion, Pago, DatosFacturacion, calcular_n_meses
+from .context_processors import MESES_ES
 from . import wompi
 from . import alegra
 
@@ -66,6 +67,73 @@ def _avanzar_fecha_proximo_pago(suscripcion, pago):
         f'Suscripcion {suscripcion.id}: avanzada {meses} mes(es), '
         f'proximo pago = {suscripcion.fecha_proximo_pago}'
     )
+
+
+def _construir_grid_meses(suscripcion, pagos_recientes):
+    """Ventana informativa de 6 meses "Estado por mes" (issue #199, A5 --
+    SOLO LECTURA, SIN selector/checkbox interactivo, decision Miguel
+    2026-07-30: Instelec mantiene el pago forzado total). 3 meses hacia
+    atras + el mes de `fecha_proximo_pago` + 2 meses hacia adelante.
+
+    Anclada en `fecha_proximo_pago`: los meses ANTERIORES se marcan
+    `pagado` SOLO si estan efectivamente cubiertos por la cobertura real de
+    `pagos_recientes` (Pago.n_meses persistido -- A2), acumulando desde el
+    pago APROBADO mas reciente hacia atras. NO se asume "pagado" solo por
+    estar antes de fecha_proximo_pago -- una Suscripcion PENDIENTE que
+    nunca se ha pagado (caso real de prod hoy: 0 Pago historicos) no debe
+    mostrar meses pasados como pagados solo porque son anteriores a la
+    fecha. Desde `fecha_proximo_pago` en adelante, `meses_atraso` (A3)
+    determina cuantos de esos meses estan VENCIDOS hoy vs. simplemente
+    PENDIENTES (aun no vencen).
+    """
+    if not suscripcion or not suscripcion.fecha_proximo_pago:
+        return []
+
+    meses_atraso = suscripcion.meses_atraso
+    anio_base, mes_base = suscripcion.fecha_proximo_pago.year, suscripcion.fecha_proximo_pago.month
+    pagos_aprobados = [p for p in pagos_recientes if p.estado == 'APROBADO']
+
+    def _cubierto_por_pago(offset_meses_atras):
+        # offset_meses_atras=1 -> el mes inmediatamente anterior a
+        # fecha_proximo_pago, 2 -> dos meses antes, etc. pagos_recientes ya
+        # viene ordenado mas reciente primero (order_by('-fecha_pago')).
+        acumulado = 0
+        for pago in pagos_aprobados:
+            acumulado += pago.n_meses
+            if offset_meses_atras <= acumulado:
+                return True
+        return False
+
+    grid = []
+    for offset in range(-3, 3):
+        mes = mes_base + offset
+        anio = anio_base
+        while mes < 1:
+            mes += 12
+            anio -= 1
+        while mes > 12:
+            mes -= 12
+            anio += 1
+
+        if offset < 0:
+            pagado = _cubierto_por_pago(-offset)
+            estado = 'pagado' if pagado else 'sin_registro'
+        elif offset < max(meses_atraso, 0):
+            pagado = False
+            estado = 'vencido'
+        else:
+            pagado = False
+            estado = 'pendiente' if offset == 0 else 'proximo'
+
+        grid.append({
+            'anio': anio,
+            'mes': mes,
+            'label': f"{MESES_ES[mes]} {anio}",
+            'pagado': pagado,
+            'estado': estado,
+            'es_mes_actual_cobro': offset == 0,
+        })
+    return grid
 
 
 class DatosFacturacionView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
@@ -224,6 +292,8 @@ class PagoPortalView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
             context['pagos_recientes'] = suscripcion.pagos.order_by('-fecha_pago')[:10]
         else:
             context['pagos_recientes'] = []
+        # Issue #199 (A5): grilla informativa "Estado por mes", SOLO LECTURA.
+        context['grid_meses'] = _construir_grid_meses(suscripcion, context['pagos_recientes'])
         # Check if billing data exists
         context['datos_facturacion'] = (
             suscripcion.datos_facturacion if suscripcion and suscripcion.datos_facturacion_id else None

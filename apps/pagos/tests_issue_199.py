@@ -317,3 +317,75 @@ class AlegraFacturaNMesesTests(TestCase):
         _, kwargs = mock_post.call_args
         item = kwargs['json']['items'][0]
         self.assertEqual(item['quantity'], 2)
+
+
+class GrillaEstadoPorMesContextTests(TestCase):
+    """A5 -- PagoPortalView agrega `grid_meses` (ventana de 6 meses desde
+    fecha_proximo_pago, SOLO LECTURA -- sin selector interactivo) al
+    contexto. Los meses pasados solo se marcan `pagado` si estan
+    respaldados por cobertura real de Pago.n_meses, no por posicion."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(email='admin_199_grid@test.com', password='x', rol='admin')
+        self.plan = PlanServicio.objects.create(nombre='Plan Instelec', precio=Decimal('150000'))
+        self.client.force_login(self.admin)
+
+    def test_grid_meses_tiene_6_periodos(self):
+        Suscripcion.objects.create(
+            plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=timezone.localdate(),
+        )
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertEqual(len(resp.context['grid_meses']), 6)
+
+    def test_grid_meses_marca_pagado_solo_con_cobertura_real(self):
+        suscripcion = Suscripcion.objects.create(
+            plan=self.plan, estado='ACTIVA', fecha_proximo_pago=timezone.localdate(),
+        )
+        Pago.objects.create(
+            suscripcion=suscripcion, monto=Decimal('150000'), estado='APROBADO', n_meses=1,
+        )
+        resp = self.client.get(reverse('pagos:portal'))
+        grid = resp.context['grid_meses']
+        pagados = [mes for mes in grid if mes['pagado']]
+        # 1 pago con n_meses=1 cubre exactamente el mes inmediato anterior
+        # a fecha_proximo_pago -- no todos los meses pasados de la ventana.
+        self.assertEqual(len(pagados), 1)
+
+    def test_grid_meses_pendiente_sin_pagos_no_marca_falso_pagado(self):
+        # Caso real de prod hoy: Suscripcion PENDIENTE, 0 Pago historicos.
+        # Ningun mes pasado debe aparecer como "pagado" solo por estar
+        # antes de fecha_proximo_pago.
+        Suscripcion.objects.create(
+            plan=self.plan, estado='PENDIENTE',
+            fecha_proximo_pago=timezone.localdate() + timezone.timedelta(days=2),
+        )
+        resp = self.client.get(reverse('pagos:portal'))
+        grid = resp.context['grid_meses']
+        self.assertFalse(any(mes['pagado'] for mes in grid))
+
+    def test_grid_meses_marca_vencido_segun_meses_atraso(self):
+        fecha = timezone.localdate() - timezone.timedelta(days=65)  # meses_atraso=3
+        Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=fecha)
+        resp = self.client.get(reverse('pagos:portal'))
+        grid = resp.context['grid_meses']
+        vencidos = [mes for mes in grid if mes['estado'] == 'vencido']
+        self.assertEqual(len(vencidos), 3)
+
+    def test_grid_meses_sin_suscripcion_no_revienta(self):
+        # Edge case: portal sin ninguna Suscripcion creada aun.
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['grid_meses'], [])
+
+    def test_grilla_visible_en_html_renderizado(self):
+        Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=timezone.localdate())
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertContains(resp, 'Estado por mes')
+
+    def test_grilla_no_agrega_selector_de_meses(self):
+        # Gate anti-regresion de la decision de scope (Miguel 2026-07-30):
+        # la grilla es SOLO LECTURA, sin ningun control interactivo.
+        Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE', fecha_proximo_pago=timezone.localdate())
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertNotContains(resp, 'name="n_meses_pago"')
+        self.assertNotContains(resp, "name='n_meses_pago'")

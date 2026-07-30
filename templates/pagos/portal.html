@@ -140,6 +140,40 @@
         </div>
     </div>
 
+    <!-- Estado por mes -- grilla informativa SOLO LECTURA (issue #199, A5).
+         Sin checkbox/click/selector -- decision Miguel 2026-07-30: Instelec
+         mantiene el pago forzado total, sin selector interactivo de meses. -->
+    {% if grid_meses %}
+    <div id="tourGridMeses" class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-calendar3 me-2"></i>Estado por mes</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                Vista informativa de los ultimos y proximos periodos de la suscripcion. El cobro siempre se realiza en una sola transaccion por el total adeudado -- no hay seleccion de meses individuales.
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                {% for periodo in grid_meses %}
+                <div class="border rounded px-3 py-2 text-center {% if periodo.es_mes_actual_cobro %}border-primary border-2{% endif %}" style="min-width: 120px;">
+                    <div class="small text-muted">{{ periodo.label }}</div>
+                    {% if periodo.estado == 'pagado' %}
+                        <span class="badge bg-success mt-1"><i class="bi bi-check-circle me-1"></i>Pagado</span>
+                    {% elif periodo.estado == 'vencido' %}
+                        <span class="badge bg-danger mt-1"><i class="bi bi-exclamation-circle me-1"></i>Vencido</span>
+                    {% elif periodo.estado == 'pendiente' %}
+                        <span class="badge bg-warning text-dark mt-1"><i class="bi bi-clock me-1"></i>Pendiente</span>
+                    {% elif periodo.estado == 'proximo' %}
+                        <span class="badge bg-secondary mt-1">Proximo</span>
+                    {% else %}
+                        <span class="badge bg-light text-dark border mt-1">Sin registro</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Pagos recientes -->
     {% if pagos_recientes %}
     <div id="tourHistorial" class="card mt-4">
@@ -227,6 +261,15 @@
         popover: {
           title: 'Realizar pago',
           description: 'Pulse el boton WOMPI para pagar con tarjeta, PSE o Nequi. El monto ya incluye todos los meses pendientes.'
+        }
+      });
+    }
+    if (document.getElementById('tourGridMeses')) {
+      pasos.push({
+        element: '#tourGridMeses',
+        popover: {
+          title: 'Estado por mes',
+          description: 'Vista informativa de los periodos de su suscripcion. El cobro sigue siendo una sola transaccion por el total adeudado, esta grilla es solo para consulta.'
         }
       });
     }
