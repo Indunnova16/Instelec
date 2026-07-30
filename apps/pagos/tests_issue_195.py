@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.pagos.models import PlanServicio, Suscripcion, Pago
+from apps.pagos.models import Pago, PlanServicio, Suscripcion
 
 User = get_user_model()
 
@@ -81,3 +81,61 @@ class PagoUniqueConstraintTests(TestCase):
             estado='PENDIENTE', wompi_transaction_id='', wompi_reference='',
         )
         self.assertEqual(Pago.objects.filter(wompi_reference='').count(), 2)
+
+
+class WebhookYaEstabaAprobadoTests(TestCase):
+    """Gap #3: una redelivery de WOMPI sobre un pago YA aprobado no debe
+    re-avanzar fecha_proximo_pago ni re-facturar."""
+
+    def setUp(self):
+        self.plan = PlanServicio.objects.create(nombre='Plan QA', precio=Decimal('150000'))
+        self.suscripcion = Suscripcion.objects.create(
+            plan=self.plan, estado='ACTIVA',
+        )
+        self.suscripcion.fecha_proximo_pago = None
+        self.suscripcion.save(update_fields=['fecha_proximo_pago'])
+        self.url = reverse('pagos:webhook')
+
+    def _payload(self, tx_id='TX-WEBHOOK-1', status='APPROVED'):
+        return {
+            'event': 'transaction.updated',
+            'data': {
+                'transaction': {
+                    'id': tx_id,
+                    'reference': f'REF-{tx_id}',
+                    'status': status,
+                    'amount_in_cents': 15000000,
+                }
+            },
+        }
+
+    def test_redelivery_no_reavanza_fecha_proximo_pago(self):
+        import json
+        from unittest.mock import patch
+
+        payload = self._payload()
+
+        with patch('apps.pagos.views.wompi.verify_webhook_signature', return_value=True), \
+                patch('apps.pagos.views.alegra.generar_factura_desde_pago', return_value=None):
+            resp1 = self.client.post(
+                self.url, data=json.dumps(payload), content_type='application/json'
+            )
+            self.assertEqual(resp1.status_code, 200)
+
+            self.suscripcion.refresh_from_db()
+            fecha_tras_primer_webhook = self.suscripcion.fecha_proximo_pago
+            self.assertIsNotNone(fecha_tras_primer_webhook)
+
+            # Redelivery del MISMO evento (mismo transaction_id, ya APROBADO)
+            resp2 = self.client.post(
+                self.url, data=json.dumps(payload), content_type='application/json'
+            )
+            self.assertEqual(resp2.status_code, 200)
+
+        self.suscripcion.refresh_from_db()
+        self.assertEqual(
+            self.suscripcion.fecha_proximo_pago, fecha_tras_primer_webhook,
+            'La redelivery del webhook re-avanzo fecha_proximo_pago sobre un '
+            'pago que ya estaba APROBADO — falta el guard ya_estaba_aprobado.'
+        )
+        self.assertEqual(Pago.objects.filter(wompi_transaction_id='TX-WEBHOOK-1').count(), 1)
