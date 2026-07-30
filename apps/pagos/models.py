@@ -1,6 +1,39 @@
+from decimal import Decimal
+
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+
+
+def calcular_n_meses(monto, precio_mes):
+    """Calcula cuantos meses cubre `monto` a razon de `precio_mes` COP/mes.
+
+    Helper puro centralizado (issue #199) -- reemplaza el calculo que vivia
+    duplicado de forma independiente en `_avanzar_fecha_proximo_pago`
+    (apps/pagos/views.py) y en `alegra.crear_factura` (apps/pagos/alegra.py).
+    Ambos usaban la misma formula (`round(monto/precio)` con minimo 1 mes)
+    pero cada uno la recalculaba por su cuenta -- con este helper como fuente
+    unica, A2 persiste `Pago.n_meses` al crear el registro y A4 hace que
+    Alegra lea ese valor ya persistido en vez de recalcularlo.
+
+    Mantiene EXACTAMENTE la misma aritmetica que ya vivia en
+    `_avanzar_fecha_proximo_pago` (Decimal, `round()` = round-half-to-even)
+    para no cambiar el comportamiento de cobro ya validado en produccion.
+
+    Edge cases:
+    - `precio_mes <= 0` (plan sin precio configurado): no se puede dividir,
+      se interpreta como 1 mes minimo (nunca ZeroDivisionError).
+    - `monto <= 0`: redondea a 0, pero el minimo de 1 mes aplica igual.
+    - `monto` no multiplo exacto de `precio_mes`: redondea al mes mas
+      cercano (ej. 140000/150000 ~= 0.93 -> 1 mes; 225000/150000 = 1.5 ->
+      2 meses via round-half-to-even).
+    """
+    precio_dec = Decimal(str(precio_mes))
+    if precio_dec <= 0:
+        return 1
+    monto_dec = Decimal(str(monto))
+    meses = int(round(monto_dec / precio_dec))
+    return max(1, meses)
 
 
 class PlanServicio(models.Model):
