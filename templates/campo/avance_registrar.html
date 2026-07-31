@@ -112,16 +112,30 @@
             </div>
         </div>
 
+        {# issue #187 (freeze rows/columns, "Grilla de Avances de Vanos hasta #}
+        {# 264 vanos en una sola linea"): esta grilla es un CSS grid de #}
+        {# tarjetas (grid-cols-*), NO una <table> -- no existe una "primera #}
+        {# columna" que congelar porque las tarjetas se reacomodan segun el #}
+        {# ancho de pantalla. Se adapta el patron de #183: el bloque queda en #}
+        {# un contenedor de altura acotada + overflow-auto real (mismo fix de #}
+        {# causa raiz que #183/9f0efc5) y el encabezado "Vanos (N)" queda #}
+        {# sticky top-0, para no perder el conteo/contexto mientras se #}
+        {# recorren las 264 tarjetas. #}
         <!-- Vanos Grid -->
         <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Vanos</h3>
             {% if vanos %}
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {% for vano in vanos %}
-                    {% include 'campo/partials/vano_cuadro.html' %}
-                {% endfor %}
+            <div class="overflow-auto max-h-[70vh]">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 py-2 px-2 -mx-2 rounded">
+                    Vanos ({{ vanos|length }})
+                </h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {% for vano in vanos %}
+                        {% include 'campo/partials/vano_cuadro.html' %}
+                    {% endfor %}
+                </div>
             </div>
             {% else %}
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Vanos</h3>
             <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center">
                 <p class="text-gray-600 dark:text-gray-400">No hay vanos registrados para esta línea</p>
             </div>
