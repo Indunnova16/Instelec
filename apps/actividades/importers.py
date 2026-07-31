@@ -990,6 +990,13 @@ class ProgramacionSemanalImporter:
                 ).count()
             )
 
+        # Issue #200: exponer los meses/años reales tocados por el import —
+        # el llamador (ImportarProgramacionView) los usa para decirle al
+        # usuario dónde quedaron las actividades y, si cayeron todas en un
+        # único mes, redirigirlo directo a esa vista de Programación Mensual
+        # (que por defecto filtra por el mes de HOY, no el de la actividad).
+        meses_tocados = sorted({(anio, mes) for (anio, mes, _linea_id) in self.programaciones_tocadas})
+
         return {
             'exito': True,
             'sheets_procesadas': sheets_procesadas,
@@ -999,6 +1006,7 @@ class ProgramacionSemanalImporter:
             'errores': self.errores,
             'advertencias': self.advertencias,
             'resumen_por_hoja': self.resumen_por_hoja,
+            'meses_tocados': meses_tocados,
         }
 
     # -- helpers ---------------------------------------------------------
