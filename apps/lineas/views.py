@@ -79,6 +79,28 @@ class LineaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailVi
         context['total_torres'] = self.object.torres.count()
         if self.object.kmz_geojson:
             context['kmz_geojson_json'] = json.dumps(self.object.kmz_geojson)
+
+        # #102 (bounce=3) — la sección "Vanos" de este template incluye
+        # `lineas/_filtro_semestre.html` (dropdown Período S1/S2/TA) desde
+        # B2.1, pero esta vista nunca leía `?semestre=` ni mostraba nada
+        # que reaccionara a él: la única cifra de esta sección es
+        # `linea.cantidad_vanos` (un contador fijo, ajeno al semestre). El
+        # dropdown quedaba renderizado sin ningún efecto observable en esta
+        # página -- coincide con el reporte del cliente ("pongo un filtro
+        # de un semestre y no me organiza los vanos") incluso después del
+        # fix de #102 en `RegistroAvanceCreateView` (que sí funciona, ver
+        # apps/campo/views.py), porque el cliente puede estar probando
+        # *esta* página (`lineas:detalle`), no esa. Se agrega el desglose
+        # real por semestre reusando `VanoSemestre.objects.avance_consolidado`
+        # (ya construido y testeado en B2.1/#102) -- sin tocar el contador
+        # `cantidad_vanos` existente.
+        from .models import VanoSemestre
+
+        semestre = (self.request.GET.get('semestre') or '').strip().upper()
+        if semestre not in dict(VanoSemestre.Semestre.choices):
+            semestre = ''
+        context['semestre'] = semestre
+        context['avance_semestre'] = VanoSemestre.objects.avance_consolidado(self.object)
         return context
 
     def post(self, request, *args, **kwargs):

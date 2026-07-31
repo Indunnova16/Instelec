@@ -27,7 +27,8 @@ Cubre:
 import importlib.util
 import os
 
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from apps.lineas.importers_b21 import (
     CASOS_ESPECIALES,
@@ -38,6 +39,8 @@ from apps.lineas.importers_b21 import (
 )
 from apps.lineas.models import Linea, Vano
 from apps.lineas.models_b21 import VanoSemestre
+from apps.lineas.views import LineaDetailView
+from apps.usuarios.models import Usuario
 
 
 def _linea(codigo, nombre=None):
@@ -356,3 +359,102 @@ class TestMigracion0017CargaVanosSemestre(TestCase):
         # No destructivo: los Vano materializados quedan (incluidos los 100
         # preexistentes de LN5114 + los nuevos que la migración creó).
         self.assertEqual(Vano.objects.count(), total_vanos_antes)
+
+
+class LineaDetailViewFiltroSemestreTests(TestCase):
+    """
+    #102 (bounce=3) — ``LineaDetailView`` (``lineas:detalle``) incluye el
+    mismo dropdown ``lineas/_filtro_semestre.html`` que
+    ``RegistroAvanceCreateView``, pero nunca leía ``?semestre=`` ni exponía
+    nada en el contexto que reaccionara a él: la única cifra de la sección
+    "Vanos" del template era ``linea.cantidad_vanos`` (contador fijo, ajeno
+    al semestre). El dropdown quedaba renderizado sin ningún efecto
+    observable EN ESTA PÁGINA — root cause verificado contra BD prod (F2):
+    ``vano_semestres`` para LN733 sí tiene S1=18/S2=8 distintos (la
+    migración 0017 y el fix de ``RegistroAvanceCreateView`` sí funcionan,
+    ver ``apps/campo/tests_issue_102.py``), así que el reporte del cliente
+    del 2026-07-24 ("pongo un filtro de un semestre y no me organiza los
+    vanos") solo se explica si estaba probando ``lineas:detalle`` en vez de
+    ``campo:avance_registrar``.
+
+    Cubre el wiring de ``semestre``/``avance_semestre`` en el contexto de
+    ``LineaDetailView`` — no la matemática de ``avance_consolidado`` (ya
+    testeada en ``tests_b21.py::test_avance_consolidado_por_semestre``).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = Usuario.objects.create_user(
+            email="admin_102b@test.com",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="102b",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+        # Mismo fixture discriminante que apps/campo/tests_issue_102.py:
+        # LN733-equivalente, S1=18 vanos, S2=subconjunto de 8.
+        cls.linea = _linea("LT-102B-733")
+        for i in range(1, 19):
+            Vano.objects.create(linea=cls.linea, numero=str(i))
+        s1_numeros = set(range(1, 19))
+        s2_numeros = {2, 3, 4, 5, 7, 12, 16, 17}
+        for n in s1_numeros:
+            vano = cls.linea.vanos.get(numero=str(n))
+            VanoSemestre.objects.create(vano=vano, semestre="S1")
+        for n in s2_numeros:
+            vano = cls.linea.vanos.get(numero=str(n))
+            VanoSemestre.objects.create(vano=vano, semestre="S2")
+
+    def _get_context(self, semestre=None):
+        """Mismo patrón que ``apps/campo/tests_issue_102.py`` —
+        ``get_context_data`` invocado directo vía ``RequestFactory``, sin
+        renderizar el template. Para un ``DetailView`` hace falta fijar
+        ``view.object`` manualmente (normalmente lo hace ``get()``)."""
+        rf = RequestFactory()
+        query = {}
+        if semestre is not None:
+            query["semestre"] = semestre
+        request = rf.get(reverse("lineas:detalle", kwargs={"pk": self.linea.pk}), query)
+        request.user = self.admin
+
+        view = LineaDetailView()
+        view.setup(request, pk=self.linea.pk)
+        view.object = view.get_object()
+        return view.get_context_data()
+
+    def test_avance_semestre_presente_en_contexto_sin_filtro(self):
+        ctx = self._get_context()
+        self.assertEqual(ctx["semestre"], "")
+        self.assertIn("avance_semestre", ctx)
+        self.assertEqual(ctx["avance_semestre"]["s1"]["total"], 18)
+        self.assertEqual(ctx["avance_semestre"]["s2"]["total"], 8)
+
+    def test_semestre_normaliza_minusculas_como_manda_el_dropdown(self):
+        ctx = self._get_context(semestre="s1")
+        self.assertEqual(ctx["semestre"], "S1")
+
+    def test_semestre_invalido_se_ignora_sin_romper(self):
+        ctx = self._get_context(semestre="Q9")
+        self.assertEqual(ctx["semestre"], "")
+        # avance_semestre sigue presente aunque el filtro sea inválido.
+        self.assertIn("avance_semestre", ctx)
+
+    def test_buckets_s1_y_s2_son_independientes_discriminante_bug_original(self):
+        # El bug original (#102 bounce=3): esta página no distinguía S1 de
+        # S2 porque no leía ningún dato segmentado. El discriminante real
+        # es que ambos buckets, calculados en la MISMA respuesta, difieren.
+        ctx = self._get_context(semestre="S1")
+        s1 = ctx["avance_semestre"]["s1"]
+        s2 = ctx["avance_semestre"]["s2"]
+        self.assertEqual(s1["total"], 18)
+        self.assertEqual(s2["total"], 8)
+        self.assertNotEqual(s1["total"], s2["total"])
+
+    def test_no_rompe_cantidad_vanos_existente(self):
+        # Backward-compatible: el contador legacy `cantidad_vanos` no se
+        # toca por este fix (sigue siendo responsabilidad de `LineaEditView`
+        # / POST `actualizar_vanos`, fuera de alcance de #102).
+        ctx = self._get_context()
+        self.assertEqual(ctx["linea"].cantidad_vanos, self.linea.cantidad_vanos)
