@@ -20,12 +20,28 @@ from .forms import TipoActividadForm
 
 
 class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
-    """List activities with filters."""
+    """List activities with filters.
+
+    #201 -- pantalla única que reemplaza a "Lista Operativa" y "Programación
+    Mensual" (antes `ProgramacionListView`, retirada). Reglas de mes/año:
+      1. Sin mes/año ni búsqueda -> mes actual (comportamiento que tenía
+         "Programación Mensual").
+      2. Con `buscar_aviso` activo -> universo completo, sin restricción de
+         mes/año (comportamiento que tenía "Lista Operativa"), sin importar
+         qué traiga el selector de mes/año en ese momento.
+      3. Mes/año explícitos (incluye el valor centinela "todos") -> se
+         respetan tal cual, para poder "jugar" entre períodos sin dos
+         pantallas separadas.
+    Abierta a cualquier usuario autenticado (sin RoleRequiredMixin) -- así
+    era "Lista Operativa" y es la landing page de MANTENIMIENTO
+    (`url_inicio_para_usuario`); las acciones masivas (asignar cuadrilla /
+    cambiar estado) siguen protegidas en sus propias vistas POST.
+    """
     model = Actividad
     template_name = 'actividades/lista.html'
     partial_template_name = 'actividades/partials/lista_actividades.html'
     context_object_name = 'actividades'
-    paginate_by = 20
+    paginate_by = 50
 
     def get_queryset(self) -> QuerySet[Actividad]:
         qs = super().get_queryset().select_related(
@@ -46,6 +62,7 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
         buscar_aviso = self.request.GET.get('buscar_aviso', '').strip()
         if buscar_aviso:
             qs = qs.filter(aviso_sap__icontains=buscar_aviso)
+        self._buscar_aviso = buscar_aviso
 
         # Filters
         estado = self.request.GET.get('estado')
@@ -76,20 +93,25 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
             except ValueError:
                 pass
 
-        # Month/year filter
-        mes = self.request.GET.get('mes')
-        if mes:
-            try:
-                qs = qs.filter(fecha_programada__month=int(mes))
-            except (ValueError, TypeError):
-                pass
+        # Month/year filter (#201 -- ver reglas en el docstring de la clase)
+        mes_raw = self.request.GET.get('mes', '').strip()
+        anio_raw = self.request.GET.get('anio', '').strip()
+        hoy = date.today()
 
-        anio = self.request.GET.get('anio')
-        if anio:
-            try:
-                qs = qs.filter(fecha_programada__year=int(anio))
-            except (ValueError, TypeError):
-                pass
+        if buscar_aviso:
+            self.selected_mes = None
+            self.selected_anio = None
+        elif not mes_raw and not anio_raw:
+            self.selected_mes = hoy.month
+            self.selected_anio = hoy.year
+        else:
+            self.selected_mes = int(mes_raw) if mes_raw.isdigit() else None
+            self.selected_anio = int(anio_raw) if anio_raw.isdigit() else None
+
+        if self.selected_mes:
+            qs = qs.filter(fecha_programada__month=self.selected_mes)
+        if self.selected_anio:
+            qs = qs.filter(fecha_programada__year=self.selected_anio)
 
         # Store for stats calculation
         self._filtered_qs = qs
@@ -105,12 +127,26 @@ class ActividadListView(LoginRequiredMixin, HTMXMixin, ListView):
         context['unidad_filter'] = self.request.GET.get('unidad', '')
 
         # Month/year selector options
-        context['meses'] = [
-            (1, 'Enero'), (2, 'Febrero'), (3, 'Marzo'), (4, 'Abril'),
-            (5, 'Mayo'), (6, 'Junio'), (7, 'Julio'), (8, 'Agosto'),
-            (9, 'Septiembre'), (10, 'Octubre'), (11, 'Noviembre'), (12, 'Diciembre')
-        ]
+        nombres_mes = {
+            1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+            5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+            9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+        }
+        context['meses'] = list(nombres_mes.items())
         context['anios'] = range(date.today().year - 1, date.today().year + 2)
+
+        # #201 -- estado del filtro mes/año para la pantalla unificada
+        # (ver reglas en ActividadListView.get_queryset).
+        context['selected_mes'] = self.selected_mes
+        context['selected_anio'] = self.selected_anio
+        context['nombre_mes'] = nombres_mes.get(self.selected_mes, '')
+        context['busqueda_universal'] = bool(getattr(self, '_buscar_aviso', ''))
+
+        # El checkbox de seleccion masiva depende del x-data="bulkActions()"
+        # que solo existe en lista.html -- este mismo partial tambien se
+        # reusa standalone (widget "Actividad Reciente" de home.html via
+        # ?partial=true), donde no hay ese scope de Alpine disponible.
+        context['bulk_actions_disponible'] = self.request.GET.get('partial') != 'true'
 
         # Progress stats from filtered queryset (before pagination)
         qs = getattr(self, '_filtered_qs', self.get_queryset())
@@ -202,137 +238,6 @@ class CalendarioView(LoginRequiredMixin, TemplateView):
         cal = calendar.Calendar(firstweekday=0)
         context['semanas'] = cal.monthdayscalendar(anio, mes)
         context['nombre_mes'] = calendar.month_name[mes]
-
-        return context
-
-
-class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
-    """List monthly programming with activities filtered by month."""
-    model = Actividad
-    template_name = 'actividades/programacion.html'
-    context_object_name = 'actividades'
-    paginate_by = 50
-    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
-
-    def get_queryset(self) -> QuerySet[Actividad]:
-        qs = Actividad.objects.select_related(
-            'linea', 'torre', 'tipo_actividad', 'cuadrilla'
-        ).order_by('linea__codigo', 'tipo_actividad__nombre', 'torre__numero')
-
-        # Filter by business unit (GET param > session > all).
-        unidad_negocio = self.request.GET.get('unidad') or get_unidad_negocio(self.request)
-        if unidad_negocio in ('MANTENIMIENTO', 'CONSTRUCCION'):
-            qs = qs.filter(
-                Q(linea__contrato__isnull=True) | Q(linea__contrato__unidad_negocio=unidad_negocio)
-            )
-
-        # Default to current month/year
-        hoy = date.today()
-        try:
-            self.selected_mes = int(self.request.GET.get('mes', hoy.month))
-        except (ValueError, TypeError):
-            self.selected_mes = hoy.month
-        try:
-            self.selected_anio = int(self.request.GET.get('anio', hoy.year))
-        except (ValueError, TypeError):
-            self.selected_anio = hoy.year
-
-        qs = qs.filter(
-            fecha_programada__month=self.selected_mes,
-            fecha_programada__year=self.selected_anio,
-        )
-
-        # Filter by linea(s) - multiple selection
-        linea_ids = self.request.GET.getlist('linea')
-        valid_linea_ids = []
-        for lid in linea_ids:
-            try:
-                UUID(lid)
-                valid_linea_ids.append(lid)
-            except ValueError:
-                pass
-        if valid_linea_ids:
-            qs = qs.filter(linea_id__in=valid_linea_ids)
-
-        # Filter by tipo_actividad
-        tipo_id = self.request.GET.get('tipo_actividad')
-        if tipo_id:
-            try:
-                UUID(tipo_id)
-                qs = qs.filter(tipo_actividad_id=tipo_id)
-            except ValueError:
-                pass
-
-        # Filter by estado
-        estado = self.request.GET.get('estado')
-        if estado and estado in dict(Actividad.Estado.choices):
-            qs = qs.filter(estado=estado)
-
-        # Filter by cuadrilla(s) - multiple selection
-        cuadrilla_ids = self.request.GET.getlist('cuadrilla')
-        valid_cuadrilla_ids = []
-        for cid in cuadrilla_ids:
-            try:
-                UUID(cid)
-                valid_cuadrilla_ids.append(cid)
-            except ValueError:
-                pass
-        if valid_cuadrilla_ids:
-            qs = qs.filter(cuadrilla_id__in=valid_cuadrilla_ids)
-
-        # Search by aviso SAP
-        buscar_aviso = self.request.GET.get('buscar_aviso', '').strip()
-        if buscar_aviso:
-            qs = qs.filter(aviso_sap__icontains=buscar_aviso)
-
-        self._filtered_qs = qs
-        return qs
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-
-        context['lineas'] = get_lineas_activas()
-        context['tipos'] = get_tipos_actividad_activos()
-        context['estados'] = Actividad.Estado.choices
-        context['cuadrillas'] = get_cuadrillas_activas()
-        context['selected_cuadrillas'] = self.request.GET.getlist('cuadrilla')
-        context['selected_lineas'] = self.request.GET.getlist('linea')
-        context['unidad_filter'] = self.request.GET.get('unidad', '')
-        context['meses'] = [
-            (1, 'Enero'), (2, 'Febrero'), (3, 'Marzo'), (4, 'Abril'),
-            (5, 'Mayo'), (6, 'Junio'), (7, 'Julio'), (8, 'Agosto'),
-            (9, 'Septiembre'), (10, 'Octubre'), (11, 'Noviembre'), (12, 'Diciembre')
-        ]
-        context['anios'] = range(date.today().year - 1, date.today().year + 2)
-        context['selected_mes'] = self.selected_mes
-        context['selected_anio'] = self.selected_anio
-
-        # Get month name
-        nombres_mes = {
-            1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
-            5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
-            9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
-        }
-        context['nombre_mes'] = nombres_mes.get(self.selected_mes, '')
-
-        # Stats
-        qs = getattr(self, '_filtered_qs', self.get_queryset())
-        stats = qs.aggregate(
-            total=Count('id'),
-            ejecutadas=Count('id', filter=Q(estado='COMPLETADA')),
-            pendientes=Count('id', filter=Q(estado__in=['PENDIENTE', 'PROGRAMADA'])),
-            en_curso=Count('id', filter=Q(estado='EN_CURSO')),
-        )
-        context['stats'] = stats
-        total = stats['total'] or 0
-        context['porcentaje_ejecucion'] = (
-            round((stats['ejecutadas'] / total) * 100, 1) if total > 0 else 0
-        )
-
-        # Programaciones for this month
-        context['programaciones'] = ProgramacionMensual.objects.filter(
-            mes=self.selected_mes, anio=self.selected_anio
-        ).select_related('linea')
 
         return context
 

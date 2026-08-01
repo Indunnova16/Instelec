@@ -186,15 +186,21 @@ class TestRoleBasedAccessControl:
 
         assert response.status_code == 403
 
-    def test_wrong_role_denied_programacion(self, client, user_password):
-        """Test that liniero gets 403 for programacion view."""
+    def test_liniero_puede_ver_programacion_pantalla_unificada(self, client, user_password):
+        """#201: 'Programacion Mensual' y 'Lista Operativa' se unificaron en
+        una sola pantalla (ActividadListView, sin RoleRequiredMixin) -- igual
+        de abierta que 'Lista Operativa' ya lo era. Antes esto daba 403 para
+        liniero porque ProgramacionListView exigia
+        admin/director/coordinador/ing_residente; esa restriccion ya no
+        aplica al LISTADO (las acciones masivas -- asignar cuadrilla /
+        cambiar estado -- siguen protegidas en sus propias vistas POST)."""
         liniero = LinieroFactory()
         client.login(username=liniero.email, password=user_password)
 
         url = reverse('actividades:programacion')
         response = client.get(url)
 
-        assert response.status_code == 403
+        assert response.status_code == 200
 
     def test_wrong_role_denied_importar(self, client, user_password):
         """Test que un rol no-admin (liniero) recibe 403 en importar.

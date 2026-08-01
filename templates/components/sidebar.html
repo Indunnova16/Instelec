@@ -190,8 +190,9 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     </svg>
                 </button>
                 <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Actividades">
-                    <li role="none"><a href="{% url 'actividades:programacion' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Programacion Mensual</a></li>
-                    <li role="none"><a href="{% url 'actividades:lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Lista Operativa</a></li>
+                    <!-- #201: "Programacion Mensual" y "Lista Operativa" se unificaron en
+                         una sola pantalla (actividades:lista) -- ver ActividadListView. -->
+                    <li role="none"><a href="{% url 'actividades:lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Actividades</a></li>
                     <li role="none"><a href="{% url 'actividades:calendario' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Calendario</a></li>
                 </ul>
             </li>

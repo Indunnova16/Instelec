@@ -293,6 +293,11 @@ class TestActividadListViewFiltroUnidadNegocio:
         act_sin_contrato = ActividadFactory(
             linea=linea_sin_contrato,
             torre=TorreFactory(linea=linea_sin_contrato),
+            # #201: la vista ahora filtra por mes actual si no se pasa
+            # mes/anio/buscar_aviso -- fijar la fecha evita flakiness de
+            # borde de mes (el default de la factory es hoy+7dias, que
+            # puede caer en el mes siguiente).
+            fecha_programada=date.today(),
             observaciones_programacion="Actividad linea sin contrato #174 lista",
         )
 
@@ -397,7 +402,9 @@ class TestCalendarioViewFiltroUnidadNegocio:
 
 @pytest.mark.django_db
 class TestProgramacionListViewFiltroUnidadNegocio:
-    """Mismo fix aplicado en ProgramacionListView.get_queryset (L221-225)."""
+    """Mismo fix, ahora servido por ActividadListView (#201 -- "Programación
+    Mensual" y "Lista Operativa" se unificaron en una sola pantalla;
+    `actividades:programacion` es un alias de URL a la misma vista)."""
 
     def test_programacion_incluye_linea_sin_contrato(self, client, admin_user):
         client.force_login(admin_user)
@@ -406,6 +413,8 @@ class TestProgramacionListViewFiltroUnidadNegocio:
         act = ActividadFactory(
             linea=linea_sin_contrato,
             torre=TorreFactory(linea=linea_sin_contrato),
+            # #201: idem nota de TestActividadListViewFiltroUnidadNegocio.
+            fecha_programada=date.today(),
             observaciones_programacion="Actividad sin contrato #174 programacion",
         )
 

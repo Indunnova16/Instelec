@@ -19,7 +19,10 @@ urlpatterns = [
     path('<uuid:pk>/editar/', views.ActividadEditView.as_view(), name='editar'),
     path('<uuid:pk>/cambiar-estado/', views.CambiarEstadoView.as_view(), name='cambiar_estado'),
     path('<uuid:pk>/restricciones/', views.EditarRestriccionesView.as_view(), name='editar_restricciones'),
-    path('programacion/', views.ProgramacionListView.as_view(), name='programacion'),
+    # #201: pantalla unificada -- "programacion" y "lista" apuntan a la
+    # misma vista (ActividadListView); se conserva el nombre de URL para no
+    # romper bookmarks/enlaces existentes (importar.html, importar_avances.html).
+    path('programacion/', views.ActividadListView.as_view(), name='programacion'),
     path('programacion/importar/', views.ImportarProgramacionView.as_view(), name='importar'),
     path('programacion/importar-avances/', views.ImportarAvancesView.as_view(), name='importar_avances'),
     path('programacion/descargar-plantilla/', views.DescargarPlantillaProgramacionView.as_view(), name='descargar_plantilla'),

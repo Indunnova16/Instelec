@@ -1,3 +1,20 @@
+<!-- #201: estado del filtro mes/año -- unifica "Lista Operativa" (universo
+     completo) y "Programacion Mensual" (mes actual) en una sola pantalla. -->
+<div class="mb-4 text-sm rounded-lg px-3 py-2 flex items-center gap-2
+    {% if busqueda_universal %}bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300
+    {% else %}bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300{% endif %}" role="status">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    {% if busqueda_universal %}
+        Busqueda activa: mostrando resultados de <strong>todo el historico</strong> (sin filtro de mes/ano).
+    {% elif selected_mes and selected_anio %}
+        Mostrando actividades de <strong>{{ nombre_mes }} {{ selected_anio }}</strong>. Usa el buscador de Aviso SAP para ver todo el historico, o el filtro de Mes/Ano para cambiar de periodo.
+    {% else %}
+        Mostrando <strong>todas las actividades</strong> (sin filtro de mes/ano).
+    {% endif %}
+</div>
+
 <!-- Progress indicators -->
 {% if stats %}
 <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -27,6 +44,17 @@
 </div>
 {% endif %}
 
+{% if actividades and bulk_actions_disponible %}
+<!-- Bulk select-all (#201 -- barra de acciones masivas vive en lista.html) -->
+<div class="flex items-center gap-2 mb-2 text-sm text-gray-600 dark:text-gray-400">
+    <input type="checkbox" @change="toggleAll($event)"
+           class="rounded border-gray-300 text-blue-600 cursor-pointer"
+           id="bulk-select-all"
+           aria-label="Seleccionar todas las actividades visibles">
+    <label for="bulk-select-all" class="cursor-pointer">Seleccionar todas las visibles</label>
+</div>
+{% endif %}
+
 <!-- Activity list -->
 <div class="space-y-4" role="list" aria-label="Lista de actividades">
     {% for actividad in actividades %}
@@ -37,6 +65,14 @@
 
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-4">
+                {% if bulk_actions_disponible %}
+                <!-- Bulk select checkbox -->
+                <input type="checkbox" class="bulk-check flex-shrink-0 rounded border-gray-300 text-blue-600 cursor-pointer"
+                       value="{{ actividad.pk }}"
+                       @change="toggleOne('{{ actividad.pk }}', $event)"
+                       aria-label="Seleccionar actividad {{ actividad.torre.numero_display }}">
+                {% endif %}
+
                 <!-- Status indicator -->
                 <div class="flex-shrink-0" aria-hidden="true">
                     {% if actividad.estado == 'COMPLETADA' %}

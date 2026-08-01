@@ -8,6 +8,8 @@ These tests cover all major views in the application with:
 - Basic context validation
 """
 
+from datetime import date, timedelta
+
 import pytest
 from django.urls import reverse
 from django.test import Client
@@ -414,18 +416,22 @@ class TestActividadesViews:
         assert 'anio' in response.context
         assert 'semanas' in response.context
 
-    def test_programacion_view_requires_role(self, client, liniero_user, user_password):
-        """Test programacion view requires specific roles."""
+    def test_programacion_view_open_to_all_roles(self, client, liniero_user, user_password):
+        """#201: 'Programacion Mensual' se unifico con 'Lista Operativa' en
+        una sola pantalla (ActividadListView) -- ya no exige rol
+        admin/director/coordinador/ing_residente para el LISTADO, igual de
+        abierta que 'Lista Operativa' ya lo era. Las acciones masivas
+        (asignar cuadrilla / cambiar estado) siguen protegidas aparte."""
         client.login(username=liniero_user.email, password=user_password)
         url = reverse('actividades:programacion')
 
         response = client.get(url)
 
-        # Liniero does not have access - should be 403
-        assert response.status_code == 403
+        assert response.status_code == 200
+        assert 'actividades/lista.html' in [t.name for t in response.templates]
 
     def test_programacion_view_coordinador(self, client, coordinador_user, user_password):
-        """Test programacion view for coordinador."""
+        """Test programacion view for coordinador -- pantalla unificada (#201)."""
         client.login(username=coordinador_user.email, password=user_password)
         ProgramacionMensualFactory.create_batch(2)
         url = reverse('actividades:programacion')
@@ -433,8 +439,106 @@ class TestActividadesViews:
         response = client.get(url)
 
         assert response.status_code == 200
-        assert 'actividades/programacion.html' in [t.name for t in response.templates]
-        assert 'programaciones' in response.context
+        assert 'actividades/lista.html' in [t.name for t in response.templates]
+        assert 'actividades' in response.context
+        assert 'selected_mes' in response.context
+
+    # ==========================================================================
+    # #201 -- pantalla unificada "Lista Operativa" + "Programacion Mensual"
+    # ==========================================================================
+
+    def test_lista_default_muestra_solo_mes_actual(self, client, admin_user, user_password):
+        """Sin filtros ni busqueda, el default es el mes actual (comportamiento
+        que tenia 'Programacion Mensual')."""
+        client.login(username=admin_user.email, password=user_password)
+        mes_pasado = date.today().replace(day=1) - timedelta(days=1)
+
+        act_mes_actual = ActividadFactory(fecha_programada=date.today())
+        act_mes_pasado = ActividadFactory(fecha_programada=mes_pasado)
+
+        response = client.get(reverse('actividades:lista'))
+
+        assert response.status_code == 200
+        ids = {str(a.id) for a in response.context['actividades']}
+        assert str(act_mes_actual.id) in ids
+        assert str(act_mes_pasado.id) not in ids
+        assert response.context['selected_mes'] == date.today().month
+        assert response.context['selected_anio'] == date.today().year
+        assert response.context['busqueda_universal'] is False
+
+    def test_lista_busqueda_expande_a_todo_el_universo(self, client, admin_user, user_password):
+        """Con `buscar_aviso` activo, se ignora el default de mes actual y se
+        busca en todo el historico (comportamiento que tenia 'Lista
+        Operativa'), aunque la actividad este en un mes distinto al actual."""
+        client.login(username=admin_user.email, password=user_password)
+        mes_pasado = date.today().replace(day=1) - timedelta(days=1)
+
+        act_fuera_de_mes = ActividadFactory(
+            fecha_programada=mes_pasado, aviso_sap='AV-201-BUSQUEDA'
+        )
+
+        response = client.get(reverse('actividades:lista'), {'buscar_aviso': 'AV-201-BUSQUEDA'})
+
+        assert response.status_code == 200
+        ids = {str(a.id) for a in response.context['actividades']}
+        assert str(act_fuera_de_mes.id) in ids
+        assert response.context['busqueda_universal'] is True
+        assert response.context['selected_mes'] is None
+        assert response.context['selected_anio'] is None
+
+    def test_lista_filtro_mes_todos_sin_busqueda(self, client, admin_user, user_password):
+        """El selector de Mes/Ano tiene un valor centinela 'todos' que deja
+        ver el universo completo sin necesidad de escribir en el buscador."""
+        client.login(username=admin_user.email, password=user_password)
+        mes_pasado = date.today().replace(day=1) - timedelta(days=1)
+
+        act_fuera_de_mes = ActividadFactory(fecha_programada=mes_pasado)
+
+        response = client.get(reverse('actividades:lista'), {'mes': 'todos', 'anio': 'todos'})
+
+        assert response.status_code == 200
+        ids = {str(a.id) for a in response.context['actividades']}
+        assert str(act_fuera_de_mes.id) in ids
+        assert response.context['selected_mes'] is None
+        assert response.context['selected_anio'] is None
+
+    def test_lista_filtro_mes_explicito_distinto_al_actual(self, client, admin_user, user_password):
+        """El usuario puede 'jugar' con el filtro de mes/ano para ver otros
+        periodos sin necesidad de dos pantallas separadas."""
+        client.login(username=admin_user.email, password=user_password)
+        mes_pasado = date.today().replace(day=1) - timedelta(days=1)
+
+        act_mes_pasado = ActividadFactory(fecha_programada=mes_pasado)
+        act_mes_actual = ActividadFactory(fecha_programada=date.today())
+
+        response = client.get(
+            reverse('actividades:lista'),
+            {'mes': mes_pasado.month, 'anio': mes_pasado.year},
+        )
+
+        assert response.status_code == 200
+        ids = {str(a.id) for a in response.context['actividades']}
+        assert str(act_mes_pasado.id) in ids
+        assert str(act_mes_actual.id) not in ids
+
+    def test_lista_partial_true_no_falla_widget_home(self, client, admin_user, user_password):
+        """El widget 'Actividad Reciente' de home.html reusa este mismo
+        endpoint via hx-get con ?partial=true (y ?fecha=hoy&partial=true) --
+        no debe fallar, y el checkbox de seleccion masiva (que depende del
+        x-data="bulkActions()" que solo existe en lista.html) debe quedar
+        deshabilitado en ese contexto standalone (#201)."""
+        client.login(username=admin_user.email, password=user_password)
+        ActividadFactory(fecha_programada=date.today())
+
+        response = client.get(
+            reverse('actividades:lista'),
+            {'partial': 'true', 'limit': '5'},
+            HTTP_HX_REQUEST='true',
+        )
+
+        assert response.status_code == 200
+        assert response.context['bulk_actions_disponible'] is False
+        assert b'toggleOne' not in response.content
 
     def test_importar_programacion_requires_role(self, client, liniero_user, user_password):
         """Test import view requires admin/director/coordinador role (liniero=NIVEL_OPERARIO denegado).
