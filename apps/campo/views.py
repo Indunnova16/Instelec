@@ -484,6 +484,9 @@ class ProcedimientoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     """
     List uploaded procedure documents with search functionality.
     Actualizado: 1 abril 2026
+    Issue #24 (ampliación 2026-07-31): filtro por categoría — "Procedimientos"
+    es padre de 2 hijos (Guía de Mantenimiento / Ficha Técnica), mismo módulo,
+    solo se organiza el listado por esa categoría.
     """
     model = Procedimiento
     template_name = 'campo/procedimientos_lista.html'
@@ -504,7 +507,39 @@ class ProcedimientoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
                 Q(tipo_archivo__icontains=q)
             )
 
+        # Filtro por categoría (Guía de Mantenimiento / Ficha Técnica)
+        categoria = self.request.GET.get('categoria', '').strip()
+        if categoria in dict(Procedimiento.CATEGORIA_CHOICES):
+            qs = qs.filter(categoria=categoria)
+
         return qs.order_by('-created_at')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['categoria_choices'] = Procedimiento.CATEGORIA_CHOICES
+        context['categoria_actual'] = self.request.GET.get('categoria', '').strip()
+
+        # Conteos para las pestañas del listado (sobre el conjunto ya filtrado
+        # por búsqueda, sin el filtro de categoría, para que las pestañas
+        # reflejen el universo navegable).
+        base_qs = super().get_queryset()
+        q = self.request.GET.get('q', '').strip()
+        if q:
+            base_qs = base_qs.filter(
+                Q(titulo__icontains=q) |
+                Q(descripcion__icontains=q) |
+                Q(nombre_original__icontains=q) |
+                Q(tipo_archivo__icontains=q)
+            )
+        context['conteo_guias'] = base_qs.filter(
+            categoria=Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO
+        ).count()
+        context['conteo_fichas'] = base_qs.filter(
+            categoria=Procedimiento.CATEGORIA_FICHA_TECNICA
+        ).count()
+        context['conteo_total'] = base_qs.count()
+
+        return context
 
 
 class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
@@ -521,18 +556,31 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
     }
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['categoria_choices'] = Procedimiento.CATEGORIA_CHOICES
+        return context
+
     def post(self, request, *args, **kwargs):
         import os
         from django.http import HttpResponseRedirect
 
         titulo = request.POST.get('titulo', '').strip()
         descripcion = request.POST.get('descripcion', '').strip()
+        categoria = request.POST.get('categoria', '').strip()
         archivo = request.FILES.get('archivo')
 
         if not titulo or not archivo:
             context = self.get_context_data(**kwargs)
             context['error'] = 'Debe ingresar un título y seleccionar un archivo.'
             return self.render_to_response(context)
+
+        # Issue #24: categoría obligatoria (Guía de Mantenimiento / Ficha
+        # Técnica). Si no llega o no es válida, cae al default del modelo
+        # (Guía de Mantenimiento) en vez de rechazar el upload — evita romper
+        # integraciones/otros flujos que no manden el campo todavía.
+        if categoria not in dict(Procedimiento.CATEGORIA_CHOICES):
+            categoria = Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO
 
         _, ext = os.path.splitext(archivo.name)
         if ext.lower() not in self.ALLOWED_EXTENSIONS:
@@ -554,6 +602,7 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
         proc = Procedimiento.objects.create(
             titulo=titulo,
             descripcion=descripcion,
+            categoria=categoria,
             archivo=archivo,
             nombre_original=archivo.name,
             tipo_archivo=archivo.content_type or '',

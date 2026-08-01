@@ -112,8 +112,8 @@ class ReporteDanoAdmin(BaseModelAdmin):
 
 @admin.register(Procedimiento)
 class ProcedimientoAdmin(BaseModelAdmin):
-    list_display = ('titulo', 'nombre_original', 'subido_por', 'tamanio', 'created_at')
-    list_filter = ('created_at',)
+    list_display = ('titulo', 'categoria', 'nombre_original', 'subido_por', 'tamanio', 'created_at')
+    list_filter = ('categoria', 'created_at')
     search_fields = ('titulo', 'descripcion', 'nombre_original', 'subido_por__email', 'subido_por__first_name')
     raw_id_fields = ('subido_por',)
     readonly_fields = ('nombre_original', 'tipo_archivo', 'tamanio')

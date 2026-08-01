@@ -31,6 +31,9 @@
     <!-- Buscador - Agregado 1 abril 2026 -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <form method="get" class="flex gap-2">
+            {% if categoria_actual %}
+            <input type="hidden" name="categoria" value="{{ categoria_actual }}">
+            {% endif %}
             <input type="text" name="q" value="{{ request.GET.q }}"
                    placeholder="Buscar procedimiento (ej: cadena, poda, lavado)..."
                    class="flex-1 px-4 py-2 border rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500">
@@ -48,6 +51,20 @@
         </form>
     </div>
 
+    <!-- Categorías (issue #24 ampliación 2026-07-31): Guía de Mantenimiento / Ficha Técnica -->
+    <div class="flex gap-2 border-b border-gray-200 dark:border-gray-700">
+        <a href="?{% if request.GET.q %}q={{ request.GET.q }}{% endif %}"
+           class="px-4 py-2 text-sm font-medium border-b-2 transition {% if not categoria_actual %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200{% endif %}">
+            Todos ({{ conteo_total }})
+        </a>
+        {% for valor, etiqueta in categoria_choices %}
+        <a href="?categoria={{ valor }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"
+           class="px-4 py-2 text-sm font-medium border-b-2 transition {% if categoria_actual == valor %}border-blue-600 text-blue-600 dark:text-blue-400{% else %}border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200{% endif %}">
+            {{ etiqueta }} ({% if valor == 'guia_mantenimiento' %}{{ conteo_guias }}{% else %}{{ conteo_fichas }}{% endif %})
+        </a>
+        {% endfor %}
+    </div>
+
     <!-- Table -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -55,6 +72,9 @@
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                         Título
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Categoría
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                         Descripción
@@ -78,6 +98,17 @@
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         {{ proc.titulo }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        {% if proc.categoria == 'ficha_tecnica' %}
+                        <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
+                            {{ proc.get_categoria_display }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+                            {{ proc.get_categoria_display }}
+                        </span>
+                        {% endif %}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
                         {{ proc.descripcion|truncatewords:10|default:"-" }}
@@ -123,7 +154,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colspan="7" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
