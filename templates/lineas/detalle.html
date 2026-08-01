@@ -375,6 +375,33 @@
                 Los vanos son los segmentos entre torres consecutivas. Ingrese la cantidad total de vanos en esta línea.
             </p>
         </div>
+
+        {# #102 — desglose por semestre (S1/S2/TA), reacciona al filtro "Período" de arriba. #}
+        {% if avance_semestre %}
+        <div class="p-6 border-t border-gray-200 dark:border-gray-700" data-testid="b21-avance-semestre">
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Vanos por semestre</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="rounded-lg border p-3 {% if semestre == 'S1' %}border-blue-500 bg-blue-50 dark:bg-blue-900/30{% else %}border-gray-200 dark:border-gray-700{% endif %}">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Semestre 1 (Ene–Jun)</p>
+                    <p class="text-xl font-bold text-gray-900 dark:text-white">{{ avance_semestre.s1.ejecutados }}/{{ avance_semestre.s1.total }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ avance_semestre.s1.porcentaje }}% ejecutado</p>
+                </div>
+                <div class="rounded-lg border p-3 {% if semestre == 'S2' %}border-blue-500 bg-blue-50 dark:bg-blue-900/30{% else %}border-gray-200 dark:border-gray-700{% endif %}">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Semestre 2 (Jul–Dic)</p>
+                    <p class="text-xl font-bold text-gray-900 dark:text-white">{{ avance_semestre.s2.ejecutados }}/{{ avance_semestre.s2.total }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ avance_semestre.s2.porcentaje }}% ejecutado</p>
+                </div>
+                <div class="rounded-lg border p-3 {% if semestre == 'TA' %}border-blue-500 bg-blue-50 dark:bg-blue-900/30{% else %}border-gray-200 dark:border-gray-700{% endif %}">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Todo el año</p>
+                    <p class="text-xl font-bold text-gray-900 dark:text-white">{{ avance_semestre.ta.ejecutados }}/{{ avance_semestre.ta.total }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ avance_semestre.ta.porcentaje }}% ejecutado</p>
+                </div>
+            </div>
+            {% if not semestre %}
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-3">Seleccioná un período arriba para resaltarlo.</p>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 
     <!-- Modal container for tower form -->
