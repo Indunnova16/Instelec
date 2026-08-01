@@ -446,11 +446,31 @@ class FotoDano(BaseModel):
 class Procedimiento(BaseModel):
     """
     Informational procedure document uploaded for field teams.
+
+    Issue #24 (ampliación 2026-07-31): "Procedimientos" es un padre con 2
+    categorías (hijos), mismo módulo/mecanismo técnico — solo se reclasifica
+    con una categoría, no se construye nada nuevo:
+      - Guía de Mantenimiento: procedimiento paso a paso de una actividad.
+      - Ficha Técnica: ficha de un material/herramienta/elemento específico.
     """
+
+    CATEGORIA_GUIA_MANTENIMIENTO = 'guia_mantenimiento'
+    CATEGORIA_FICHA_TECNICA = 'ficha_tecnica'
+    CATEGORIA_CHOICES = [
+        (CATEGORIA_GUIA_MANTENIMIENTO, 'Guía de Mantenimiento'),
+        (CATEGORIA_FICHA_TECNICA, 'Ficha Técnica'),
+    ]
 
     titulo = models.CharField(
         'Título',
         max_length=200,
+    )
+    categoria = models.CharField(
+        'Categoría',
+        max_length=30,
+        choices=CATEGORIA_CHOICES,
+        default=CATEGORIA_GUIA_MANTENIMIENTO,
+        help_text='Guía de Mantenimiento (paso a paso) o Ficha Técnica (hoja de vida de un elemento).',
     )
     descripcion = models.TextField(
         'Descripción',

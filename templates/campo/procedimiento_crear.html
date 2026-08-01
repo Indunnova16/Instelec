@@ -50,6 +50,22 @@
             </div>
 
             <div>
+                <label for="categoria" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Categoría <span class="text-red-500">*</span>
+                </label>
+                <select name="categoria" id="categoria" required
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                    {% for valor, etiqueta in categoria_choices %}
+                    <option value="{{ valor }}">{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Guía de Mantenimiento: procedimiento paso a paso de una actividad (ej. cambio de cadena).
+                    Ficha Técnica: hoja de vida de un material/herramienta/elemento específico.
+                </p>
+            </div>
+
+            <div>
                 <label for="archivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Archivo <span class="text-red-500">*</span>
                 </label>

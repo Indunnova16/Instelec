@@ -6,7 +6,6 @@ from django.urls import reverse
 
 from apps.campo.models import Procedimiento
 
-
 PDF_BYTES = b"%PDF-1.4\n%test\n"
 XLSX_BYTES = b"PK\x03\x04test xlsx payload"
 XLS_BYTES = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1test xls payload"
@@ -114,6 +113,196 @@ class TestProcedimientoUploadMime:
         )
         assert resp.status_code == 200
         assert not Procedimiento.objects.filter(titulo="Fake DOCX").exists()
+
+
+@pytest.mark.django_db
+class TestProcedimientoCategoria:
+    """Issue #24 (ampliación 2026-07-31): "Procedimientos" padre con 2
+    categorías hijas (Guía de Mantenimiento / Ficha Técnica), mismo módulo
+    técnico — solo se agrega la clasificación al subir y al listar."""
+
+    def test_default_categoria_es_guia_mantenimiento(self, admin_user):
+        """Registros creados sin categoría explícita (legacy / API antigua)
+        caen en Guía de Mantenimiento por default del modelo."""
+        archivo = SimpleUploadedFile("legacy.pdf", PDF_BYTES, content_type="application/pdf")
+        p = Procedimiento.objects.create(
+            titulo="Legacy sin categoría",
+            archivo=archivo,
+            nombre_original="legacy.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+        assert p.categoria == Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO
+        assert p.get_categoria_display() == "Guía de Mantenimiento"
+
+    def test_upload_con_categoria_ficha_tecnica(self, admin_client, upload_url):
+        archivo = SimpleUploadedFile("gafas.pdf", PDF_BYTES, content_type="application/pdf")
+        resp = admin_client.post(
+            upload_url,
+            {
+                "titulo": "Gafas oscuras — especificaciones",
+                "descripcion": "",
+                "categoria": Procedimiento.CATEGORIA_FICHA_TECNICA,
+                "archivo": archivo,
+            },
+        )
+        assert resp.status_code == 302
+        proc = Procedimiento.objects.get(titulo="Gafas oscuras — especificaciones")
+        assert proc.categoria == Procedimiento.CATEGORIA_FICHA_TECNICA
+
+    def test_upload_con_categoria_guia_mantenimiento(self, admin_client, upload_url):
+        archivo = SimpleUploadedFile("cadena.pdf", PDF_BYTES, content_type="application/pdf")
+        resp = admin_client.post(
+            upload_url,
+            {
+                "titulo": "Cambio de cadena",
+                "descripcion": "",
+                "categoria": Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO,
+                "archivo": archivo,
+            },
+        )
+        assert resp.status_code == 302
+        proc = Procedimiento.objects.get(titulo="Cambio de cadena")
+        assert proc.categoria == Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO
+
+    def test_upload_sin_categoria_cae_a_default(self, admin_client, upload_url):
+        """Si el POST no manda categoria (integraciones viejas), no se
+        rechaza el upload — cae al default del modelo."""
+        archivo = SimpleUploadedFile("sin_cat.pdf", PDF_BYTES, content_type="application/pdf")
+        resp = admin_client.post(
+            upload_url,
+            {"titulo": "Sin categoría en el POST", "descripcion": "", "archivo": archivo},
+        )
+        assert resp.status_code == 302
+        proc = Procedimiento.objects.get(titulo="Sin categoría en el POST")
+        assert proc.categoria == Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO
+
+    def test_upload_con_categoria_invalida_cae_a_default(self, admin_client, upload_url):
+        archivo = SimpleUploadedFile("cat_rara.pdf", PDF_BYTES, content_type="application/pdf")
+        resp = admin_client.post(
+            upload_url,
+            {
+                "titulo": "Categoría inválida",
+                "descripcion": "",
+                "categoria": "no-existe",
+                "archivo": archivo,
+            },
+        )
+        assert resp.status_code == 302
+        proc = Procedimiento.objects.get(titulo="Categoría inválida")
+        assert proc.categoria == Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO
+
+    def test_crear_form_expone_categoria_choices(self, admin_client, upload_url):
+        resp = admin_client.get(upload_url)
+        assert resp.status_code == 200
+        assert resp.context["categoria_choices"] == Procedimiento.CATEGORIA_CHOICES
+        assert b"Gu\xc3\xada de Mantenimiento" in resp.content
+        assert b"Ficha T\xc3\xa9cnica" in resp.content
+
+    def test_listado_filtra_por_categoria_guia(self, admin_client, admin_user):
+        Procedimiento.objects.create(
+            titulo="Guía A",
+            categoria=Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO,
+            archivo=SimpleUploadedFile("a.pdf", PDF_BYTES, content_type="application/pdf"),
+            nombre_original="a.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+        Procedimiento.objects.create(
+            titulo="Ficha B",
+            categoria=Procedimiento.CATEGORIA_FICHA_TECNICA,
+            archivo=SimpleUploadedFile("b.pdf", PDF_BYTES, content_type="application/pdf"),
+            nombre_original="b.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+
+        resp = admin_client.get(
+            reverse("campo:procedimientos"),
+            {"categoria": Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO},
+        )
+        assert resp.status_code == 200
+        titulos = [p.titulo for p in resp.context["procedimientos"]]
+        assert "Guía A" in titulos
+        assert "Ficha B" not in titulos
+
+    def test_listado_filtra_por_categoria_ficha(self, admin_client, admin_user):
+        Procedimiento.objects.create(
+            titulo="Guía C",
+            categoria=Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO,
+            archivo=SimpleUploadedFile("c.pdf", PDF_BYTES, content_type="application/pdf"),
+            nombre_original="c.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+        Procedimiento.objects.create(
+            titulo="Ficha D",
+            categoria=Procedimiento.CATEGORIA_FICHA_TECNICA,
+            archivo=SimpleUploadedFile("d.pdf", PDF_BYTES, content_type="application/pdf"),
+            nombre_original="d.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+
+        resp = admin_client.get(
+            reverse("campo:procedimientos"),
+            {"categoria": Procedimiento.CATEGORIA_FICHA_TECNICA},
+        )
+        assert resp.status_code == 200
+        titulos = [p.titulo for p in resp.context["procedimientos"]]
+        assert "Ficha D" in titulos
+        assert "Guía C" not in titulos
+
+    def test_listado_sin_filtro_muestra_todas_las_categorias(self, admin_client, admin_user):
+        Procedimiento.objects.create(
+            titulo="Guía E",
+            categoria=Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO,
+            archivo=SimpleUploadedFile("e.pdf", PDF_BYTES, content_type="application/pdf"),
+            nombre_original="e.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+        Procedimiento.objects.create(
+            titulo="Ficha F",
+            categoria=Procedimiento.CATEGORIA_FICHA_TECNICA,
+            archivo=SimpleUploadedFile("f.pdf", PDF_BYTES, content_type="application/pdf"),
+            nombre_original="f.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+
+        resp = admin_client.get(reverse("campo:procedimientos"))
+        assert resp.status_code == 200
+        titulos = [p.titulo for p in resp.context["procedimientos"]]
+        assert "Guía E" in titulos
+        assert "Ficha F" in titulos
+        assert resp.context["conteo_guias"] >= 1
+        assert resp.context["conteo_fichas"] >= 1
+        assert resp.context["conteo_total"] >= 2
+
+    def test_listado_ignora_categoria_invalida_en_querystring(self, admin_client, admin_user):
+        """Un valor de categoría no reconocido en el querystring no debe
+        tumbar el listado — se ignora el filtro y se muestra todo."""
+        Procedimiento.objects.create(
+            titulo="Guía G",
+            categoria=Procedimiento.CATEGORIA_GUIA_MANTENIMIENTO,
+            archivo=SimpleUploadedFile("g.pdf", PDF_BYTES, content_type="application/pdf"),
+            nombre_original="g.pdf",
+            tipo_archivo="application/pdf",
+            tamanio=len(PDF_BYTES),
+            subido_por=admin_user,
+        )
+        resp = admin_client.get(reverse("campo:procedimientos"), {"categoria": "no-existe"})
+        assert resp.status_code == 200
+        titulos = [p.titulo for p in resp.context["procedimientos"]]
+        assert "Guía G" in titulos
 
 
 @pytest.mark.django_db
