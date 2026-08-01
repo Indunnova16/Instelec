@@ -159,13 +159,23 @@
     </section>
 
     <!-- Cuadrillas List grouped by week -->
+    {# issue #187 (freeze rows/columns): esta lista NO es una <table> -- es un #}
+    {# acordeon de tarjetas agrupadas por semana (213 filas en produccion). El #}
+    {# patron sticky-thead de #183 no aplica literal (no hay columnas que #}
+    {# congelar), asi que se adapta: el bloque completo vive en un contenedor #}
+    {# con altura acotada + overflow-auto real (mismo fix de causa raiz que #}
+    {# #183/9f0efc5 -- overflow-x-auto solo deja el scroll-y implicito roto) y #}
+    {# el header de cada grupo de semana queda sticky top-0, para nunca perder #}
+    {# de vista a que semana pertenece la cuadrilla que se esta viendo mientras #}
+    {# se hace scroll. #}
     <section class="space-y-4" aria-labelledby="cuadrillas-list-title">
             <h2 id="cuadrillas-list-title" class="sr-only">Lista de Cuadrillas por Semana</h2>
 
+            <div class="overflow-auto max-h-[70vh] space-y-4 pr-1">
             {% for semana_label, cuadrillas_grupo in cuadrillas_por_semana.items %}
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-                <!-- Week header -->
-                <div class="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700 flex items-center justify-between">
+                <!-- Week header (sticky -- issue #187) -->
+                <div class="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700 flex items-center justify-between sticky top-0 z-10">
                     <div class="flex items-center gap-2">
                         <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -279,6 +289,7 @@
                 {% endif %}
             </div>
             {% endfor %}
+            </div><!-- /scroll container sticky-header (issue #187) -->
         </section>
     </div> <!-- /tab: semanas (issue #188, A10) -->
 

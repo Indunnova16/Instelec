@@ -191,6 +191,14 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                 </button>
                 <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Actividades">
                     <li role="none"><a href="{% url 'actividades:programacion' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Programacion Mensual</a></li>
+                    {# issue #187 -- "Programacion Semanal" renombrado desde el link plano #}
+                    {# "Cuadrillas" (spec final confirmada por Alcides en el issue: la #}
+                    {# pantalla "Cuadrillas - TransMaint" / cuadrillas:lista ES, en el uso #}
+                    {# real del cliente, la programacion semanal -- cada Cuadrilla es un #}
+                    {# bloque de semana WW-YYYY-####, ver apps/cuadrillas/views_semanal.py). #}
+                    {# Antes cero referencias visibles: solo se llegaba via el boton dentro #}
+                    {# de /cuadrillas/. Mismo URL, no una pantalla nueva. #}
+                    <li role="none"><a href="{% url 'cuadrillas:lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Programacion Semanal</a></li>
                     <li role="none"><a href="{% url 'actividades:lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Lista Operativa</a></li>
                     <li role="none"><a href="{% url 'actividades:calendario' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Calendario</a></li>
                 </ul>
@@ -206,25 +214,67 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                 </a>
             </li>
 
-            <!-- Cuadrillas -->
-            <li role="none" x-show="modulo === 'mantenimiento'">
-                <a href="{% url 'cuadrillas:lista' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+            {# issue #187 -- "Campo" pasa de link plano ("Registros Campo" -> campo:lista) #}
+            {# a submenu expandible con acceso directo a "Avances" (pantalla "Avances de #}
+            {# Vanos" = campo:avance_registrar, cero referencias en el sidebar antes de #}
+            {# este fix, era el hallazgo central del issue) y "Anomalia" (renombrado desde #}
+            {# "Danos" confirmado por Alcides = campo:reportar_dano). "Registros Campo" se #}
+            {# conserva como 3er item (no estaba en el alcance explicito de la spec final #}
+            {# del cliente, pero se preserva el acceso existente en vez de retirarlo #}
+            {# silenciosamente). #}
+            <!-- Campo -->
+            <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
+                <button @click="open = !open"
+                        class="w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                        aria-haspopup="true"
+                        :aria-expanded="open"
+                        type="button">
+                    <span class="flex items-center">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Campo
+                    </span>
+                    <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                     </svg>
-                    Cuadrillas
-                </a>
+                </button>
+                <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Campo">
+                    <li role="none"><a href="{% url 'campo:avance_registrar' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Avances</a></li>
+                    <li role="none"><a href="{% url 'campo:reportar_dano' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Anomalia</a></li>
+                    <li role="none"><a href="{% url 'campo:lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Registros Campo</a></li>
+                </ul>
             </li>
 
-            <!-- Campo -->
-            <li role="none" x-show="modulo === 'mantenimiento'">
-                <a href="{% url 'campo:lista' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+            {# issue #187 -- grupo "Procedimientos" nuevo en el menu de administrativos #}
+            {# (antes solo existia dentro de "Formato de Campo" para trabajadores de #}
+            {# campo). Spec final del cliente: padre con 2 hijos (Guias de Mantenimiento #}
+            {# / Fichas Tecnicas). Ver issue #24 -- Procedimiento AUN no tiene un campo #}
+            {# `categoria` en el modelo para separar el contenido real; ambos items #}
+            {# apuntan al mismo listado campo:procedimientos hasta que #24 agregue esa #}
+            {# clasificacion (fuera de alcance de #187 -- no se inventa el campo aca). #}
+            <!-- Procedimientos -->
+            <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
+                <button @click="open = !open"
+                        class="w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                        aria-haspopup="true"
+                        :aria-expanded="open"
+                        type="button">
+                    <span class="flex items-center">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Procedimientos
+                    </span>
+                    <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                     </svg>
-                    Registros Campo
-                </a>
+                </button>
+                <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Procedimientos">
+                    <li role="none"><a href="{% url 'campo:procedimientos' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Guias de Mantenimiento</a></li>
+                    <li role="none"><a href="{% url 'campo:procedimientos' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Fichas Tecnicas</a></li>
+                </ul>
             </li>
 
             {% if ok_mant %}
