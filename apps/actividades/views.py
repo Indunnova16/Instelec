@@ -11,6 +11,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from django.contrib import messages
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
 from apps.core.cache import get_lineas_activas, get_cuadrillas_activas, get_tipos_actividad_activos
@@ -342,6 +343,34 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
     template_name = 'actividades/importar.html'
     allowed_roles = ['admin', 'director', 'coordinador']
 
+    NOMBRES_MES = {
+        1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+        5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+        9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
+    }
+
+    @staticmethod
+    def _resumen_advertencias(advertencias, limite=15):
+        """Issue #200: construye el detalle real (hoja/fila/mensaje) de las
+        advertencias del importador en vez de descartarlas y mostrar solo un
+        conteo — antes era imposible saber qué falló en una fila concreta."""
+        lineas = []
+        for adv in advertencias[:limite]:
+            hoja = adv.get('hoja')
+            fila = adv.get('fila')
+            mensaje = adv.get('mensaje', '')
+            if hoja and fila is not None:
+                lineas.append(f"Hoja {hoja}, fila {fila}: {mensaje}")
+            elif hoja:
+                lineas.append(f"Hoja {hoja}: {mensaje}")
+            else:
+                lineas.append(mensaje)
+        restantes = len(advertencias) - len(lineas)
+        detalle = ' | '.join(lineas)
+        if restantes > 0:
+            detalle += f' | ... y {restantes} advertencia(s) más (ver logs del servidor).'
+        return detalle
+
     @staticmethod
     def _es_formato_semanal(archivo):
         """True si el Excel tiene ≥1 hoja con nombre numérico y headers
@@ -432,11 +461,51 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
                     f"{resultado['actividades_actualizadas']} actualizadas "
                     f"en hojas [{hojas}]."
                 )
+                # Issue #200 (root cause 1): las actividades quedan
+                # programadas con la fecha real del Excel (columna INICIO),
+                # casi nunca el mes actual. Decirlo explícito en el mensaje
+                # — antes el usuario buscaba en "Programación Mensual" con
+                # el filtro por defecto (mes de hoy) y no encontraba nada.
+                meses_tocados = sorted(resultado.get('meses_tocados') or [])
+                if meses_tocados:
+                    etiquetas = [
+                        f"{self.NOMBRES_MES.get(mes_t, mes_t)} {anio_t}"
+                        for (anio_t, mes_t) in meses_tocados
+                    ]
+                    mensaje += f" Quedaron programadas para: {', '.join(etiquetas)}."
+
                 if resultado.get('advertencias'):
-                    mensaje += f" {len(resultado['advertencias'])} advertencias."
+                    mensaje += f" {len(resultado['advertencias'])} advertencias (detalle abajo)."
                 messages.success(request, mensaje)
+
+                # Issue #200 (root cause 2): antes solo se mostraba el
+                # CONTEO de advertencias/errores — el detalle por fila se
+                # descartaba por completo y nunca quedaba visible en ningún
+                # lado (ni UI ni logs). Ahora se muestra el detalle real.
+                if resultado.get('advertencias'):
+                    messages.warning(
+                        request, self._resumen_advertencias(resultado['advertencias'])
+                    )
+                if resultado.get('errores'):
+                    for error_hoja in resultado['errores']:
+                        messages.error(
+                            request,
+                            f"Error procesando hoja '{error_hoja.get('hoja', '?')}': "
+                            f"{error_hoja.get('error', 'desconocido')}",
+                        )
             else:
                 messages.error(request, f"Error: {resultado.get('error', 'desconocido')}")
+                return redirect('actividades:programacion')
+
+            # Issue #200 (root cause 1): si todas las actividades importadas
+            # cayeron en un único mes/año, llevar al usuario directo a esa
+            # vista de Programación Mensual — el filtro por defecto (mes de
+            # hoy) es lo que hacía "desaparecer" las actividades recién
+            # creadas cuando el Excel programaba a futuro.
+            if resultado['exito'] and len(meses_tocados) == 1:
+                anio_dest, mes_dest = meses_tocados[0]
+                url = f"{reverse('actividades:programacion')}?mes={mes_dest}&anio={anio_dest}"
+                return redirect(url)
             return redirect('actividades:programacion')
 
         # Si no hay línea, intentar importar como avisos (detecta línea del Excel)
