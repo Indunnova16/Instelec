@@ -1114,3 +1114,61 @@ class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
         self.assertTrue(res["exito"], res.get("error"))
         personal = PersonalCuadrilla.objects.get(documento="11122301")
         self.assertEqual(personal.rol_cuadrilla_id, "SOLDADOR_ESPECIAL")
+
+
+class TestAreaAsignacionIssue176(TestCase):
+    """El área del usuario limita asignación, API e importación sin romper legacy."""
+
+    def setUp(self):
+        self.usuario = _crear_admin()
+        self.usuario.area = "MANTENIMIENTO"
+        self.usuario.save(update_fields=["area"])
+        self.client = Client()
+        self.client.force_login(self.usuario)
+        self.cuadrilla = Cuadrilla.objects.create(
+            codigo="02-2026-AREA176", nombre="Cuadrilla área 176", activa=True
+        )
+
+    def test_picklist_y_api_excluyen_otra_area(self):
+        visible = PersonalCuadrilla.objects.create(
+            nombre="Visible Mantenimiento", documento="176-AREA-1",
+            rol_cuadrilla_id="LINIERO_I", area="MANTENIMIENTO",
+        )
+        oculta = PersonalCuadrilla.objects.create(
+            nombre="Oculta Construcción", documento="176-AREA-2",
+            rol_cuadrilla_id="LINIERO_I", area="CONSTRUCCION",
+        )
+        resp = self.client.get(reverse("cuadrillas:detalle", args=[self.cuadrilla.pk]))
+        ids = {str(persona.id) for persona in resp.context["personal_disponible"]}
+        self.assertIn(str(visible.id), ids)
+        self.assertNotIn(str(oculta.id), ids)
+        api = self.client.get(reverse("cuadrillas:personal_detalle_api"), {"documento": oculta.documento})
+        self.assertEqual(api.status_code, 404)
+
+    def test_importa_area_y_conserva_formato_legacy(self):
+        archivo = self._build_workbook_area([
+            ["Importado Área", "176-AREA-3", "CONSTRUCCION", "AYUDANTE", 0, "", ""],
+        ])
+        self.client.post(reverse("cuadrillas:personal_upload"), {"archivo": archivo})
+        persona = PersonalCuadrilla.objects.get(documento="176-AREA-3")
+        self.assertEqual(persona.area, "CONSTRUCCION")
+
+        legacy = self._build_workbook_area([
+            ["Importado Legacy", "176-AREA-4", "AYUDANTE", 0, "", ""],
+        ], headers=["Nombre", "Documento", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"])
+        self.client.post(reverse("cuadrillas:personal_upload"), {"archivo": legacy})
+        self.assertEqual(PersonalCuadrilla.objects.get(documento="176-AREA-4").area, "")
+
+    @staticmethod
+    def _build_workbook_area(rows, headers=None):
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(headers or ["Nombre", "Documento", "Área", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"])
+        for row in rows:
+            ws.append(row)
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "colaboradores_area.xlsx"
+        return buf

@@ -279,7 +279,13 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
     }
 
 
-def _choices_form_bloque():
+def _personal_visible_para_usuario(request, qs=None):
+    qs = qs if qs is not None else PersonalCuadrilla.objects.filter(activo=True)
+    area = getattr(getattr(request, "user", None), "area", "") if request else ""
+    return qs.filter(area=area) if area else qs
+
+
+def _choices_form_bloque(request=None):
     """Catálogos activos para el form de bloque (crear/editar, issue #188
     A2-A4): tipo de actividad, línea, vehículo, supervisor. El propio Tramo
     se resuelve por cascada AJAX dependiente de la línea (A3) — no vive acá.
@@ -296,13 +302,13 @@ def _choices_form_bloque():
         "supervisores_bloque": Usuario.objects.filter(rol="supervisor", is_active=True).order_by(
             "first_name"
         ),
-        "personal_disponible_datalist": PersonalCuadrilla.objects.filter(activo=True).order_by(
+        "personal_disponible_datalist": _personal_visible_para_usuario(request).order_by(
             "nombre"
         ),
     }
 
 
-def _personal_sin_asignar(anio, semana):
+def _personal_sin_asignar(anio, semana, request=None):
     """``PersonalCuadrilla`` activo del maestro Colaboradores que NO tiene
     ningún ``CuadrillaMiembro`` activo en los bloques (``Cuadrilla``) de la
     semana indicada (issue #178, B1 — Gabriel: manejan hasta 120 personas,
@@ -326,19 +332,19 @@ def _personal_sin_asignar(anio, semana):
         .values_list("usuario__documento", flat=True)
     )
     return (
-        PersonalCuadrilla.objects.filter(activo=True)
+        _personal_visible_para_usuario(request)
         .exclude(documento__in=list(documentos_asignados))
         .order_by("nombre")
     )
 
 
-def _contexto_semana(anio, semana):
+def _contexto_semana(anio, semana, request=None):
     """Contexto compartido por la vista grid y el export PDF."""
     bloques = [_bloque_a_dict(c) for c in _bloques_qs(anio, semana)]
     novedades = list(
         NovedadPersonalSemana.objects.filter(anio=anio, semana=semana).order_by("nombre")
     )
-    personal_sin_asignar = list(_personal_sin_asignar(anio, semana))
+    personal_sin_asignar = list(_personal_sin_asignar(anio, semana, request))
     total_miembros = sum(len(b["miembros"]) for b in bloques)
     lunes, domingo = _rango_calendario(anio, semana)
     origen_anio, origen_semana = _semana_anterior(anio, semana)
@@ -419,14 +425,14 @@ class ProgramacionSemanalGridView(LoginRequiredMixin, RoleRequiredMixin, Templat
         context = super().get_context_data(**kwargs)
         anio = int(self.kwargs["anio"])
         semana = int(self.kwargs["semana"])
-        context.update(_contexto_semana(anio, semana))
+        context.update(_contexto_semana(anio, semana, self.request))
         # Cuando la semana destino ya tiene datos, el POST de duplicar pide
         # confirmación redirigiendo aquí con ?confirmar_duplicado=1.
         context["confirmar_duplicado"] = self.request.GET.get("confirmar_duplicado") == "1"
         # Issue #188 (A2): choices del form de bloque (crear/editar), reusadas
         # por _bloque_form.html vía include. La cascada Línea→Tramo real
         # (AJAX) llega en A3 — acá solo se precargan los catálogos activos.
-        context.update(_choices_form_bloque())
+        context.update(_choices_form_bloque(self.request))
         return context
 
 
@@ -514,7 +520,7 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
 
         card_html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
-            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            {**_choices_form_bloque(request), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
             request=request,
         )
         form_html = self._render_form(request, anio, semana)
@@ -522,7 +528,7 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
 
     def _render_form(self, request, anio, semana, form_error=None, valores=None):
         contexto = {
-            **_choices_form_bloque(),
+            **_choices_form_bloque(request),
             "b": valores,
             "anio": anio,
             "semana": semana,
@@ -601,7 +607,7 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
         cuadrilla.refresh_from_db()
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
-            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            {**_choices_form_bloque(request), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
             request=request,
         )
         return HttpResponse(html)
@@ -612,7 +618,7 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
             {
-                **_choices_form_bloque(),
+                **_choices_form_bloque(request),
                 "b": valores,
                 "anio": anio,
                 "semana": semana,
@@ -654,7 +660,7 @@ class ProgramacionSemanalMiembroAgregarView(LoginRequiredMixin, RoleRequiredMixi
                 agregar_state={"open": True, "documento": documento},
             )
 
-        personal = PersonalCuadrilla.objects.filter(documento=documento, activo=True).first()
+        personal = _personal_visible_para_usuario(request).filter(documento=documento).first()
         if not personal:
             return self._card_con_error(
                 request, cuadrilla, anio, semana,
@@ -726,7 +732,7 @@ class ProgramacionSemanalMiembroAgregarView(LoginRequiredMixin, RoleRequiredMixi
         cuadrilla.refresh_from_db()
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
-            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            {**_choices_form_bloque(request), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
             request=request,
         )
         return HttpResponse(html)
@@ -736,7 +742,7 @@ class ProgramacionSemanalMiembroAgregarView(LoginRequiredMixin, RoleRequiredMixi
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
             {
-                **_choices_form_bloque(),
+                **_choices_form_bloque(request),
                 "b": _bloque_a_dict(cuadrilla),
                 "anio": anio,
                 "semana": semana,
@@ -769,7 +775,7 @@ class ProgramacionSemanalMiembroQuitarView(LoginRequiredMixin, RoleRequiredMixin
         cuadrilla.refresh_from_db()
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
-            {**_choices_form_bloque(), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            {**_choices_form_bloque(request), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
             request=request,
         )
         return HttpResponse(html)
@@ -896,12 +902,12 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
         origen.refresh_from_db()
         card_nueva_html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
-            {**_choices_form_bloque(), "b": _bloque_a_dict(nuevo), "anio": anio, "semana": semana},
+            {**_choices_form_bloque(request), "b": _bloque_a_dict(nuevo), "anio": anio, "semana": semana},
             request=request,
         )
         card_origen_html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
-            {**_choices_form_bloque(), "b": _bloque_a_dict(origen), "anio": anio, "semana": semana},
+            {**_choices_form_bloque(request), "b": _bloque_a_dict(origen), "anio": anio, "semana": semana},
             request=request,
         )
         return HttpResponse(
@@ -921,7 +927,7 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
             {
-                **_choices_form_bloque(),
+                **_choices_form_bloque(request),
                 "b": _bloque_a_dict(origen),
                 "anio": anio,
                 "semana": semana,
@@ -1026,7 +1032,7 @@ class ProgramacionSemanalPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
 
     def get(self, request, anio, semana):
         anio, semana = int(anio), int(semana)
-        contexto = _contexto_semana(anio, semana)
+        contexto = _contexto_semana(anio, semana, request)
         contexto["generado"] = timezone.now()
         html = render_to_string(
             "cuadrillas/programacion_semanal_pdf.html", contexto, request=request
