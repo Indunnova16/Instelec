@@ -886,6 +886,21 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         context['es_admin'] = es_admin
         context['permission_denied'] = False
 
+        # #102 (bounce=3) — parseo de ``?semestre=`` subido ARRIBA del early
+        # return del selector de líneas. Antes solo se leía más abajo (rama
+        # "línea ya elegida"), así que el selector (rama sin ``linea_id``,
+        # tarjetas de ``avance_registrar.html``) ignoraba el filtro por
+        # completo y mostraba ``l.vanos.count`` (total fijo) sin importar
+        # qué período estuviera seleccionado en el dropdown — root cause del
+        # "son iguales" reportado por el cliente contra
+        # ``/campo/avance/registrar/`` SIN ``linea_id`` (pantalla distinta a
+        # las 2 ya corregidas en bounce=2 y bounce=3: grid con línea elegida,
+        # y ``lineas:detalle``).
+        semestre = self.request.GET.get('semestre', '').strip().upper()
+        if semestre not in dict(VanoSemestre.Semestre.choices):
+            semestre = ''
+        context['semestre'] = semestre
+
         # Get available lines for the user
         if es_admin:
             lineas = get_lineas_activas()
@@ -910,6 +925,34 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
 
         # If a line is selected, show vanos for that line
         if not linea_id:
+            # #102 (bounce=3) — conteo de vanos por línea en las tarjetas del
+            # selector, respetando ``?semestre=``. 1 query agregada (GROUP BY
+            # linea_id) en vez de N ``l.vanos.count()`` en el template (que
+            # además ignoraban el filtro por completo). El conteo se anota
+            # como atributo Python en cada objeto ``Linea`` (no un dict
+            # aparte en el contexto) porque el template no puede indexar un
+            # dict con una key dinámica (``dict.l.id`` no resuelve — Django
+            # solo soporta lookups literales en la sintaxis de puntos).
+            lineas_list = list(lineas)
+            linea_ids = [linea_obj.id for linea_obj in lineas_list]
+            if semestre:
+                counts_qs = (
+                    Vano.objects
+                    .filter(linea_id__in=linea_ids, semestres__semestre=semestre)
+                    .values('linea_id')
+                    .annotate(n=Count('id', distinct=True))
+                )
+            else:
+                counts_qs = (
+                    Vano.objects
+                    .filter(linea_id__in=linea_ids)
+                    .values('linea_id')
+                    .annotate(n=Count('id'))
+                )
+            counts_by_id = {row['linea_id']: row['n'] for row in counts_qs}
+            for linea_obj in lineas_list:
+                linea_obj.vanos_semestre_count = counts_by_id.get(linea_obj.id, 0)
+            context['lineas'] = lineas_list
             return context
 
         # Validar UUID antes de tocar el ORM. Sin esto,
@@ -960,9 +1003,8 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         # gancho visual sin efecto real). Sin el parámetro (o inválido), el
         # queryset queda IDÉNTICO al comportamiento anterior — backward
         # compatible, 0 cambio para requests históricos sin ?semestre=.
-        semestre = self.request.GET.get('semestre', '').strip().upper()
-        if semestre not in dict(VanoSemestre.Semestre.choices):
-            semestre = ''
+        # (bounce=3) — ``semestre`` ya se parseó arriba (antes del early
+        # return del selector); se reusa la misma variable, no se re-parsea.
 
         vanos = (
             Vano.objects
