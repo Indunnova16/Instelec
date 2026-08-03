@@ -12,6 +12,8 @@ import pytest
 from django.urls import reverse
 from django.test import Client
 
+from apps.core.models import RoleModuloPermiso
+from apps.core.permissions import invalidate_role_cache
 from tests.factories import (
     LineaFactory,
     TorreFactory,
@@ -179,6 +181,27 @@ class TestCoreViews:
 
         assert response.status_code == 302
         assert response.url == reverse('campo:lista')
+
+    def test_home_view_legacy_liniero_without_mantenimiento_access_is_stable(
+        self, client, liniero_user, user_password
+    ):
+        """A legacy field user without RBAC access must not enter a redirect loop."""
+        RoleModuloPermiso.objects.update_or_create(
+            role_id=liniero_user.rol,
+            modulo=RoleModuloPermiso.MODULO_MANTENIMIENTO,
+            submodulo='',
+            defaults={'nivel_acceso': RoleModuloPermiso.SIN_ACCESO},
+        )
+        try:
+            client.login(username=liniero_user.email, password=user_password)
+
+            response = client.get(reverse('core:home'), follow=True)
+
+            assert response.status_code == 200
+            assert response.request['PATH_INFO'] == reverse('core:home')
+        finally:
+            # mismo leak de cache que test_permissions.py — ver ese comentario.
+            invalidate_role_cache(liniero_user.rol)
 
     def test_health_check_simple(self, client):
         """Test simple health check endpoint."""
