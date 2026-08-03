@@ -9,10 +9,18 @@ from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+from apps.core.permissions import AREA_CHOICES
 from .models import Asistencia, Cargo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
 from .forms_personal import PersonalCuadrillaForm
 from .forms_cargo import CargoForm
 from .utils_semana import _prefijo
+
+
+def _personal_visible_para_usuario(request):
+    """Colaboradores asignables por el área del usuario, con compatibilidad legacy."""
+    qs = PersonalCuadrilla.objects.filter(activo=True)
+    area = getattr(request.user, "area", "")
+    return qs.filter(area=area) if area else qs
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
@@ -139,8 +147,8 @@ class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVi
         if grid_anio is None or grid_semana is None:
             grid_anio, grid_semana = _semana_mas_reciente_con_datos()
 
-        context.update(_contexto_semana(grid_anio, grid_semana))
-        context.update(_choices_form_bloque())
+        context.update(_contexto_semana(grid_anio, grid_semana, self.request))
+        context.update(_choices_form_bloque(self.request))
         context['confirmar_duplicado'] = self.request.GET.get('confirmar_duplicado') == '1'
         return context
 
@@ -250,9 +258,9 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
         miembros_documentos = {
             m.usuario.documento for m in miembros if m.usuario and m.usuario.documento
         }
-        context['personal_disponible'] = PersonalCuadrilla.objects.filter(
-            activo=True
-        ).exclude(documento__in=miembros_documentos).order_by('nombre')
+        context['personal_disponible'] = _personal_visible_para_usuario(self.request).exclude(
+            documento__in=miembros_documentos
+        ).order_by('nombre')
 
         # Choices for form selects
         # Issue #176 (A4): RolCuadrilla (TextChoices) eliminado, catalogo
@@ -622,7 +630,7 @@ class CuadrillaMiembroAddView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
             messages.error(request, 'Debe ingresar el documento de un colaborador.')
             return redirect('cuadrillas:detalle', pk=cuadrilla.pk)
 
-        personal = PersonalCuadrilla.objects.filter(documento=documento, activo=True).first()
+        personal = _personal_visible_para_usuario(request).filter(documento=documento).first()
         if not personal:
             messages.error(
                 request,
@@ -1022,6 +1030,15 @@ class CuadrillaMiembroUploadView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
             actualizados = 0
             no_encontrados = []
 
+            encabezados = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+            encabezados = {str(v).strip().lower(): i for i, v in enumerate(encabezados) if v}
+            idx_area = encabezados.get('área', encabezados.get('area'))
+            # Formato legacy: Nombre | Documento | Cargo | Salario Base | fechas.
+            idx_cargo = encabezados.get('cargo', 2)
+            idx_salario = encabezados.get('salario base', 3)
+            idx_fecha_ingreso = encabezados.get('fecha ingreso', 4)
+            idx_fecha_salida = encabezados.get('fecha salida', 5)
+
             for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
                 if not row or not row[0]:
                     continue
@@ -1333,6 +1350,15 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
             actualizados = 0
             errores = []
 
+            encabezados = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+            encabezados = {str(v).strip().lower(): i for i, v in enumerate(encabezados) if v}
+            idx_area = encabezados.get('área', encabezados.get('area'))
+            # Formato legacy: Nombre | Documento | Cargo | Salario Base | fechas.
+            idx_cargo = encabezados.get('cargo', 2)
+            idx_salario = encabezados.get('salario base', 3)
+            idx_fecha_ingreso = encabezados.get('fecha ingreso', 4)
+            idx_fecha_salida = encabezados.get('fecha salida', 5)
+
             for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
                 if not row or not row[0]:
                     continue
@@ -1340,13 +1366,17 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                 try:
                     nombre = str(row[0]).strip()
                     documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
-                    rol_raw = str(row[2]).strip().upper() if len(row) > 2 and row[2] else ''
-                    salario_raw = row[3] if len(row) > 3 else None
-                    fecha_ingreso_raw = row[4] if len(row) > 4 else None
-                    fecha_salida_raw = row[5] if len(row) > 5 else None
+                    rol_raw = str(row[idx_cargo]).strip().upper() if len(row) > idx_cargo and row[idx_cargo] else ''
+                    area_raw = str(row[idx_area]).strip().upper() if idx_area is not None and len(row) > idx_area and row[idx_area] else ''
+                    salario_raw = row[idx_salario] if len(row) > idx_salario else None
+                    fecha_ingreso_raw = row[idx_fecha_ingreso] if len(row) > idx_fecha_ingreso else None
+                    fecha_salida_raw = row[idx_fecha_salida] if len(row) > idx_fecha_salida else None
 
                     if not nombre or not documento:
                         errores.append(f'Fila {idx}: nombre o documento vacío')
+                        continue
+                    if area_raw and area_raw not in dict(AREA_CHOICES):
+                        errores.append(f'Fila {idx}: área inválida ({area_raw})')
                         continue
 
                     # Resolve role
@@ -1358,6 +1388,7 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                     defaults = {
                         'nombre': nombre,
                         'rol_cuadrilla_id': rol,
+                        'area': area_raw,
                         'salario_base': salario_base,
                         'fecha_ingreso': fecha_ingreso,
                         'fecha_salida': fecha_salida,
@@ -1404,9 +1435,9 @@ class PersonalCuadrillaAPIView(LoginRequiredMixin, View):
 
         personal = None
         if personal_id:
-            personal = PersonalCuadrilla.objects.filter(id=personal_id, activo=True).first()
+            personal = _personal_visible_para_usuario(request).filter(id=personal_id).first()
         elif documento:
-            personal = PersonalCuadrilla.objects.filter(documento=documento, activo=True).first()
+            personal = _personal_visible_para_usuario(request).filter(documento=documento).first()
 
         if personal:
             return JsonResponse({
@@ -1424,7 +1455,7 @@ class PersonalCuadrillaListAPIView(LoginRequiredMixin, View):
     """API endpoint to list all active crew personnel."""
 
     def get(self, request, *args, **kwargs):
-        personal = PersonalCuadrilla.objects.filter(activo=True).order_by('nombre')
+        personal = _personal_visible_para_usuario(request).order_by('nombre')
         data = [
             {
                 'id': str(p.id),
@@ -1591,7 +1622,7 @@ class CuadrillaMasivaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
 
                         # Try to find by documento first, then by name
                         usuario = None
-                        personal = PersonalCuadrilla.objects.filter(
+                        personal = _personal_visible_para_usuario(request).filter(
                             models.Q(documento=miembro_ref) | models.Q(nombre__icontains=miembro_ref),
                             activo=True
                         ).first()
@@ -1662,6 +1693,19 @@ class DescargarPlantillaCuadrillasView(LoginRequiredMixin, RoleRequiredMixin, Vi
         from openpyxl.styles import Font, PatternFill, Alignment
         from openpyxl.utils import get_column_letter
         from datetime import date
+
+        if request.GET.get('tipo') == 'personal':
+            wb = Workbook()
+            ws = wb.active
+            ws.title = 'Colaboradores'
+            ws.append(['Nombre', 'Documento', 'Área', 'Cargo', 'Salario Base', 'Fecha Ingreso', 'Fecha Salida'])
+            ws.append(['Ejemplo', '123456789', 'CONSTRUCCION', 'LINIERO_I', 0, '', ''])
+            response = HttpResponse(
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename=plantilla_colaboradores.xlsx'
+            wb.save(response)
+            return response
 
         # Crear workbook
         wb = Workbook()
@@ -2070,11 +2114,12 @@ class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = 'Colaboradores'
-        ws.append(['Documento', 'Nombre', 'Cargo', 'Salario Base', 'Fecha Ingreso', 'Fecha Salida'])
+        ws.append(['Documento', 'Nombre', 'Área', 'Cargo', 'Salario Base', 'Fecha Ingreso', 'Fecha Salida'])
         for p in PersonalCuadrilla.objects.select_related('rol_cuadrilla').all().order_by('nombre'):
             ws.append([
                 p.documento,
                 p.nombre,
+                p.get_area_display() if p.area else '',
                 p.rol_cuadrilla.nombre if p.rol_cuadrilla_id else '',
                 float(p.salario_base),
                 p.fecha_ingreso.strftime('%Y-%m-%d') if p.fecha_ingreso else '',
