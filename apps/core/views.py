@@ -37,7 +37,12 @@ class HomeView(LoginRequiredMixin, TemplateView):
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and request.user.is_campo:
             from django.shortcuts import redirect
-            return redirect('campo:lista')
+            from apps.core.permissions import (
+                MODULO_MANTENIMIENTO,
+                user_can_access_modulo,
+            )
+            if user_can_access_modulo(request.user, MODULO_MANTENIMIENTO):
+                return redirect('campo:lista')
         # RBAC #44: redirigir a módulo único si el usuario solo tiene uno
         if request.user.is_authenticated:
             from django.shortcuts import redirect

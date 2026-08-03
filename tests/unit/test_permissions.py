@@ -12,6 +12,12 @@ from django.urls import reverse
 from django.test import Client
 from django.contrib.auth import get_user_model
 
+from apps.core.models import RoleModuloPermiso
+from apps.core.permissions import (
+    MODULO_MANTENIMIENTO,
+    invalidate_role_cache,
+    user_can_access_modulo,
+)
 from tests.factories import (
     AdminFactory,
     CoordinadorFactory,
@@ -277,6 +283,23 @@ class TestCorrectRoleAllowed:
 
         response = client.get(reverse('indicadores:actas'))
         assert response.status_code == 200
+
+    def test_legacy_liniero_permission_is_evaluated_from_rbac_matrix(self, liniero_user):
+        """The effective module permission, not only is_campo, controls access."""
+        RoleModuloPermiso.objects.update_or_create(
+            role_id=liniero_user.rol,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo='',
+            defaults={'nivel_acceso': RoleModuloPermiso.SIN_ACCESO},
+        )
+        try:
+            assert user_can_access_modulo(liniero_user, MODULO_MANTENIMIENTO) is False
+        finally:
+            # _get_role_permisos() cachea por role_id (permissions.py); el rollback de la
+            # transacción del test borra la fila pero no dispara el post_delete que
+            # invalidaría el cache, dejando "sin acceso" filtrado a los tests siguientes
+            # que reusan el mismo rol de liniero.
+            invalidate_role_cache(liniero_user.rol)
 
     def test_coordinador_can_access_cuadrillas(self, client, user_password):
         """Test that coordinador can access cuadrillas views."""
