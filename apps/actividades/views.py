@@ -238,10 +238,17 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         except (ValueError, TypeError):
             self.selected_anio = hoy.year
 
-        qs = qs.filter(
-            fecha_programada__month=self.selected_mes,
-            fecha_programada__year=self.selected_anio,
-        )
+        # The month/year are the initial context for the canonical listing.
+        # An explicit aviso search is global: users commonly use it to find
+        # an activity imported/programmed in a different period.  Do not let
+        # the default period hide that result, while retaining all the
+        # administrative filters below.
+        buscar_aviso = self.request.GET.get('buscar_aviso', '').strip()
+        if not buscar_aviso:
+            qs = qs.filter(
+                fecha_programada__month=self.selected_mes,
+                fecha_programada__year=self.selected_anio,
+            )
 
         # Filter by linea(s) - multiple selection
         linea_ids = self.request.GET.getlist('linea')
@@ -281,8 +288,9 @@ class ProgramacionListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         if valid_cuadrilla_ids:
             qs = qs.filter(cuadrilla_id__in=valid_cuadrilla_ids)
 
-        # Search by aviso SAP
-        buscar_aviso = self.request.GET.get('buscar_aviso', '').strip()
+        # Search by aviso SAP across all periods.  This intentionally runs
+        # after the administrative filters, but independently of the
+        # month/year context selected above.
         if buscar_aviso:
             qs = qs.filter(aviso_sap__icontains=buscar_aviso)
 
