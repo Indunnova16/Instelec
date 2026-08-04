@@ -24,7 +24,7 @@ env:
 
 jobs:
   changes:
-    runs-on: self-hosted
+    runs-on: [gcp, linux-amd64]
     outputs:
       should_deploy: ${{ steps.filter.outputs.src }}
     steps:
@@ -46,7 +46,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Build, Migrate & Deploy
-    runs-on: self-hosted
+    runs-on: [gcp, linux-amd64]
     permissions:
       contents: read
       id-token: write
