@@ -560,6 +560,18 @@ class TestA10PestanasSemanasMapa(TestCase):
 
 # ---------------------------------------------------------------------------
 # A11 — Mover botones de carga masiva de personas a /cuadrillas/colaboradores/
+#
+# Retrofit issue #208 (2026-08-04): A11 reubicó los 3 botones asumiendo que
+# los 3 eran "carga masiva de personal". Error: "Carga Masiva" (masiva_upload)
+# NO crea/actualiza PersonalCuadrilla -- crea/actualiza bloques Cuadrilla de
+# la programación semanal (S18 vertical, #124), que es exactamente lo que
+# Alcides usaba desde /cuadrillas/ pestaña Semanas. Al moverlo a
+# /cuadrillas/colaboradores/ quedó oculto de su pantalla natural sin que
+# nadie lo notara hasta el reclamo del cliente. Fix: el botón "Importar
+# Excel" reaparece en /cuadrillas/ (partials/_tab_semanas.html, visible en
+# la pestaña Semanas). Se deja también en /cuadrillas/colaboradores/ (no se
+# tocó esa pantalla) para no ampliar el alcance del fix más allá de
+# "restaurar visibilidad".
 # ---------------------------------------------------------------------------
 class TestA11BotonesReubicados(TestCase):
     def setUp(self):
@@ -575,7 +587,10 @@ class TestA11BotonesReubicados(TestCase):
         self.assertEqual(resp_fusion.status_code, 200)
         contenido_fusion = resp_fusion.content.decode()
         self.assertNotIn('aria-label="Subir personal de cuadrilla"', contenido_fusion)
-        self.assertNotIn('aria-label="Carga masiva de cuadrillas desde Excel"', contenido_fusion)
+        # issue #208: "Carga masiva de cuadrillas desde Excel" (import de
+        # PROGRAMACIÓN, no de personal) fue restaurado en /cuadrillas/ --
+        # ya NO se espera ausente acá.
+        self.assertIn('aria-label="Carga masiva de cuadrillas desde Excel"', contenido_fusion)
         self.assertNotIn('aria-label="Descargar plantilla Excel"', contenido_fusion)
         self.assertNotIn('id="modal-personal"', contenido_fusion)
 

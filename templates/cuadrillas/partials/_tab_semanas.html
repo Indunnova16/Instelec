@@ -35,6 +35,20 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
                class="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition"
                aria-label="Semana siguiente">Sem {{ next_semana }} &rarr;</a>
 
+            <!-- Importar Excel (S18 vertical, issue #124/masiva_upload) -- restaurado:
+                 quedó oculto por la fusión de pantallas de #188 (A11 lo reubicó por
+                 error en /cuadrillas/colaboradores/, asumiendo que era "carga masiva
+                 de personal" cuando en realidad crea/actualiza bloques Cuadrilla de
+                 la programación semanal misma). Refs #208. -->
+            <a href="{% url 'cuadrillas:masiva_upload' %}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+               aria-label="Carga masiva de cuadrillas desde Excel">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Importar Excel
+            </a>
+
             <!-- Exportar PDF -->
             <a href="{% url 'cuadrillas:semanal_pdf' anio=anio semana=semana %}" target="_blank" rel="noopener"
                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
