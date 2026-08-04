@@ -25,12 +25,22 @@
     {% if not linea %}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for l in lineas %}
-        <a href="?linea_id={{ l.id }}" class="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition p-6 block">
+        {# #102 (bounce=3) — el link preserva ?semestre= para que el filtro #}
+        {# elegido en el selector no se pierda al entrar al detalle de la #}
+        {# línea (mismo período sigue activo del otro lado). #}
+        <a href="?linea_id={{ l.id }}{% if semestre %}&semestre={{ semestre }}{% endif %}" class="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition p-6 block">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ l.codigo }}</h3>
             <p class="text-gray-600 dark:text-gray-400 text-sm">{{ l.nombre }}</p>
             <div class="mt-4 text-xs text-gray-500">
-                {% if l.vanos.all %}
-                    {{ l.vanos.count }} vanos
+                {# #102 (bounce=3) — antes ``{{ l.vanos.count }}`` (total fijo, #}
+                {# ignoraba ?semestre=). Ahora ``vanos_semestre_count`` ya viene #}
+                {# filtrado por semestre desde la vista (0 si no hay vanos en #}
+                {# ese período específico, aunque la línea sí tenga vanos en #}
+                {# otro semestre). #}
+                {% if l.vanos_semestre_count %}
+                    {{ l.vanos_semestre_count }} vanos
+                {% elif semestre %}
+                    Sin vanos en este período
                 {% else %}
                     Sin vanos registrados
                 {% endif %}

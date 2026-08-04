@@ -191,3 +191,146 @@ class RegistroAvanceCreateViewFiltroSemestreTests(TestCase):
         ctx = _invoke_get_context(self.admin, linea_id=str(self.linea_legacy.id))
         self.assertEqual(ctx["total_vanos"], 5)
         self.assertEqual(len(ctx["vanos"]), 5)
+
+
+class RegistroAvanceCreateViewSelectorSemestreTests(TestCase):
+    """Tests #102 (bounce=3) — Wiring de ``?semestre=`` en el SELECTOR de
+    líneas (rama ``if not linea_id:`` de ``_build_context``), la pantalla
+    ``/campo/avance/registrar/`` SIN ``linea_id`` (tarjetas por línea, antes
+    de elegir una).
+
+    Causa raíz (F2, confirmada contra prod con 4 líneas reales — LN5114,
+    LN5156, LN5157, LN733, LN734): esta rama nunca leía ``?semestre=`` —
+    las tarjetas del template usaban ``{{ l.vanos.count }}`` (total fijo de
+    ``Vano``), por eso el selector mostraba EXACTAMENTE los mismos números
+    para S1/S2/"Todos los semestres" en las 4 capturas del comentario
+    actual del cliente ("son iguales"). Esta rama es DISTINTA de la ya
+    cableada en bounce=2 (grid CON ``linea_id`` elegida, cubierta arriba
+    por ``RegistroAvanceCreateViewFiltroSemestreTests``).
+
+    Cubre el escenario del cliente con >1 registro (3 líneas con perfiles
+    de datos distintos — replica el patrón real de prod: LN733 18/8,
+    LN5156 264/0, LN5114 104/104 "con suerte") para no repetir el error de
+    ``validado_1_registro`` del post-mortem de bounce=2.
+    """
+
+    def setUp(self):
+        # ``get_lineas_activas()`` (apps/core/cache.py) cachea la lista de
+        # líneas activas 1h (``django.core.cache``, independiente de la
+        # transacción de test) — sin esto, las líneas de este test class
+        # quedan invisibles si otro test ya calentó el caché antes con un
+        # snapshot distinto de la tabla ``lineas``.
+        from django.core.cache import cache
+
+        cache.clear()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = Usuario.objects.create_user(
+            email="admin_102_sel@test.com",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="102Sel",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        # Línea A — equivalente LN733: S1=18, S2=8 (subset, distintos).
+        cls.linea_a = _linea("LT-102SEL-A-733")
+        for i in range(1, 19):
+            Vano.objects.create(linea=cls.linea_a, numero=str(i))
+        for n in range(1, 19):
+            VanoSemestre.objects.create(
+                vano=cls.linea_a.vanos.get(numero=str(n)), semestre="S1"
+            )
+        for n in (2, 3, 4, 5, 7, 12, 16, 17):
+            VanoSemestre.objects.create(
+                vano=cls.linea_a.vanos.get(numero=str(n)), semestre="S2"
+            )
+
+        # Línea B — equivalente LN5156: SOLO tiene trabajo en S1 (S2=0),
+        # replica el caso real de prod donde el selector mostraba 264 en
+        # AMBOS semestres cuando S2 debía ser 0 / "Sin vanos en este período".
+        cls.linea_b = _linea("LT-102SEL-B-5156")
+        for i in range(1, 11):
+            Vano.objects.create(linea=cls.linea_b, numero=str(i))
+        for n in range(1, 11):
+            VanoSemestre.objects.create(
+                vano=cls.linea_b.vanos.get(numero=str(n)), semestre="S1"
+            )
+        # 0 VanoSemestre con semestre="S2" para esta línea — a propósito.
+
+        # Línea C — equivalente LN5114: coincide en ambos semestres
+        # (la línea "con suerte" que no expone el bug por sí sola — de ahí
+        # la necesidad de A y B en el mismo test).
+        cls.linea_c = _linea("LT-102SEL-C-5114")
+        for i in range(1, 6):
+            Vano.objects.create(linea=cls.linea_c, numero=str(i))
+        for n in range(1, 6):
+            VanoSemestre.objects.create(
+                vano=cls.linea_c.vanos.get(numero=str(n)), semestre="S1"
+            )
+            VanoSemestre.objects.create(
+                vano=cls.linea_c.vanos.get(numero=str(n)), semestre="S2"
+            )
+
+    def _counts_by_linea(self, semestre=None):
+        ctx = _invoke_get_context(self.admin, linea_id=None, semestre=semestre)
+        return {
+            linea_obj.codigo: linea_obj.vanos_semestre_count
+            for linea_obj in ctx["lineas"]
+        }
+
+    def test_selector_s1_vs_s2_conteos_distintos_multiples_lineas(self):
+        """El discriminante central del bug: S1 y S2 deben dar conteos
+        DISTINTOS para las líneas A y B — antes del fix daban el mismo
+        número (el total) para las 3 líneas en las 3 variantes del filtro."""
+        counts_s1 = self._counts_by_linea(semestre="S1")
+        counts_s2 = self._counts_by_linea(semestre="S2")
+
+        self.assertEqual(counts_s1["LT-102SEL-A-733"], 18)
+        self.assertEqual(counts_s2["LT-102SEL-A-733"], 8)
+        self.assertNotEqual(
+            counts_s1["LT-102SEL-A-733"], counts_s2["LT-102SEL-A-733"]
+        )
+
+        self.assertEqual(counts_s1["LT-102SEL-B-5156"], 10)
+        self.assertEqual(counts_s2["LT-102SEL-B-5156"], 0)
+
+    def test_selector_sin_filtro_usa_total_vano_no_vanosemestre(self):
+        """Sin ?semestre=, el selector debe seguir mostrando el TOTAL de
+        Vano por línea (comportamiento histórico) — regresión."""
+        counts = self._counts_by_linea(semestre=None)
+        self.assertEqual(counts["LT-102SEL-A-733"], 18)
+        self.assertEqual(counts["LT-102SEL-B-5156"], 10)
+        self.assertEqual(counts["LT-102SEL-C-5114"], 5)
+
+    def test_selector_linea_con_suerte_igual_en_ambos_semestres(self):
+        """Línea C (equivalente LN5114 real) da el MISMO número en S1 y S2
+        porque sus vanos genuinamente están configurados en ambos — esto
+        NO prueba que el filtro funcione (es justo el fixture que 'por
+        casualidad' no expone el bug, documentado en el post-mortem de
+        bounce=2). Se incluye para dejar registrado por qué validar solo
+        contra LN5114 no es suficiente."""
+        counts_s1 = self._counts_by_linea(semestre="S1")
+        counts_s2 = self._counts_by_linea(semestre="S2")
+        self.assertEqual(counts_s1["LT-102SEL-C-5114"], 5)
+        self.assertEqual(counts_s2["LT-102SEL-C-5114"], 5)
+
+    def test_selector_semestre_invalido_se_comporta_como_sin_filtro(self):
+        counts = self._counts_by_linea(semestre="XX")
+        self.assertEqual(counts["LT-102SEL-A-733"], 18)
+
+    def test_selector_context_semestre_disponible_para_preservar_en_link(self):
+        """``context['semestre']`` debe estar disponible en la rama del
+        selector (antes solo se seteaba en la rama con línea elegida) para
+        que el template arme ``?linea_id=...&semestre=...`` al navegar."""
+        ctx = _invoke_get_context(self.admin, linea_id=None, semestre="S1")
+        self.assertEqual(ctx["semestre"], "S1")
+
+    def test_selector_ta_da_cero_si_nadie_configuro_todo_el_ano(self):
+        counts_ta = self._counts_by_linea(semestre="TA")
+        self.assertEqual(counts_ta["LT-102SEL-A-733"], 0)
+        self.assertEqual(counts_ta["LT-102SEL-B-5156"], 0)
+        self.assertEqual(counts_ta["LT-102SEL-C-5114"], 0)
