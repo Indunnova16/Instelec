@@ -206,11 +206,8 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
     </section>
     {% endif %}
 
-    <!-- Datalist global de Colaboradores activos (issue #188, A5) -- compartido
-         por el mini-form "agregar personal" de todas las cards de la semana. -->
-    <datalist id="personal_disponible_datalist">
-        {% for p in personal_disponible_datalist %}
-        <option value="{{ p.documento }}">{{ p.nombre }}</option>
-        {% endfor %}
-    </datalist>
+    <!-- Issue #209: el datalist global se retiró -- cada card renderiza su
+         propio <select class="js-tomselect"> de Personal directamente desde
+         `personal_disponible_datalist` (_bloque_card.html), ya buscable por
+         nombre/documento sin depender de un <datalist> compartido. -->
 </div>

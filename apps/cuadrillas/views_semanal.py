@@ -23,6 +23,7 @@ from datetime import date, datetime, timedelta
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
@@ -32,6 +33,7 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from apps.core.mixins import RoleRequiredMixin
+from apps.core.permissions import AREA_MANTENIMIENTO
 
 from .models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana, PersonalCuadrilla, Vehiculo
 from .utils_semana import _prefijo
@@ -280,9 +282,25 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
 
 
 def _personal_visible_para_usuario(request, qs=None):
+    """Colaboradores de Mantenimiento asignables al bloque (issue #209).
+
+    Antes filtraba por el área del USUARIO LOGUEADO (``request.user.area``),
+    no por el área fija de esta pantalla -- si el coordinador no tenía área
+    asignada (caso legacy frecuente en prod, ver verificación 2026-08-05) el
+    filtro simplemente no aplicaba y se mezclaba personal de Construcción /
+    Financiero en el buscador. Este formulario es EXCLUSIVO de Mantenimiento
+    (Cuadrilla.linea_asignada/tramo son conceptos de líneas de mantenimiento,
+    ver docstring del módulo), así que el área objetivo es fija.
+
+    Se incluyen también los colaboradores legacy con ``area=''`` (blank) --
+    a la fecha de este fix, 60/66 registros de ``PersonalCuadrilla`` en prod
+    nunca fueron etiquetados con un área (solo 1 tiene ``MANTENIMIENTO``
+    explícito). Excluirlos ocultaría de golpe casi todo el personal activo
+    del módulo. Coherente con el propio docstring de
+    ``PersonalCuadrilla.area``: "blank/default vacío para no romper
+    colaboradores legacy sin área asignada"."""
     qs = qs if qs is not None else PersonalCuadrilla.objects.filter(activo=True)
-    area = getattr(getattr(request, "user", None), "area", "") if request else ""
-    return qs.filter(area=area) if area else qs
+    return qs.filter(Q(area=AREA_MANTENIMIENTO) | Q(area=""))
 
 
 def _choices_form_bloque(request=None):
@@ -290,7 +308,15 @@ def _choices_form_bloque(request=None):
     A2-A4): tipo de actividad, línea, vehículo, supervisor. El propio Tramo
     se resuelve por cascada AJAX dependiente de la línea (A3) — no vive acá.
     También incluye el datalist de Colaboradores activos (A5) que alimenta
-    el autocompletado de "agregar personal" en cada card."""
+    el buscador de "agregar personal" en cada card.
+
+    Issue #209: ``supervisores_bloque`` filtraba solo por ``rol='supervisor'``
+    -- no existe en el modelo ningún cargo literal "Supervisor de
+    Mantenimiento" (verificado en prod: el único cargo que mapea a
+    ``rol='supervisor'`` es ``SUPERVISOR``, sin distinción de área). Se suma
+    el mismo filtro de área compatible-con-legacy que ``PersonalCuadrilla``
+    para no mostrar, si algún día existiera, un supervisor explícitamente de
+    otra área."""
     from apps.actividades.models import TipoActividad
     from apps.lineas.models import Linea
     from apps.usuarios.models import Usuario
@@ -299,12 +325,10 @@ def _choices_form_bloque(request=None):
         "tipos_actividad_bloque": TipoActividad.objects.filter(activo=True).order_by("nombre"),
         "lineas_bloque": Linea.objects.filter(activa=True).order_by("codigo"),
         "vehiculos_bloque": Vehiculo.objects.filter(activo=True).order_by("placa"),
-        "supervisores_bloque": Usuario.objects.filter(rol="supervisor", is_active=True).order_by(
-            "first_name"
-        ),
-        "personal_disponible_datalist": _personal_visible_para_usuario(request).order_by(
-            "nombre"
-        ),
+        "supervisores_bloque": Usuario.objects.filter(rol="supervisor", is_active=True)
+        .filter(Q(area=AREA_MANTENIMIENTO) | Q(area=""))
+        .order_by("first_name"),
+        "personal_disponible_datalist": _personal_visible_para_usuario(request).order_by("nombre"),
     }
 
 

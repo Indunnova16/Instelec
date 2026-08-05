@@ -689,7 +689,11 @@ class TestA12SuiteConsolidada(TestCase):
         quitar_url = reverse("cuadrillas:semanal_miembro_quitar", args=[bloque.id, miembro.id])
         resp_quitar = self.client.post(quitar_url)
         self.assertEqual(resp_quitar.status_code, 200)
-        self.assertNotContains(resp_quitar, "Colaborador A12 E2E")
+        # Issue #209: la tabla de miembros del bloque queda vacía (mensaje
+        # "Sin personal asignado."). El nombre SÍ puede seguir apareciendo en
+        # el <select> buscable de "Agregar personal" -- correcto, el
+        # colaborador vuelve a estar disponible para reasignar.
+        self.assertContains(resp_quitar, "Sin personal asignado.")
         miembro.refresh_from_db()
         self.assertFalse(miembro.activo)
         bloque.refresh_from_db()
