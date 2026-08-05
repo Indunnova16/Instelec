@@ -127,13 +127,24 @@ montado a la vez). Recibe:
                               class="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                             {% csrf_token %}
                             <div class="relative">
-                                <label for="id_documento" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Documento</label>
-                                <input type="text" name="documento" id="id_documento" required autocomplete="off"
-                                       list="personal_disponible_datalist"
-                                       value="{{ agregar_state.documento|default:'' }}"
-                                       oninput="cargarDatosPersonalBloque(this)"
-                                       placeholder="Ingrese documento…"
-                                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                                <label for="id_documento" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Personal</label>
+                                {% comment %}
+                                Issue #209: antes era un <input list="datalist"> (buscaba SOLO por
+                                coincidencia exacta del documento, value=documento visible en el
+                                input). Ahora es un <select class="js-tomselect"> buscable por
+                                nombre O documento (la etiqueta de cada <option> incluye ambos --
+                                TomSelect filtra client-side sobre el texto visible). El value
+                                sigue siendo el documento -- el backend
+                                (ProgramacionSemanalMiembroAgregarView) no cambia.
+                                {% endcomment %}
+                                <select name="documento" id="id_documento" required
+                                        onchange="cargarDatosPersonalBloque(this)"
+                                        class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                                    <option value="">— Buscar por nombre o documento —</option>
+                                    {% for p in personal_disponible_datalist %}
+                                    <option value="{{ p.documento }}" {% if agregar_state.documento == p.documento %}selected{% endif %}>{{ p.nombre }} — {{ p.documento }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                             <div>
                                 <label for="id_nombre_display" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>

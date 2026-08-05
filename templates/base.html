@@ -270,6 +270,21 @@
         // Selects que entran por HTMX (partials/modales).
         document.body.addEventListener('htmx:afterSwap', function (evt) {
             initTomSelect(evt.target || document);
+            // Issue #209: cascada Línea->Tramo -- el <select id="id_tramo">
+            // YA tiene TomSelect inicializado (initTomSelect() es idempotente
+            // y lo salta) cuando llega el hx-swap="innerHTML" que reemplaza
+            // sus <option> con los tramos de la línea elegida. Sin este
+            // resync, TomSelect sigue mostrando las <option> VIEJAS en su
+            // dropdown (el <select> nativo queda actualizado pero oculto) --
+            // es el mismo bug reportado por el cliente ("dice que filtra
+            // pero no se ve reflejado"). .sync() relee las <option> del
+            // <select> nativo; .clear() descarta la selección anterior (ya
+            // no es válida para la nueva línea).
+            var target = evt.target;
+            if (target && target.matches && target.matches('select.js-tomselect') && target.tomselect) {
+                target.tomselect.sync();
+                target.tomselect.clear(true);
+            }
         });
     })();
     </script>

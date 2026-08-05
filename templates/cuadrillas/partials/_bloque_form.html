@@ -33,7 +33,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
     <div>
         <label for="id_tipo_actividad" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de actividad</label>
         <select name="tipo_actividad" id="id_tipo_actividad"
-                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
             <option value="">— Sin tipo —</option>
             {% for ta in tipos_actividad_bloque %}
             <option value="{{ ta.id }}" {% if b.tipo_actividad_id == ta.id|stringformat:'s' %}selected{% endif %}>{{ ta.nombre }}</option>
@@ -47,7 +47,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
                 hx-trigger="change"
                 hx-target="#id_tramo"
                 hx-swap="innerHTML"
-                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-linea">
+                class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-linea">
             <option value="">— Sin línea —</option>
             {% for l in lineas_bloque %}
             <option value="{{ l.id }}" {% if b.linea_id == l.id|stringformat:'s' %}selected{% endif %}>{{ l.codigo }} - {{ l.nombre }}</option>
@@ -57,7 +57,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
     <div>
         <label for="id_tramo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tramo</label>
         <select name="tramo" id="id_tramo"
-                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-tramo">
+                class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-tramo">
             <option value="{{ b.tramo_id|default:'' }}">{% if b.tramo_id %}{{ b.tramo }} - {{ b.tramo_nombre }}{% else %}— Sin tramo —{% endif %}</option>
         </select>
         <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Se carga según la línea seleccionada.</p>
@@ -65,7 +65,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
     <div>
         <label for="id_vehiculo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vehículo</label>
         <select name="vehiculo" id="id_vehiculo"
-                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
             <option value="">— Sin vehículo —</option>
             {% for v in vehiculos_bloque %}
             <option value="{{ v.id }}" {% if b.vehiculo_id == v.id|stringformat:'s' %}selected{% endif %}>{{ v.placa }} - {{ v.marca }}</option>
@@ -75,7 +75,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
     <div>
         <label for="id_supervisor" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Supervisor</label>
         <select name="supervisor" id="id_supervisor"
-                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
             <option value="">— Sin supervisor —</option>
             {% for s in supervisores_bloque %}
             <option value="{{ s.id }}" {% if b.supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.get_full_name }}</option>
