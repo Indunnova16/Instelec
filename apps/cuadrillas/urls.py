@@ -21,6 +21,9 @@ urlpatterns = [
     path('<uuid:pk>/miembro/<uuid:miembro_pk>/eliminar/', views.CuadrillaMiembroRemoveView.as_view(), name='miembro_eliminar'),
     path('<uuid:pk>/miembros/subir/', views.CuadrillaMiembroUploadView.as_view(), name='miembros_upload'),
     path('<uuid:pk>/asistencia/', views.AsistenciaUpdateView.as_view(), name='asistencia_update'),
+    # Issue #210: acciones masivas (presente/festivo-domingo/viatico) para
+    # todo el personal activo de la cuadrilla en una fecha dada.
+    path('<uuid:pk>/asistencia/masiva/', views.AsistenciaAccionMasivaView.as_view(), name='asistencia_accion_masiva'),
     path('<uuid:pk>/exportar-asistencia/', views.ExportarAsistenciaView.as_view(), name='exportar_asistencia'),
     path('personal/subir/', views.PersonalCuadrillaUploadView.as_view(), name='personal_upload'),
     path('api/personal/', views.PersonalCuadrillaListAPIView.as_view(), name='personal_list_api'),
