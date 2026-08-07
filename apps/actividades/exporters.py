@@ -352,11 +352,60 @@ class ProgramacionSemanalHorizontalExporter:
         Returns:
             BytesIO con el contenido del .xlsx
         """
-        from apps.cuadrillas.views_semanal import _bloque_a_dict, _bloques_qs
+        from apps.cuadrillas.views_semanal import _bloques_qs
+
+        return self._escribir_hoja(_bloques_qs(anio, semana), f"Sem {semana:02d}-{anio}")
+
+    def generar_excel_rango(self, fecha_inicio, fecha_fin):
+        """
+        Genera un ÚNICO Excel horizontal consolidando TODAS las cuadrillas
+        (bloques) activas cuya ``fecha`` cae dentro de ``[fecha_inicio,
+        fecha_fin]`` (rango de fechas calendario arbitrario, sin importar a
+        qué semana ISO pertenece cada una) -- issue #211.
+
+        A diferencia de ``generar_excel`` (que filtra por prefijo de código
+        ``WW-YYYY-``, una semana ISO por vez), este método consulta
+        ``Cuadrilla`` directo por su campo ``fecha`` propio, así que un rango
+        que cruza 2+ semanas ISO trae TODOS los bloques en un solo archivo.
+
+        Args:
+            fecha_inicio: date
+            fecha_fin: date
+
+        Returns:
+            BytesIO con el contenido del .xlsx
+        """
+        from apps.cuadrillas.models import Cuadrilla
+
+        cuadrillas_qs = (
+            Cuadrilla.objects.filter(
+                fecha__gte=fecha_inicio, fecha__lte=fecha_fin, activa=True
+            )
+            .select_related(
+                "linea_asignada",
+                "vehiculo",
+                "supervisor",
+                "tipo_actividad",
+                "tramo",
+                "reprogramado_desde",
+            )
+            .prefetch_related("miembros__usuario", "miembros__rol_cuadrilla")
+            .order_by("fecha", "codigo")
+        )
+        titulo = f"{fecha_inicio:%d-%m} a {fecha_fin:%d-%m}"
+        return self._escribir_hoja(cuadrillas_qs, titulo)
+
+    def _escribir_hoja(self, cuadrillas_qs, titulo_hoja):
+        """Helper compartido: escribe headers + itera ``cuadrillas_qs`` (vía
+        ``_bloque_a_dict``/``_escribir_bloque``) + ajusta column_widths.
+        Extraído de ``generar_excel`` (issue #211) para que
+        ``generar_excel_rango`` reuse el MISMO layout ya validado por el
+        cliente sin duplicar HEADERS/estilos/anchos de columna."""
+        from apps.cuadrillas.views_semanal import _bloque_a_dict
 
         self.workbook = Workbook()
         self.sheet = self.workbook.active
-        self.sheet.title = f"Sem {semana:02d}-{anio}"[:31]
+        self.sheet.title = titulo_hoja[:31]
 
         for col_idx, header in enumerate(self.HEADERS, start=1):
             cell = self.sheet.cell(row=1, column=col_idx, value=header)
@@ -366,7 +415,7 @@ class ProgramacionSemanalHorizontalExporter:
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
         row_num = 2
-        for numero, cuadrilla in enumerate(_bloques_qs(anio, semana), start=1):
+        for numero, cuadrilla in enumerate(cuadrillas_qs, start=1):
             b = _bloque_a_dict(cuadrilla)
             row_num = self._escribir_bloque(numero, cuadrilla.fecha_fin, b, row_num)
 

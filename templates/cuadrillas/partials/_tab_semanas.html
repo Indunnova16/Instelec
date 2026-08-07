@@ -69,29 +69,59 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
                 Exportar Excel
             </a>
 
-            <!-- Duplicar semana anterior -->
+            <!-- Exportar Excel consolidado por rango de fechas (issue #211) -->
+            <form method="get" action="{% url 'cuadrillas:semanal_exportar_rango' %}"
+                  class="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
+                  aria-label="Exportar programación consolidada por rango de fechas">
+                <label class="sr-only" for="id_export_fecha_inicio">Fecha inicio del rango a exportar</label>
+                <input type="date" id="id_export_fecha_inicio" name="fecha_inicio" required
+                       class="text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                <span class="text-gray-400 text-sm">—</span>
+                <label class="sr-only" for="id_export_fecha_fin">Fecha fin del rango a exportar</label>
+                <input type="date" id="id_export_fecha_fin" name="fecha_fin" required
+                       class="text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                <button type="submit"
+                        class="px-3 py-1.5 bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 transition text-sm"
+                        aria-label="Exportar Excel consolidado del rango de fechas elegido">
+                    Exportar rango
+                </button>
+            </form>
+
+            <!-- Duplicar semana (issue #207: elegir cualquier semana origen, no solo la anterior) -->
             {% if confirmar_duplicado %}
             <form method="post" action="{% url 'cuadrillas:semanal_duplicar' anio=anio semana=semana %}" class="inline">
                 {% csrf_token %}
                 <input type="hidden" name="confirmar" value="1">
+                <input type="hidden" name="semana_origen_key" value="{{ semana_origen_key }}">
                 <button type="submit"
                         class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition"
-                        aria-label="Confirmar duplicar semana anterior">
+                        aria-label="Confirmar duplicar semana">
                     Confirmar duplicado
                 </button>
             </form>
             {% else %}
-            <form method="post" action="{% url 'cuadrillas:semanal_duplicar' anio=anio semana=semana %}" class="inline">
+            <form method="post" action="{% url 'cuadrillas:semanal_duplicar' anio=anio semana=semana %}" class="inline-flex items-center gap-2">
                 {% csrf_token %}
+                <label class="sr-only" for="id_semana_origen_key">Semana origen a duplicar</label>
+                <select name="semana_origen_key" id="id_semana_origen_key"
+                        {% if not semanas_disponibles %}disabled{% endif %}
+                        class="text-sm rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        aria-label="Semana origen a duplicar">
+                    {% for s in semanas_disponibles %}
+                    <option value="{{ s.key }}" {% if s.key == semana_origen_key %}selected{% endif %}>
+                        Semana {{ s.semana }}/{{ s.anio }} ({{ s.n_bloques }} bloque(s))
+                    </option>
+                    {% endfor %}
+                </select>
                 <button type="submit"
-                        {% if not origen_tiene_datos %}disabled title="La semana {{ origen_semana }}/{{ origen_anio }} no tiene programación para duplicar"{% endif %}
+                        {% if not semanas_disponibles %}disabled title="No hay ninguna semana con programación cargada para duplicar"{% endif %}
                         class="px-4 py-2 rounded-lg transition flex items-center gap-2
-                               {% if origen_tiene_datos %}bg-blue-600 text-white hover:bg-blue-700{% else %}bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500{% endif %}"
-                        aria-label="Duplicar la programación de la semana anterior">
+                               {% if semanas_disponibles %}bg-blue-600 text-white hover:bg-blue-700{% else %}bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500{% endif %}"
+                        aria-label="Duplicar la semana elegida como origen">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
-                    Duplicar semana anterior
+                    Duplicar semana
                 </button>
             </form>
             {% endif %}
@@ -101,7 +131,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
     {% if confirmar_duplicado %}
     <div class="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200">
         Esta semana ya tiene programación. Al confirmar se agregarán únicamente los bloques
-        de la semana {{ origen_semana }}/{{ origen_anio }} que aún no existan (los actuales no se modifican).
+        de la semana {{ origen_seleccionado_semana }}/{{ origen_seleccionado_anio }} que aún no existan (los actuales no se modifican).
     </div>
     {% endif %}
 
