@@ -411,6 +411,7 @@
                 <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-teal-100 border border-teal-300"></span> Capacitacion</span>
                 <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-cyan-100 border border-cyan-300"></span> Compensatorio</span>
                 <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100 border border-slate-300"></span> Descanso</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-100 border border-emerald-300"></span> Día ganado</span>
             </div>
         </div>
         <div class="overflow-x-auto">
@@ -422,6 +423,23 @@
                         <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase min-w-[120px]">
                             <div>{% if forloop.counter == 1 %}Lun{% elif forloop.counter == 2 %}Mar{% elif forloop.counter == 3 %}Mie{% elif forloop.counter == 4 %}Jue{% elif forloop.counter == 5 %}Vie{% elif forloop.counter == 6 %}Sab{% else %}Dom{% endif %}</div>
                             <div class="text-gray-400 font-normal">{{ dia|date:"d/m" }}</div>
+                            {# Issue #210: acciones masivas para TODO el personal de la cuadrilla, ese dia #}
+                            <div class="flex items-center justify-center gap-1 mt-1"
+                                 x-data="{ enviar(accion) {
+                                     if (!confirm('¿Aplicar \'' + accion + '\' a TODO el personal de esta cuadrilla el {{ dia|date:'d/m' }}?')) return;
+                                     fetch('{% url 'cuadrillas:asistencia_accion_masiva' cuadrilla.pk %}', {
+                                         method: 'POST',
+                                         headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                                         body: 'accion=' + accion + '&fecha={{ dia|date:'Y-m-d' }}',
+                                     }).then(r => { if (r.ok) location.reload(); else alert('No se pudo aplicar la accion masiva.'); });
+                                 } }">
+                                <button type="button" @click="enviar('presente')" title="Marcar toda la cuadrilla Presente este día"
+                                        class="text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300">Presente</button>
+                                <button type="button" @click="enviar('festivo_domingo')" title="Festivo/Domingo trabajado: jornada completa como recargo dominical para toda la cuadrilla"
+                                        class="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300">Festivo</button>
+                                <button type="button" @click="enviar('viatico')" title="Aplicar viático default a toda la cuadrilla este día"
+                                        class="text-[9px] px-1 py-0.5 rounded bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-300">Viático</button>
+                            </div>
                         </th>
                         {% endfor %}
                         <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase min-w-[70px]">H. Ord.</th>
@@ -466,6 +484,7 @@
                                         {% elif dia_info.tipo_novedad == 'CAPACITACION' %}text-teal-600 bg-teal-50 border-teal-300
                                         {% elif dia_info.tipo_novedad == 'COMPENSATORIO' %}text-cyan-600 bg-cyan-50 border-cyan-300
                                         {% elif dia_info.tipo_novedad == 'DESCANSO' %}text-slate-600 bg-slate-50 border-slate-300
+                                        {% elif dia_info.tipo_novedad == 'DIA_GANADO' %}text-emerald-700 bg-emerald-50 border-emerald-300
                                         {% else %}text-gray-400 bg-white border-gray-200
                                         {% endif %}
                                         dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200">
@@ -526,7 +545,7 @@
                                            class="rounded border-gray-300 text-orange-600 cursor-pointer">
                                     <span class="text-xs text-gray-500 dark:text-gray-400">HE</span>
                                     <span class="text-[10px] text-orange-400">
-                                        ({% if dia_info.dia_semana == 0 %}8h{% elif dia_info.dia_semana == 5 %}6h{% elif dia_info.dia_semana == 6 %}0h{% else %}7.5h{% endif %})
+                                        ({{ dia_info.jornada|floatformat:1 }}h)
                                     </span>
                                 </div>
                                 <div x-show="showHE" x-collapse class="mt-1 space-y-1">

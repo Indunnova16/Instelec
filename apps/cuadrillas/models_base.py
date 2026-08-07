@@ -481,6 +481,7 @@ class Asistencia(BaseModel):
         CAPACITACION = 'CAPACITACION', 'Capacitación'
         COMPENSATORIO = 'COMPENSATORIO', 'Compensatorio'
         DESCANSO = 'DESCANSO', 'Descanso'
+        DIA_GANADO = 'DIA_GANADO', 'Día ganado'
 
     usuario = models.ForeignKey(
         'usuarios.Usuario',

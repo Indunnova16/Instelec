@@ -348,6 +348,10 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                     'he_dominical_diurna': info.get('he_dominical_diurna', 0),
                     'he_dominical_nocturna': info.get('he_dominical_nocturna', 0),
                     'dia_semana': dia.weekday(),
+                    # Issue #210: jornada del día ya calculada acá arriba --
+                    # se pasa al template para no re-hardcodear el mapeo
+                    # dia_semana->horas en Django template tags.
+                    'jornada': jornada,
                 })
             filas_asistencia.append({
                 'miembro': miembro,
@@ -795,6 +799,7 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             'CAPACITACION': 'text-teal-600 bg-teal-50 border-teal-300',
             'COMPENSATORIO': 'text-cyan-600 bg-cyan-50 border-cyan-300',
             'DESCANSO': 'text-slate-600 bg-slate-50 border-slate-300',
+            'DIA_GANADO': 'text-emerald-700 bg-emerald-50 border-emerald-300',
         }
         css = color_map.get(tipo_novedad, 'text-gray-400 bg-white border-gray-200')
 
@@ -828,11 +833,14 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         total_viaticos_fmt = int(totals['total_viaticos'] or 0)
         total_he_fmt = float(totals['total_he'] or 0)
 
-        # Calculate ordinary hours (jornada regular for PRESENTE days)
-        JORNADA_DIA = {0: 8.0, 1: 7.5, 2: 7.5, 3: 7.5, 4: 7.5, 5: 6.0, 6: 0.0}
+        # Calculate ordinary hours (jornada regular for PRESENTE days).
+        # Issue #210: fuente única Asistencia.JORNADA_POR_DIA -- antes este
+        # dict estaba re-hardcodeado acá (y otra vez mas abajo), con riesgo
+        # de que una futura actualización de jornada (ej. reforma 42h) se
+        # aplicara en un lugar y se olvidara en los otros.
         total_hord = 0.0
         for a in week_asistencias.filter(tipo_novedad='PRESENTE'):
-            total_hord += JORNADA_DIA.get(a.fecha.weekday(), 0)
+            total_hord += Asistencia.JORNADA_POR_DIA.get(a.fecha.weekday(), 0)
         total_htotal = total_hord + total_he_fmt
 
         # Build observation field (visible when not PRESENTE)
@@ -851,9 +859,8 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         else:
             obs_field = f'<input type="hidden" name="observacion" value="{obs_escaped}">'
 
-        # Build Alpine.js overtime section
-        JORNADA = {0: 8.0, 1: 7.5, 2: 7.5, 3: 7.5, 4: 7.5, 5: 6.0, 6: 0.0}
-        jornada = JORNADA.get(fecha.weekday(), 0)
+        # Build Alpine.js overtime section (issue #210: fuente única, ver nota arriba)
+        jornada = Asistencia.JORNADA_POR_DIA.get(fecha.weekday(), 0)
 
         he_vals = {
             'he_diurna': float(he_diurna),
@@ -959,6 +966,104 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             },
         })
         return response
+
+
+class AsistenciaAccionMasivaView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    """Issue #210 -- acciones masivas de asistencia sobre TODOS los miembros
+    activos de una cuadrilla para una fecha dada (una sola request de
+    servidor, no un loop de N POSTs HTMX por celda -- mismo patrón que
+    recomendó el diagnóstico F2 para no romper la UX de "1 celda = 1
+    request" existente, pero evitando N round-trips para una acción que
+    conceptualmente es "toda la fila del día").
+
+    Acciones soportadas (POST ``accion``):
+      - ``presente``: marca PRESENTE a todo el personal activo ese día.
+      - ``festivo_domingo``: domingo/festivo trabajado -- JORNADA_POR_DIA
+        ya da 0h de jornada regular ese día (ver modelo), así que TODAS las
+        horas trabajadas se registran como recargo dominical/festivo
+        diurno (``he_dominical_diurna``), jornada completa (8h, mismo
+        default que ``AsistenciaUpdateView`` usa para un día normal).
+      - ``viatico``: aplica el viático default (misma fuente de verdad que
+        ``AsistenciaUpdateView``: ``CostoRecurso(tipo='VIATICO')``, con el
+        mismo fallback hardcodeado) a todo el personal activo ese día.
+
+    NO sobreescribe registros ya marcados con un tipo_novedad distinto de
+    PRESENTE (ej. no pisa una Incapacidad ya cargada) salvo para la propia
+    acción que se está aplicando -- ver detalle por rama abajo.
+    """
+    model = Cuadrilla
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+    ACCIONES_VALIDAS = {'presente', 'festivo_domingo', 'viatico'}
+
+    def post(self, request, *args, **kwargs):
+        from datetime import date as date_cls
+        from decimal import Decimal
+        from django.http import HttpResponse, JsonResponse
+
+        cuadrilla = self.get_object()
+        accion = (request.POST.get('accion') or '').strip()
+        fecha_str = (request.POST.get('fecha') or '').strip()
+
+        if accion not in self.ACCIONES_VALIDAS:
+            return HttpResponse('Accion invalida', status=400)
+        try:
+            fecha = date_cls.fromisoformat(fecha_str)
+        except ValueError:
+            return HttpResponse('Fecha invalida', status=400)
+
+        miembros_activos = cuadrilla.miembros.filter(activo=True).select_related('usuario')
+        afectados = 0
+
+        if accion == 'presente':
+            for m in miembros_activos:
+                asist, _ = Asistencia.objects.get_or_create(
+                    usuario=m.usuario, cuadrilla=cuadrilla, fecha=fecha,
+                    defaults={'registrado_por': request.user},
+                )
+                asist.tipo_novedad = Asistencia.TipoNovedad.PRESENTE
+                asist.registrado_por = request.user
+                asist.save(update_fields=['tipo_novedad', 'registrado_por', 'updated_at'])
+                afectados += 1
+
+        elif accion == 'festivo_domingo':
+            # Jornada completa (8h) registrada como recargo dominical/
+            # festivo diurno -- mismo default de "un dia" que usa el resto
+            # del flujo de asistencia (ver AsistenciaUpdateView).
+            for m in miembros_activos:
+                asist, _ = Asistencia.objects.get_or_create(
+                    usuario=m.usuario, cuadrilla=cuadrilla, fecha=fecha,
+                    defaults={'registrado_por': request.user},
+                )
+                asist.tipo_novedad = Asistencia.TipoNovedad.PRESENTE
+                asist.he_dominical_diurna = Decimal('8')
+                asist.registrado_por = request.user
+                asist.save(update_fields=[
+                    'tipo_novedad', 'he_dominical_diurna', 'horas_extra',
+                    'registrado_por', 'updated_at',
+                ])
+                afectados += 1
+
+        elif accion == 'viatico':
+            from apps.financiero.models import CostoRecurso
+            costo_viatico = CostoRecurso.objects.filter(
+                tipo='VIATICO', activo=True
+            ).order_by('-vigencia_desde').first()
+            valor_viatico = costo_viatico.costo_unitario if costo_viatico else Decimal('136941')
+            for m in miembros_activos:
+                asist, _ = Asistencia.objects.get_or_create(
+                    usuario=m.usuario, cuadrilla=cuadrilla, fecha=fecha,
+                    defaults={'registrado_por': request.user},
+                )
+                asist.viatico_aplica = True
+                asist.viaticos = valor_viatico
+                asist.registrado_por = request.user
+                asist.save(update_fields=[
+                    'viatico_aplica', 'viaticos', 'registrado_por', 'updated_at',
+                ])
+                afectados += 1
+
+        return JsonResponse({'ok': True, 'accion': accion, 'fecha': fecha_str, 'afectados': afectados})
 
 
 class CuadrillaMiembroRemoveView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
@@ -1215,6 +1320,7 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
                         'CAPACITACION': '76D7C4',
                         'COMPENSATORIO': '67E8F9',
                         'DESCANSO': 'CBD5E1',
+                        'DIA_GANADO': '34D399',
                     }
                     fill_color = color_map.get(asist.tipo_novedad)
                     if fill_color:
