@@ -144,3 +144,39 @@ class WebhookYaEstabaAprobadoTests(TestCase):
             'pago que ya estaba APROBADO — falta el guard ya_estaba_aprobado.'
         )
         self.assertEqual(Pago.objects.filter(wompi_transaction_id='TX-WEBHOOK-1').count(), 1)
+
+
+class PortalCargaEstilosBootstrapTests(TestCase):
+    """Reproceso #195 (bounce): el hardening de backend quedó validado, pero
+    los templates de /pagos/ usan clases Bootstrap 5 (card, badge, btn...)
+    sin que Bootstrap CSS se cargara nunca -- base.html solo declaraba
+    `extra_head`, no `extra_css` (el bloque de portal.html quedaba huérfano
+    y Django lo descartaba en silencio). Ver PLAN F2 (RUN_2026-08-07_0220)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='qa_pagos_195_css@test.com', password='x', rol='admin',
+        )
+        self.plan = PlanServicio.objects.create(nombre='Plan QA', precio=Decimal('150000'))
+        Suscripcion.objects.create(plan=self.plan, estado='PENDIENTE')
+        self.client.force_login(self.user)
+
+    def _assert_bootstrap_cargado(self, url):
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn('bootstrap@5.3.3/dist/css/bootstrap.min.css', html)
+        self.assertIn('bootstrap-icons@1.11.3', html)
+
+    def test_portal_carga_bootstrap(self):
+        self._assert_bootstrap_cargado(reverse('pagos:portal'))
+
+    def test_portal_carga_driver_js_css_bloque_ya_no_huerfano(self):
+        resp = self.client.get(reverse('pagos:portal'))
+        self.assertIn('driver.js@1.3.1/dist/driver.css', resp.content.decode())
+
+    def test_historial_carga_bootstrap(self):
+        self._assert_bootstrap_cargado(reverse('pagos:historial'))
+
+    def test_facturacion_carga_bootstrap(self):
+        self._assert_bootstrap_cargado(reverse('pagos:facturacion'))
