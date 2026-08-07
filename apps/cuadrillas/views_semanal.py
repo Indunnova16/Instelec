@@ -390,6 +390,9 @@ def _contexto_semana(anio, semana, request=None):
         "origen_anio": origen_anio,
         "origen_semana": origen_semana,
         "origen_tiene_datos": _bloques_qs(origen_anio, origen_semana).exists(),
+        # Issue #207: universo de semanas elegibles como origen del "Duplicar
+        # semana" (no solo N-1) -- excluye la propia semana destino.
+        "semanas_disponibles": _semanas_con_datos(excluir=(anio, semana)),
         "prev_anio": prev_anio,
         "prev_semana": prev_semana,
         "next_anio": next_anio,
@@ -400,6 +403,64 @@ def _contexto_semana(anio, semana, request=None):
 # ---------------------------------------------------------------------------
 # Vistas
 # ---------------------------------------------------------------------------
+
+
+def _semanas_con_datos(excluir=None):
+    """Todas las (anio, semana) distintas con AL MENOS un bloque (Cuadrilla)
+    activo, con conteo de bloques, ordenadas desc (más reciente primero).
+    Mismo patrón de recorrido de código que ``_semana_mas_reciente_con_datos``
+    -- issue #207, alimenta el selector de "semana origen" de Duplicar semana
+    (ya no limitado a N-1). ``excluir``, si se pasa, es una tupla
+    ``(anio, semana)`` que se omite del resultado (la semana destino no debe
+    aparecer como opción de origen de sí misma)."""
+    conteo = {}
+    codigos = Cuadrilla.objects.filter(
+        codigo__regex=r"^[0-9]{2}-[0-9]{4}-", activa=True
+    ).values_list("codigo", flat=True)
+    for codigo in codigos:
+        partes = codigo.split("-")
+        try:
+            sem, ano = int(partes[0]), int(partes[1])
+        except (ValueError, IndexError):
+            continue
+        if 1 <= sem <= 53 and 2000 <= ano <= 2100:
+            conteo[(ano, sem)] = conteo.get((ano, sem), 0) + 1
+    if excluir is not None:
+        conteo.pop(tuple(excluir), None)
+    return [
+        {"anio": ano, "semana": sem, "n_bloques": n, "key": f"{sem:02d}-{ano}"}
+        for (ano, sem), n in sorted(conteo.items(), key=lambda kv: kv[0], reverse=True)
+    ]
+
+
+def _parse_semana_origen_key(key):
+    """Parsea un ``semana_origen_key`` formato ``SS-AAAA`` (ej. ``'28-2099'``)
+    a ``(anio, semana)``. Devuelve ``(None, None)`` si viene vacío o mal
+    formado -- issue #207, campo compuesto único para que la selección de
+    origen viaje en 1 solo parámetro a través del paso de confirmación (ver
+    ``ProgramacionSemanalDuplicarView``)."""
+    key = (key or "").strip()
+    if not key or "-" not in key:
+        return None, None
+    semana_str, _, anio_str = key.partition("-")
+    try:
+        semana, anio = int(semana_str), int(anio_str)
+    except ValueError:
+        return None, None
+    if 1 <= semana <= 53 and 2000 <= anio <= 2100:
+        return anio, semana
+    return None, None
+
+
+def _resolver_origen_duplicado(request, anio, semana):
+    """Semana origen para "Duplicar semana" (issue #207): lee
+    ``semana_origen_key`` del POST; si no viene o no parsea, fallback EXACTO
+    a ``_semana_anterior`` -- 100% compatible con callers/tests que no envían
+    el campo nuevo (comportamiento histórico N-1 sin cambios)."""
+    origen_anio, origen_semana = _parse_semana_origen_key(request.POST.get("semana_origen_key"))
+    if origen_anio is None:
+        return _semana_anterior(anio, semana)
+    return origen_anio, origen_semana
 
 
 def _semana_mas_reciente_con_datos():
@@ -453,6 +514,23 @@ class ProgramacionSemanalGridView(LoginRequiredMixin, RoleRequiredMixin, Templat
         # Cuando la semana destino ya tiene datos, el POST de duplicar pide
         # confirmación redirigiendo aquí con ?confirmar_duplicado=1.
         context["confirmar_duplicado"] = self.request.GET.get("confirmar_duplicado") == "1"
+
+        # Issue #207: semana origen ELEGIDA en el selector de "Duplicar
+        # semana" -- viaja como query param ``semana_origen_key`` a través
+        # del paso de confirmación. Default = N-1 (``origen_anio``/
+        # ``origen_semana``, comportamiento histórico) si no viene o es
+        # inválida. Estas variables ``origen_seleccionado_*`` (distintas de
+        # ``origen_anio``/``origen_semana``, que SIEMPRE son N-1) son las que
+        # debe pintar el mensaje/hidden-field del paso de confirmación.
+        key = (self.request.GET.get("semana_origen_key") or "").strip()
+        origen_sel_anio, origen_sel_semana = _parse_semana_origen_key(key)
+        if origen_sel_anio is None:
+            origen_sel_anio = context["origen_anio"]
+            origen_sel_semana = context["origen_semana"]
+        context["origen_seleccionado_anio"] = origen_sel_anio
+        context["origen_seleccionado_semana"] = origen_sel_semana
+        context["semana_origen_key"] = key or f"{origen_sel_semana:02d}-{origen_sel_anio}"
+
         # Issue #188 (A2): choices del form de bloque (crear/editar), reusadas
         # por _bloque_form.html vía include. La cascada Línea→Tramo real
         # (AJAX) llega en A3 — acá solo se precargan los catálogos activos.
@@ -963,21 +1041,29 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
 
 
 class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Copia los bloques (Cuadrilla + CuadrillaMiembro) de la semana anterior a
-    la semana destino como base editable. NO destructivo: si un bloque ya existe
-    en el destino se omite (no se sobrescribe). Las NOVEDADES no se duplican."""
+    """Copia los bloques (Cuadrilla + CuadrillaMiembro) de una semana origen a
+    la semana destino como base editable. Issue #207: el origen ya NO está
+    limitado a la semana inmediatamente anterior -- se lee de
+    ``semana_origen_key`` (POST, formato ``SS-AAAA``), con fallback a la
+    semana anterior (``_semana_anterior``) si no viene. El shift de fechas se
+    calcula por el delta real de días entre origen y destino (no un +7 fijo).
+    NO destructivo: si un bloque ya existe en el destino se omite (no se
+    sobrescribe). Las NOVEDADES no se duplican."""
 
     allowed_roles = ROLES_CUADRILLAS
 
     def post(self, request, anio, semana):
         anio, semana = int(anio), int(semana)
-        origen_anio, origen_semana = _semana_anterior(anio, semana)
+        # Issue #207: origen ya NO está fijo a la semana anterior -- se lee
+        # de `semana_origen_key` (POST), con fallback exacto a
+        # `_semana_anterior` si no viene o no parsea (compatibilidad).
+        origen_anio, origen_semana = _resolver_origen_duplicado(request, anio, semana)
         origen = list(_bloques_qs(origen_anio, origen_semana))
 
         if not origen:
             messages.error(
                 request,
-                f"La semana anterior ({origen_semana:02d}/{origen_anio}) no tiene "
+                f"La semana {origen_semana:02d}/{origen_anio} no tiene "
                 f"programación cargada; no hay nada que duplicar.",
             )
             return redirect("cuadrillas:semanal_grid", anio=anio, semana=semana)
@@ -991,7 +1077,22 @@ class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, Vie
                 f"sobrescriben). Confirmá para continuar.",
             )
             url = reverse("cuadrillas:semanal_grid", args=[anio, semana])
-            return redirect(f"{url}?confirmar_duplicado=1")
+            # Issue #207: la semana origen ELEGIDA viaja en el redirect para
+            # que el paso de confirmación no la pierda (ver
+            # ProgramacionSemanalGridView.get_context_data).
+            return redirect(
+                f"{url}?confirmar_duplicado=1&semana_origen_key={origen_semana:02d}-{origen_anio}"
+            )
+
+        # Issue #207: delta real (en días) entre la semana origen y la
+        # destino -- generaliza el shift antes hardcodeado a 7 días (una
+        # semana), para que un origen arbitrario (ej. 4 semanas antes) corra
+        # las fechas correctamente. Fallback defensivo a 7 solo si
+        # `_rango_calendario` no puede resolver alguna de las dos semanas
+        # (semana ISO inválida, caso borde no esperado en operación normal).
+        lunes_origen, _ = _rango_calendario(origen_anio, origen_semana)
+        lunes_destino, _ = _rango_calendario(anio, semana)
+        delta_dias = (lunes_destino - lunes_origen).days if lunes_origen and lunes_destino else 7
 
         creadas = 0
         omitidas = 0
@@ -1010,7 +1111,7 @@ class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, Vie
                     linea_asignada=c.linea_asignada,
                     activa=True,
                     observaciones=c.observaciones,
-                    fecha=_shift(c.fecha, 7),
+                    fecha=_shift(c.fecha, delta_dias),
                 )
                 for m in c.miembros.all():
                     if not m.activo:
@@ -1021,8 +1122,8 @@ class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, Vie
                         rol_cuadrilla=m.rol_cuadrilla,
                         cargo=m.cargo,
                         costo_dia=m.costo_dia,
-                        fecha_inicio=_shift(m.fecha_inicio, 7) or date.today(),
-                        fecha_fin=_shift(m.fecha_fin, 7),
+                        fecha_inicio=_shift(m.fecha_inicio, delta_dias) or date.today(),
+                        fecha_fin=_shift(m.fecha_fin, delta_dias),
                         activo=True,
                         es_conductor_interno=m.es_conductor_interno,
                     )
@@ -1103,6 +1204,50 @@ class ProgramacionSemanalExportarHorizontalView(LoginRequiredMixin, RoleRequired
         return resp
 
 
+class ProgramacionSemanalExportarRangoView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """GET /cuadrillas/semanal/exportar-rango/?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
+    (issue #211).
+
+    Export consolidado: UN solo Excel con TODAS las cuadrillas activas cuya
+    ``fecha`` cae en el rango indicado, sin importar la semana ISO a la que
+    pertenezca cada una -- reemplaza el flujo de exportar semana por semana
+    (``ProgramacionSemanalExportarHorizontalView``) cuando el rango pedido
+    cruza 2+ semanas ISO."""
+
+    allowed_roles = ROLES_CUADRILLAS
+
+    def get(self, request):
+        from apps.actividades.exporters import ProgramacionSemanalHorizontalExporter
+
+        fecha_inicio_str = (request.GET.get("fecha_inicio") or "").strip()
+        fecha_fin_str = (request.GET.get("fecha_fin") or "").strip()
+        if not fecha_inicio_str or not fecha_fin_str:
+            return HttpResponse(
+                "Debe indicar fecha_inicio y fecha_fin para exportar el rango.", status=400
+            )
+        try:
+            fecha_inicio = date.fromisoformat(fecha_inicio_str)
+            fecha_fin = date.fromisoformat(fecha_fin_str)
+        except ValueError:
+            return HttpResponse("Las fechas ingresadas no son válidas.", status=400)
+        if fecha_fin < fecha_inicio:
+            return HttpResponse(
+                "La fecha fin no puede ser anterior a la fecha inicio.", status=400
+            )
+
+        output = ProgramacionSemanalHorizontalExporter().generar_excel_rango(
+            fecha_inicio, fecha_fin
+        )
+        resp = HttpResponse(
+            output.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = (
+            f'attachment; filename="programacion_{fecha_inicio:%Y%m%d}_{fecha_fin:%Y%m%d}.xlsx"'
+        )
+        return resp
+
+
 urlpatterns = [
     path("semanal/", ProgramacionSemanalIndexView.as_view(), name="semanal_index"),
     path(
@@ -1125,6 +1270,14 @@ urlpatterns = [
         "semanal/<int:anio>/<int:semana>/exportar/",
         ProgramacionSemanalExportarHorizontalView.as_view(),
         name="semanal_exportar_horizontal",
+    ),
+    # Issue #211 — export Excel consolidado por rango de fechas arbitrario
+    # (cruza semanas ISO). "exportar-rango" no matchea el converter <int:> de
+    # los patterns de arriba, sin conflicto de resolución.
+    path(
+        "semanal/exportar-rango/",
+        ProgramacionSemanalExportarRangoView.as_view(),
+        name="semanal_exportar_rango",
     ),
     # Issue #188 (A3) — grid editable in-place: crear bloque + cascada Línea→Tramo.
     path(

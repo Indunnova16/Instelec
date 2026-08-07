@@ -233,7 +233,9 @@ class TestC1GridSemanal(TestCase):
         self.assertEqual(resp.status_code, 200)
         html = resp.content.decode()
         self.assertIn("PEDRO PEREZ", html)
-        self.assertIn("Duplicar semana anterior", html)
+        # Issue #207: el botón ya no dice "anterior" (el origen ahora es
+        # elegible vía selector, no fijo a N-1).
+        self.assertIn("Duplicar semana", html)
         self.assertIn("Exportar PDF", html)
 
     def test_grid_semana_vacia_no_500(self):
