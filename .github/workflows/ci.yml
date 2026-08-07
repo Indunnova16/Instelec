@@ -76,7 +76,16 @@ jobs:
           pip install "GDAL==$(gdal-config --version)"
           grep -ivE '^GDAL([=<>! ]|$)' requirements/base.txt > "$RUNNER_TEMP/req_no_gdal.txt"
           pip install -r "$RUNNER_TEMP/req_no_gdal.txt"
-          pip install factory-boy pytest pytest-django pytest-timeout
+          # pytest-django 4.13.0 DEJÓ DE SOPORTAR Django 5.1 (sus classifiers
+          # solo declaran 5.2 y 6.0) pero NO declara restricción de Django, así
+          # que pip lo instalaba igual contra el Django>=5.1,<5.2 de base.txt y
+          # reventaba toda la suite con
+          #   AttributeError: type object 'PytestDjangoTestCase' has no
+          #   attribute '_pre_setup_ran_eagerly'
+          # (`_pre_setup_ran_eagerly` es un atributo de TransactionTestCase que
+          # Django agregó en 5.2). 4.12.0 es la última que soporta Django 5.1;
+          # al subir a Django 5.2+ se puede levantar el cap.
+          pip install factory-boy pytest "pytest-django>=4.9,<4.13" pytest-timeout
 
       - name: Django system check
         env:
