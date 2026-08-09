@@ -20,7 +20,7 @@ concurrency:
 jobs:
   test:
     name: Unit+Integration (PostGIS)
-    runs-on: ubuntu-latest
+    runs-on: [gcp, linux-amd64]
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -28,8 +28,13 @@ jobs:
           POSTGRES_DB: instelec_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
+        # Puerto DINÁMICO a propósito: los runners GCP corren un Postgres del
+        # sistema en el 5432 del host y hay 3 runners concurrentes. Un mapeo fijo
+        # (5432:5432 o 5433:5433) da "failed to bind host port" o choca entre
+        # jobs. Declarando solo el puerto del contenedor, Docker asigna uno libre
+        # y lo leemos con job.services.postgres.ports['5432'].
         ports:
-          - 5432:5432
+          - 5432
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 10s
@@ -42,7 +47,9 @@ jobs:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_HOST: localhost
-      DB_PORT: "5432"
+      # OJO: DB_PORT NO puede vivir acá — el contexto `job.services` no está
+      # disponible en el `env:` a nivel de job. Se inyecta en el `env:` de cada
+      # step que toca la BD (Django check + pytest).
       DJANGO_SETTINGS_MODULE: config.settings.ci_postgis
     steps:
       - uses: actions/checkout@v4
@@ -52,25 +59,42 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gdal-bin libgdal-dev binutils libproj-dev libgeos-dev postgresql-client
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
+      # actions/setup-python NO sirve en estos runners (Debian 12): el repo
+      # actions/python-versions no publica builds para Debian. Usamos el
+      # python3.12 de la máquina y un venv por job.
+      - name: Setup Python 3.12 (venv del runner)
+        run: |
+          python3.12 -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          # El binding pip de GDAL debe matchear el libgdal del sistema (apt trae
-          # 3.8.x; base.txt pinea otra). Instalar la versión del sistema y excluir el pin.
+          # El binding pip de GDAL debe matchear el libgdal del sistema (Debian 12
+          # trae 3.6.x; base.txt pinea otra). Instalar la versión del sistema y
+          # excluir el pin.
           pip install "GDAL==$(gdal-config --version)"
-          grep -ivE '^GDAL([=<>! ]|$)' requirements/base.txt > /tmp/req_no_gdal.txt
-          pip install -r /tmp/req_no_gdal.txt
-          pip install factory-boy pytest pytest-django pytest-timeout
+          grep -ivE '^GDAL([=<>! ]|$)' requirements/base.txt > "$RUNNER_TEMP/req_no_gdal.txt"
+          pip install -r "$RUNNER_TEMP/req_no_gdal.txt"
+          # pytest-django 4.13.0 DEJÓ DE SOPORTAR Django 5.1 (sus classifiers
+          # solo declaran 5.2 y 6.0) pero NO declara restricción de Django, así
+          # que pip lo instalaba igual contra el Django>=5.1,<5.2 de base.txt y
+          # reventaba toda la suite con
+          #   AttributeError: type object 'PytestDjangoTestCase' has no
+          #   attribute '_pre_setup_ran_eagerly'
+          # (`_pre_setup_ran_eagerly` es un atributo de TransactionTestCase que
+          # Django agregó en 5.2). 4.12.0 es la última que soporta Django 5.1;
+          # al subir a Django 5.2+ se puede levantar el cap.
+          pip install factory-boy pytest "pytest-django>=4.9,<4.13" pytest-timeout
 
       - name: Django system check
+        env:
+          DB_PORT: ${{ job.services.postgres.ports['5432'] }}
         run: python manage.py check
 
       - name: Run unit + integration tests (PostGIS)
+        env:
+          DB_PORT: ${{ job.services.postgres.ports['5432'] }}
         run: >-
           pytest tests/unit tests/integration
           --ds=config.settings.ci_postgis
