@@ -13,6 +13,15 @@
         </p>
     </div>
 
+    {% if linea_filtro %}
+    <div class="px-4 py-3 rounded-lg text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200"
+         data-b4-banner="linea-filtro">
+        <strong>🔎 Filtro activo: Línea {{ linea_filtro.codigo }}</strong> — {{ linea_filtro.nombre }}.
+        Las filas del Excel que correspondan a otra línea se omitirán de la importación
+        (quedan listadas en advertencias).
+    </div>
+    {% endif %}
+
     {% if error %}
     <div class="px-4 py-3 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">
         <strong>❌ Error:</strong> {{ error }}
@@ -136,6 +145,9 @@
     <form method="post" enctype="multipart/form-data"
           class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
         {% csrf_token %}
+        {# Issue #218 (A7): el filtro de línea de la pantalla viaja al POST -- #}
+        {# el <select> del filtro vive en /cuadrillas/, no acá. #}
+        {% if linea_filtro_id %}<input type="hidden" name="linea_filtro_id" value="{{ linea_filtro_id }}">{% endif %}
 
         <div>
             <label for="archivo_cuadrillas" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

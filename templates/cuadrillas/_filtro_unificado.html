@@ -1,0 +1,92 @@
+{% comment %}Issue #218 (A6) — sistema de filtros ÚNICO de Cuadrillas: semana + línea +
+   actividad + fecha, en UN solo <form method="get">. Mismo patrón de
+   hidden-inputs de carry-forward que _filtro_estado.html: preserva `filtro`
+   (tri-state B3) y `codigo` (búsqueda) al aplicar estos filtros, para que
+   cambiar de semana no resetee el tab activas/inactivas/todas ni viceversa.
+   Variables esperadas en context: filtros_cuadrilla (FiltrosCuadrilla),
+   semanas_filtro_disponibles, semana_actual, lineas_disponibles,
+   actividades_disponibles, cuadrillas.{% endcomment %}
+<section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+         aria-labelledby="filtro-unificado-title"
+         data-cuadrillas-component="filtro-unificado">
+    <h2 id="filtro-unificado-title" class="sr-only">Filtrar cuadrillas</h2>
+    <form method="get" class="flex flex-col gap-4">
+        {# Preservar filtros que NO se editan en este form. #}
+        {% if request.GET.filtro %}<input type="hidden" name="filtro" value="{{ request.GET.filtro }}">{% endif %}
+        {% if request.GET.codigo %}<input type="hidden" name="codigo" value="{{ request.GET.codigo }}">{% endif %}
+
+        <div class="flex flex-col sm:flex-row sm:items-end flex-wrap gap-4">
+            <div class="flex flex-col gap-1">
+                <label for="semana" class="text-sm font-medium text-gray-700 dark:text-gray-300">Semana</label>
+                <select name="semana" id="semana"
+                        onchange="this.form.submit()"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    <option value="">Todas las semanas</option>
+                    {% for semana in semanas_filtro_disponibles %}
+                    <option value="{{ semana.value }}" {% if semana.value == semana_actual %}selected{% endif %}>
+                        {{ semana.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label for="linea" class="text-sm font-medium text-gray-700 dark:text-gray-300">Línea</label>
+                <select name="linea" id="linea"
+                        onchange="this.form.submit()"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    <option value="">Todas las líneas</option>
+                    {% for linea in lineas_disponibles %}
+                    <option value="{{ linea.id }}" {% if linea.id|stringformat:"s" == filtros_cuadrilla.linea_id %}selected{% endif %}>
+                        {{ linea.codigo }} - {{ linea.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label for="actividad" class="text-sm font-medium text-gray-700 dark:text-gray-300">Actividad</label>
+                <select name="actividad" id="actividad"
+                        onchange="this.form.submit()"
+                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    <option value="">Todas las actividades</option>
+                    {% for actividad in actividades_disponibles %}
+                    <option value="{{ actividad.id }}" {% if actividad.id|stringformat:"s" == filtros_cuadrilla.actividad_id %}selected{% endif %}>
+                        {{ actividad.codigo }} - {{ actividad.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label for="fecha_desde" class="text-sm font-medium text-gray-700 dark:text-gray-300">Desde</label>
+                <input type="date" name="fecha_desde" id="fecha_desde"
+                       value="{{ filtros_cuadrilla.fecha_desde }}"
+                       class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label for="fecha_hasta" class="text-sm font-medium text-gray-700 dark:text-gray-300">Hasta</label>
+                <input type="date" name="fecha_hasta" id="fecha_hasta"
+                       value="{{ filtros_cuadrilla.fecha_hasta }}"
+                       class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button type="submit"
+                        class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                    Aplicar
+                </button>
+                {% if filtros_cuadrilla.hay_filtro_activo %}
+                <a href="?{% if request.GET.filtro %}filtro={{ request.GET.filtro }}{% endif %}"
+                   class="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    Limpiar filtros
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="text-sm text-gray-500 dark:text-gray-400">
+            {{ cuadrillas|length }} cuadrilla{{ cuadrillas|length|pluralize:"s" }} encontrada{{ cuadrillas|length|pluralize:"s" }}
+        </div>
+    </form>
+</section>

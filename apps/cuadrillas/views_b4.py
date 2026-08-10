@@ -55,17 +55,39 @@ class CuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         'AVISO_SAP': 'Carga Masiva Simple (Aviso SAP)',
     }
 
+    def _resolver_linea_filtro(self, linea_id):
+        """Issue #218 (A7): resuelve el ``?linea=<uuid>`` activo en pantalla
+        a una instancia real de ``Linea`` para el banner -- ``None`` si no
+        viene, o si el uuid no existe (falla silenciosa: se trata como "sin
+        filtro" en vez de romper la carga)."""
+        linea_id = (linea_id or '').strip()
+        if not linea_id:
+            return None
+        from apps.lineas.models import Linea
+        return Linea.objects.filter(pk=linea_id).first()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Cargar Cuadrillas Masivamente'
+        linea_filtro = self._resolver_linea_filtro(self.request.GET.get('linea'))
+        context['linea_filtro'] = linea_filtro
+        context['linea_filtro_id'] = str(linea_filtro.id) if linea_filtro else ''
         return context
 
     def post(self, request, *args, **kwargs):
+        linea_filtro_id = (request.POST.get('linea_filtro_id') or '').strip()
+        linea_filtro = self._resolver_linea_filtro(linea_filtro_id)
+        # Si el uuid posteado ya no resuelve a una Linea real, no acotamos
+        # el import por un filtro fantasma.
+        linea_filtro_id = str(linea_filtro.id) if linea_filtro else ''
+
         archivo = request.FILES.get('archivo_cuadrillas')
         if not archivo:
             return render(request, self.template_name, {
                 'titulo': 'Cargar Cuadrillas Masivamente',
                 'error': 'Por favor selecciona un archivo Excel.',
+                'linea_filtro': linea_filtro,
+                'linea_filtro_id': linea_filtro_id,
             })
 
         # Validar extensión.
@@ -73,6 +95,8 @@ class CuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             return render(request, self.template_name, {
                 'titulo': 'Cargar Cuadrillas Masivamente',
                 'error': f'Archivo "{archivo.name}" no es Excel (.xlsx/.xls).',
+                'linea_filtro': linea_filtro,
+                'linea_filtro_id': linea_filtro_id,
             })
 
         # Leer el archivo a memoria una sola vez: lo usamos para detectar el
@@ -86,6 +110,8 @@ class CuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         opciones = {
             'actualizar_existentes': request.POST.get('actualizar_existentes') == 'on',
             'crear_usuarios_faltantes': request.POST.get('crear_usuarios_faltantes') == 'on',
+            # Issue #218 (A7): línea activa en pantalla acota/valida el Excel.
+            'linea_filtro_id': linea_filtro_id,
         }
 
         datos.seek(0)
@@ -97,6 +123,8 @@ class CuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
 
         return render(request, self.template_name, {
             'titulo': 'Cargar Cuadrillas Masivamente',
+            'linea_filtro': linea_filtro,
+            'linea_filtro_id': linea_filtro_id,
             'resultado': resultado,
             'formato_detectado': self.FORMATO_LABELS.get(formato, formato),
             'mensaje_exito': resultado.get('exito', False),

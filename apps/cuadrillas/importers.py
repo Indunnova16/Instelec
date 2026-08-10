@@ -141,6 +141,11 @@ class CuadrillaImporter:
         self.cuadrillas_actualizadas = 0
         self.miembros_agregados = 0
         self.column_indices = {}
+        # Issue #218 (A7): filtro de línea activo en pantalla al momento de
+        # importar (contrato del cliente -- "no debe existir un selector de
+        # filtros aparte solo para la pantalla de importación"). '' = sin
+        # filtro, se importan todas las líneas como hasta ahora.
+        self.linea_filtro_id = ''
 
     # ---------- API pública ----------
 
@@ -167,6 +172,7 @@ class CuadrillaImporter:
         """
         opciones = opciones or {}
         actualizar_existentes = opciones.get('actualizar_existentes', False)
+        self.linea_filtro_id = (opciones.get('linea_filtro_id') or '').strip()
 
         try:
             workbook = load_workbook(archivo_excel, read_only=True, data_only=True)
@@ -342,6 +348,16 @@ class CuadrillaImporter:
                     f'Fila {row_num}: línea "{linea_nombre}" no existe para cuadrilla {codigo}'
                 )
                 return
+
+        # Issue #218 (A7): filtro de línea activo en pantalla acota el
+        # import -- filas de OTRA línea se RECHAZAN (no se crean/actualizan,
+        # advertencia con motivo explícito), no fallan toda la transacción.
+        if self.linea_filtro_id and str(linea.id) != str(self.linea_filtro_id):
+            self.advertencias.append(
+                f'Fila {row_num}: cuadrilla {codigo} omitida -- línea "{linea.codigo}" '
+                f'no corresponde al filtro de línea activo en pantalla'
+            )
+            return
 
         # Resolver supervisor (warning si no existe; deja null).
         supervisor = None
@@ -656,6 +672,9 @@ class ProgramacionS18CuadrillaImporter:
         # cualquier bloque/actividad — ver `_guardar_novedad`.
         self.novedades_pendientes = []
         self.novedades_creadas = 0
+        # Issue #218 (A7): filtro de línea activo en pantalla al momento de
+        # importar. '' = sin filtro (comportamiento actual sin cambios).
+        self.linea_filtro_id = ''
 
     # ---------- API pública ----------
 
@@ -663,6 +682,7 @@ class ProgramacionS18CuadrillaImporter:
         opciones = opciones or {}
         actualizar = opciones.get('actualizar_existentes', False)
         crear_usuarios = opciones.get('crear_usuarios_faltantes', False)
+        self.linea_filtro_id = (opciones.get('linea_filtro_id') or '').strip()
 
         try:
             # Issue #178 (A1): NO usar read_only=True — openpyxl no expone
@@ -940,6 +960,18 @@ class ProgramacionS18CuadrillaImporter:
                 f'Fila {bloque["row_num"]}: línea {bloque["linea_codigos"]} no '
                 f'encontrada para cuadrilla {codigo}; queda sin línea asignada'
             )
+
+        # Issue #218 (A7): filtro de línea activo en pantalla acota el
+        # import -- bloques de OTRA línea (o sin línea resuelta, cuando hay
+        # filtro activo) se RECHAZAN, no fallan todo el lote.
+        if self.linea_filtro_id:
+            if linea is None or str(linea.id) != str(self.linea_filtro_id):
+                self.advertencias.append(
+                    f'Fila {bloque["row_num"]}: cuadrilla {codigo} omitida -- '
+                    f'línea {"sin resolver" if linea is None else linea.codigo!r} '
+                    f'no corresponde al filtro de línea activo en pantalla'
+                )
+                return
 
         # Resolver vehículo por la primera placa no vacía del grupo.
         vehiculo = None

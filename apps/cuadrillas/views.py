@@ -79,8 +79,21 @@ class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVi
                 semanas_set.add((ano, sem))
 
         # Sort descending: most recent first
+        # Issue #218: este contexto se llama `semanas_filtro_disponibles`
+        # (NO `semanas_disponibles`) a propósito. Más abajo, la fusión con
+        # el grid editable (issue #188, línea ~150) hace
+        # `context.update(_contexto_semana(...))`, y `_contexto_semana`
+        # (views_semanal.py) YA usa la clave `semanas_disponibles` para un
+        # concepto distinto (semanas CON datos, para el selector de origen
+        # de "Duplicar semana" -- shape {anio,semana,n_bloques,key}). Antes
+        # de este fix ambos usaban el mismo nombre de clave y el `.update()`
+        # pisaba silenciosamente esta lista {value,label} con la otra shape,
+        # dejando el <select id="semana"> con 28 <option value=""> vacías:
+        # ese era el bug reportado (visual -- "cuadro grande vacío" -- y
+        # funcional -- elegir una semana no filtraba, porque el value
+        # submiteado siempre era "").
         semanas_disponibles = sorted(semanas_set, reverse=True)
-        context['semanas_disponibles'] = [
+        context['semanas_filtro_disponibles'] = [
             {'value': f'{s[1]}-{s[0]}', 'label': f'Semana {s[1]} - {s[0]}'}
             for s in semanas_disponibles
         ]
@@ -1623,12 +1636,40 @@ class CuadrillaMasivaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
         'SUPERVISOR_FOREST': 2969427, 'ASISTENTE_FOREST': 4204000,
     }
 
+    def _resolver_linea_filtro(self, linea_id):
+        """Issue #218 (A7): resuelve el filtro de línea activo en pantalla
+        (viaja por querystring en el GET, y por hidden input en el POST) a
+        una instancia real de ``Linea``. ``None`` si no viene o el uuid no
+        existe -- se trata como "sin filtro", no rompe la carga."""
+        from apps.lineas.models import Linea
+        linea_id = (linea_id or '').strip()
+        if not linea_id:
+            return None
+        return Linea.objects.filter(pk=linea_id).first()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        linea_filtro = self._resolver_linea_filtro(self.request.GET.get('linea'))
+        context['linea_filtro'] = linea_filtro
+        context['linea_filtro_id'] = str(linea_filtro.id) if linea_filtro else ''
+        return context
+
     def post(self, request, *args, **kwargs):
         import openpyxl
         from io import BytesIO
         from datetime import date
         from apps.usuarios.models import Usuario
         from apps.lineas.models import Linea
+
+        # Issue #218 (A7): filtro de línea activo en pantalla acota/valida
+        # el Excel -- contrato explícito del cliente: "no debe existir un
+        # selector de filtros aparte solo para la pantalla de importación".
+        # Esta es la vista REAL que ejecuta el botón "Importar Excel" del
+        # grid semanal (`_tab_semanas.html` -> `cuadrillas:masiva_upload`);
+        # `views_b4.CuadrillaUploadView` es un importer en paralelo, no
+        # enlazado todavía desde ningún template (ver su propio docstring),
+        # así que el fix tiene que vivir ACÁ para ser visible en producción.
+        linea_filtro = self._resolver_linea_filtro(request.POST.get('linea_filtro_id'))
 
         archivo = request.FILES.get('archivo')
         if not archivo:
@@ -1699,6 +1740,19 @@ class CuadrillaMasivaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
                         ).filter(
                             models.Q(codigo__icontains=linea_name) | models.Q(nombre__icontains=linea_name)
                         ).first()
+
+                    # Issue #218 (A7): con un filtro de línea activo en
+                    # pantalla, las filas de OTRA línea (o sin línea
+                    # resuelta) se RECHAZAN -- no se crea/actualiza la
+                    # cuadrilla, queda listada en advertencias con el
+                    # motivo explícito. No es fatal para el resto del lote.
+                    if linea_filtro and (linea is None or linea.id != linea_filtro.id):
+                        motivo = 'sin línea resuelta' if linea is None else f'línea "{linea.codigo}"'
+                        errores.append(
+                            f'Fila {row_num}: cuadrilla {cuadrilla_num} omitida -- {motivo} '
+                            f'no corresponde al filtro de línea activo ({linea_filtro.codigo})'
+                        )
+                        continue
 
                     # Find vehiculo
                     vehiculo = None

@@ -67,38 +67,8 @@
     {# B3 hook (Sofi mayo 2026) — filtro activas/inactivas/todas. Sub-feature crea templates/cuadrillas/_filtro_estado.html. #}
     {% include 'cuadrillas/_filtro_estado.html' %}
 
-    <!-- Week Filter -->
-    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <form method="get" class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-                <label for="semana" class="text-sm font-medium text-gray-700 dark:text-gray-300">Filtrar por semana:</label>
-            </div>
-            <div class="flex items-center gap-2">
-                <select name="semana" id="semana"
-                        onchange="this.form.submit()"
-                        class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
-                    <option value="">Todas las semanas</option>
-                    {% for semana in semanas_disponibles %}
-                    <option value="{{ semana.value }}" {% if semana.value == semana_actual %}selected{% endif %}>
-                        {{ semana.label }}
-                    </option>
-                    {% endfor %}
-                </select>
-                {% if semana_actual %}
-                <a href="{% url 'cuadrillas:lista' %}"
-                   class="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                    Limpiar
-                </a>
-                {% endif %}
-            </div>
-            <div class="ml-auto text-sm text-gray-500 dark:text-gray-400">
-                {{ cuadrillas|length }} cuadrilla{{ cuadrillas|length|pluralize:"s" }} encontrada{{ cuadrillas|length|pluralize:"s" }}
-            </div>
-        </form>
-    </section>
+    <!-- Issue #218 (A6): sistema de filtros UNICO (semana + linea + actividad + fecha) -->
+    {% include 'cuadrillas/_filtro_unificado.html' %}
 
     <!-- Stats -->
     <section class="grid grid-cols-1 md:grid-cols-3 gap-4" aria-labelledby="stats-title">
@@ -144,7 +114,7 @@
                 </div>
                 <div class="ml-4">
                     <h3 id="stat-semanas" class="text-sm font-medium text-gray-500">Semanas</h3>
-                    <p class="text-2xl font-bold text-purple-600" aria-live="polite">{{ semanas_disponibles|length }}</p>
+                    <p class="text-2xl font-bold text-purple-600" aria-live="polite">{{ semanas_en_filtro_actual }}</p>
                 </div>
             </div>
         </article>

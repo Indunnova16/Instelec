@@ -9,6 +9,15 @@
         <p class="text-gray-600 dark:text-gray-400 mt-1">Suba un archivo Excel para crear cuadrillas con sus miembros automaticamente.</p>
     </div>
 
+    {% if linea_filtro %}
+    <div class="px-4 py-3 rounded-lg text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200"
+         data-masiva-banner="linea-filtro">
+        <strong>🔎 Filtro activo: Línea {{ linea_filtro.codigo }}</strong> — {{ linea_filtro.nombre }}.
+        Las filas del Excel que correspondan a otra línea se omitirán de la importación
+        (quedan listadas en advertencias).
+    </div>
+    {% endif %}
+
     {% if messages %}
     <div class="space-y-2">
         {% for message in messages %}
@@ -56,6 +65,8 @@
     <!-- Upload form -->
     <form method="post" enctype="multipart/form-data" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 space-y-4">
         {% csrf_token %}
+        {# Issue #218 (A7): el filtro de línea de la pantalla /cuadrillas/ viaja al POST. #}
+        {% if linea_filtro_id %}<input type="hidden" name="linea_filtro_id" value="{{ linea_filtro_id }}">{% endif %}
         <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Archivo Excel (.xlsx)

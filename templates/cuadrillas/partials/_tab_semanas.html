@@ -40,7 +40,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
                  error en /cuadrillas/colaboradores/, asumiendo que era "carga masiva
                  de personal" cuando en realidad crea/actualiza bloques Cuadrilla de
                  la programación semanal misma). Refs #208. -->
-            <a href="{% url 'cuadrillas:masiva_upload' %}"
+            <a href="{% url 'cuadrillas:masiva_upload' %}{% if filtros_cuadrilla.linea_id %}?linea={{ filtros_cuadrilla.linea_id }}{% endif %}"
                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
                aria-label="Carga masiva de cuadrillas desde Excel">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

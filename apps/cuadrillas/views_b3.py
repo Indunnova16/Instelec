@@ -30,6 +30,12 @@ from django.views import View
 
 from apps.core.mixins import RoleRequiredMixin
 from . import views as _legacy_views
+from .filtros import (
+    aplicar_filtros_queryset,
+    choices_actividades,
+    choices_lineas,
+    resolver_filtros,
+)
 from .models import Cuadrilla, TrackingUbicacion
 
 
@@ -58,23 +64,19 @@ def _b3_get_queryset(self):
     elif filtro == 'inactivas':
         qs = qs.filter(activa=False)
 
-    # búsqueda por código (semana o prefix)
-    semana_param = self.request.GET.get('semana', '').strip()
-    if semana_param:
-        try:
-            parts = semana_param.split('-')
-            sem = parts[0].zfill(2)
-            ano = parts[1]
-            qs = qs.filter(codigo__startswith=f'{sem}-{ano}-')
-        except (IndexError, ValueError):
-            pass
-
     codigo = self.request.GET.get('codigo', '').strip()
     if codigo:
         qs = qs.filter(codigo__icontains=codigo)
 
+    # Issue #218 (A2-A6): semana/línea/actividad/fecha, sistema de filtros
+    # ÚNICO compartido con la pantalla de importación (ver apps/cuadrillas/
+    # filtros.py). Se combinan con AND (intersección), no OR.
+    filtros = resolver_filtros(self.request.GET)
+    qs = aplicar_filtros_queryset(qs, filtros)
+
     # exposed para que get_context_data sepa el filtro actual sin re-parsear
     self._b3_filtro_actual = filtro
+    self._b3_filtros_cuadrilla = filtros
     return qs
 
 
@@ -82,8 +84,11 @@ def _b3_get_context_data(self, **kwargs):
     """Inyectar contadores y filtro actual al contexto."""
     context = _ORIG_GET_CONTEXT(self, **kwargs)
     filtro_actual = getattr(self, '_b3_filtro_actual', 'activas')
+    filtros_cuadrilla = getattr(self, '_b3_filtros_cuadrilla', resolver_filtros(self.request.GET))
 
-    # contadores globales (no afectados por filtros adicionales)
+    # contadores globales del tri-state activas/inactivas/todas (NO afectados
+    # por semana/línea/actividad/fecha -- son las etiquetas de los 3 tabs de
+    # _filtro_estado.html, deben seguir mostrando el universo completo).
     total_activas = Cuadrilla.objects.filter(activa=True).count()
     total_inactivas = Cuadrilla.objects.filter(activa=False).count()
     total_todas = total_activas + total_inactivas
@@ -93,6 +98,11 @@ def _b3_get_context_data(self, **kwargs):
         'b3_total_activas': total_activas,
         'b3_total_inactivas': total_inactivas,
         'b3_total_todas': total_todas,
+        # Issue #218 (A3-A6): filtros activos + choices para los <select> de
+        # línea/actividad y el carry-forward de hidden inputs.
+        'filtros_cuadrilla': filtros_cuadrilla,
+        'lineas_disponibles': choices_lineas(),
+        'actividades_disponibles': choices_actividades(),
     })
 
     # Regenerar el agrupamiento por semana del queryset filtrado actual,
@@ -113,9 +123,16 @@ def _b3_get_context_data(self, **kwargs):
         cuadrillas_por_semana['Otras'] = sin_semana
     context['cuadrillas_por_semana'] = cuadrillas_por_semana
 
-    # Stats ya regeneradas correctamente: usar nuestros contadores B3.
-    context['total_cuadrillas'] = total_todas
-    context['cuadrillas_activas'] = total_activas
+    # Issue #218 (A8): las 3 tarjetas de stats (Total/Activas/Semanas) pasan
+    # a reflejar el queryset FILTRADO actual (semana+línea+actividad+fecha
+    # además del tri-state B3), no el total global de 227 -- decisión de
+    # diseño declarada en el PLAN. `b3_total_*` arriba se conservan intactos
+    # porque alimentan los contadores de los tabs (esos SÍ deben ser
+    # globales, o el tab "Inactivas" nunca mostraría cuántas hay para poder
+    # cambiar a esa vista).
+    context['total_cuadrillas'] = len(cuadrillas)
+    context['cuadrillas_activas'] = sum(1 for c in cuadrillas if c.activa)
+    context['semanas_en_filtro_actual'] = len(cuadrillas_por_semana)
 
     # ubicaciones: el original solo construye para activas porque el queryset
     # estaba filtrado. Replicar con el queryset actual del contexto.

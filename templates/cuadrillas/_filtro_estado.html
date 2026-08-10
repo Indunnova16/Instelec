@@ -7,9 +7,14 @@
     <h2 id="b3-filtro-estado-title" class="sr-only">Filtrar cuadrillas por estado</h2>
     <form method="get" class="flex flex-col sm:flex-row items-start sm:items-center gap-4"
           role="tablist" aria-label="Filtro de estado">
-        {# Preservar otros filtros (semana, codigo) al cambiar de tab. #}
+        {% comment %}Preservar otros filtros al cambiar de tab (issue #218 A6: ahora
+           tambien linea/actividad/fecha, no solo semana/codigo).{% endcomment %}
         {% if request.GET.semana %}<input type="hidden" name="semana" value="{{ request.GET.semana }}">{% endif %}
         {% if request.GET.codigo %}<input type="hidden" name="codigo" value="{{ request.GET.codigo }}">{% endif %}
+        {% if request.GET.linea %}<input type="hidden" name="linea" value="{{ request.GET.linea }}">{% endif %}
+        {% if request.GET.actividad %}<input type="hidden" name="actividad" value="{{ request.GET.actividad }}">{% endif %}
+        {% if request.GET.fecha_desde %}<input type="hidden" name="fecha_desde" value="{{ request.GET.fecha_desde }}">{% endif %}
+        {% if request.GET.fecha_hasta %}<input type="hidden" name="fecha_hasta" value="{{ request.GET.fecha_hasta }}">{% endif %}
 
         <fieldset class="flex flex-wrap gap-2 items-center">
             <legend class="sr-only">Estado</legend>
