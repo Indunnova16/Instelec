@@ -14,8 +14,15 @@
     <link rel="icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
     <link rel="apple-touch-icon" href="{% static 'img/favicon.svg' %}">
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS — servido localmente (#206).
+         Antes colgaba de https://cdn.tailwindcss.com: ese host republicó el 2026-08-06
+         y su raíz pasó a responder un 302 con caché de solo 4h, así que cada navegador
+         lo re-pedía 6 veces al día. Si ese pedido no llegaba (proxy corporativo, red
+         lenta, bloqueador), Tailwind no generaba NADA de CSS y la página se veía en
+         crudo: logo e íconos a tamaño nativo, menú suelto. Además Tailwind ya no
+         documenta esa dirección. Sirviéndolo desde acá viaja por la misma conexión
+         que ya trajo la página: si el usuario ve la app, ve el diseño. -->
+    <script src="{% static 'vendor/tailwind-3.4.17.min.js' %}"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -29,20 +36,25 @@
         }
     </script>
 
-    <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
-    <script src="https://unpkg.com/htmx.org@2.0.0/dist/ext/loading-states.js"></script>
+    <!-- HTMX — servido localmente (#206).
+         Ojo: la extensión loading-states venía apuntando a
+         unpkg.com/htmx.org@2.0.0/dist/ext/loading-states.js, que responde 404 —
+         en htmx 2.x las extensiones salieron del paquete principal. Nunca cargó.
+         Se reemplaza por el paquete correcto (htmx-ext-loading-states). -->
+    <script src="{% static 'vendor/htmx-2.0.0.min.js' %}"></script>
+    <script src="{% static 'vendor/htmx-ext-loading-states-2.0.1.js' %}"></script>
 
     <!-- TomSelect (vanilla, sin jQuery — consistente con el stack Tailwind+HTMX+Alpine).
          #155: buscador en los <select> marcados con la clase `js-tomselect`. UN SOLO
          init global aquí (NO inits por template: un 2do init conflictúa y deja el
          widget sin control — memoria contexto_select2_base_html_jsselect2). -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <link rel="stylesheet" href="{% static 'vendor/tom-select-2.3.1.min.css' %}">
+    <script src="{% static 'vendor/tom-select-2.3.1.complete.min.js' %}"></script>
 
-    <!-- Alpine.js with Collapse plugin -->
-    <script defer src="https://unpkg.com/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Alpine.js with Collapse plugin — servido localmente (#206).
+         Antes venía de unpkg con el rango 3.x.x (versión no fijada). -->
+    <script defer src="{% static 'vendor/alpinejs-collapse-3.min.js' %}"></script>
+    <script defer src="{% static 'vendor/alpinejs-3.min.js' %}"></script>
 
     <!-- Custom styles -->
     <style>
