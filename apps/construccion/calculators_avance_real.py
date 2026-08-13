@@ -823,3 +823,20 @@ def avance_general(proyecto) -> dict:
         global_pct = sum(f['pct'] for f in fases_out) / len(fases_out) if fases_out else 0.0
 
     return {'fases': fases_out, 'global_pct': round(global_pct, 2)}
+
+
+def avance_modulos(proyecto) -> dict:
+    """Porcentajes reales de los tres módulos mostrados en el dashboard.
+
+    Mantiene un único origen de cálculo para las tarjetas consolidadas y para
+    ``avance_general``. Las fases sin torres o sin registros devuelven 0.0 por
+    contrato, por lo que el dashboard puede renderizar proyectos nuevos sin
+    excepciones ni valores ``None``.
+    """
+    por_seccion = {fase['seccion']: fase['pct']
+                   for fase in avance_general(proyecto)['fases']}
+    return {
+        'obra_civil': por_seccion.get('OBRA_CIVIL', 0.0),
+        'montaje': por_seccion.get('MONTAJE', 0.0),
+        'tendido': por_seccion.get('TENDIDO', 0.0),
+    }

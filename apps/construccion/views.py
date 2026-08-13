@@ -69,6 +69,7 @@ from .models import (
     HochiminhMarcacionReplanteo,
     cruzar_preliminares,
 )
+from . import calculators_avance_real as calculators_avance_real
 
 
 class ProyectoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
@@ -960,10 +961,15 @@ class DashboardAvanceView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         torres = list(proyecto.torres.all())
         ctx['proyecto'] = proyecto
         ctx['active_tab'] = 'dashboard_avance'
-        ctx['avance_civil_ponderado'] = proyecto.porcentaje_avance_civil_ponderado
+        # #204: las tarjetas deben leer el mismo backbone real que los
+        # dashboards individuales; las propiedades legacy dependen de
+        # relaciones/cache que pueden estar vacías aunque exista oc_detalle,
+        # montaje_detalle o tendido_torre en datos legacy.
+        avance_modulos = calculators_avance_real.avance_modulos(proyecto)
+        ctx['avance_civil_ponderado'] = avance_modulos['obra_civil']
         ctx['avance_civil_lineal'] = proyecto.porcentaje_avance_civil
-        ctx['avance_montaje'] = proyecto.porcentaje_avance_montaje
-        ctx['avance_tendido'] = proyecto.porcentaje_avance_tendido
+        ctx['avance_montaje'] = avance_modulos['montaje']
+        ctx['avance_tendido'] = avance_modulos['tendido']
         ctx['curva_s'] = proyecto.curva_s_data()
         ctx['total_torres'] = len(torres)
         ctx['torres_lista_montaje'] = sum(1 for t in torres if t.obra_civil_completa)
