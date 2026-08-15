@@ -32,7 +32,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
-from apps.core.mixins import RoleRequiredMixin
+from apps.core.mixins import NivelAdminRequiredMixin, RoleRequiredMixin
 from apps.core.permissions import AREA_MANTENIMIENTO
 
 from .models import Cuadrilla, CuadrillaMiembro, NovedadPersonalSemana, PersonalCuadrilla, Vehiculo
@@ -1204,7 +1204,7 @@ class ProgramacionSemanalExportarHorizontalView(LoginRequiredMixin, RoleRequired
         return resp
 
 
-class ProgramacionSemanalExportarRangoView(LoginRequiredMixin, RoleRequiredMixin, View):
+class ProgramacionSemanalExportarRangoView(LoginRequiredMixin, NivelAdminRequiredMixin, View):
     """GET /cuadrillas/semanal/exportar-rango/?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
     (issue #211).
 
@@ -1213,8 +1213,6 @@ class ProgramacionSemanalExportarRangoView(LoginRequiredMixin, RoleRequiredMixin
     pertenezca cada una -- reemplaza el flujo de exportar semana por semana
     (``ProgramacionSemanalExportarHorizontalView``) cuando el rango pedido
     cruza 2+ semanas ISO."""
-
-    allowed_roles = ROLES_CUADRILLAS
 
     def get(self, request):
         from apps.actividades.exporters import ProgramacionSemanalHorizontalExporter
