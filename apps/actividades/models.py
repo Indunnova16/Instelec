@@ -234,7 +234,7 @@ class Actividad(BaseModel):
     # SAP Integration
     aviso_sap = models.CharField(
         'Número Aviso SAP',
-        max_length=20,
+        max_length=50,
         blank=True,
         help_text='Número de aviso en el sistema SAP de Transelca'
     )
