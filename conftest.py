@@ -36,8 +36,33 @@ def django_db_setup(django_db_setup, django_db_blocker):
     """
     with django_db_blocker.unblock():
         from apps.core.rbac_seed_data import seed_roles_permisos_bd
+        from apps.cuadrillas.models import Cargo
 
         seed_roles_permisos_bd()
+        # `--nomigrations` omits the data migration 0019 that creates the
+        # Cargo catalog.  Keep the test database equivalent to an installed
+        # database so tests outside apps/cuadrillas can create crew members.
+        cargos = {
+            "SUPERVISOR": "Supervisor",
+            "LINIERO_I": "Liniero I",
+            "LINIERO_II": "Liniero II",
+            "AYUDANTE": "Ayudante",
+            "CONDUCTOR": "Conductor",
+            "ADMINISTRADOR_OBRA": "Administrador de Obra",
+            "PROFESIONAL_SST": "Profesional SST",
+            "ING_RESIDENTE": "Ingeniero Residente",
+            "SERVICIO_GENERAL": "Servicio General",
+            "ALMACENISTA": "Almacenista",
+            "SUPERVISOR_FOREST": "Supervisor Forestal",
+            "ASISTENTE_FOREST": "Asistente Forestal",
+            "MALACATERO": "Malacatero",
+            "COORDINADOR_HSQ": "Coordinador HSQ",
+        }
+        for codigo, nombre in cargos.items():
+            Cargo.objects.get_or_create(
+                codigo=codigo,
+                defaults={"nombre": nombre, "activo": True},
+            )
 
 
 # ==============================================================================

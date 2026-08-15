@@ -52,3 +52,11 @@ class TestProgramacionBusquedaGlobal:
         assert response.status_code == 200
         assert not list(response.context["actividades"])
         assert "No hay avisos" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_catalogo_cargo_global_incluye_supervisor_bajo_nomigrations():
+    """La fixture global reproduce el seed 0019 para tests fuera de cuadrillas."""
+    from apps.cuadrillas.models import Cargo
+
+    assert Cargo.objects.filter(codigo="SUPERVISOR", activo=True).exists()
