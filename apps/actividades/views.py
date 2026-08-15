@@ -531,12 +531,34 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
                     f"Importación exitosa: {resultado['actividades_creadas']} actividades creadas, "
                     f"{resultado['actividades_actualizadas']} actualizadas."
                 )
+                meses_tocados = sorted(resultado.get('meses_tocados') or [])
+                if meses_tocados:
+                    etiquetas = [
+                        f"{self.NOMBRES_MES.get(mes_t, mes_t)} {anio_t}"
+                        for anio_t, mes_t in meses_tocados
+                    ]
+                    mensaje += f" Quedaron programadas para: {', '.join(etiquetas)}."
                 if resultado.get('advertencias'):
-                    mensaje += f" {len(resultado['advertencias'])} advertencias."
+                    mensaje += f" {len(resultado['advertencias'])} advertencias (detalle abajo)."
                 messages.success(request, mensaje)
+                if resultado.get('advertencias'):
+                    messages.warning(
+                        request, self._resumen_advertencias(resultado['advertencias'])
+                    )
+                if resultado.get('errores'):
+                    for error_fila in resultado['errores']:
+                        messages.error(
+                            request,
+                            f"Error procesando fila {error_fila.get('fila', '?')}: "
+                            f"{error_fila.get('error', 'desconocido')}",
+                        )
             else:
                 messages.error(request, f"Error en importación: {resultado.get('error', 'Error desconocido')}")
 
+            if resultado['exito'] and len(meses_tocados) == 1:
+                anio_dest, mes_dest = meses_tocados[0]
+                url = f"{reverse('actividades:programacion')}?mes={mes_dest}&anio={anio_dest}"
+                return redirect(url)
             return redirect('actividades:programacion')
 
         try:

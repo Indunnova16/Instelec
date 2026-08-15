@@ -43,8 +43,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from openpyxl import Workbook
 
-from apps.actividades.importers import ProgramacionSemanalImporter
-from apps.actividades.models import Actividad
+from apps.actividades.importers import AvisosTranselcaImporter, ProgramacionSemanalImporter
+from apps.actividades.models import Actividad, TipoActividad
 from apps.actividades.views import ImportarProgramacionView
 from apps.lineas.models import Linea, Torre
 
@@ -104,6 +104,26 @@ def _build_xlsx(sheet_name, filas, hoja_banner='Fecha de envio: hoy'):
 
 def _uploaded_file(nombre, contenido):
     return SimpleUploadedFile(nombre, contenido, content_type=XLSX_CONTENT_TYPE)
+
+
+def _build_xlsx_mensual(filas):
+    """Layout de la plantilla mensual real: hoja no numérica y fecha por fila."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Programación'
+    ws.append(['Aviso SAP', 'Línea', 'Torre', 'TipoActividad', 'Fecha'])
+    for fila in filas:
+        ws.append(fila)
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
+def _crear_tipo_termografia():
+    return TipoActividad.objects.create(
+        codigo='TERM-200', nombre='Termografía', categoria='TERMOGRAFIA', activo=True,
+    )
 
 
 # ============================================================================
@@ -175,6 +195,56 @@ class TestImporterExponeMesesTocados:
             _uploaded_file('prog.xlsx', contenido), opciones={}
         )
         assert resultado['meses_tocados'] == [(2026, 9), (2026, 10)]
+
+
+@pytest.mark.django_db
+class TestPlantillaMensualIssue200:
+    """Regresión del reproceso: esta plantilla cae en AvisosTranselcaImporter,
+    no en la rama semanal que ya había sido corregida."""
+
+    def test_preserva_tipo_torre_fecha_y_mes_real_por_fila(self):
+        linea = _crear_linea('LN839', con_torres=False)
+        Torre.objects.create(
+            linea=linea, numero='T-025', tipo=Torre.TipoTorre.SUSPENSION,
+            latitud=Decimal('10.0'), longitud=Decimal('-75.0'),
+        )
+        Torre.objects.create(
+            linea=linea, numero='T-026', tipo=Torre.TipoTorre.SUSPENSION,
+            latitud=Decimal('10.1'), longitud=Decimal('-75.1'),
+        )
+        _crear_tipo_termografia()
+        contenido = _build_xlsx_mensual([
+            ['QA_E2E_200_A', 'LN839', 'T025', 'Termografía', date(2030, 11, 15)],
+            ['QA_E2E_200_B', 'LN839', 'T026', 'Termografía', date(2030, 11, 16)],
+        ])
+
+        resultado = AvisosTranselcaImporter().importar(_uploaded_file('mensual.xlsx', contenido))
+
+        assert resultado['exito'] is True
+        assert resultado['actividades_creadas'] == 2
+        assert resultado['meses_tocados'] == [(2030, 11)]
+        actividad = Actividad.objects.get(aviso_sap='QA_E2E_200_A')
+        assert actividad.torre.numero == 'T-025'
+        assert actividad.tipo_actividad.categoria == 'TERMOGRAFIA'
+        assert actividad.fecha_programada == date(2030, 11, 15)
+
+    def test_post_mensual_redirige_y_muestra_advertencia_con_fila(self, authenticated_client):
+        linea = _crear_linea('LN839')
+        _crear_tipo_termografia()
+        contenido = _build_xlsx_mensual([
+            ['QA_E2E_200_C', linea.codigo, 'T-001', 'Termografía', date(2030, 11, 15)],
+            ['QA_E2E_200_D', linea.codigo, 'INEXISTENTE', 'Termografía', date(2030, 11, 16)],
+        ])
+
+        response = authenticated_client.post(
+            reverse('actividades:importar'),
+            {'archivo': _uploaded_file('mensual.xlsx', contenido)},
+        )
+
+        assert response.url == f"{reverse('actividades:programacion')}?mes=11&anio=2030"
+        mensajes = ' '.join(m.message for m in get_messages(response.wsgi_request))
+        assert 'Torre no encontrada' in mensajes
+        assert 'fila 3' in mensajes
 
 
 # ============================================================================

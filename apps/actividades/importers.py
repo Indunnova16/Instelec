@@ -2,7 +2,7 @@
 Importers for activity programming from Excel files.
 """
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.db import transaction
@@ -404,11 +404,12 @@ class AvisosTranselcaImporter:
         'pt_sap': ['pt sap', 'pt', 'puesto trabajo', 'puesto de trabajo'],
         'centro_empl': ['centro empl', 'centro empl.', 'centro emplazamiento', 'ce'],
         'contratista': ['contratista', 'ejecutor', 'outsourcing', 'empresa'],
-        'torre_inicio': ['torre inicio', 'desde', 'torre desde'],
+        'torre_inicio': ['torre inicio', 'torre', 'desde', 'torre desde'],
         'torre_fin': ['torre fin', 'hasta', 'torre hasta'],
         'descripcion': ['descripcion', 'descripción', 'descripcion actividad'],
         'anio': ['año', 'año fin prioridad', 'ano', 'year'],
         'mes': ['mes', 'mes ejecucion', 'mes\nejecu', 'month'],
+        'fecha': ['fecha', 'fecha programada', 'fecha ejecución', 'fecha ejecucion'],
     }
 
     def __init__(self):
@@ -418,6 +419,7 @@ class AvisosTranselcaImporter:
         self.actividades_actualizadas = []
         self.actividades_omitidas = []
         self.column_indices = {}
+        self.programaciones_tocadas = set()
 
     def importar(self, archivo_excel, anio: int = None, mes: int = None, opciones=None):
         """
@@ -505,6 +507,18 @@ class AvisosTranselcaImporter:
                     logger.warning(f"Error processing row {row_num}: {e}")
                     self.errores.append({'fila': row_num, 'error': str(e)})
 
+        from .models import Actividad, ProgramacionMensual
+        for anio_tocado, mes_tocado, linea_id in self.programaciones_tocadas:
+            ProgramacionMensual.objects.filter(
+                anio=anio_tocado, mes=mes_tocado, linea_id=linea_id,
+            ).update(
+                total_actividades=Actividad.objects.filter(
+                    programacion__anio=anio_tocado,
+                    programacion__mes=mes_tocado,
+                    programacion__linea_id=linea_id,
+                ).count()
+            )
+
         return {
             'exito': True,
             'actividades_creadas': len(self.actividades_creadas),
@@ -513,6 +527,7 @@ class AvisosTranselcaImporter:
             'errores': self.errores,
             'advertencias': self.advertencias,
             'columnas_detectadas': list(self.column_indices.keys()),
+            'meses_tocados': sorted({(a, m) for a, m, _ in self.programaciones_tocadas}),
         }
 
     def _detectar_columnas(self, header_row):
@@ -572,6 +587,29 @@ class AvisosTranselcaImporter:
             return None
         tipo_lower = str(tipo_str).lower().strip()
         return self.CATEGORIA_MAPPING.get(tipo_lower)
+
+    def _fecha_por_fila(self, row, row_num, anio, mes):
+        """Prioriza la fecha explícita de la plantilla mensual sobre el mes del formulario."""
+        valor = self._get_cell(row, 'fecha')
+        if isinstance(valor, datetime):
+            return valor.date()
+        if isinstance(valor, date):
+            return valor
+        if valor:
+            for formato in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y'):
+                try:
+                    return datetime.strptime(str(valor).strip(), formato).date()
+                except ValueError:
+                    continue
+            self.advertencias.append({
+                'fila': row_num,
+                'mensaje': f'Fecha inválida "{valor}"; se usará el primer día del mes',
+            })
+        return date(anio, mes, 1)
+
+    @staticmethod
+    def _normalizar_torre(valor):
+        return ''.join(c for c in str(valor or '').upper() if c.isalnum())
 
     def _procesar_fila(self, row, row_num, anio, mes, lineas_cache, tipos_cache,
                        tipos_nombre_cache, actualizar_existentes, crear_lineas):
@@ -642,6 +680,9 @@ class AvisosTranselcaImporter:
             })
             return 'omitida'
 
+        fecha_programada = self._fecha_por_fila(row, row_num, anio, mes)
+        anio, mes = fecha_programada.year, fecha_programada.month
+
         # Buscar o crear programación mensual
         programacion, _ = ProgramacionMensual.objects.get_or_create(
             anio=anio,
@@ -650,8 +691,28 @@ class AvisosTranselcaImporter:
             defaults={'total_actividades': 0}
         )
 
-        # Buscar torre por defecto (primera de la línea)
+        torre_excel = self._get_cell(row, 'torre_inicio')
         torre = linea.torres.first()
+        if torre_excel:
+            torre_normalizada = self._normalizar_torre(torre_excel)
+            torre = next(
+                (torre_obj for torre_obj in linea.torres.all()
+                 if self._normalizar_torre(torre_obj.numero) == torre_normalizada),
+                None,
+            )
+            if not torre:
+                self.advertencias.append({
+                    'fila': row_num,
+                    'mensaje': f'Torre no encontrada en {linea.codigo}: {torre_excel}',
+                })
+                return 'omitida'
+
+        if not torre:
+            self.advertencias.append({
+                'fila': row_num,
+                'mensaje': f'Línea {linea.codigo} no tiene torres configuradas',
+            })
+            return 'omitida'
 
         # Verificar si existe
         try:
@@ -661,9 +722,12 @@ class AvisosTranselcaImporter:
                 actividad.tipo_actividad = tipo_actividad
                 actividad.pt_sap = str(pt_sap).strip() if pt_sap else ''
                 actividad.programacion = programacion
+                actividad.torre = torre
+                actividad.fecha_programada = fecha_programada
                 if descripcion:
                     actividad.observaciones_programacion = str(descripcion)
                 actividad.save()
+                self.programaciones_tocadas.add((anio, mes, linea.id))
                 return 'actualizada'
             return 'omitida'
         except Actividad.DoesNotExist:
@@ -677,12 +741,13 @@ class AvisosTranselcaImporter:
             programacion=programacion,
             aviso_sap=aviso_sap,
             pt_sap=str(pt_sap).strip() if pt_sap else '',
-            fecha_programada=date(anio, mes, 1),
+            fecha_programada=fecha_programada,
             estado=Actividad.Estado.PENDIENTE,
             prioridad=Actividad.Prioridad.NORMAL,
             observaciones_programacion=str(descripcion) if descripcion else '',
         )
 
+        self.programaciones_tocadas.add((anio, mes, linea.id))
         return 'creada'
 
 
