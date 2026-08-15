@@ -244,7 +244,7 @@ class TestPlantillaMensualIssue200:
         assert response.url == f"{reverse('actividades:programacion')}?mes=11&anio=2030"
         mensajes = ' '.join(m.message for m in get_messages(response.wsgi_request))
         assert 'Torre no encontrada' in mensajes
-        assert 'fila 3' in mensajes
+        assert 'fila 3' in mensajes.lower()
 
 
 # ============================================================================

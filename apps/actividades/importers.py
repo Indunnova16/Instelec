@@ -399,7 +399,7 @@ class AvisosTranselcaImporter:
     COLUMN_MAPPINGS = {
         'linea': ['linea', 'línea', 'line', 'codigo_linea'],
         'circuito': ['circuito', 'cto', 'circuit'],
-        'tipo': ['tipo', 'tipo actividad', 'actividad', 'categoria'],
+        'tipo': ['tipo', 'tipo actividad', 'tipoactividad', 'actividad', 'categoria'],
         'aviso': ['aviso', 'aviso sap', 'nro aviso', 'no. aviso'],
         'pt_sap': ['pt sap', 'pt', 'puesto trabajo', 'puesto de trabajo'],
         'centro_empl': ['centro empl', 'centro empl.', 'centro emplazamiento', 'ce'],

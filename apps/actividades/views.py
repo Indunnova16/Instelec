@@ -371,6 +371,8 @@ class ImportarProgramacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
                 lineas.append(f"Hoja {hoja}, fila {fila}: {mensaje}")
             elif hoja:
                 lineas.append(f"Hoja {hoja}: {mensaje}")
+            elif fila is not None:
+                lineas.append(f"Fila {fila}: {mensaje}")
             else:
                 lineas.append(mensaje)
         restantes = len(advertencias) - len(lineas)
