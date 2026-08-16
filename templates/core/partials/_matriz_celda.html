@@ -6,7 +6,9 @@ sola por RoleModuloPermisoCeldaView tras un guardado HTMX (hx-swap=outerHTML).{%
         hx-trigger="change"
         hx-swap="outerHTML"
         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-        class="text-xs rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white py-1 w-full">
+        aria-label="Nivel de acceso de {{ role.nombre }} para {{ columna }}"
+        data-access-level="{{ nivel_actual }}"
+        class="text-xs rounded border py-1 w-full transition-colors focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-gray-800 {% if nivel_actual == 'sin_acceso' %}border-gray-300 bg-gray-100 text-gray-600 focus:border-gray-500 focus:ring-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300{% elif nivel_actual == 'ver' %}border-blue-300 bg-blue-50 text-blue-800 focus:border-blue-500 focus:ring-blue-400 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200{% else %}border-emerald-300 bg-emerald-50 text-emerald-800 focus:border-emerald-500 focus:ring-emerald-400 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200{% endif %}">
     {% for value, label in nivel_choices %}
     <option value="{{ value }}" {% if value == nivel_actual %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
