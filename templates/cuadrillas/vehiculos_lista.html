@@ -6,7 +6,7 @@
 <div class="max-w-7xl mx-auto space-y-6">
     <div class="flex flex-col sm:flex-row justify-between gap-4 sm:items-center">
         <div><h1 class="text-2xl font-bold text-gray-900 dark:text-white">Vehículos</h1><p class="text-gray-600 dark:text-gray-400">Catálogo operativo para Construcción y Mantenimiento.</p></div>
-        {% if request.user.rol in 'admin director coordinador' or request.user.is_superuser %}<a href="{% url 'core:vehiculos_crear' %}" class="inline-flex justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Crear vehículo</a>{% endif %}
+        {% if request.user.rol in 'admin director coordinador' or request.user.is_superuser %}<div class="flex gap-2"><a href="{% url 'core:vehiculos_exportar' %}" class="inline-flex justify-center px-4 py-2 bg-gray-200 rounded-lg">Exportar</a><a href="{% url 'core:vehiculos_importar' %}" class="inline-flex justify-center px-4 py-2 bg-gray-200 rounded-lg">Importar</a><a href="{% url 'core:vehiculos_crear' %}" class="inline-flex justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Crear vehículo</a></div>{% endif %}
     </div>
     <form method="get" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" aria-label="Filtros de vehículos">
         <div><label for="placa" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Buscar placa</label><input id="placa" name="placa" value="{{ placa }}" class="mt-1 w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:text-white" placeholder="Ej. ABC123"></div>

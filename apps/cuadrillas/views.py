@@ -163,6 +163,52 @@ class VehiculoDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
         return redirect('core:vehiculos_lista')
 
 
+class VehiculoExcelBase(LoginRequiredMixin, RoleRequiredMixin):
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+
+class VehiculoExportView(VehiculoExcelBase, View):
+    def get(self, request, *args, **kwargs):
+        from openpyxl import Workbook
+        from .vehiculo_excel import VEHICULO_HEADERS
+        workbook, sheet = Workbook(), None
+        sheet = workbook.active
+        sheet.title = 'Vehículos'
+        sheet.append(VEHICULO_HEADERS)
+        for vehiculo in Vehiculo.objects.order_by('placa'):
+            sheet.append([vehiculo.placa, vehiculo.marca, vehiculo.tipo, vehiculo.descripcion, vehiculo.estado, vehiculo.modelo, vehiculo.ano, vehiculo.capacidad_personas, vehiculo.costo_dia, vehiculo.observaciones])
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename=vehiculos.xlsx'
+        workbook.save(response)
+        return response
+
+
+class VehiculoPlantillaView(VehiculoExcelBase, View):
+    def get(self, request, *args, **kwargs):
+        from openpyxl import Workbook
+        from .vehiculo_excel import VEHICULO_HEADERS
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = 'Vehículos'
+        sheet.append(VEHICULO_HEADERS)
+        sheet.append(['ABC123', 'Toyota', 'CAMIONETA', 'Vehículo de operación', 'ACTIVO', 'Hilux', 2024, 5, 120000, ''])
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename=plantilla_vehiculos.xlsx'
+        workbook.save(response)
+        return response
+
+
+class VehiculoImportView(VehiculoExcelBase, TemplateView):
+    template_name = 'cuadrillas/vehiculos_importar.html'
+
+    def post(self, request, *args, **kwargs):
+        from .vehiculo_excel import VehiculoExcelImporter
+        archivo = request.FILES.get('archivo')
+        if not archivo or not archivo.name.lower().endswith('.xlsx'):
+            return self.render_to_response({'resultado': {'exito': False, 'creados': 0, 'errores': [{'fila': 0, 'mensaje': 'Seleccione un archivo .xlsx.'}]}})
+        return self.render_to_response({'resultado': VehiculoExcelImporter().importar(archivo)})
+
+
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):
     """List all crews, organized by week."""
     model = Cuadrilla

@@ -3,6 +3,9 @@
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
+from io import BytesIO
+
+from openpyxl import Workbook, load_workbook
 
 from apps.cuadrillas.models import Cuadrilla, Vehiculo
 
@@ -248,3 +251,65 @@ class TestVehiculoMigrationLegacy(TestCase):
             Vehiculo.objects.get(pk=vehiculo_inactivo.pk).estado,
             Vehiculo.Estado.INACTIVO,
         )
+
+
+class TestVehiculoExcelAtomico(TestCase):
+    """A5: plantilla/exportación y carga validada completamente antes de persistir."""
+
+    headers = ["PLACA", "MARCA", "TIPO", "DESCRIPCION", "ESTADO", "MODELO", "ANO", "CAPACIDAD_PERSONAS", "COSTO_DIA", "OBSERVACIONES"]
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(_usuario_226('excel_admin_226@test.com'))
+
+    def _archivo(self, *filas):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(self.headers)
+        for fila in filas:
+            sheet.append(fila)
+        contenido = BytesIO()
+        workbook.save(contenido)
+        contenido.seek(0)
+        contenido.name = 'vehiculos.xlsx'
+        return contenido
+
+    def _fila_valida(self, placa='IMP-226-01', **cambios):
+        valores = {'PLACA': placa, 'MARCA': 'Toyota', 'TIPO': 'CAMIONETA', 'DESCRIPCION': 'QA legacy', 'ESTADO': 'ACTIVO', 'MODELO': 'Hilux', 'ANO': 2024, 'CAPACIDAD_PERSONAS': 5, 'COSTO_DIA': 100000, 'OBSERVACIONES': ''}
+        valores.update(cambios)
+        return [valores[header] for header in self.headers]
+
+    def test_plantilla_y_exportacion_conservan_cabeceras(self):
+        Vehiculo.objects.create(placa='LEG-226-EXCEL', marca='Legacy')
+        plantilla = self.client.get(reverse('core:vehiculos_plantilla'))
+        exportacion = self.client.get(reverse('core:vehiculos_exportar'))
+        self.assertEqual(list(load_workbook(BytesIO(plantilla.content)).active.values)[0], tuple(self.headers))
+        filas = list(load_workbook(BytesIO(exportacion.content)).active.values)
+        self.assertEqual(filas[0], tuple(self.headers))
+        self.assertEqual(filas[1][0], 'LEG-226-EXCEL')
+
+    def test_importacion_valida_crea_y_sincroniza_estado_legacy(self):
+        respuesta = self.client.post(reverse('core:vehiculos_importar'), {'archivo': self._archivo(self._fila_valida(ESTADO='EN_MANTENIMIENTO'))})
+        self.assertContains(respuesta, 'Importación exitosa')
+        vehiculo = Vehiculo.objects.get(placa='IMP-226-01')
+        self.assertEqual(vehiculo.estado, Vehiculo.Estado.EN_MANTENIMIENTO)
+        self.assertFalse(vehiculo.activo)
+
+    def test_duplicado_requerido_y_choices_invalidos_revierten_lote_completo(self):
+        Vehiculo.objects.create(placa='EXISTE-226', marca='Nissan')
+        respuesta = self.client.post(reverse('core:vehiculos_importar'), {'archivo': self._archivo(
+            self._fila_valida('NUEVO-226'),
+            self._fila_valida('EXISTE-226'),
+            self._fila_valida('', MARCA='', TIPO='BARCO', ESTADO='DAÑADO'),
+        )})
+        self.assertContains(respuesta, 'La importación no realizó cambios')
+        self.assertContains(respuesta, 'ya existe')
+        self.assertContains(respuesta, 'La placa es obligatoria')
+        self.assertContains(respuesta, 'no es válido')
+        self.assertFalse(Vehiculo.objects.filter(placa='NUEVO-226').exists())
+
+    def test_usuario_no_autorizado_no_importa(self):
+        self.client.force_login(_usuario_226('excel_supervisor_226@test.com', rol='supervisor'))
+        respuesta = self.client.post(reverse('core:vehiculos_importar'), {'archivo': self._archivo(self._fila_valida())})
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertFalse(Vehiculo.objects.filter(placa='IMP-226-01').exists())

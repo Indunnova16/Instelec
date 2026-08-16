@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Importar vehículos{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <div><h1 class="text-2xl font-bold text-gray-900 dark:text-white">Importar vehículos</h1><p class="text-gray-600 dark:text-gray-400">Se validan todas las filas antes de crear cualquier vehículo.</p></div>
+  <div class="flex gap-3"><a href="{% url 'core:vehiculos_plantilla' %}" class="px-4 py-2 bg-gray-200 rounded-lg">Descargar plantilla</a><a href="{% url 'core:vehiculos_exportar' %}" class="px-4 py-2 bg-gray-200 rounded-lg">Exportar catálogo</a></div>
+  <form method="post" enctype="multipart/form-data" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">{% csrf_token %}<label for="archivo" class="block font-medium">Archivo Excel (.xlsx)</label><input id="archivo" name="archivo" type="file" accept=".xlsx" required class="block w-full"><button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-lg">Importar vehículos</button></form>
+  {% if resultado %}{% if resultado.exito %}<div class="p-4 bg-green-50 text-green-900 rounded-lg" role="status">Importación exitosa: {{ resultado.creados }} vehículo{{ resultado.creados|pluralize }} creado{{ resultado.creados|pluralize }}.</div>{% else %}<div class="p-4 bg-red-50 text-red-900 rounded-lg" role="alert"><h2 class="font-semibold">La importación no realizó cambios</h2><ul class="mt-2 list-disc pl-5">{% for error in resultado.errores %}<li>Fila {{ error.fila }}: {{ error.mensaje }}</li>{% endfor %}</ul></div>{% endif %}{% endif %}
+</div>
+{% endblock %}

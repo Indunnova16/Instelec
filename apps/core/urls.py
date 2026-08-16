@@ -29,6 +29,9 @@ urlpatterns = [
     # se expone al usuario bajo Parametrización (issue #226, A2).
     path('parametrizacion/vehiculos/', cuadrillas_views.VehiculoEntryView.as_view(), name='vehiculos_lista'),
     path('parametrizacion/vehiculos/crear/', cuadrillas_views.VehiculoCreateView.as_view(), name='vehiculos_crear'),
+    path('parametrizacion/vehiculos/exportar/', cuadrillas_views.VehiculoExportView.as_view(), name='vehiculos_exportar'),
+    path('parametrizacion/vehiculos/plantilla/', cuadrillas_views.VehiculoPlantillaView.as_view(), name='vehiculos_plantilla'),
+    path('parametrizacion/vehiculos/importar/', cuadrillas_views.VehiculoImportView.as_view(), name='vehiculos_importar'),
     path('parametrizacion/vehiculos/<uuid:pk>/', cuadrillas_views.VehiculoDetailView.as_view(), name='vehiculos_detalle'),
     path('parametrizacion/vehiculos/<uuid:pk>/editar/', cuadrillas_views.VehiculoEditView.as_view(), name='vehiculos_editar'),
     path('parametrizacion/vehiculos/<uuid:pk>/estado/', cuadrillas_views.VehiculoEstadoView.as_view(), name='vehiculos_estado'),
