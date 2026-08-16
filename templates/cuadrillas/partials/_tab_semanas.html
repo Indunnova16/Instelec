@@ -136,9 +136,21 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
     {% endif %}
 
     <!-- Nuevo bloque (issue #188, A2) -->
-    <div x-data="{ creando: false }">
+    {% comment %}
+    Issue #223 (A1): #id_tramo_libre/#id_fecha_inicio/etc. NO llevan sufijo
+    por bloque (mismo id en el form de crear y en el de editar -- ver
+    _bloque_form.html). Si el form "Nueva cuadrilla" queda abierto (por
+    diseño, se resetea tras crear para agregar varias seguidas) y el
+    usuario abre "Editar" en una card, quedan DOS elementos con el mismo
+    id montados a la vez -- fill()/value por id pega en el primero del
+    DOM (el de crear, vacío), no en el de editar, y la edición se pierde
+    en silencio (encontrado por F5 canary, prod intacto). Se cierran uno
+    a otro por evento window para garantizar que solo UN _bloque_form.html
+    esté montado a la vez, sin tocar los ids que ya usan journeys #188.
+    {% endcomment %}
+    <div x-data="{ creando: false }" @cerrar-form-crear.window="creando = false">
         <button type="button" id="btn-nuevo-bloque" data-action="nuevo-bloque"
-                @click="creando = !creando; if (creando) { $nextTick(() => { window.initTomSelect && window.initTomSelect(document) }) }"
+                @click="if (!creando) { document.body.dispatchEvent(new CustomEvent('cerrar-form-editar', {bubbles: true})) }; creando = !creando; if (creando) { $nextTick(() => { window.initTomSelect && window.initTomSelect(document) }) }"
                 class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm flex items-center gap-2"
                 aria-label="Agregar nueva cuadrilla a la semana">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

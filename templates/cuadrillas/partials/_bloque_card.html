@@ -18,6 +18,7 @@ montado a la vez). Recibe:
 {% url 'cuadrillas:semanal_miembro_agregar' pk=b.id as url_agregar_personal %}
 <div data-bloque-codigo="{{ b.codigo }}"
      x-data="{ editando: {{ editando_inicial|yesno:'true,false' }}, agregando: {{ agregar_state.open|yesno:'true,false' }}, reprogramando: {{ reprogramar_state.open|yesno:'true,false' }} }"
+     @cerrar-form-editar.window="editando = false"
      class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
 
     <template x-if="editando">
@@ -45,7 +46,7 @@ montado a la vez). Recibe:
                     {% if b.tramo_libre %}<span class="px-2 py-1 text-xs rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">Tramo {{ b.tramo_libre }}</span>{% elif b.tramo %}<span class="px-2 py-1 text-xs rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">Tramo {{ b.tramo }}{% if b.tramo_nombre %} - {{ b.tramo_nombre }}{% endif %}</span>{% endif %}
                     {% if b.vehiculo %}<span class="px-2 py-1 text-xs rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">🚚 {{ b.vehiculo }}</span>{% endif %}
                     <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">{{ b.miembros|length }} pers.</span>
-                    <button type="button" data-action="editar-bloque" @click="editando = true; $nextTick(() => { window.initTomSelect && window.initTomSelect(document) })"
+                    <button type="button" data-action="editar-bloque" @click="document.body.dispatchEvent(new CustomEvent('cerrar-form-crear', {bubbles: true})); editando = true; $nextTick(() => { window.initTomSelect && window.initTomSelect(document) })"
                             class="px-2 py-1 text-xs rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800 transition"
                             aria-label="Editar cuadrilla {{ b.codigo }}">
                         ✏️ Editar
