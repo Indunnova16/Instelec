@@ -22,7 +22,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import IntegerField, Q
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.db.models.functions import Cast, Substr
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -86,10 +86,27 @@ def _b3_get_queryset(self):
     # año y semana del código ``WW-YYYY-...`` para que el límite siga siendo
     # correcto al pasar de diciembre a enero; comparar el código como texto
     # produciría falsos positivos (p. ej. 52-2025 > 32-2026).
+    #
+    # Códigos legacy/especiales (``28-Apoyo Sede-011``, ``28-Avisos SC-010``,
+    # ``NN-ACTIVIDAD-00#``) NO siguen el formato ``WW-YYYY-...`` — castear su
+    # substring a INTEGER revienta la query completa con un error SQL real
+    # (500 en /cuadrillas/, no un 0 resultados). ``Case/When`` con Postgres
+    # NO evalúa la rama no tomada (mismo mecanismo que evita división por
+    # cero en SQL) — los códigos malformados nunca llegan al Cast y quedan
+    # con año=9999 (siempre "futuro", visibles por default en vez de ocultos).
     iso_hoy = timezone.localdate().isocalendar()
+    formato_semana_valido = Q(codigo__regex=r'^\d{2}-\d{4}-')
     qs = qs.annotate(
-        _b3_semana_iso=Cast(Substr("codigo", 1, 2), IntegerField()),
-        _b3_anio_iso=Cast(Substr("codigo", 4, 4), IntegerField()),
+        _b3_semana_iso=Case(
+            When(formato_semana_valido, then=Cast(Substr("codigo", 1, 2), IntegerField())),
+            default=Value(0),
+            output_field=IntegerField(),
+        ),
+        _b3_anio_iso=Case(
+            When(formato_semana_valido, then=Cast(Substr("codigo", 4, 4), IntegerField())),
+            default=Value(9999),
+            output_field=IntegerField(),
+        ),
     ).filter(
         Q(_b3_anio_iso__gt=iso_hoy.year)
         | Q(_b3_anio_iso=iso_hoy.year, _b3_semana_iso__gte=iso_hoy.week)
