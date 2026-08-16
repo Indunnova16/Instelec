@@ -19,7 +19,7 @@ def _payload(proyecto, **overrides):
     data = {
         'proyecto': str(proyecto.pk),
         'tipo_actividad': 'OBRA_CIVIL',
-        'subactividad': 'Excavación de fundación',
+        'subactividad': 'Excavación',
         'actividad_complementaria': '',
         'fecha_inicio': '2026-08-17',
         'fecha_fin': '2026-08-21',
@@ -38,7 +38,7 @@ def test_tipo_subactividad(admin_user, client, proyecto_psc):
     assert response.status_code == 302
     creada = ProgramacionSemanalConstruccion.objects.get(proyecto=proyecto_psc)
     assert creada.tipo_actividad == 'OBRA_CIVIL'
-    assert creada.subactividad == 'Excavación de fundación'
+    assert creada.subactividad == 'Excavación'
 
 
 @pytest.mark.django_db
