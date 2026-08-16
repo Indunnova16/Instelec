@@ -16,6 +16,7 @@
 <template x-teleport="body">
 <div
     data-testid="vano-estado-modal-root"
+    data-vano-id="{{ vano.id }}"
     x-show="abierto"
     x-cloak
     @click.stop
@@ -182,6 +183,7 @@ function vanoEstadoModal(vanoId) {
                     this.error = data.error || `No se pudo guardar (HTTP ${resp.status}).`;
                 } else {
                     document.body.dispatchEvent(new CustomEvent('vano-actualizado', {
+                        bubbles: true,
                         detail: {
                             vanoId: this.vanoId,
                             estado: data.estado,
