@@ -39,35 +39,138 @@
   </div>
 
   <!-- Curva S -->
-  {% if curva_s %}
+  {% if curva_s_disponible %}
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-    <h2 class="text-lg font-semibold mb-4">Curva S — Planeado acumulado</h2>
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <h2 class="text-lg font-semibold">Curva S — Planeado vs. Ejecutado acumulado</h2>
+      <div class="flex items-center gap-4 text-xs text-gray-600" aria-label="Leyenda de la Curva S">
+        <span class="inline-flex items-center gap-1"><i class="w-3 h-0.5 bg-blue-500"></i>Planeado</span>
+        <span class="inline-flex items-center gap-1"><i class="w-3 h-0.5 bg-emerald-500"></i>Ejecutado</span>
+      </div>
+    </div>
     <canvas id="curvaS" height="80"></canvas>
+    {{ curva_s|json_script:"curva-s-data" }}
   </div>
   <script>
     const ctx = document.getElementById('curvaS').getContext('2d');
+    const curvaS = JSON.parse(document.getElementById('curva-s-data').textContent);
     new Chart(ctx, {
       type: 'line',
       data: {
-        labels: [{% for m in curva_s %}'{{ m.mes }}'{% if not forloop.last %},{% endif %}{% endfor %}],
-        datasets: [{
-          label: 'Planeado %',
-          data: [{% for m in curva_s %}{{ m.planeado|default:0 }}{% if not forloop.last %},{% endif %}{% endfor %}],
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          fill: true, tension: 0.3,
-        }]
+        labels: curvaS.labels,
+        datasets: [
+          {
+            label: 'Planeado %', data: curvaS.planeado,
+            borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: false, tension: 0.3,
+          },
+          {
+            label: 'Ejecutado %', data: curvaS.ejecutado,
+            borderColor: 'rgb(16, 185, 129)', backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            fill: false, tension: 0.3,
+          },
+        ]
       },
       options: {
         responsive: true, scales: { y: { beginAtZero: true, max: 100 } }
       }
     });
   </script>
-  {% else %}
-  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-    Para ver la curva S, primero define el cronograma con fechas de inicio y fin.
+  {% endif %}
+  {% if not curva_s_planeado_disponible %}
+  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800" role="status">
+    Aún no hay cronograma planeado para la Curva S. Define las fechas esperadas de Obra Civil.
     <a href="{% url 'construccion:cronograma' proyecto.id %}" class="font-medium underline">Ir al cronograma →</a>
   </div>
   {% endif %}
+  {% if not curva_s_ejecutado_disponible %}
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800" role="status">
+    Aún no hay avance real finalizado para graficar en la Curva S.
+  </div>
+  {% endif %}
+
+  {% if gantt_consolidado_disponible %}
+  {{ gantt_consolidado|json_script:"gantt-consolidado-data" }}
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" data-block="gantt-consolidado">
+    <h2 class="text-lg font-semibold mb-1">Gantt consolidado por torre</h2>
+    <p class="text-sm text-gray-500 mb-4">
+      Obra Civil, Montaje y Tendido con las fechas reales disponibles. Las torres no aplicables no se incluyen.
+    </p>
+    <div class="max-h-[600px] overflow-auto">
+      <div class="relative" style="height: 520px;">
+        <canvas id="gantt-consolidado-chart"></canvas>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600" role="status">
+    Aún no hay fechas de avance para mostrar el Gantt consolidado.
+  </div>
+  {% endif %}
 </div>
+<script>
+(function () {
+  var DAY_MS = 86400000;
+  function readJSON(id) {
+    var el = document.getElementById(id);
+    if (!el) { return null; }
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  }
+  function toMs(iso) {
+    if (!iso) { return null; }
+    var parts = String(iso).split('-');
+    if (parts.length !== 3) { return null; }
+    return Date.UTC(+parts[0], (+parts[1]) - 1, +parts[2]);
+  }
+  function fmt(ms) {
+    var date = new Date(ms);
+    return date.getUTCFullYear() + '-' + ('0' + (date.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + date.getUTCDate()).slice(-2);
+  }
+  function renderGanttConsolidado() {
+    if (typeof Chart === 'undefined') { return; }
+    var canvas = document.getElementById('gantt-consolidado-chart');
+    var filas = readJSON('gantt-consolidado-data') || [];
+    if (!canvas || !canvas.getContext || !filas.length) { return; }
+    var inicioMinimo = null;
+    filas.forEach(function (fila) {
+      var inicio = toMs(fila.inicio);
+      if (inicio !== null && (inicioMinimo === null || inicio < inicioMinimo)) { inicioMinimo = inicio; }
+    });
+    if (inicioMinimo === null) { return; }
+    var colores = {'Obra Civil': '#10b981', 'Montaje': '#8b5cf6', 'Tendido': '#ec4899'};
+    var wrapper = canvas.parentElement;
+    if (wrapper) { wrapper.style.height = Math.max(520, filas.length * 26) + 'px'; }
+    new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: filas.map(function (fila) { return fila.bloque + ' — ' + fila.torre; }),
+        datasets: [{
+          label: 'Avance por bloque',
+          data: filas.map(function (fila) {
+            var inicio = toMs(fila.inicio);
+            var fin = toMs(fila.final) || toMs(fila.esperada) || inicio;
+            return [(inicio - inicioMinimo) / DAY_MS, (fin - inicioMinimo) / DAY_MS];
+          }),
+          backgroundColor: filas.map(function (fila) { return colores[fila.bloque] || '#64748b'; }),
+          borderSkipped: false,
+          _filas: filas
+        }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { beginAtZero: true, title: {display: true, text: 'Fecha'}, ticks: {callback: function (v) { return fmt(inicioMinimo + v * DAY_MS); }}},
+          y: { ticks: { autoSkip: false } }
+        },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (item) {
+          var fila = (item.dataset._filas || [])[item.dataIndex] || {};
+          return fila.bloque + ' — ' + fila.torre + ': ' + (fila.inicio || '—') + ' → ' + (fila.final || fila.esperada || '—');
+        }}}}
+      }
+    });
+  }
+  if (document.readyState === 'complete') { requestAnimationFrame(renderGanttConsolidado); }
+  else { window.addEventListener('load', function () { requestAnimationFrame(renderGanttConsolidado); }, {once: true}); }
+})();
+</script>
 {% endblock %}

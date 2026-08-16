@@ -69,6 +69,7 @@ from .models import (
     HochiminhMarcacionReplanteo,
     cruzar_preliminares,
 )
+from . import calculators_avance_real as calculators_avance_real
 
 
 class ProyectoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
@@ -960,11 +961,33 @@ class DashboardAvanceView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         torres = list(proyecto.torres.all())
         ctx['proyecto'] = proyecto
         ctx['active_tab'] = 'dashboard_avance'
-        ctx['avance_civil_ponderado'] = proyecto.porcentaje_avance_civil_ponderado
+        # #204: las tarjetas deben leer el mismo backbone real que los
+        # dashboards individuales; las propiedades legacy dependen de
+        # relaciones/cache que pueden estar vacías aunque exista oc_detalle,
+        # montaje_detalle o tendido_torre en datos legacy.
+        avance_modulos = calculators_avance_real.avance_modulos(proyecto)
+        ctx['avance_civil_ponderado'] = avance_modulos['obra_civil']
         ctx['avance_civil_lineal'] = proyecto.porcentaje_avance_civil
-        ctx['avance_montaje'] = proyecto.porcentaje_avance_montaje
-        ctx['avance_tendido'] = proyecto.porcentaje_avance_tendido
-        ctx['curva_s'] = proyecto.curva_s_data()
+        ctx['avance_montaje'] = avance_modulos['montaje']
+        ctx['avance_tendido'] = avance_modulos['tendido']
+        # #204: el dashboard consolidado usa el mismo payload de Curva S del
+        # dashboard de Obra Civil.  Ese helper une las fechas de Planeado y
+        # Ejecutado, las ordena y completa cada serie para que Chart.js dibuje
+        # ambas líneas sobre el mismo eje; no volver a calcularlo aquí.
+        from .views_dashboards import _curva_s_chart_payload
+        curva_s = _curva_s_chart_payload(proyecto)
+        ctx['curva_s'] = curva_s
+        ctx['curva_s_disponible'] = bool(curva_s['labels'])
+        # Las series alineadas contienen ceros por carry-forward aun cuando
+        # falta la fuente original.  ``any`` conserva el estado vacío útil
+        # para que el usuario sepa qué dato debe cargar.
+        ctx['curva_s_planeado_disponible'] = any(curva_s['planeado'])
+        ctx['curva_s_ejecutado_disponible'] = any(curva_s['ejecutado'])
+        # #204: el Gantt consolidado reutiliza el formato de barras por torre
+        # que ya utiliza Obra Civil, agregando las fuentes reales de Montaje y
+        # Tendido.  El helper filtra torres no aplicables y filas sin fechas.
+        ctx['gantt_consolidado'] = calculators_avance_real.gantt_consolidado(proyecto)
+        ctx['gantt_consolidado_disponible'] = bool(ctx['gantt_consolidado'])
         ctx['total_torres'] = len(torres)
         ctx['torres_lista_montaje'] = sum(1 for t in torres if t.obra_civil_completa)
         ctx['torres_en_fases_paralelas'] = sum(

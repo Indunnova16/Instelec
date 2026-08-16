@@ -536,6 +536,84 @@ def gantt_oc(proyecto) -> list:
     return filas
 
 
+# ===========================================================================
+# Gantt consolidado — Obra Civil, Montaje y Tendido (#204)
+# ===========================================================================
+
+def gantt_consolidado(proyecto) -> list:
+    """Filas del Gantt consolidado, una barra por torre y bloque.
+
+    Cada fila conserva el contrato del Gantt de Obra Civil (``inicio``,
+    ``esperada`` y ``final`` en ISO) y añade ``bloque`` para diferenciar sus
+    tres fuentes.  Solo incorpora torres ``aplica=True`` que tengan al menos
+    una fecha real: una barra sin fechas no comunica avance y Chart.js no la
+    puede posicionar de manera fiable.
+
+    Tendido no tiene fechas en ``TendidoTorre``: las fechas reales se capturan
+    en la relación legacy ``FaseTorre``.  Por eso su tramo se forma entre la
+    primera y última fecha diligenciada allí, sin usar ``updated_at`` (que es
+    fecha de guardado, no de ejecución).
+    """
+    filas = []
+
+    for fila in gantt_oc(proyecto):
+        filas.append({**fila, 'bloque': 'Obra Civil'})
+
+    from .models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+    montajes = (MontajeEstructuraTorreDetalle.objects
+                .filter(proyecto=proyecto, torre__aplica=True)
+                .select_related('torre'))
+    for detalle in montajes:
+        fechas = [
+            detalle.prearmado_fecha_inicio,
+            detalle.prearmado_fecha_fin,
+            detalle.montaje_fecha_inicio,
+            detalle.montaje_fecha_fin,
+        ]
+        fechas = [fecha for fecha in fechas if fecha]
+        if not fechas:
+            continue
+        filas.append({
+            'bloque': 'Montaje',
+            'torre': detalle.torre.numero_display or (detalle.torre.numero or ''),
+            'inicio': min(fechas).isoformat(),
+            'esperada': None,
+            'final': max(fechas).isoformat(),
+        })
+
+    from .models import FaseTorre
+    tendidos = (FaseTorre.objects
+                .filter(proyecto=proyecto, torre__aplica=True)
+                .select_related('torre'))
+    for fase in tendidos:
+        fechas = [getattr(fase, campo, None)
+                  for campo in _CAMPOS_FECHA_TENDIDO_FASETORRE]
+        fechas = [fecha for fecha in fechas if fecha]
+        if not fechas:
+            continue
+        filas.append({
+            'bloque': 'Tendido',
+            'torre': fase.torre.numero_display or (fase.torre.numero or ''),
+            'inicio': min(fechas).isoformat(),
+            'esperada': None,
+            'final': max(fechas).isoformat(),
+        })
+
+    orden_bloque = {'Obra Civil': 0, 'Montaje': 1, 'Tendido': 2}
+    orden_torre = {
+        torre.numero_display or (torre.numero or ''): torre.orden_numerico
+        for torre in proyecto.torres.all()
+    }
+    return sorted(
+        filas,
+        key=lambda fila: (
+            orden_bloque[fila['bloque']],
+            orden_torre.get(fila['torre'], 0),
+            fila['torre'],
+        ),
+    )
+
+
 # ==========================================================================
 # avance_por_etapa — genérico para las 3 fases (G2 universal)
 # ==========================================================================
@@ -823,3 +901,20 @@ def avance_general(proyecto) -> dict:
         global_pct = sum(f['pct'] for f in fases_out) / len(fases_out) if fases_out else 0.0
 
     return {'fases': fases_out, 'global_pct': round(global_pct, 2)}
+
+
+def avance_modulos(proyecto) -> dict:
+    """Porcentajes reales de los tres módulos mostrados en el dashboard.
+
+    Mantiene un único origen de cálculo para las tarjetas consolidadas y para
+    ``avance_general``. Las fases sin torres o sin registros devuelven 0.0 por
+    contrato, por lo que el dashboard puede renderizar proyectos nuevos sin
+    excepciones ni valores ``None``.
+    """
+    por_seccion = {fase['seccion']: fase['pct']
+                   for fase in avance_general(proyecto)['fases']}
+    return {
+        'obra_civil': por_seccion.get('OBRA_CIVIL', 0.0),
+        'montaje': por_seccion.get('MONTAJE', 0.0),
+        'tendido': por_seccion.get('TENDIDO', 0.0),
+    }
