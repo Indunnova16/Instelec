@@ -13,12 +13,13 @@
 {# repetido sobre id="vano-{{ vano.id }}" (el journey E2E reabre/reusa el #}
 {# mismo modal para un segundo cambio) nunca queda bloqueado por un overlay #}
 {# que cubra toda la pantalla encima de su propio trigger. #}
+<template x-teleport="body">
 <div
     data-testid="vano-estado-modal-root"
     x-show="abierto"
     x-cloak
     @click.stop
-    class="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-80 max-w-[92vw] rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-left cursor-default"
+    class="fixed z-50 inset-x-0 top-8 mx-auto w-80 max-w-[92vw] rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-left cursor-default"
 >
     <div class="flex items-center justify-between mb-3">
         <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
@@ -94,6 +95,7 @@
         </div>
     </div>
 </div>
+</template>
 
 {% if forloop.first %}
 {# La funcion Alpine se define UNA sola vez (primer vano del grid) — se #}
@@ -179,10 +181,16 @@ function vanoEstadoModal(vanoId) {
                 if (!resp.ok) {
                     this.error = data.error || `No se pudo guardar (HTTP ${resp.status}).`;
                 } else {
-                    this.success = `Guardado como "${data.estado_display || ''}".`;
+                    document.body.dispatchEvent(new CustomEvent('vano-actualizado', {
+                        detail: {
+                            vanoId: this.vanoId,
+                            estado: data.estado,
+                            estadoDisplay: data.estado_display || '',
+                        },
+                    }));
                     this.$refs.form.reset();
-                    this.estadoSeleccionado = '';  // sync swatch tras reset() nativo del form
-                    await this.cargarHistorial();
+                    this.estadoSeleccionado = '';
+                    this.cerrar();
                 }
             } catch (exc) {
                 this.error = 'Error de red: ' + exc.message;

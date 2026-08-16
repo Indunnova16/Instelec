@@ -82,30 +82,30 @@
                 <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">Total Vanos</div>
             </div>
             <div class="bg-gray-50 dark:bg-gray-700 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">{{ vanos_pendientes }}</div>
+                <div id="stat-count-pendiente" class="text-2xl font-bold text-gray-600 dark:text-gray-300">{{ vanos_pendientes }}</div>
                 <div class="text-xs text-gray-700 dark:text-gray-400 mt-1">Pendiente</div>
             </div>
             <div class="bg-green-50 dark:bg-green-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-green-600">{{ vanos_ejecutados }}</div>
+                <div id="stat-count-ejecutado" class="text-2xl font-bold text-green-600">{{ vanos_ejecutados }}</div>
                 <div class="text-xs text-green-700 dark:text-green-400 mt-1">Ejecutado</div>
             </div>
             {# Issue #177 (bounce=2) — colores segun convencion del Excel de #}
             {# control del cliente (att_04): Sin Permiso=rojo, Parcial=verde #}
             {# claro/lime, Seccionado=naranja-dorado/amber, Especial=azul. #}
             <div class="bg-red-50 dark:bg-red-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-red-600">{{ vanos_sin_permiso }}</div>
+                <div id="stat-count-sin_permiso" class="text-2xl font-bold text-red-600">{{ vanos_sin_permiso }}</div>
                 <div class="text-xs text-red-700 dark:text-red-400 mt-1">Sin Permiso</div>
             </div>
             <div class="bg-lime-50 dark:bg-lime-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-lime-600">{{ vanos_en_espera }}</div>
+                <div id="stat-count-en_espera" class="text-2xl font-bold text-lime-600">{{ vanos_en_espera }}</div>
                 <div class="text-xs text-lime-700 dark:text-lime-400 mt-1">Parcial</div>
             </div>
             <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-amber-600">{{ vanos_seccionados }}</div>
+                <div id="stat-count-seccionado" class="text-2xl font-bold text-amber-600">{{ vanos_seccionados }}</div>
                 <div class="text-xs text-amber-700 dark:text-amber-400 mt-1">Seccionado</div>
             </div>
             <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg shadow p-4 text-center">
-                <div class="text-2xl font-bold text-blue-600">{{ vanos_especiales }}</div>
+                <div id="stat-count-especial" class="text-2xl font-bold text-blue-600">{{ vanos_especiales }}</div>
                 <div class="text-xs text-blue-700 dark:text-blue-400 mt-1">Especial</div>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
@@ -172,7 +172,7 @@
         Chart.register(ChartDataLabels);
 
         const ctx = document.getElementById('estadoChart').getContext('2d');
-        new Chart(ctx, {
+        const estadoChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: ['Pendiente', 'Ejecutado', 'Sin Permiso', 'Parcial', 'Seccionado', 'Especial'],
@@ -227,6 +227,41 @@
                     },
                 },
             },
+        });
+
+        const estadoVisual = {
+            pendiente: ['bg-gray-50', 'border-gray-300', 'hover:bg-gray-100'],
+            ejecutado: ['bg-green-50', 'border-green-300', 'hover:bg-green-100'],
+            sin_permiso: ['bg-red-50', 'border-red-300', 'hover:bg-red-100'],
+            no_ejecutado: ['bg-rose-50', 'border-rose-300', 'hover:bg-rose-100'],
+            en_espera: ['bg-lime-50', 'border-lime-300', 'hover:bg-lime-100'],
+            seccionado: ['bg-amber-50', 'border-amber-300', 'hover:bg-amber-100'],
+            especial: ['bg-blue-50', 'border-blue-300', 'hover:bg-blue-100'],
+        };
+
+        function estadoActual(card) {
+            return Object.entries(estadoVisual).find(([, classes]) =>
+                classes.some((className) => card.classList.contains(className))
+            )?.[0] || 'pendiente';
+        }
+
+        document.addEventListener('vano-actualizado', (event) => {
+            const { vanoId, estado } = event.detail;
+            const card = document.getElementById(`vano-${vanoId}`);
+            if (!card || !estadoVisual[estado]) return;
+
+            const anterior = estadoActual(card);
+            if (anterior !== estado) {
+                estadoData[anterior] = Math.max(0, estadoData[anterior] - 1);
+                estadoData[estado] = (estadoData[estado] || 0) + 1;
+                document.getElementById(`stat-count-${anterior}`).textContent = estadoData[anterior];
+                document.getElementById(`stat-count-${estado}`).textContent = estadoData[estado];
+                estadoChart.data.datasets[0].data = Object.values(estadoData);
+                estadoChart.update();
+            }
+
+            Object.values(estadoVisual).flat().forEach((className) => card.classList.remove(className));
+            card.classList.add(...estadoVisual[estado]);
         });
     </script>
     {% endif %}
