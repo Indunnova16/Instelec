@@ -306,6 +306,25 @@ class TestListadoSemanasActualesOFuturas(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.pasada.nombre)
 
+    @patch("apps.cuadrillas.views_b3.timezone.localdate", return_value=date(2026, 8, 3))
+    def test_lista_no_revienta_con_codigo_legacy_sin_formato_semana(self, _localdate):
+        """Regresión: códigos reales de prod ("28-Apoyo Sede-011", "28-Avisos
+        SC-010") no siguen el formato WW-YYYY-... — castear su substring a
+        INTEGER revienta la query completa con un 500 real (no un 0
+        resultados). El filtro de A3 debe tratarlos como visibles por
+        default, nunca tumbar la página."""
+        Cuadrilla.objects.create(
+            codigo="28-Apoyo Sede-011",
+            nombre="Cuadrilla codigo legacy sin semana 223",
+            fecha=date(2026, 8, 3),
+            activa=True,
+        )
+
+        response = self.client.get(reverse("cuadrillas:lista"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cuadrilla codigo legacy sin semana 223")
+
 
 class TestTerminologiaCuadrilla(TestCase):
     """A4: la programación semanal usa la terminología del cliente."""
