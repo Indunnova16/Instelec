@@ -247,7 +247,8 @@ class DashboardObraCivilRealView(_DashboardObraCivilViewLegacy):
         ctx['graficas_json'] = json.dumps(graficas)
 
         # 4. Vista por torre OC + drill-down a obra_civil_torre.
-        vista = car.vista_por_torre(proyecto, fase)
+        orden_gantt = ctx.get('orden_gantt', 'numero')
+        vista = car.vista_por_torre(proyecto, fase, orden=orden_gantt)
         for fila in vista:
             torre_id = fila.get('torre_id')
             try:
@@ -264,6 +265,6 @@ class DashboardObraCivilRealView(_DashboardObraCivilViewLegacy):
         # 5. Gantt de Obra Civil (#122 Fase 2) — barra por torre [inicio, final]
         # con marcador de fecha_esperada, ordenado por torre. Pre-serializado vía
         # json_script en el template (guard es-CO: nunca JSON crudo en JS inline).
-        ctx['gantt_oc_json'] = car.gantt_oc(proyecto)
+        ctx['gantt_oc_json'] = car.gantt_oc(proyecto, orden=orden_gantt)
 
         return ctx

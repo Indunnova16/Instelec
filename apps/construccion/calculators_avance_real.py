@@ -33,6 +33,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from typing import Optional
+import re
 
 from django.utils import timezone
 
@@ -119,6 +120,55 @@ def _to_float(value) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _clave_natural_torre(numero):
+    """Clave estable para ``T-2`` antes de ``T-10`` y datos legacy vacíos.
+
+    Cada fragmento lleva un marcador de tipo para que nombres que empiezan por
+    números, letras o están vacíos sigan siendo comparables en Python 3.
+    """
+    return tuple(
+        (0, int(fragment)) if fragment.isdigit() else (1, fragment.casefold())
+        for fragment in re.split(r'(\d+)', str(numero or ''))
+    )
+
+
+def ordenar_filas_dashboard(filas, orden='numero', *, clave_torre='torre',
+                             clave_fecha='fecha_orden', claves_precedencia=()):
+    """Ordena filas de dashboard por torre o por su fecha real rectora.
+
+    ``cronologico`` deja los ``NULL`` al final y, ante la misma fecha, conserva
+    un desempate natural por torre. ``claves_precedencia`` permite que un Gantt
+    con bloques conserve su agrupación al usar el orden por número.
+    """
+    filas = list(filas)
+
+    def precedencia(fila):
+        return tuple(fila.get(clave) for clave in claves_precedencia)
+
+    if orden == 'cronologico':
+        return sorted(
+            filas,
+            key=lambda fila: (
+                fila.get(clave_fecha) is None,
+                fila.get(clave_fecha),
+                _clave_natural_torre(fila.get(clave_torre)),
+                precedencia(fila),
+            ),
+        )
+    return sorted(
+        filas,
+        key=lambda fila: (precedencia(fila), _clave_natural_torre(fila.get(clave_torre))),
+    )
+
+
+def _sin_fecha_orden(filas):
+    """Retira el metadato interno de orden antes de exponer el contrato JSON."""
+    for fila in filas:
+        fila.pop('fecha_orden', None)
+        fila.pop('orden_bloque', None)
+    return filas
 
 
 # ==========================================================================
@@ -504,7 +554,7 @@ def serie_ejecutado_montaje_fechas(proyecto) -> dict:
 # Gantt de Obra Civil — barras por torre (#122 Fase 2)
 # ==========================================================================
 
-def gantt_oc(proyecto) -> list:
+def gantt_oc(proyecto, orden='numero') -> list:
     """Datos del Gantt de Obra Civil: una barra por torre con sus 3 fechas.
 
     Devuelve ``[{'torre','inicio','esperada','final'}]`` (fechas en ISO o None)
@@ -518,29 +568,28 @@ def gantt_oc(proyecto) -> list:
     qs = (ObraCivilTorre.objects
           .filter(proyecto=proyecto, torre__aplica=True, fecha_inicio__isnull=False)
           .select_related('torre'))
-    # orden_numerico es una @property (no columna) → ordenar en Python, mismo
-    # patrón que las demás vistas por torre (orden natural T-1, T-2, …, T-10).
-    ocs = sorted(qs, key=lambda oc: (oc.torre.orden_numerico, oc.torre.numero or ''))
-
     def _iso(d):
         return d.isoformat() if d else None
 
     filas = []
-    for oc in ocs:
+    for oc in qs:
         filas.append({
             'torre': oc.torre.numero_display or (oc.torre.numero or ''),
             'inicio': _iso(oc.fecha_inicio),
             'esperada': _iso(oc.fecha_esperada),
             'final': _iso(oc.fecha_final),
+            # La fecha de cierre es la única fecha REAL rectora de OC; una
+            # planeada o timestamp de edición no debe reordenar al cliente.
+            'fecha_orden': oc.fecha_final,
         })
-    return filas
+    return _sin_fecha_orden(ordenar_filas_dashboard(filas, orden))
 
 
 # ===========================================================================
 # Gantt consolidado — Obra Civil, Montaje y Tendido (#204)
 # ===========================================================================
 
-def gantt_consolidado(proyecto) -> list:
+def gantt_consolidado(proyecto, orden='numero') -> list:
     """Filas del Gantt consolidado, una barra por torre y bloque.
 
     Cada fila conserva el contrato del Gantt de Obra Civil (``inicio``,
@@ -556,8 +605,13 @@ def gantt_consolidado(proyecto) -> list:
     """
     filas = []
 
-    for fila in gantt_oc(proyecto):
-        filas.append({**fila, 'bloque': 'Obra Civil'})
+    for fila in gantt_oc(proyecto, orden='numero'):
+        filas.append({
+            **fila,
+            'bloque': 'Obra Civil',
+            'fecha_orden': date.fromisoformat(fila['final']) if fila['final'] else None,
+            'orden_bloque': 0,
+        })
 
     from .models_b3_mont_detalle import MontajeEstructuraTorreDetalle
     montajes = (MontajeEstructuraTorreDetalle.objects
@@ -579,6 +633,8 @@ def gantt_consolidado(proyecto) -> list:
             'inicio': min(fechas).isoformat(),
             'esperada': None,
             'final': max(fechas).isoformat(),
+            'fecha_orden': detalle.montaje_fecha_fin,
+            'orden_bloque': 1,
         })
 
     from .models import FaseTorre
@@ -597,20 +653,12 @@ def gantt_consolidado(proyecto) -> list:
             'inicio': min(fechas).isoformat(),
             'esperada': None,
             'final': max(fechas).isoformat(),
+            'fecha_orden': max(fechas),
+            'orden_bloque': 2,
         })
 
-    orden_bloque = {'Obra Civil': 0, 'Montaje': 1, 'Tendido': 2}
-    orden_torre = {
-        torre.numero_display or (torre.numero or ''): torre.orden_numerico
-        for torre in proyecto.torres.all()
-    }
-    return sorted(
-        filas,
-        key=lambda fila: (
-            orden_bloque[fila['bloque']],
-            orden_torre.get(fila['torre'], 0),
-            fila['torre'],
-        ),
+    return _sin_fecha_orden(
+        ordenar_filas_dashboard(filas, orden, claves_precedencia=('orden_bloque',))
     )
 
 
@@ -712,7 +760,37 @@ def avance_por_etapa_tendido(proyecto) -> dict:
 # vista_por_torre — punto 3
 # ==========================================================================
 
-def vista_por_torre(proyecto, fase) -> list:
+def _fechas_rectoras_por_torre(proyecto, fase):
+    """Devuelve la fecha real rectora disponible de cada torre por fase.
+
+    No usa ``updated_at`` ni ``created_at``: ambos describen cuándo se guardó
+    un registro, no cuándo se ejecutó el trabajo. Las torres legacy sin fecha
+    quedan explícitamente en ``None`` para que el orden cronológico las deje al
+    final.
+    """
+    fase = (fase or '').upper()
+    if fase == FASE_OOCC:
+        from .models import ObraCivilTorre
+        return {
+            fila.torre_id: fila.fecha_final
+            for fila in ObraCivilTorre.objects.filter(proyecto=proyecto, torre__aplica=True)
+        }
+    if fase == FASE_MONTAJE:
+        return {
+            fila.torre_id: fila.montaje_fecha_fin
+            for fila in _detalles_montaje(proyecto)
+        }
+    if fase == FASE_TENDIDO:
+        from .models import FaseTorre
+        fechas = {}
+        for fila in FaseTorre.objects.filter(proyecto=proyecto, torre__aplica=True):
+            candidatas = [getattr(fila, campo, None) for campo in _CAMPOS_FECHA_TENDIDO_FASETORRE]
+            fechas[fila.torre_id] = max((fecha for fecha in candidatas if fecha), default=None)
+        return fechas
+    return {}
+
+
+def vista_por_torre(proyecto, fase, orden='numero') -> list:
     """Lista por torre con % de avance, si está completa y etapas pendientes.
 
     Devuelve [{'torre_id','numero','pct','completa','pendientes':[labels]}]
@@ -781,15 +859,10 @@ def vista_por_torre(proyecto, fase) -> list:
     for r in resultado:
         if r['completa']:
             r['pendientes'] = []
-    # #159: orden NUMÉRICO natural de torres (E1, E2, …, E10, E11), no lexicográfico
-    # de string (que daba E1, E10, E11, E2). Clave: trozos texto/número alternados.
-    import re as _re
-
-    def _natkey(numero):
-        return [int(ch) if ch.isdigit() else ch.lower()
-                for ch in _re.split(r'(\d+)', str(numero or ''))]
-    resultado.sort(key=lambda r: _natkey(r['numero']))
-    return resultado
+    fechas_rectoras = _fechas_rectoras_por_torre(proyecto, fase)
+    for fila in resultado:
+        fila['fecha_orden'] = fechas_rectoras.get(fila['torre_id'])
+    return _sin_fecha_orden(ordenar_filas_dashboard(resultado, orden, clave_torre='numero'))
 
 
 # ==========================================================================

@@ -32,7 +32,10 @@ from django.shortcuts import get_object_or_404
 
 from . import calculators_avance_real as car
 from .models import ProyectoConstruccion
-from .views import _DashboardCurvaSBase as _DashboardCurvaSBaseLegacy
+from .views import (
+    _DashboardCurvaSBase as _DashboardCurvaSBaseLegacy,
+    orden_dashboard_desde_request,
+)
 from .views_dashboards import _DashboardCurvaSBase
 
 
@@ -80,7 +83,9 @@ class DashboardMontajeRealView(_DashboardCurvaSBase):
         # --- Vista por torre Montaje (drill-down a montaje_torre) ---
         # Edge case: proyecto sin torres/sin montaje → [] (la tabla muestra el
         # estado vacío del parcial base sin reventar).
-        vista_torres = car.vista_por_torre(proyecto, fase) if proyecto is not None else []
+        vista_torres = car.vista_por_torre(
+            proyecto, fase, orden=ctx.get('orden_gantt', 'numero'),
+        ) if proyecto is not None else []
 
         # "Sin datos" = no hay NINGUNA torre con avance de Montaje. OJO:
         # avance_por_etapa SIEMPRE devuelve las 4 etapas (al 0% si no hay datos),
@@ -123,6 +128,7 @@ class DashboardMontajeDatosGraficasView(_DashboardCurvaSBaseLegacy):
     def get(self, request, *args, **kwargs):
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         fase = car.FASE_MONTAJE
+        orden, _orden_invalido = orden_dashboard_desde_request(request)
         payload = {
             'fase': fase,
             'curva_real': {
@@ -133,5 +139,6 @@ class DashboardMontajeDatosGraficasView(_DashboardCurvaSBaseLegacy):
                 'planeado': car.serie_planeado(proyecto, fase),
             },
             'avance_etapas': car.avance_por_etapa(proyecto, fase),
+            'vista_torres': car.vista_por_torre(proyecto, fase, orden=orden),
         }
         return JsonResponse(payload)
