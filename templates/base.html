@@ -275,6 +275,11 @@
                 } catch (e) { /* no romper la página si un select es atípico */ }
             });
         }
+        // Issue #223 (A2): expuesto en window para que markup Alpine (x-if/
+        // <template>, sin htmx:afterSwap -- ej. el form "Nueva cuadrilla"/
+        // "Editar cuadrilla" de apps/cuadrillas) pueda re-disparar el init
+        // tras que Alpine monte el <select> en el DOM real (via $nextTick).
+        window.initTomSelect = initTomSelect;
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function () { initTomSelect(document); });
         } else {
