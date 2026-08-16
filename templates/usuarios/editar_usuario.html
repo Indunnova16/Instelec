@@ -92,6 +92,21 @@
             </select>
         </div>
 
+        {% if form.is_superuser %}
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+            <label class="flex items-start gap-3 cursor-pointer" for="{{ form.is_superuser.id_for_label }}">
+                {{ form.is_superuser }}
+                <span>
+                    <span class="block text-sm font-medium text-amber-900 dark:text-amber-200">{{ form.is_superuser.label }}</span>
+                    <span class="block text-xs text-amber-800 dark:text-amber-300">{{ form.is_superuser.help_text }}</span>
+                </span>
+            </label>
+            {% for error in form.is_superuser.errors %}
+            <p class="mt-2 text-sm text-red-700 dark:text-red-300">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <div class="flex items-center space-x-4 pt-2">
             <button type="submit"
                     class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">

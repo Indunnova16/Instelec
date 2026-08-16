@@ -4,6 +4,7 @@ User views.
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
+from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import ListView, TemplateView, UpdateView
@@ -107,6 +108,11 @@ class EditarUsuarioView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
     allowed_roles = ['admin', 'director']
     success_url = reverse_lazy('usuarios:gestion')
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['actor'] = self.request.user
+        return kwargs
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Mismo patron BD-backed que GestionUsuariosView/CrearUsuarioAdminView
@@ -118,6 +124,24 @@ class EditarUsuarioView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
         return context
 
     def form_valid(self, form):
+        # Recheck the last-Super-Admin invariant under a lock.  Form.clean()
+        # gives an immediate field error in the usual path; this protects the
+        # same rule if two privileged requests race to revoke access.
+        if 'is_superuser' in form.fields:
+            requested_superuser = form.cleaned_data['is_superuser']
+            with transaction.atomic():
+                target = Usuario.objects.select_for_update().get(pk=self.object.pk)
+                if (
+                    target.is_superuser
+                    and not requested_superuser
+                    and Usuario.objects.select_for_update().filter(is_superuser=True).count() <= 1
+                ):
+                    form.add_error(
+                        'is_superuser',
+                        'No se puede retirar Super Admin al último Super Admin del sistema.',
+                    )
+                    return self.form_invalid(form)
+
         messages.success(
             self.request,
             f'Usuario {form.instance.get_full_name()} actualizado exitosamente.'

@@ -74,4 +74,41 @@ class UsuarioChangeForm(UserChangeForm):
             # Issue #186 (186-M4): campo Área -- editable desde la vista
             # individual de edición, igual que rol/estado.
             'area',
+            # It is removed from ``self.fields`` unless the authenticated
+            # actor is allowed to manage another Super Admin.  Keeping it in
+            # Meta lets ModelForm persist the intentionally exposed field.
+            'is_superuser',
         )
+
+    def __init__(self, *args, actor=None, **kwargs):
+        """Expose the Super Admin switch only to a different Super Admin.
+
+        The view passes the authenticated actor explicitly.  Keeping the field
+        out of the form for every other case makes a forged POST harmless: a
+        ModelForm only persists fields it declares.
+        """
+        self.actor = actor
+        super().__init__(*args, **kwargs)
+
+        if actor and actor.is_superuser and self.instance.pk != getattr(actor, 'pk', None):
+            self.fields['is_superuser'] = forms.BooleanField(
+                label='Super Admin',
+                required=False,
+                help_text='Otorga acceso total a todos los módulos y permisos.',
+            )
+        else:
+            self.fields.pop('is_superuser', None)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if (
+            'is_superuser' in self.fields
+            and self.instance.is_superuser
+            and not cleaned_data.get('is_superuser')
+            and Usuario.objects.filter(is_superuser=True).count() <= 1
+        ):
+            self.add_error(
+                'is_superuser',
+                'No se puede retirar Super Admin al último Super Admin del sistema.',
+            )
+        return cleaned_data
