@@ -1,0 +1,16 @@
+{% if personal_disponible %}
+    <p class="mb-3 text-sm text-slate-600">{{ personal_disponible|length }} persona{{ personal_disponible|length|pluralize }} disponible{{ personal_disponible|length|pluralize }} entre {{ fecha_inicio|date:"d/m/Y" }} y {{ fecha_fin|date:"d/m/Y" }}.</p>
+    <ul class="space-y-2">
+        {% for persona in personal_disponible %}
+            <li class="flex items-center justify-between rounded border p-3">
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" name="personal_ids" value="{{ persona.pk }}">
+                    <span>{{ persona.nombre }}</span>
+                </label>
+                <span class="text-sm text-slate-600">{{ persona.rol_cuadrilla.nombre }}</span>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p class="rounded border border-amber-300 bg-amber-50 p-3 text-amber-800" role="status">No hay personal habilitado y libre para este proyecto e intervalo.</p>
+{% endif %}
