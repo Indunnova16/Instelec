@@ -125,6 +125,47 @@ def test_dashboard_avance_alinea_planeado_y_ejecutado_del_backbone_oc(
 
 
 @pytest.mark.django_db
+def test_dashboard_avance_conserva_ambas_series_en_hitos_intercalados(
+        authenticated_client, proyecto_204):
+    """Regresión: los hitos planeados y reales distintos comparten eje sin
+    adelantar el ejecutado al siguiente hito planeado.
+
+    Con dos torres legacy, el dashboard debe aplicar carry-forward a cada
+    serie de forma independiente. Es el caso que el canvas consume en cliente:
+    Planeado alcanza 50% antes que Ejecutado y ambos llegan a 100% después.
+    """
+    from apps.construccion.models import ObraCivilTorre, TorreConstruccion
+
+    primera = proyecto_204.torres.get(numero='T1')
+    segunda = TorreConstruccion.objects.create(proyecto=proyecto_204, numero='T2')
+    ObraCivilTorre.objects.update_or_create(
+        proyecto=proyecto_204, torre=primera,
+        defaults={
+            'fecha_esperada': date(2025, 1, 10),
+            'fecha_final': date(2025, 1, 15),
+        },
+    )
+    ObraCivilTorre.objects.create(
+        proyecto=proyecto_204, torre=segunda,
+        fecha_esperada=date(2025, 1, 20), fecha_final=date(2025, 1, 25),
+    )
+
+    response = authenticated_client.get(
+        reverse('construccion:dashboard_avance', kwargs={'proyecto_id': proyecto_204.id})
+    )
+
+    assert response.status_code == 200
+    assert response.context['curva_s'] == {
+        'labels': ['2025-01-10', '2025-01-15', '2025-01-20', '2025-01-25'],
+        'planeado': [50.0, 50.0, 100.0, 100.0],
+        'ejecutado': [0.0, 50.0, 50.0, 100.0],
+    }
+    html = response.content.decode()
+    assert 'id="curva-s-data"' in html
+    assert 'Planeado %' in html and 'Ejecutado %' in html
+
+
+@pytest.mark.django_db
 def test_dashboard_avance_sin_cronograma_muestra_estado_vacio(
         authenticated_client, db):
     """Edge: un proyecto sin fechas planeadas orienta a cargar el cronograma."""
