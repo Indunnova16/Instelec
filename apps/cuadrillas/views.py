@@ -2,7 +2,7 @@
 Views for crew management.
 """
 from django.db import models
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from django.views.generic import ListView, DetailView, TemplateView
 from django.views import View
@@ -27,13 +27,38 @@ def _personal_visible_para_usuario(request):
 # ---------------------------------------------------------------------------
 # Vehículos — superficie de parametrización (issue #226, A2)
 # ---------------------------------------------------------------------------
-class VehiculoEntryView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Entrada temporal del maestro; A3 convierte esta URL en el listado."""
+class VehiculoEntryView(LoginRequiredMixin, RoleRequiredMixin, ListView):
+    """Listado del maestro de vehículos con filtros combinables."""
 
+    model = Vehiculo
+    template_name = 'cuadrillas/vehiculos_lista.html'
+    context_object_name = 'vehiculos'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
 
-    def get(self, request, *args, **kwargs):
-        return redirect('core:vehiculos_crear')
+    def get_queryset(self):
+        queryset = Vehiculo.objects.all().order_by('placa')
+        self.filtros = {
+            'placa': self.request.GET.get('placa', '').strip(),
+            'marca': self.request.GET.get('marca', '').strip(),
+            'tipo': self.request.GET.get('tipo', '').strip(),
+            'estado': self.request.GET.get('estado', '').strip(),
+        }
+        if self.filtros['placa']:
+            queryset = queryset.filter(placa__icontains=self.filtros['placa'])
+        if self.filtros['marca']:
+            queryset = queryset.filter(marca__icontains=self.filtros['marca'])
+        if self.filtros['tipo'] in Vehiculo.TipoVehiculo.values:
+            queryset = queryset.filter(tipo=self.filtros['tipo'])
+        if self.filtros['estado'] in Vehiculo.Estado.values:
+            queryset = queryset.filter(estado=self.filtros['estado'])
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self.filtros)
+        context['tipos'] = Vehiculo.TipoVehiculo.choices
+        context['estados'] = Vehiculo.Estado.choices
+        return context
 
 
 class VehiculoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
@@ -109,6 +134,22 @@ class VehiculoEstadoView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             vehiculo.save(update_fields=['estado', 'updated_at'])
             messages.success(request, f'Estado de "{vehiculo.placa}" actualizado a {estados_validos[estado]}.')
         return redirect('core:vehiculos_detalle', pk=vehiculo.pk)
+
+
+class VehiculoDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Elimina vehículos sin cuadrillas activas que dependan de ellos."""
+
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        vehiculo = get_object_or_404(Vehiculo, pk=kwargs['pk'])
+        if vehiculo.cuadrillas.filter(activa=True).exists():
+            messages.error(request, f'No se puede eliminar "{vehiculo.placa}" porque está asignado a una cuadrilla activa.')
+            return redirect('core:vehiculos_detalle', pk=vehiculo.pk)
+        placa = vehiculo.placa
+        vehiculo.delete()
+        messages.success(request, f'Vehículo "{placa}" eliminado exitosamente.')
+        return redirect('core:vehiculos_lista')
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):

@@ -7,7 +7,7 @@ from django.core.exceptions import PermissionDenied
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
-from apps.cuadrillas.models import Vehiculo
+from apps.cuadrillas.models import Cuadrilla, Vehiculo
 
 
 Usuario = get_user_model()
@@ -129,6 +129,45 @@ class TestVehiculoCRUDParametrizacion(TestCase):
                 reverse('core:vehiculos_estado', args=[vehiculo.pk]),
                 {'estado': Vehiculo.Estado.INACTIVO},
             )
+
+
+class TestVehiculoListadoYEliminacion(TestCase):
+    """A3: listado filtrable y eliminación segura del maestro."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(_usuario_226('listado_admin_226@test.com'))
+        self.activo = Vehiculo.objects.create(placa='ABC-226', marca='Toyota', tipo=Vehiculo.TipoVehiculo.CAMIONETA)
+        self.mantenimiento = Vehiculo.objects.create(placa='MOTO-226', marca='Honda', tipo=Vehiculo.TipoVehiculo.MOTO, estado=Vehiculo.Estado.EN_MANTENIMIENTO)
+
+    def test_listado_combina_filtros_y_muestra_acciones(self):
+        respuesta = self.client.get(reverse('core:vehiculos_lista'), {'placa': 'moto', 'marca': 'hon', 'tipo': Vehiculo.TipoVehiculo.MOTO, 'estado': Vehiculo.Estado.EN_MANTENIMIENTO})
+        self.assertContains(respuesta, 'MOTO-226')
+        self.assertNotContains(respuesta, 'ABC-226')
+        self.assertContains(respuesta, 'Ver detalle')
+        self.assertContains(respuesta, 'Editar')
+        self.assertContains(respuesta, 'Eliminar')
+
+    def test_filtro_invalido_no_falla(self):
+        respuesta = self.client.get(reverse('core:vehiculos_lista'), {'tipo': 'NO_EXISTE'})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(list(respuesta.context['vehiculos']), [self.activo, self.mantenimiento])
+
+    def test_eliminar_bloquea_vehiculo_asignado_a_cuadrilla_activa(self):
+        Cuadrilla.objects.create(codigo='CUA-226-A', nombre='Activa 226', vehiculo=self.activo, activa=True)
+        respuesta = self.client.post(reverse('core:vehiculos_eliminar', args=[self.activo.pk]), follow=True)
+        self.assertContains(respuesta, 'está asignado a una cuadrilla activa')
+        self.assertTrue(Vehiculo.objects.filter(pk=self.activo.pk).exists())
+
+    def test_eliminar_vehiculo_sin_asignacion_activa(self):
+        respuesta = self.client.post(reverse('core:vehiculos_eliminar', args=[self.mantenimiento.pk]), follow=True)
+        self.assertContains(respuesta, 'eliminado exitosamente')
+        self.assertFalse(Vehiculo.objects.filter(pk=self.mantenimiento.pk).exists())
+
+    def test_supervisor_no_puede_eliminar(self):
+        self.client.force_login(_usuario_226('listado_supervisor_226@test.com', rol='supervisor'))
+        with self.assertRaises(PermissionDenied):
+            self.client.post(reverse('core:vehiculos_eliminar', args=[self.activo.pk]))
 
 
 class TestVehiculoMigrationLegacy(TransactionTestCase):

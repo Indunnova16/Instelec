@@ -32,4 +32,5 @@ urlpatterns = [
     path('parametrizacion/vehiculos/<uuid:pk>/', cuadrillas_views.VehiculoDetailView.as_view(), name='vehiculos_detalle'),
     path('parametrizacion/vehiculos/<uuid:pk>/editar/', cuadrillas_views.VehiculoEditView.as_view(), name='vehiculos_editar'),
     path('parametrizacion/vehiculos/<uuid:pk>/estado/', cuadrillas_views.VehiculoEstadoView.as_view(), name='vehiculos_estado'),
+    path('parametrizacion/vehiculos/<uuid:pk>/eliminar/', cuadrillas_views.VehiculoDeleteView.as_view(), name='vehiculos_eliminar'),
 ]
