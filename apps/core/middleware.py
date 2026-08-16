@@ -2,7 +2,7 @@
 
 Filtra acceso por path-prefix según el rol del usuario:
 - /construccion/* → requiere CONSTRUCCION
-- /contratos/, /ambiental/, /indicadores/, /financiero/ → requiere MANTENIMIENTO
+- Superficies operativas de Mantenimiento → requieren MANTENIMIENTO
 - Resto → solo LoginRequired (delegado a vistas)
 
 Paths exentos (login, api pública, static, etc.) pasan sin chequear.
@@ -36,11 +36,19 @@ EXEMPT_PREFIXES = (
 CONSTRUCCION_PREFIXES = ('/construccion/',)
 
 MANTENIMIENTO_PREFIXES = (
+    # Toda ruta web montada en config.urls que pertenece a la operación de
+    # Mantenimiento. Mantener el inventario aquí evita que una pantalla nueva
+    # quede protegida sólo por el sidebar y siga accesible por URL directa.
+    '/actividades/',
+    '/lineas/',
+    # `cuadrillas/` también aloja maestros de Configuración; sólo el mapa
+    # operativo mostrado en el bloque Mantenimiento se clasifica aquí.
+    '/cuadrillas/mapa/',
+    '/campo/',
     '/contratos/',
     '/ambiental/',
     '/indicadores/',
     '/financiero/',
-    '/campo/',
 )
 
 
