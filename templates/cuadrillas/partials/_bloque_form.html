@@ -66,7 +66,9 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
                 class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
             <option value="">— Sin vehículo —</option>
             {% for v in vehiculos_bloque %}
+            {% if v.estado == 'ACTIVO' or b.vehiculo_id == v.id|stringformat:'s' %}
             <option value="{{ v.id }}" {% if b.vehiculo_id == v.id|stringformat:'s' %}selected{% endif %}>{{ v.placa }} - {{ v.marca }}</option>
+            {% endif %}
             {% endfor %}
         </select>
     </div>

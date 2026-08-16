@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
@@ -306,7 +307,7 @@ def _personal_visible_para_usuario(request, qs=None):
     return qs.filter(Q(area=AREA_MANTENIMIENTO) | Q(area=""))
 
 
-def _choices_form_bloque(request=None):
+def _choices_form_bloque(request=None, vehiculos_historicos=None):
     """Catálogos activos para el form de bloque (crear/editar, issue #188
     A2-A4): tipo de actividad, línea, vehículo, supervisor. El propio Tramo
     se resuelve por cascada AJAX dependiente de la línea (A3) — no vive acá.
@@ -325,15 +326,42 @@ def _choices_form_bloque(request=None):
     from apps.lineas.models import Linea
     from apps.usuarios.models import Usuario
 
+    vehiculos_historicos = [pk for pk in (vehiculos_historicos or []) if pk]
+    vehiculos_bloque = Vehiculo.objects.filter(
+        Q(estado=Vehiculo.Estado.ACTIVO) | Q(pk__in=vehiculos_historicos)
+    ).order_by("placa")
+
     return {
         "tipos_actividad_bloque": TipoActividad.objects.filter(activo=True).order_by("nombre"),
         "lineas_bloque": Linea.objects.filter(activa=True).order_by("codigo"),
-        "vehiculos_bloque": Vehiculo.objects.filter(activo=True).order_by("placa"),
+        # El estado operativo reemplaza al puente booleano legacy. Los vehículos
+        # inactivos asignados a bloques existentes se incluyen solamente para
+        # preservar su referencia histórica al abrir el editor.
+        "vehiculos_bloque": vehiculos_bloque,
         "supervisores_bloque": Usuario.objects.filter(is_active=True)
         .filter(Q(area=AREA_MANTENIMIENTO) | Q(area=""))
         .order_by("first_name"),
         "personal_disponible_datalist": _personal_visible_para_usuario(request).order_by("nombre"),
     }
+
+
+def _vehiculo_permitido_para_asignacion(vehiculo_id, vehiculo_actual_id=None):
+    """Un bloque nuevo solo puede tomar vehículos operativos.
+
+    La excepción es conservar la misma FK en un bloque que ya la tenía: así
+    una edición administrativa de un registro histórico no borra una
+    referencia cuyo vehículo fue inactivado después de la asignación.
+    """
+    if not vehiculo_id:
+        return True
+    if vehiculo_actual_id and str(vehiculo_id) == str(vehiculo_actual_id):
+        return True
+    try:
+        return Vehiculo.objects.filter(
+            pk=vehiculo_id, estado=Vehiculo.Estado.ACTIVO
+        ).exists()
+    except (TypeError, ValueError, ValidationError):
+        return False
 
 
 def _personal_sin_asignar(anio, semana, request=None):
@@ -538,7 +566,12 @@ class ProgramacionSemanalGridView(LoginRequiredMixin, RoleRequiredMixin, Templat
         # Issue #188 (A2): choices del form de bloque (crear/editar), reusadas
         # por _bloque_form.html vía include. La cascada Línea→Tramo real
         # (AJAX) llega en A3 — acá solo se precargan los catálogos activos.
-        context.update(_choices_form_bloque(self.request))
+        context.update(
+            _choices_form_bloque(
+                self.request,
+                vehiculos_historicos=[b["vehiculo_id"] for b in context["bloques"]],
+            )
+        )
         return context
 
 
@@ -613,6 +646,12 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
             return self._form_con_error(
                 request, anio, semana,
                 "La hora de fin planeada no puede ser anterior a la hora de inicio planeada.",
+            )
+
+        if not _vehiculo_permitido_para_asignacion(request.POST.get("vehiculo")):
+            return self._form_con_error(
+                request, anio, semana,
+                "El vehículo seleccionado no está activo para nuevas asignaciones.",
             )
 
         codigo = _siguiente_codigo_bloque(anio, semana, nombre)
@@ -721,6 +760,14 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
                 "La hora de fin planeada no puede ser anterior a la hora de inicio planeada.",
             )
 
+        if not _vehiculo_permitido_para_asignacion(
+            request.POST.get("vehiculo"), cuadrilla.vehiculo_id
+        ):
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                "El vehículo seleccionado no está activo para nuevas asignaciones.",
+            )
+
         try:
             with transaction.atomic():
                 cuadrilla.nombre = nombre
@@ -742,7 +789,10 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
         cuadrilla.refresh_from_db()
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
-            {**_choices_form_bloque(request), "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana},
+            {
+                **_choices_form_bloque(request, [cuadrilla.vehiculo_id]),
+                "b": _bloque_a_dict(cuadrilla), "anio": anio, "semana": semana,
+            },
             request=request,
         )
         return HttpResponse(html)
@@ -753,7 +803,7 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
         html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
             {
-                **_choices_form_bloque(request),
+                **_choices_form_bloque(request, [cuadrilla.vehiculo_id]),
                 "b": valores,
                 "anio": anio,
                 "semana": semana,

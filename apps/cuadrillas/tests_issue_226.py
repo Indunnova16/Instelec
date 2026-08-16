@@ -313,3 +313,58 @@ class TestVehiculoExcelAtomico(TestCase):
         respuesta = self.client.post(reverse('core:vehiculos_importar'), {'archivo': self._archivo(self._fila_valida())})
         self.assertEqual(respuesta.status_code, 403)
         self.assertFalse(Vehiculo.objects.filter(placa='IMP-226-01').exists())
+
+
+class TestVehiculoProgramacionSemanalMantenimiento(TestCase):
+    """A6: el grid semanal usa el catálogo operativo de vehículos."""
+
+    anio, semana = 2026, 46
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(_usuario_226('programacion_226@test.com'))
+        self.activo = Vehiculo.objects.create(placa='ACT-226-SEM', marca='Toyota')
+        self.inactivo = Vehiculo.objects.create(
+            placa='INA-226-SEM', marca='Ford', estado=Vehiculo.Estado.INACTIVO,
+        )
+
+    def test_activo_se_ofrece_y_formulario_conserva_wiring_htmx(self):
+        respuesta = self.client.get(
+            reverse('cuadrillas:semanal_grid', args=[self.anio, self.semana])
+        )
+
+        self.assertContains(respuesta, 'ACT-226-SEM - Toyota')
+        self.assertNotContains(respuesta, 'INA-226-SEM - Ford')
+        self.assertContains(respuesta, 'hx-post=')
+        self.assertContains(respuesta, 'hx-swap="outerHTML"')
+
+    def test_inactivo_no_se_puede_asignar_a_bloque_nuevo(self):
+        respuesta = self.client.post(
+            reverse('cuadrillas:semanal_bloque_crear', args=[self.anio, self.semana]),
+            {'nombre': 'Bloque sin vehículo inactivo', 'vehiculo': str(self.inactivo.pk)},
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertContains(respuesta, 'no está activo para nuevas asignaciones', status_code=400)
+        self.assertFalse(Cuadrilla.objects.filter(nombre='Bloque sin vehículo inactivo').exists())
+
+    def test_historico_inactivo_permanece_visible_y_se_puede_conservar(self):
+        bloque = Cuadrilla.objects.create(
+            codigo='46-2026-0001-HIST', nombre='Bloque histórico',
+            vehiculo=self.inactivo, activa=True,
+        )
+        respuesta = self.client.get(
+            reverse('cuadrillas:semanal_grid', args=[self.anio, self.semana])
+        )
+
+        self.assertContains(respuesta, 'INA-226-SEM - Ford')
+        self.assertContains(respuesta, f'value="{self.inactivo.pk}" selected')
+
+        guardado = self.client.post(
+            reverse('cuadrillas:semanal_bloque_editar', args=[bloque.pk]),
+            {'nombre': 'Bloque histórico actualizado', 'vehiculo': str(self.inactivo.pk)},
+        )
+        self.assertEqual(guardado.status_code, 200)
+        self.assertContains(guardado, 'Bloque histórico actualizado')
+        bloque.refresh_from_db()
+        self.assertEqual(bloque.vehiculo_id, self.inactivo.pk)
