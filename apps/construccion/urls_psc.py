@@ -10,6 +10,7 @@ for _module_name in (
     'urls_psc_personal',
     'urls_psc_excel',
     'urls_psc_lifecycle',
+    'urls_psc_asignacion',
 ):
     try:
         _module = __import__(f'{__package__}.{_module_name}', fromlist=['urlpatterns'])

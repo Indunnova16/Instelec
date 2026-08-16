@@ -6,7 +6,13 @@ from django.urls import reverse
 from django.views.generic import CreateView, DetailView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
-from apps.construccion.models import ProgramacionSemanalConstruccion
+from apps.construccion.models import (
+    ProgramacionSemanalConstruccion,
+    ProgramacionSemanalConstruccionPersonal,
+    ProgramacionSemanalConstruccionVehiculo,
+)
+from apps.construccion.services_psc_disponibilidad import personal_elegible
+from apps.cuadrillas.models import Vehiculo
 
 
 PSC_ADMIN_ROLES = [
@@ -116,7 +122,36 @@ class ProgramacionSemanalConstruccionDetailView(
     model = ProgramacionSemanalConstruccion
     template_name = 'construccion/programacion_semanal/detalle.html'
     context_object_name = 'programacion'
-    allowed_roles = PSC_ADMIN_ROLES
+    # Los supervisores pueden consultar la cuadrilla, pero no cambiarla.
+    allowed_roles = [*PSC_ADMIN_ROLES, 'supervisor']
 
     def get_queryset(self):
         return ProgramacionSemanalConstruccion.objects.select_related('proyecto', 'supervisor')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        programacion = self.object
+        personal_asignado = ProgramacionSemanalConstruccionPersonal.objects.filter(
+            programacion=programacion,
+        ).select_related('personal__rol_cuadrilla').order_by('personal__nombre')
+        vehiculos_asignados = ProgramacionSemanalConstruccionVehiculo.objects.filter(
+            programacion=programacion,
+        ).select_related('vehiculo', 'conductor').order_by('vehiculo__placa')
+        context.update({
+            # B6 — contrato de contexto para los partials de asignación.
+            'personal_asignado': personal_asignado,
+            'personal_disponible': personal_elegible(
+                programacion.proyecto_id, programacion.fecha_inicio, programacion.fecha_fin,
+            ),
+            'vehiculos_asignados': vehiculos_asignados,
+            'vehiculos_disponibles': Vehiculo.objects.filter(
+                estado=Vehiculo.Estado.ACTIVO,
+            ).exclude(
+                programaciones_semanales_psc__programacion=programacion,
+            ).order_by('placa'),
+            'puede_gestionar': (
+                self.request.user.is_superuser
+                or getattr(self.request.user, 'rol', '') in PSC_ADMIN_ROLES
+            ),
+        })
+        return context

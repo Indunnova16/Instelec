@@ -11,4 +11,49 @@
     <div><dt class="text-sm text-gray-500">Supervisor</dt><dd>{{ programacion.supervisor|default:'Sin asignar' }}</dd></div>
     <div><dt class="text-sm text-gray-500">Observaciones</dt><dd>{{ programacion.observaciones|default:'Sin observaciones' }}</dd></div>
 </dl>
+<div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="personal-asignado-titulo">
+        <h2 id="personal-asignado-titulo" class="text-xl font-semibold">Personal asignado</h2>
+        {% if personal_asignado %}
+            <ul class="mt-4 divide-y">
+                {% for asignacion in personal_asignado %}
+                    <li class="flex items-center justify-between gap-3 py-3">
+                        <div>
+                            <p class="font-medium">{{ asignacion.personal.nombre }}</p>
+                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}</p>
+                        </div>
+                        {% if puede_gestionar %}
+                            <form method="post" action="{% url 'construccion:psc_personal_quitar' pk=programacion.pk personal_pk=asignacion.personal.pk %}">
+                                {% csrf_token %}<button class="rounded border border-red-600 px-3 py-1 text-sm text-red-700" type="submit">Quitar</button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="mt-3 text-sm text-slate-600" role="status">Sin personal programado.</p>
+        {% endif %}
+        {% if puede_gestionar %}{% include "construccion/programacion_semanal/_asignar_personal.html" %}{% endif %}
+    </section>
+    <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="vehiculos-asignados-titulo">
+        <h2 id="vehiculos-asignados-titulo" class="text-xl font-semibold">Vehículos asignados</h2>
+        {% if vehiculos_asignados %}
+            <ul class="mt-4 divide-y">
+                {% for asignacion in vehiculos_asignados %}
+                    <li class="flex items-center justify-between gap-3 py-3">
+                        <div><p class="font-medium">{{ asignacion.vehiculo.placa }}</p><p class="text-sm text-slate-600">{{ asignacion.vehiculo.get_tipo_display }}{% if asignacion.conductor %} · Conductor: {{ asignacion.conductor.nombre }}{% else %} · Sin conductor asignado{% endif %}</p></div>
+                        {% if puede_gestionar %}
+                            <form method="post" action="{% url 'construccion:psc_vehiculo_quitar' pk=programacion.pk vehiculo_pk=asignacion.vehiculo.pk %}">
+                                {% csrf_token %}<button class="rounded border border-red-600 px-3 py-1 text-sm text-red-700" type="submit">Quitar</button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="mt-3 text-sm text-slate-600" role="status">Sin vehículos asignados.</p>
+        {% endif %}
+        {% if puede_gestionar %}{% include "construccion/programacion_semanal/_asignar_vehiculos.html" %}{% endif %}
+    </section>
+</div>
 {% endblock %}
