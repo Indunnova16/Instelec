@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from apps.actividades.models import TipoActividad
 from apps.cuadrillas.models import Cuadrilla
 from apps.cuadrillas.views_semanal import _bloque_a_dict, _choices_form_bloque
 from apps.lineas.models import Linea, Torre, Tramo
@@ -209,6 +210,43 @@ class TestCatalogoSupervisorMantenimiento(TestCase):
         self.assertEqual(response.status_code, 200)
         cuadrilla.refresh_from_db()
         self.assertEqual(cuadrilla.supervisor, supervisor)
+
+    def test_grid_expone_los_tres_catalogos_tomselect_con_opciones_buscables(self):
+        """La pantalla entrega los selects que el navegador transforma en búsqueda."""
+        admin = Usuario.objects.create_user(
+            email="admin_catalogos_ui_223@test.local",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="Catálogos 223",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+        tipo = TipoActividad.objects.create(
+            codigo="223-CAT", nombre="Poda 223", categoria=TipoActividad.Categoria.PODA
+        )
+        linea = Linea.objects.create(codigo="223-CAT-L", nombre="Línea catálogo 223")
+        supervisor = self._usuario(
+            "catalogo_ui_223@test.local", area="MANTENIMIENTO", documento="CC-223-UI"
+        )
+        client = Client()
+        client.force_login(admin)
+
+        response = client.get(reverse("cuadrillas:semanal_grid", args=[2099, 1]))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('id="id_tipo_actividad"', html)
+        self.assertIn('id="id_linea"', html)
+        self.assertIn('id="id_supervisor"', html)
+        self.assertRegex(
+            html, r'<select name="tipo_actividad" id="id_tipo_actividad"\s+class="js-tomselect'
+        )
+        self.assertRegex(html, r'<select name="linea_asignada" id="id_linea"\s+class="js-tomselect')
+        self.assertRegex(html, r'<select name="supervisor" id="id_supervisor"\s+class="js-tomselect')
+        self.assertIn(tipo.nombre, html)
+        self.assertIn(linea.codigo, html)
+        self.assertIn(supervisor.documento, html)
 
 
 class TestListadoSemanasActualesOFuturas(TestCase):
