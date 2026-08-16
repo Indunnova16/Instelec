@@ -1,0 +1,22 @@
+<form class="mt-5 border-t pt-4" method="post" action="{% url 'construccion:psc_personal_agregar' pk=programacion.pk %}">
+    {% csrf_token %}
+    <fieldset>
+        <legend class="font-medium">Agregar personal a la cuadrilla</legend>
+        <p class="mt-1 text-sm text-slate-600">Seleccione integrantes habilitados para este proyecto y periodo.</p>
+        <label class="mt-3 block text-sm font-medium" for="categoria-personal">Categoría</label>
+        <select id="categoria-personal" name="categoria" class="mt-1 w-full rounded border p-2">
+            <option value="OPERATIVO">Operativo</option>
+            <option value="ADMINISTRATIVO">Administrativo</option>
+        </select>
+        {% if personal_disponible %}
+            <ul class="mt-3 max-h-64 space-y-2 overflow-y-auto">
+                {% for persona in personal_disponible %}
+                    <li class="rounded border p-3"><label class="flex cursor-pointer gap-2"><input type="checkbox" name="personal_ids" value="{{ persona.pk }}"><span><span class="font-medium">{{ persona.nombre }}</span><span class="block text-sm text-slate-600">Cédula: {{ persona.documento }} · Cargo/Rol: {{ persona.rol_cuadrilla.nombre }}</span></span></label></li>
+                {% endfor %}
+            </ul>
+            <button class="mt-3 rounded bg-blue-600 px-4 py-2 text-white" type="submit">Agregar personal</button>
+        {% else %}
+            <p class="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" role="status">Sin programar: no hay personal habilitado y libre en este periodo.</p>
+        {% endif %}
+    </fieldset>
+</form>
