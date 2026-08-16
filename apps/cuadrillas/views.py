@@ -90,6 +90,7 @@ class VehiculoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['estados'] = Vehiculo.Estado.choices
+        context['eliminacion_bloqueada'] = self.request.GET.get('eliminacion_bloqueada') == '1'
         return context
 
 
@@ -137,15 +138,25 @@ class VehiculoEstadoView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
 
 
 class VehiculoDeleteView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Elimina vehículos sin cuadrillas activas que dependan de ellos."""
+    """Elimina vehículos sin asignaciones operativas activas.
+
+    Las cuadrillas inactivas son referencias históricas: no deben impedir que
+    un vehículo que ya no participa de la operación se retire del catálogo.
+    Una asignación activa, en cambio, requiere conservar el vehículo y ofrecer
+    la alternativa reversible de inactivarlo.
+    """
 
     allowed_roles = ['admin', 'director', 'coordinador']
 
     def post(self, request, *args, **kwargs):
         vehiculo = get_object_or_404(Vehiculo, pk=kwargs['pk'])
         if vehiculo.cuadrillas.filter(activa=True).exists():
-            messages.error(request, f'No se puede eliminar "{vehiculo.placa}" porque está asignado a una cuadrilla activa.')
-            return redirect('core:vehiculos_detalle', pk=vehiculo.pk)
+            messages.error(
+                request,
+                f'No se puede eliminar "{vehiculo.placa}" porque está asignado a una cuadrilla activa. '
+                'Inactívelo para retirarlo de las nuevas asignaciones.',
+            )
+            return redirect(f'{redirect("core:vehiculos_detalle", pk=vehiculo.pk).url}?eliminacion_bloqueada=1')
         placa = vehiculo.placa
         vehiculo.delete()
         messages.success(request, f'Vehículo "{placa}" eliminado exitosamente.')

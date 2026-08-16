@@ -157,12 +157,39 @@ class TestVehiculoListadoYEliminacion(TestCase):
         Cuadrilla.objects.create(codigo='CUA-226-A', nombre='Activa 226', vehiculo=self.activo, activa=True)
         respuesta = self.client.post(reverse('core:vehiculos_eliminar', args=[self.activo.pk]), follow=True)
         self.assertContains(respuesta, 'está asignado a una cuadrilla activa')
+        self.assertContains(respuesta, 'Inactivar vehículo')
+        self.assertContains(respuesta, 'No se eliminó para preservar la operación')
         self.assertTrue(Vehiculo.objects.filter(pk=self.activo.pk).exists())
+
+    def test_inactivar_desde_advertencia_retiro_de_nuevas_asignaciones(self):
+        Cuadrilla.objects.create(codigo='CUA-226-I', nombre='Activa para inactivar', vehiculo=self.activo, activa=True)
+        bloqueo = self.client.post(reverse('core:vehiculos_eliminar', args=[self.activo.pk]), follow=True)
+        self.assertContains(bloqueo, 'Inactivar vehículo')
+
+        respuesta = self.client.post(
+            reverse('core:vehiculos_estado', args=[self.activo.pk]),
+            {'estado': Vehiculo.Estado.INACTIVO},
+            follow=True,
+        )
+
+        self.assertContains(respuesta, 'actualizado a Inactivo')
+        self.activo.refresh_from_db()
+        self.assertEqual(self.activo.estado, Vehiculo.Estado.INACTIVO)
+        self.assertFalse(self.activo.activo)
 
     def test_eliminar_vehiculo_sin_asignacion_activa(self):
         respuesta = self.client.post(reverse('core:vehiculos_eliminar', args=[self.mantenimiento.pk]), follow=True)
         self.assertContains(respuesta, 'eliminado exitosamente')
         self.assertFalse(Vehiculo.objects.filter(pk=self.mantenimiento.pk).exists())
+
+    def test_eliminar_acepta_referencia_historica_inactiva(self):
+        Cuadrilla.objects.create(codigo='CUA-226-H', nombre='Histórica 226', vehiculo=self.mantenimiento, activa=False)
+
+        respuesta = self.client.post(reverse('core:vehiculos_eliminar', args=[self.mantenimiento.pk]), follow=True)
+
+        self.assertContains(respuesta, 'eliminado exitosamente')
+        self.assertFalse(Vehiculo.objects.filter(pk=self.mantenimiento.pk).exists())
+        self.assertIsNone(Cuadrilla.objects.get(codigo='CUA-226-H').vehiculo)
 
     def test_supervisor_no_puede_eliminar(self):
         self.client.force_login(_usuario_226('listado_supervisor_226@test.com', rol='supervisor'))
