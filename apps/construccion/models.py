@@ -10,6 +10,13 @@ from django.contrib.gis.db import models as gis_models
 from apps.core.models import BaseModel
 from apps.contratos.models import Contrato
 
+# Programación Semanal de Construcción (#225). El import es protegido para que
+# las ramas que aún no llevan el módulo sigan siendo importables.
+try:
+    from .models_psc import *  # noqa: F401,F403
+except ImportError:
+    pass
+
 
 class ProyectoConstruccion(BaseModel):
     """
