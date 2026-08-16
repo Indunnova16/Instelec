@@ -21,7 +21,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
             </p>
             {% endif %}
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {{ total_bloques }} bloque(s) · {{ total_miembros }} asignación(es)
+                {{ total_bloques }} cuadrilla(s) · {{ total_miembros }} asignación(es)
                 {% if total_novedades %}· {{ total_novedades }} novedad(es){% endif %}
             </p>
         </div>
@@ -109,7 +109,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
                         aria-label="Semana origen a duplicar">
                     {% for s in semanas_disponibles %}
                     <option value="{{ s.key }}" {% if s.key == semana_origen_key %}selected{% endif %}>
-                        Semana {{ s.semana }}/{{ s.anio }} ({{ s.n_bloques }} bloque(s))
+                        Semana {{ s.semana }}/{{ s.anio }} ({{ s.n_bloques }} cuadrilla(s))
                     </option>
                     {% endfor %}
                 </select>
@@ -130,7 +130,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
 
     {% if confirmar_duplicado %}
     <div class="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200">
-        Esta semana ya tiene programación. Al confirmar se agregarán únicamente los bloques
+        Esta semana ya tiene programación. Al confirmar se agregarán únicamente las cuadrillas
         de la semana {{ origen_seleccionado_semana }}/{{ origen_seleccionado_anio }} que aún no existan (los actuales no se modifican).
     </div>
     {% endif %}
@@ -140,11 +140,11 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
         <button type="button" id="btn-nuevo-bloque" data-action="nuevo-bloque"
                 @click="creando = !creando"
                 class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm flex items-center gap-2"
-                aria-label="Agregar nuevo bloque de actividad a la semana">
+                aria-label="Agregar nueva cuadrilla a la semana">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
-            + Nuevo bloque
+            + Nueva cuadrilla
         </button>
         <template x-if="creando">
             <div class="mt-3">
@@ -155,7 +155,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
     </div>
 
     <!-- Bloques de actividad -->
-    <section id="bloques-lista" class="space-y-4" aria-label="Bloques de actividad de la semana">
+    <section id="bloques-lista" class="space-y-4" aria-label="Cuadrillas de la semana">
         {% for b in bloques %}
         {% include 'cuadrillas/partials/_bloque_card.html' with b=b anio=anio semana=semana tipos_actividad_bloque=tipos_actividad_bloque lineas_bloque=lineas_bloque vehiculos_bloque=vehiculos_bloque supervisores_bloque=supervisores_bloque %}
         {% endfor %}
@@ -211,7 +211,7 @@ prev/next, origen_*, confirmar_duplicado, tipos_actividad_bloque, etc).
     <section class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" aria-label="Personal sin programar en la semana">
         <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
             <h2 class="font-semibold text-gray-900 dark:text-white">Personal sin programar ({{ total_personal_sin_asignar }})</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Colaboradores activos del maestro que aún no están asignados a ningún bloque de esta semana.</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Colaboradores activos del maestro que aún no están asignados a ninguna cuadrilla de esta semana.</p>
         </div>
         <div class="p-4 overflow-x-auto">
             <table class="min-w-full text-sm">

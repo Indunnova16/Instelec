@@ -1,8 +1,11 @@
 """Regression tests for the weekly-crew range and free-route changes in #223."""
 
 from datetime import date
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import Client, TestCase
@@ -264,3 +267,64 @@ class TestListadoSemanasActualesOFuturas(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.pasada.nombre)
+
+
+class TestTerminologiaCuadrilla(TestCase):
+    """A4: la programación semanal usa la terminología del cliente."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(
+            email="admin_terminologia_223@test.local",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="Terminologia",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+        Cuadrilla.objects.create(
+            codigo="01-2099-0001-TERM",
+            nombre="Cuadrilla terminología 223",
+            fecha=date(2099, 1, 5),
+            activa=True,
+        )
+
+    def test_grid_y_formulario_dicen_cuadrilla_y_conservan_ids_tecnicos(self):
+        response = self.client.get(reverse("cuadrillas:semanal_grid", args=[2099, 1]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "1 cuadrilla(s)")
+        self.assertContains(response, "+ Nueva cuadrilla")
+        self.assertContains(response, 'id="btn-nuevo-bloque"')
+        self.assertContains(response, 'data-bloque-codigo="01-2099-0001-TERM"')
+
+        form = render_to_string("cuadrillas/partials/_bloque_form.html", {"b": {}})
+        self.assertIn("Nombre de la cuadrilla", form)
+        self.assertIn("Guardar cuadrilla", form)
+
+    def test_pdf_generado_usa_cuadrillas(self):
+        class FakeHTML:
+            ultimo_html = ""
+
+            def __init__(self, *, string, base_url):
+                type(self).ultimo_html = string
+
+            def write_pdf(self):
+                return b"%PDF-1.4 terminologia"
+
+        with patch.dict("sys.modules", {"weasyprint": SimpleNamespace(HTML=FakeHTML)}):
+            response = self.client.get(reverse("cuadrillas:semanal_pdf", args=[2099, 1]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertIn("1 cuadrilla(s)", FakeHTML.ultimo_html)
+        self.assertIn("Programación semanal de cuadrillas", FakeHTML.ultimo_html)
+        self.assertIn("Cuadrilla: Cuadrilla terminología 223", FakeHTML.ultimo_html)
+
+    def test_terminologia_de_macro_bloques_de_construccion_no_cambia(self):
+        macro = Path(settings.BASE_DIR) / "templates/construccion/programacion_cuadrilla_lista.html"
+
+        self.assertIn(">Bloque</th>", macro.read_text(encoding="utf-8"))

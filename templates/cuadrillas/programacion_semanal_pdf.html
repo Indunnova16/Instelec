@@ -8,7 +8,7 @@
         size: A4 landscape;
         margin: 1.2cm 1cm;
         @bottom-center {
-            content: "Programación semanal cuadrillas — Instelec SAS — página " counter(page) " de " counter(pages);
+            content: "Programación semanal de cuadrillas — Instelec SAS — página " counter(page) " de " counter(pages);
             font-size: 7pt;
             color: #666;
         }
@@ -69,7 +69,7 @@
         <div class="sub">{{ lunes|date:"d/m/Y" }} — {{ domingo|date:"d/m/Y" }}</div>
         {% endif %}
         <div class="meta">
-            {{ total_bloques }} bloque(s) &middot; {{ total_miembros }} asignación(es)
+            {{ total_bloques }} cuadrilla(s) &middot; {{ total_miembros }} asignación(es)
             {% if total_novedades %}&middot; {{ total_novedades }} novedad(es){% endif %}
             &middot; Generado {{ generado|date:"d/m/Y H:i" }}
         </div>
@@ -82,7 +82,7 @@
     {% for b in bloques %}
     <div class="block">
         <div class="block-head">
-            {{ b.nombre }}
+            Cuadrilla: {{ b.nombre }}
             <span class="chips">
                 {{ b.codigo }}{% if b.linea %} &middot; Línea {{ b.linea }}{% endif %}{% if b.tramo_libre %} &middot; Tramo {{ b.tramo_libre }}{% elif b.tramo %} &middot; Tramo {{ b.tramo }}{% endif %}{% if b.vehiculo %} &middot; {{ b.vehiculo }}{% endif %}{% if b.fecha %} &middot; Fecha Inicio: {{ b.fecha|date:"d/m/Y" }}{% endif %}{% if b.fecha_fin %} &middot; Fecha Fin: {{ b.fecha_fin|date:"d/m/Y" }}{% endif %}
             </span>

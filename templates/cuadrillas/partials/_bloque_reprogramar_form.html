@@ -25,12 +25,12 @@ Recibe:
     {% csrf_token %}
     <div class="md:col-span-3">
         <p class="text-xs text-orange-700 dark:text-orange-300">
-            Mueve este bloque a una nueva actividad/línea desde la fecha indicada. El bloque
+            Mueve esta cuadrilla a una nueva actividad/línea desde la fecha indicada. La cuadrilla
             original queda intacto hasta el día anterior — su personal NO se modifica.
         </p>
     </div>
     <div>
-        <label for="id_reprogramar_nombre" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del bloque nuevo</label>
+        <label for="id_reprogramar_nombre" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre de la nueva cuadrilla</label>
         <input type="text" name="nombre" id="id_reprogramar_nombre" required maxlength="100"
                value="{{ reprogramar_state.nombre|default:'' }}"
                placeholder="Ej: Emergencia sector sur"

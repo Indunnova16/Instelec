@@ -579,7 +579,7 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
         anio, semana = int(anio), int(semana)
         nombre = (request.POST.get("nombre") or "").strip()
         if not nombre:
-            return self._form_con_error(request, anio, semana, "El nombre del bloque es obligatorio.")
+            return self._form_con_error(request, anio, semana, "El nombre de la cuadrilla es obligatorio.")
 
         fecha_str = (request.POST.get("fecha_inicio") or request.POST.get("fecha") or "").strip()
         fecha = None
@@ -635,7 +635,7 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
                 )
         except Exception as e:
             logger.exception("Error creando bloque de programación semanal (issue #188)")
-            return self._form_con_error(request, anio, semana, f"Error al crear el bloque: {e}")
+            return self._form_con_error(request, anio, semana, f"Error al crear la cuadrilla: {e}")
 
         card_html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
@@ -682,7 +682,7 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
 
         nombre = (request.POST.get("nombre") or "").strip()
         if not nombre:
-            return self._card_con_error(request, cuadrilla, anio, semana, "El nombre del bloque es obligatorio.")
+            return self._card_con_error(request, cuadrilla, anio, semana, "El nombre de la cuadrilla es obligatorio.")
 
         fecha_str = (request.POST.get("fecha_inicio") or request.POST.get("fecha") or "").strip()
         fecha = None
@@ -958,13 +958,13 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
                 origen,
                 None,
                 None,
-                "No se pudo determinar la semana del bloque origen a partir de su código.",
+                "No se pudo determinar la semana de la cuadrilla origen a partir de su código.",
             )
 
         nombre = (request.POST.get("nombre") or "").strip()
         if not nombre:
             return self._form_con_error(
-                request, origen, anio, semana, "El nombre del bloque nuevo es obligatorio."
+                request, origen, anio, semana, "El nombre de la nueva cuadrilla es obligatorio."
             )
 
         fecha_desde_str = (request.POST.get("fecha_desde") or "").strip()
@@ -984,7 +984,7 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
                 anio,
                 semana,
                 f"La fecha debe estar dentro de la semana {semana:02d}/{anio}{rango} del "
-                f"bloque origen; reprogramar hacia otra semana no está soportado.",
+                f"cuadrilla origen; reprogramar hacia otra semana no está soportado.",
             )
         if origen.fecha and fecha_desde <= origen.fecha:
             return self._form_con_error(
@@ -992,7 +992,7 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
                 origen,
                 anio,
                 semana,
-                f"La fecha debe ser posterior al inicio del bloque origen "
+                f"La fecha debe ser posterior al inicio de la cuadrilla origen "
                 f"({origen.fecha:%d/%m/%Y}).",
             )
 
@@ -1106,7 +1106,7 @@ class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, Vie
             messages.warning(
                 request,
                 f"La semana {semana:02d}/{anio} ya tiene programación. Al duplicar "
-                f"solo se agregarán los bloques que falten (los existentes NO se "
+                f"solo se agregarán las cuadrillas que falten (las existentes NO se "
                 f"sobrescriben). Confirmá para continuar.",
             )
             url = reverse("cuadrillas:semanal_grid", args=[anio, semana])
@@ -1167,14 +1167,14 @@ class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, Vie
             extra = f" {omitidas} ya existían y se omitieron." if omitidas else ""
             messages.success(
                 request,
-                f"Semana {semana:02d}/{anio}: se duplicaron {creadas} bloque(s) y "
+                f"Semana {semana:02d}/{anio}: se duplicaron {creadas} cuadrilla(s) y "
                 f"{miembros_creados} asignación(es) desde la semana "
                 f"{origen_semana:02d}/{origen_anio}.{extra} Ahora podés editarla.",
             )
         else:
             messages.info(
                 request,
-                f"No se creó ningún bloque nuevo: los {omitidas} bloque(s) de la "
+                f"No se creó ninguna cuadrilla nueva: las {omitidas} cuadrilla(s) de la "
                 f"semana {origen_semana:02d}/{origen_anio} ya existían en la semana "
                 f"{semana:02d}/{anio}.",
             )
