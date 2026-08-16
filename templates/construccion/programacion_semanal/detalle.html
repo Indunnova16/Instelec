@@ -1,0 +1,14 @@
+{% extends "construccion/programacion_semanal/_base.html" %}
+
+{% block psc_content %}
+<div class="mb-6 flex items-center justify-between"><h1 class="text-2xl font-bold">Programación semanal</h1><a class="rounded bg-blue-600 px-4 py-2 text-white" href="{% url 'construccion:psc_programacion_editar' pk=programacion.pk %}">Editar</a></div>
+<dl class="grid grid-cols-1 gap-4 rounded-lg bg-white p-6 shadow md:grid-cols-2">
+    <div><dt class="text-sm text-gray-500">Proyecto</dt><dd>{{ programacion.proyecto }}</dd></div>
+    <div><dt class="text-sm text-gray-500">Tipo / subactividad</dt><dd>{{ programacion.get_tipo_actividad_display }}{% if programacion.subactividad %} — {{ programacion.subactividad }}{% endif %}</dd></div>
+    {% if programacion.actividad_complementaria %}<div class="md:col-span-2"><dt class="text-sm text-gray-500">Actividad complementaria</dt><dd>{{ programacion.actividad_complementaria }}</dd></div>{% endif %}
+    <div><dt class="text-sm text-gray-500">Periodo</dt><dd>{{ programacion.fecha_inicio }} a {{ programacion.fecha_fin }}</dd></div>
+    <div><dt class="text-sm text-gray-500">Horario</dt><dd>{{ programacion.hora_inicio|default:'Sin definir' }} — {{ programacion.hora_fin|default:'Sin definir' }}</dd></div>
+    <div><dt class="text-sm text-gray-500">Supervisor</dt><dd>{{ programacion.supervisor|default:'Sin asignar' }}</dd></div>
+    <div><dt class="text-sm text-gray-500">Observaciones</dt><dd>{{ programacion.observaciones|default:'Sin observaciones' }}</dd></div>
+</dl>
+{% endblock %}

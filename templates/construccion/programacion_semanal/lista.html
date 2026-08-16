@@ -1,0 +1,8 @@
+{% extends "construccion/programacion_semanal/_base.html" %}
+
+{% block psc_content %}
+<div class="mb-6 flex items-center justify-between"><h1 class="text-2xl font-bold">Programación semanal</h1><a class="rounded bg-blue-600 px-4 py-2 text-white" href="{% url 'construccion:psc_programacion_crear' %}">Nueva programación</a></div>
+{% if programaciones %}
+<div class="overflow-x-auto rounded-lg bg-white shadow"><table class="min-w-full"><thead><tr class="text-left"><th class="p-3">Proyecto</th><th class="p-3">Actividad</th><th class="p-3">Periodo</th><th class="p-3">Acción</th></tr></thead><tbody>{% for programacion in programaciones %}<tr class="border-t"><td class="p-3">{{ programacion.proyecto }}</td><td class="p-3">{{ programacion.get_tipo_actividad_display }} {{ programacion.subactividad }}</td><td class="p-3">{{ programacion.fecha_inicio }} — {{ programacion.fecha_fin }}</td><td class="p-3"><a class="text-blue-700 underline" href="{% url 'construccion:psc_programacion_detalle' pk=programacion.pk %}">Ver</a></td></tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="rounded bg-white p-6 shadow">No hay programaciones semanales registradas.</p>{% endif %}
+{% endblock %}

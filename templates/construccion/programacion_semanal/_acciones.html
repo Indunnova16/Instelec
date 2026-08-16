@@ -1,0 +1,12 @@
+<div class="flex flex-wrap gap-2" aria-label="Acciones de programación">
+  <a class="rounded border border-blue-700 px-3 py-1 text-sm text-blue-700 hover:bg-blue-50" href="{% url 'construccion:psc_programacion_detalle' pk=programacion.pk %}">Ver detalle</a>
+  {% if puede_gestionar %}
+    <a class="rounded border border-amber-700 px-3 py-1 text-sm text-amber-800 hover:bg-amber-50" href="{% url 'construccion:psc_programacion_editar' pk=programacion.pk %}">Editar</a>
+    <form method="post" action="{% url 'construccion:psc_programacion_duplicar' pk=programacion.pk %}" data-psc-action="duplicar">
+      {% csrf_token %}<button class="rounded border border-green-700 px-3 py-1 text-sm text-green-800 hover:bg-green-50" type="submit">Duplicar</button>
+    </form>
+    <form method="post" action="{% url 'construccion:psc_programacion_eliminar' pk=programacion.pk %}" data-psc-action="eliminar" data-confirmacion="¿Eliminar esta programación y sus asignaciones?">
+      {% csrf_token %}<button class="rounded border border-red-700 px-3 py-1 text-sm text-red-700 hover:bg-red-50" type="submit">Eliminar</button>
+    </form>
+  {% endif %}
+</div>

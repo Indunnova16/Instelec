@@ -333,3 +333,11 @@ try:
     urlpatterns += urls_pc.urlpatterns
 except Exception:
     pass
+
+# Programación Semanal de Construcción (#225): el agregador reúne las rutas
+# independientes de cada sub-feature bajo /construccion/cuadrillas/semanal/.
+try:
+    from . import urls_psc  # noqa: E402
+    urlpatterns += urls_psc.urlpatterns
+except ImportError:
+    pass

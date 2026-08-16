@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="max-w-7xl mx-auto px-4 py-6" data-module="programacion-semanal-construccion">
+    {% block psc_content %}{% endblock %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+{# Contratos de integración PSC: #psc-programacion-form, #psc-personal-disponible,
+   #psc-tabla-semanal, #psc-importar-form, #psc-exportar-excel y #psc-importar-excel. #}
+{% block psc_extra_js %}{% endblock %}
+{% endblock %}

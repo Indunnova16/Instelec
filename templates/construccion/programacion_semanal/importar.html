@@ -1,0 +1,32 @@
+{% extends "construccion/programacion_semanal/_base.html" %}
+
+{% block psc_content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+  <div><h1 class="text-2xl font-bold">Importar programación semanal</h1><p class="text-gray-600">Cargue actividades, personal y vehículos desde la plantilla oficial.</p></div>
+  <a id="psc-exportar-excel" class="rounded bg-blue-700 px-4 py-2 text-white" href="{% url 'construccion:psc_exportar_excel' %}">Exportar Excel</a>
+</div>
+<div class="rounded bg-white p-6 shadow">
+  <p class="mb-4 text-sm text-gray-600">La importación se valida completa: si una fila falla, no se guarda ninguna.</p>
+  <a class="mb-4 inline-block text-blue-700 underline" href="{% url 'construccion:psc_plantilla_excel' %}">Descargar plantilla XLSX</a>
+  <form id="psc-importar-form" enctype="multipart/form-data" method="post" class="space-y-4">
+    {% csrf_token %}
+    <label class="block" for="psc-importar-excel"><span class="font-medium">Archivo XLSX</span><input id="psc-importar-excel" name="archivo" type="file" accept=".xlsx" required class="mt-1 block w-full" /></label>
+    <button type="submit" class="rounded bg-green-700 px-4 py-2 text-white">Validar e importar</button>
+  </form>
+  <p id="psc-importando-estado" class="mt-3 hidden text-blue-700" role="status">Validando archivo e importando…</p>
+</div>
+{% if import_result and import_result.ok %}
+<section class="mt-6 rounded border border-green-300 bg-green-50 p-4 text-green-800" role="status">Importación completada: {{ import_result.created }} programaciones creadas.</section>
+{% endif %}
+{% if import_result and import_result.errors %}
+<section class="mt-6 rounded border border-red-300 bg-red-50 p-4" role="alert"><h2 class="font-bold">Errores encontrados</h2><ul class="mt-2 list-disc pl-5">{% for error in import_result.errors %}<li>{% if error.row %}Fila {{ error.row }}: {% endif %}{{ error.error }}</li>{% endfor %}</ul></section>
+{% endif %}
+{% endblock %}
+
+{% block psc_extra_js %}
+<script>
+document.getElementById('psc-importar-form')?.addEventListener('submit', function () {
+  document.getElementById('psc-importando-estado')?.classList.remove('hidden');
+});
+</script>
+{% endblock %}

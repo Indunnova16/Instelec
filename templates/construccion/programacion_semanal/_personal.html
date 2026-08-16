@@ -1,0 +1,10 @@
+<section id="psc-personal-disponible" aria-live="polite" class="rounded-lg border bg-white p-4">
+    {% if error %}
+        <p class="rounded border border-red-300 bg-red-50 p-3 text-red-700" role="alert">{{ error }}</p>
+    {% elif consulta_exitosa %}
+        <p class="mb-3 text-sm text-green-700" role="status">Disponibilidad consultada para {{ proyecto.nombre }}.</p>
+        {% include "construccion/programacion_semanal/_personal_disponible.html" %}
+    {% else %}
+        <p class="text-sm text-slate-600" role="status">Seleccione proyecto y fechas para consultar disponibilidad.</p>
+    {% endif %}
+</section>

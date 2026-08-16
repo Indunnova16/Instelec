@@ -579,6 +579,12 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     {# 10. Programación de Cuadrillas — subsección administrativa (#155, B1). issue #186 (186-M3): gateado por PROGRAMACION. #}
                     {% if ok_programacion %}
                     {% include "construccion/_nav_admin_programacion.html" %}
+                    <li role="none" x-show="modulo === 'construccion'">
+                        <a href="/construccion/cuadrillas/semanal/" role="menuitem"
+                           class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                            Programación Semanal
+                        </a>
+                    </li>
                     {% endif %}
                 </div>
             </template>

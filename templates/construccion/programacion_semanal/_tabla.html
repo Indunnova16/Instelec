@@ -1,0 +1,30 @@
+{% extends "construccion/programacion_semanal/_base.html" %}
+
+{% block psc_content %}
+<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+  <div><h1 class="text-2xl font-bold">Programación semanal</h1><p class="text-sm text-gray-600">{% if puede_gestionar %}Gestione y audite todas las programaciones.{% else %}Solo se muestran las programaciones donde usted es líder o integrante.{% endif %}</p></div>
+  {% if puede_gestionar %}<a class="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700" href="{% url 'construccion:psc_programacion_crear' %}">Nueva programación</a>{% endif %}
+</div>
+{% if programaciones %}
+  <div id="psc-tabla-semanal" class="overflow-x-auto rounded-lg bg-white shadow" aria-live="polite">
+    <table class="min-w-full"><thead><tr class="text-left"><th class="p-3">Proyecto</th><th class="p-3">Actividad</th><th class="p-3">Periodo</th><th class="p-3">Acciones</th></tr></thead>
+    <tbody>{% for programacion in programaciones %}<tr class="border-t"><td class="p-3">{{ programacion.proyecto }}</td><td class="p-3">{{ programacion.get_tipo_actividad_display }}{% if programacion.subactividad %} — {{ programacion.subactividad }}{% endif %}</td><td class="p-3">{{ programacion.fecha_inicio }} — {{ programacion.fecha_fin }}</td><td class="p-3">{% include "construccion/programacion_semanal/_acciones.html" %}</td></tr>{% endfor %}</tbody></table>
+  </div>
+{% else %}
+  <p id="psc-tabla-semanal" class="rounded bg-white p-6 shadow" role="status">No hay programaciones semanales disponibles para su usuario.</p>
+{% endif %}
+<p id="psc-accion-estado" class="mt-3 hidden text-blue-700" role="status">Procesando acción…</p>
+{% endblock %}
+
+{% block psc_extra_js %}
+<script>
+document.querySelectorAll('[data-psc-action]').forEach(function (form) {
+  form.addEventListener('submit', function (event) {
+    if (form.dataset.pscAction === 'eliminar' && !window.confirm(form.dataset.confirmacion)) { event.preventDefault(); return; }
+    var status = document.getElementById('psc-accion-estado');
+    status.classList.remove('hidden');
+    form.querySelector('button').disabled = true;
+  });
+});
+</script>
+{% endblock %}
