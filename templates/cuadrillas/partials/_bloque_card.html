@@ -32,7 +32,7 @@ montado a la vez). Recibe:
                 <div>
                     <h2 class="font-semibold text-gray-900 dark:text-white">{{ b.nombre }}</h2>
                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                        {{ b.codigo }}{% if b.fecha %} · {{ b.fecha|date:"d/m/Y" }}{% if b.fecha_fin %}–{{ b.fecha_fin|date:"d/m/Y" }}{% endif %}{% endif %}
+                        {{ b.codigo }}{% if b.fecha %} · Fecha Inicio: {{ b.fecha|date:"d/m/Y" }}{% endif %}{% if b.fecha_fin %} · Fecha Fin: {{ b.fecha_fin|date:"d/m/Y" }}{% endif %}
                         {% if b.hora_inicio_planeada and b.hora_fin_planeada %}
                         · <span title="Hora planeada del bloque, distinta de la asistencia real">Horario planeado: {{ b.hora_inicio_planeada }}–{{ b.hora_fin_planeada }}</span>
                         {% endif %}
@@ -42,7 +42,7 @@ montado a la vez). Recibe:
                     {% if b.reprogramado_desde_codigo %}<span class="px-2 py-1 text-xs rounded bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" title="Este bloque nació de reprogramar {{ b.reprogramado_desde_codigo }}">↩ Reprogramado desde {{ b.reprogramado_desde_codigo }}</span>{% endif %}
                     {% if b.tipo_actividad %}<span class="px-2 py-1 text-xs rounded bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">{{ b.tipo_actividad }}</span>{% endif %}
                     {% if b.linea %}<span class="px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">Línea {{ b.linea }}</span>{% endif %}
-                    {% if b.tramo %}<span class="px-2 py-1 text-xs rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">Tramo {{ b.tramo }}{% if b.tramo_nombre %} - {{ b.tramo_nombre }}{% endif %}</span>{% endif %}
+                    {% if b.tramo_libre %}<span class="px-2 py-1 text-xs rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">Tramo {{ b.tramo_libre }}</span>{% elif b.tramo %}<span class="px-2 py-1 text-xs rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">Tramo {{ b.tramo }}{% if b.tramo_nombre %} - {{ b.tramo_nombre }}{% endif %}</span>{% endif %}
                     {% if b.vehiculo %}<span class="px-2 py-1 text-xs rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">🚚 {{ b.vehiculo }}</span>{% endif %}
                     <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">{{ b.miembros|length }} pers.</span>
                     <button type="button" data-action="editar-bloque" @click="editando = true"

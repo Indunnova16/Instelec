@@ -188,6 +188,7 @@ def _bloque_a_dict(cuadrilla):
         "tramo_id": str(cuadrilla.tramo_id) if cuadrilla.tramo_id else "",
         "tramo": getattr(cuadrilla.tramo, "codigo", "") or "",
         "tramo_nombre": getattr(cuadrilla.tramo, "nombre", "") or "",
+        "tramo_libre": cuadrilla.tramo_libre or "",
         "vehiculo_id": str(cuadrilla.vehiculo_id) if cuadrilla.vehiculo_id else "",
         "vehiculo": getattr(cuadrilla.vehiculo, "placa", "") or "",
         "supervisor_id": str(cuadrilla.supervisor_id) if cuadrilla.supervisor_id else "",
@@ -268,9 +269,11 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
         "tramo_id": request.POST.get("tramo") or "",
         "tramo": "",
         "tramo_nombre": "",
+        "tramo_libre": (request.POST.get("tramo_libre") or "").strip(),
         "vehiculo_id": request.POST.get("vehiculo") or "",
         "supervisor_id": request.POST.get("supervisor") or "",
         "fecha": fecha,
+        "fecha_fin": (request.POST.get("fecha_fin") or "").strip(),
         # Issue #178 (D1): a diferencia de `fecha` (que llega ya parseada por
         # el caller), estos se leen crudos del POST — el input type="time"
         # espera directamente el string "HH:MM" como value, y así el usuario
@@ -577,13 +580,25 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
         if not nombre:
             return self._form_con_error(request, anio, semana, "El nombre del bloque es obligatorio.")
 
-        fecha_str = (request.POST.get("fecha") or "").strip()
+        fecha_str = (request.POST.get("fecha_inicio") or request.POST.get("fecha") or "").strip()
         fecha = None
         if fecha_str:
             try:
                 fecha = date.fromisoformat(fecha_str)
             except ValueError:
                 return self._form_con_error(request, anio, semana, "La fecha ingresada no es válida.")
+
+        fecha_fin_str = (request.POST.get("fecha_fin") or "").strip()
+        fecha_fin = None
+        if fecha_fin_str:
+            try:
+                fecha_fin = date.fromisoformat(fecha_fin_str)
+            except ValueError:
+                return self._form_con_error(request, anio, semana, "La fecha de fin ingresada no es válida.")
+        if fecha and fecha_fin and fecha_fin < fecha:
+            return self._form_con_error(
+                request, anio, semana, "La fecha de fin no puede ser anterior a la fecha de inicio."
+            )
 
         # Issue #178 (D1): hora de inicio/fin PLANEADA — ambas opcionales,
         # nullable (M1). Si ambas vienen y fin < inicio, error inline (no
@@ -607,11 +622,12 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
                     nombre=nombre,
                     tipo_actividad_id=request.POST.get("tipo_actividad") or None,
                     linea_asignada_id=request.POST.get("linea_asignada") or None,
-                    tramo_id=request.POST.get("tramo") or None,
+                    tramo_libre=(request.POST.get("tramo_libre") or "").strip(),
                     vehiculo_id=request.POST.get("vehiculo") or None,
                     supervisor_id=request.POST.get("supervisor") or None,
                     observaciones=(request.POST.get("observaciones") or "").strip(),
                     fecha=fecha,
+                    fecha_fin=fecha_fin,
                     hora_inicio_planeada=hora_inicio_planeada,
                     hora_fin_planeada=hora_fin_planeada,
                     activa=True,
@@ -667,13 +683,28 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
         if not nombre:
             return self._card_con_error(request, cuadrilla, anio, semana, "El nombre del bloque es obligatorio.")
 
-        fecha_str = (request.POST.get("fecha") or "").strip()
+        fecha_str = (request.POST.get("fecha_inicio") or request.POST.get("fecha") or "").strip()
         fecha = None
         if fecha_str:
             try:
                 fecha = date.fromisoformat(fecha_str)
             except ValueError:
                 return self._card_con_error(request, cuadrilla, anio, semana, "La fecha ingresada no es válida.")
+
+        fecha_fin_str = (request.POST.get("fecha_fin") or "").strip()
+        fecha_fin = None
+        if fecha_fin_str:
+            try:
+                fecha_fin = date.fromisoformat(fecha_fin_str)
+            except ValueError:
+                return self._card_con_error(
+                    request, cuadrilla, anio, semana, "La fecha de fin ingresada no es válida."
+                )
+        if fecha and fecha_fin and fecha_fin < fecha:
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                "La fecha de fin no puede ser anterior a la fecha de inicio.",
+            )
 
         # Issue #178 (D1): idem ProgramacionSemanalBloqueCrearView.
         try:
@@ -694,11 +725,12 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
                 cuadrilla.nombre = nombre
                 cuadrilla.tipo_actividad_id = request.POST.get("tipo_actividad") or None
                 cuadrilla.linea_asignada_id = request.POST.get("linea_asignada") or None
-                cuadrilla.tramo_id = request.POST.get("tramo") or None
+                cuadrilla.tramo_libre = (request.POST.get("tramo_libre") or "").strip()
                 cuadrilla.vehiculo_id = request.POST.get("vehiculo") or None
                 cuadrilla.supervisor_id = request.POST.get("supervisor") or None
                 cuadrilla.observaciones = (request.POST.get("observaciones") or "").strip()
                 cuadrilla.fecha = fecha
+                cuadrilla.fecha_fin = fecha_fin
                 cuadrilla.hora_inicio_planeada = hora_inicio_planeada
                 cuadrilla.hora_fin_planeada = hora_fin_planeada
                 cuadrilla.save()

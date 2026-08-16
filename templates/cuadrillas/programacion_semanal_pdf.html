@@ -84,7 +84,7 @@
         <div class="block-head">
             {{ b.nombre }}
             <span class="chips">
-                {{ b.codigo }}{% if b.linea %} &middot; Línea {{ b.linea }}{% endif %}{% if b.vehiculo %} &middot; {{ b.vehiculo }}{% endif %}{% if b.fecha %} &middot; {{ b.fecha|date:"d/m/Y" }}{% endif %}
+                {{ b.codigo }}{% if b.linea %} &middot; Línea {{ b.linea }}{% endif %}{% if b.tramo_libre %} &middot; Tramo {{ b.tramo_libre }}{% elif b.tramo %} &middot; Tramo {{ b.tramo }}{% endif %}{% if b.vehiculo %} &middot; {{ b.vehiculo }}{% endif %}{% if b.fecha %} &middot; Fecha Inicio: {{ b.fecha|date:"d/m/Y" }}{% endif %}{% if b.fecha_fin %} &middot; Fecha Fin: {{ b.fecha_fin|date:"d/m/Y" }}{% endif %}
             </span>
         </div>
         {% if b.observaciones %}<div class="block-obs">{{ b.observaciones }}</div>{% endif %}

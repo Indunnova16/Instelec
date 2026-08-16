@@ -230,6 +230,14 @@ class Cuadrilla(BaseModel):
         'La tabla tramos puede estar vacía hasta que el cliente la cargue — el campo '
         'admite None sin romper el bloque.',
     )
+    tramo_libre = models.CharField(
+        'Tramo libre',
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Issue #223 (A1): descripción libre del tramo operativo. Conserva el FK '
+        '`tramo` para que las cuadrillas legacy sigan mostrando su catálogo histórico.',
+    )
     activa = models.BooleanField(
         'Activa',
         default=True
