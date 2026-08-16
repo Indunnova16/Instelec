@@ -111,9 +111,22 @@ class Vehiculo(BaseModel):
         estado_cambio = self.estado != self._estado_original
         activo_cambio = self.activo != self._activo_original
 
-        if self._state.adding and self.estado == self.Estado.ACTIVO and not self.activo:
-            self.estado = self.Estado.INACTIVO
-            estado_cambio = True
+        if self._state.adding:
+            # Registro nuevo: `_estado_original`/`_activo_original` se
+            # capturaron en __init__ con los MISMOS kwargs del constructor,
+            # así que `estado_cambio`/`activo_cambio` comparados contra sí
+            # mismos siempre dan False acá -- no sirven para detectar qué
+            # campo vino explícito. En su lugar: `estado` no-default manda
+            # (ej. Vehiculo.objects.create(estado=EN_MANTENIMIENTO) debe
+            # dejar activo=False, no el default True del campo); si `estado`
+            # quedó en su default (ACTIVO) pero `activo` vino explícito en
+            # False, es el puente legacy inverso.
+            if self.estado != self.Estado.ACTIVO:
+                self.activo = False
+                activo_cambio = True
+            elif not self.activo:
+                self.estado = self.Estado.INACTIVO
+                estado_cambio = True
         elif estado_cambio:
             self.activo = self.estado == self.Estado.ACTIVO
             activo_cambio = True

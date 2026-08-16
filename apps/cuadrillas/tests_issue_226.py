@@ -1,10 +1,7 @@
 """Regression tests for the shared vehicle catalogue in issue #226."""
 
-from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.cuadrillas.models import Cuadrilla, Vehiculo
@@ -120,15 +117,22 @@ class TestVehiculoCRUDParametrizacion(TestCase):
         self.assertEqual(Vehiculo.objects.filter(placa__iexact='DUP-226').count(), 1)
 
     def test_usuario_sin_rol_autorizado_no_puede_crear_ni_cambiar_estado(self):
+        # Django convierte PermissionDenied en una respuesta 403 ANTES de que
+        # llegue al test client (django.core.handlers.exception) -- nunca se
+        # re-lanza como excepción, incluso con TestCase. assertRaises acá
+        # siempre falla con "not raised" pese a que el 403 real se sirve bien
+        # (ver el WARNING Forbidden en logs). Se valida por status_code.
         vehiculo = Vehiculo.objects.create(placa='DEN-226', marca='Mazda')
         self.client.force_login(_usuario_226('supervisor_226@test.com', rol='supervisor'))
-        with self.assertRaises(PermissionDenied):
-            self.client.get(reverse('core:vehiculos_crear'))
-        with self.assertRaises(PermissionDenied):
-            self.client.post(
-                reverse('core:vehiculos_estado', args=[vehiculo.pk]),
-                {'estado': Vehiculo.Estado.INACTIVO},
-            )
+        respuesta = self.client.get(reverse('core:vehiculos_crear'))
+        self.assertEqual(respuesta.status_code, 403)
+        respuesta = self.client.post(
+            reverse('core:vehiculos_estado', args=[vehiculo.pk]),
+            {'estado': Vehiculo.Estado.INACTIVO},
+        )
+        self.assertEqual(respuesta.status_code, 403)
+        vehiculo.refresh_from_db()
+        self.assertEqual(vehiculo.estado, Vehiculo.Estado.ACTIVO)
 
 
 class TestVehiculoListadoYEliminacion(TestCase):
@@ -192,36 +196,55 @@ class TestVehiculoListadoYEliminacion(TestCase):
         self.assertIsNone(Cuadrilla.objects.get(codigo='CUA-226-H').vehiculo)
 
     def test_supervisor_no_puede_eliminar(self):
+        # Ver nota en TestVehiculoCRUDParametrizacion: PermissionDenied se
+        # convierte en 403 antes de llegar al test client, nunca se re-lanza.
         self.client.force_login(_usuario_226('listado_supervisor_226@test.com', rol='supervisor'))
-        with self.assertRaises(PermissionDenied):
-            self.client.post(reverse('core:vehiculos_eliminar', args=[self.activo.pk]))
+        respuesta = self.client.post(reverse('core:vehiculos_eliminar', args=[self.activo.pk]))
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertTrue(Vehiculo.objects.filter(pk=self.activo.pk).exists())
 
 
-class TestVehiculoMigrationLegacy(TransactionTestCase):
-    """The additive migration maps legacy ``activo=False`` rows to INACTIVO."""
+class TestVehiculoMigrationLegacy(TestCase):
+    """The additive migration maps legacy ``activo=False`` rows to INACTIVO.
 
-    reset_sequences = True
+    NO usa ``MigrationExecutor`` para reproducir la migración completa: los
+    settings de test rápidos del repo (``dev_lite``/``settings_ci``) corren
+    con el grafo de migraciones deshabilitado/faked para velocidad, así que
+    ``executor.migrate(previous)`` revienta con ``NodeNotFoundError`` (no
+    encuentra los nodos reales) -- no es un problema del código de #226, es
+    un choque con el resto de la suite del repo. En su lugar, se importa y
+    llama DIRECTO la función ``RunPython`` de la migración 0028 contra filas
+    creadas vía UPDATE crudo (bypaseando el bridge estado/activo del modelo,
+    para simular fielmente una fila legacy pre-#226 con estado desincronizado).
+    """
 
     def test_registros_legacy_conservan_estado_operativo(self):
-        executor = MigrationExecutor(connection)
-        previous = [('cuadrillas', '0027_issue_223_tramo_libre')]
-        latest = [('cuadrillas', '0028_vehiculo_catalogo_estado')]
+        import importlib
 
-        executor.migrate(previous)
-        legacy_apps = executor.loader.project_state(previous).apps
-        LegacyVehiculo = legacy_apps.get_model('cuadrillas', 'Vehiculo')
-        LegacyVehiculo.objects.create(placa='226-ANTES-01', marca='Legacy activo', activo=True)
-        LegacyVehiculo.objects.create(placa='226-ANTES-02', marca='Legacy inactivo', activo=False)
+        migracion = importlib.import_module(
+            'apps.cuadrillas.migrations.0028_vehiculo_catalogo_estado'
+        )
 
-        executor.migrate(latest)
-        migrated_apps = executor.loader.project_state(latest).apps
-        VehiculoMigrado = migrated_apps.get_model('cuadrillas', 'Vehiculo')
+        vehiculo_activo = Vehiculo.objects.create(placa='226-ANTES-01', marca='Legacy activo')
+        vehiculo_inactivo = Vehiculo.objects.create(placa='226-ANTES-02', marca='Legacy inactivo')
+        # UPDATE crudo (no .save()): simula la fila legacy tal como quedaba
+        # ANTES de #226 -- activo=False pero estado aún en el default ACTIVO,
+        # que es exactamente el desajuste que sincronizar_estado_legacy() debe resolver.
+        Vehiculo.objects.filter(pk=vehiculo_inactivo.pk).update(activo=False, estado=Vehiculo.Estado.ACTIVO)
+
+        class _AppsFake:
+            @staticmethod
+            def get_model(app_label, model_name):
+                assert (app_label, model_name) == ('cuadrillas', 'Vehiculo')
+                return Vehiculo
+
+        migracion.sincronizar_estado_legacy(_AppsFake(), schema_editor=None)
 
         self.assertEqual(
-            VehiculoMigrado.objects.get(placa='226-ANTES-01').estado,
+            Vehiculo.objects.get(pk=vehiculo_activo.pk).estado,
             Vehiculo.Estado.ACTIVO,
         )
         self.assertEqual(
-            VehiculoMigrado.objects.get(placa='226-ANTES-02').estado,
+            Vehiculo.objects.get(pk=vehiculo_inactivo.pk).estado,
             Vehiculo.Estado.INACTIVO,
         )
