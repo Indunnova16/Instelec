@@ -536,6 +536,84 @@ def gantt_oc(proyecto) -> list:
     return filas
 
 
+# ===========================================================================
+# Gantt consolidado — Obra Civil, Montaje y Tendido (#204)
+# ===========================================================================
+
+def gantt_consolidado(proyecto) -> list:
+    """Filas del Gantt consolidado, una barra por torre y bloque.
+
+    Cada fila conserva el contrato del Gantt de Obra Civil (``inicio``,
+    ``esperada`` y ``final`` en ISO) y añade ``bloque`` para diferenciar sus
+    tres fuentes.  Solo incorpora torres ``aplica=True`` que tengan al menos
+    una fecha real: una barra sin fechas no comunica avance y Chart.js no la
+    puede posicionar de manera fiable.
+
+    Tendido no tiene fechas en ``TendidoTorre``: las fechas reales se capturan
+    en la relación legacy ``FaseTorre``.  Por eso su tramo se forma entre la
+    primera y última fecha diligenciada allí, sin usar ``updated_at`` (que es
+    fecha de guardado, no de ejecución).
+    """
+    filas = []
+
+    for fila in gantt_oc(proyecto):
+        filas.append({**fila, 'bloque': 'Obra Civil'})
+
+    from .models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+    montajes = (MontajeEstructuraTorreDetalle.objects
+                .filter(proyecto=proyecto, torre__aplica=True)
+                .select_related('torre'))
+    for detalle in montajes:
+        fechas = [
+            detalle.prearmado_fecha_inicio,
+            detalle.prearmado_fecha_fin,
+            detalle.montaje_fecha_inicio,
+            detalle.montaje_fecha_fin,
+        ]
+        fechas = [fecha for fecha in fechas if fecha]
+        if not fechas:
+            continue
+        filas.append({
+            'bloque': 'Montaje',
+            'torre': detalle.torre.numero_display or (detalle.torre.numero or ''),
+            'inicio': min(fechas).isoformat(),
+            'esperada': None,
+            'final': max(fechas).isoformat(),
+        })
+
+    from .models import FaseTorre
+    tendidos = (FaseTorre.objects
+                .filter(proyecto=proyecto, torre__aplica=True)
+                .select_related('torre'))
+    for fase in tendidos:
+        fechas = [getattr(fase, campo, None)
+                  for campo in _CAMPOS_FECHA_TENDIDO_FASETORRE]
+        fechas = [fecha for fecha in fechas if fecha]
+        if not fechas:
+            continue
+        filas.append({
+            'bloque': 'Tendido',
+            'torre': fase.torre.numero_display or (fase.torre.numero or ''),
+            'inicio': min(fechas).isoformat(),
+            'esperada': None,
+            'final': max(fechas).isoformat(),
+        })
+
+    orden_bloque = {'Obra Civil': 0, 'Montaje': 1, 'Tendido': 2}
+    orden_torre = {
+        torre.numero_display or (torre.numero or ''): torre.orden_numerico
+        for torre in proyecto.torres.all()
+    }
+    return sorted(
+        filas,
+        key=lambda fila: (
+            orden_bloque[fila['bloque']],
+            orden_torre.get(fila['torre'], 0),
+            fila['torre'],
+        ),
+    )
+
+
 # ==========================================================================
 # avance_por_etapa — genérico para las 3 fases (G2 universal)
 # ==========================================================================

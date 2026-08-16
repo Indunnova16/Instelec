@@ -88,5 +88,89 @@
     Aún no hay avance real finalizado para graficar en la Curva S.
   </div>
   {% endif %}
+
+  {% if gantt_consolidado_disponible %}
+  {{ gantt_consolidado|json_script:"gantt-consolidado-data" }}
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" data-block="gantt-consolidado">
+    <h2 class="text-lg font-semibold mb-1">Gantt consolidado por torre</h2>
+    <p class="text-sm text-gray-500 mb-4">
+      Obra Civil, Montaje y Tendido con las fechas reales disponibles. Las torres no aplicables no se incluyen.
+    </p>
+    <div class="max-h-[600px] overflow-auto">
+      <div class="relative" style="height: 520px;">
+        <canvas id="gantt-consolidado-chart"></canvas>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600" role="status">
+    Aún no hay fechas de avance para mostrar el Gantt consolidado.
+  </div>
+  {% endif %}
 </div>
+<script>
+(function () {
+  var DAY_MS = 86400000;
+  function readJSON(id) {
+    var el = document.getElementById(id);
+    if (!el) { return null; }
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  }
+  function toMs(iso) {
+    if (!iso) { return null; }
+    var parts = String(iso).split('-');
+    if (parts.length !== 3) { return null; }
+    return Date.UTC(+parts[0], (+parts[1]) - 1, +parts[2]);
+  }
+  function fmt(ms) {
+    var date = new Date(ms);
+    return date.getUTCFullYear() + '-' + ('0' + (date.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + date.getUTCDate()).slice(-2);
+  }
+  function renderGanttConsolidado() {
+    if (typeof Chart === 'undefined') { return; }
+    var canvas = document.getElementById('gantt-consolidado-chart');
+    var filas = readJSON('gantt-consolidado-data') || [];
+    if (!canvas || !canvas.getContext || !filas.length) { return; }
+    var inicioMinimo = null;
+    filas.forEach(function (fila) {
+      var inicio = toMs(fila.inicio);
+      if (inicio !== null && (inicioMinimo === null || inicio < inicioMinimo)) { inicioMinimo = inicio; }
+    });
+    if (inicioMinimo === null) { return; }
+    var colores = {'Obra Civil': '#10b981', 'Montaje': '#8b5cf6', 'Tendido': '#ec4899'};
+    var wrapper = canvas.parentElement;
+    if (wrapper) { wrapper.style.height = Math.max(520, filas.length * 26) + 'px'; }
+    new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: filas.map(function (fila) { return fila.bloque + ' — ' + fila.torre; }),
+        datasets: [{
+          label: 'Avance por bloque',
+          data: filas.map(function (fila) {
+            var inicio = toMs(fila.inicio);
+            var fin = toMs(fila.final) || toMs(fila.esperada) || inicio;
+            return [(inicio - inicioMinimo) / DAY_MS, (fin - inicioMinimo) / DAY_MS];
+          }),
+          backgroundColor: filas.map(function (fila) { return colores[fila.bloque] || '#64748b'; }),
+          borderSkipped: false,
+          _filas: filas
+        }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { beginAtZero: true, title: {display: true, text: 'Fecha'}, ticks: {callback: function (v) { return fmt(inicioMinimo + v * DAY_MS); }}},
+          y: { ticks: { autoSkip: false } }
+        },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (item) {
+          var fila = (item.dataset._filas || [])[item.dataIndex] || {};
+          return fila.bloque + ' — ' + fila.torre + ': ' + (fila.inicio || '—') + ' → ' + (fila.final || fila.esperada || '—');
+        }}}}
+      }
+    });
+  }
+  if (document.readyState === 'complete') { requestAnimationFrame(renderGanttConsolidado); }
+  else { window.addEventListener('load', function () { requestAnimationFrame(renderGanttConsolidado); }, {once: true}); }
+})();
+</script>
 {% endblock %}

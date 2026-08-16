@@ -173,3 +173,86 @@ def test_dashboard_avance_sin_avance_real_conserva_planeado_y_lo_indica(
     html = response.content.decode()
     assert 'id="curvaS"' in html
     assert 'Aún no hay avance real finalizado para graficar' in html
+
+
+@pytest.mark.django_db
+def test_gantt_consolidado_usa_fechas_parciales_de_los_tres_bloques(proyecto_204):
+    """Una fecha aislada sigue siendo una barra válida de un día."""
+    from apps.construccion.calculators_avance_real import gantt_consolidado
+    from apps.construccion.models import FaseTorre, ObraCivilTorre
+    from apps.construccion.models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+
+    torre = proyecto_204.torres.get(numero='T1')
+    ObraCivilTorre.objects.update_or_create(
+        proyecto=proyecto_204, torre=torre,
+        defaults={'fecha_inicio': date(2025, 1, 2), 'fecha_final': None},
+    )
+    montaje = MontajeEstructuraTorreDetalle.objects.get(proyecto=proyecto_204, torre=torre)
+    montaje.montaje_fecha_fin = date(2025, 2, 4)
+    montaje.save(update_fields=['montaje_fecha_fin'])
+    fase, _ = FaseTorre.objects.get_or_create(proyecto=proyecto_204, torre=torre)
+    fase.tendido_conductor_a_fecha = date(2025, 3, 6)
+    fase.save(update_fields=['tendido_conductor_a_fecha'])
+
+    filas = gantt_consolidado(proyecto_204)
+
+    filas_torre = {fila['bloque']: fila for fila in filas if fila['torre'] == torre.numero_display}
+    assert set(filas_torre) == {'Obra Civil', 'Montaje', 'Tendido'}
+    assert filas_torre['Montaje']['inicio'] == filas_torre['Montaje']['final'] == '2025-02-04'
+    assert filas_torre['Tendido']['inicio'] == filas_torre['Tendido']['final'] == '2025-03-06'
+
+
+@pytest.mark.django_db
+def test_gantt_consolidado_excluye_torres_no_aplicables(proyecto_204):
+    """Las tres fuentes respetan aplica=False aun cuando tengan fechas."""
+    from apps.construccion.calculators_avance_real import gantt_consolidado
+    from apps.construccion.models import FaseTorre, ObraCivilTorre, TorreConstruccion
+    from apps.construccion.models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+
+    torre = TorreConstruccion.objects.create(
+        proyecto=proyecto_204, numero='T-no-aplica', aplica=False,
+    )
+    ObraCivilTorre.objects.create(
+        proyecto=proyecto_204, torre=torre, fecha_inicio=date(2025, 1, 1),
+    )
+    MontajeEstructuraTorreDetalle.objects.create(
+        proyecto=proyecto_204, torre=torre, montaje_fecha_inicio=date(2025, 2, 1),
+    )
+    FaseTorre.objects.create(
+        proyecto=proyecto_204, torre=torre, fecha_riega_manila=date(2025, 3, 1),
+    )
+
+    assert 'T-no-aplica' not in [fila['torre'] for fila in gantt_consolidado(proyecto_204)]
+
+
+@pytest.mark.django_db
+def test_dashboard_avance_renderiza_gantt_y_estado_vacio(authenticated_client, proyecto_204, db):
+    """El canvas recibe JSON seguro; un proyecto sin fechas obtiene orientación."""
+    from apps.contratos.models import Contrato
+    from apps.construccion.models import ObraCivilTorre, ProyectoConstruccion
+
+    torre = proyecto_204.torres.get(numero='T1')
+    ObraCivilTorre.objects.update_or_create(
+        proyecto=proyecto_204, torre=torre,
+        defaults={'fecha_inicio': date(2025, 1, 2)},
+    )
+    response = authenticated_client.get(
+        reverse('construccion:dashboard_avance', kwargs={'proyecto_id': proyecto_204.id})
+    )
+    html = response.content.decode()
+    assert response.status_code == 200
+    assert 'id="gantt-consolidado-data"' in html
+    assert 'id="gantt-consolidado-chart"' in html
+
+    contrato = Contrato.objects.create(
+        unidad_negocio=Contrato.UnidadNegocio.CONSTRUCCION,
+        codigo='TEST-204-004', nombre='Sin Gantt', cliente='Cliente test',
+    )
+    vacio = ProyectoConstruccion.objects.create(
+        contrato=contrato, nombre='Proyecto sin fechas', estado='PLANIFICACION',
+    )
+    response_vacio = authenticated_client.get(
+        reverse('construccion:dashboard_avance', kwargs={'proyecto_id': vacio.id})
+    )
+    assert response_vacio.status_code == 200
+    assert 'Aún no hay fechas de avance para mostrar el Gantt consolidado.' in response_vacio.content.decode()

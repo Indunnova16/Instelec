@@ -983,6 +983,11 @@ class DashboardAvanceView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         # para que el usuario sepa qué dato debe cargar.
         ctx['curva_s_planeado_disponible'] = any(curva_s['planeado'])
         ctx['curva_s_ejecutado_disponible'] = any(curva_s['ejecutado'])
+        # #204: el Gantt consolidado reutiliza el formato de barras por torre
+        # que ya utiliza Obra Civil, agregando las fuentes reales de Montaje y
+        # Tendido.  El helper filtra torres no aplicables y filas sin fechas.
+        ctx['gantt_consolidado'] = calculators_avance_real.gantt_consolidado(proyecto)
+        ctx['gantt_consolidado_disponible'] = bool(ctx['gantt_consolidado'])
         ctx['total_torres'] = len(torres)
         ctx['torres_lista_montaje'] = sum(1 for t in torres if t.obra_civil_completa)
         ctx['torres_en_fases_paralelas'] = sum(
