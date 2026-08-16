@@ -1,4 +1,6 @@
 """Formulario de Programación Semanal de Construcción (#225, B2)."""
+import json
+
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -12,6 +14,7 @@ from apps.construccion.models import (
     ProgramacionSemanalConstruccionVehiculo,
 )
 from apps.construccion.services_psc_disponibilidad import personal_elegible
+from apps.construccion.subactividades_psc import SUBACTIVIDADES_POR_TIPO
 from apps.cuadrillas.models import Vehiculo
 
 
@@ -58,6 +61,11 @@ class ProgramacionSemanalConstruccionForm(forms.ModelForm):
                 )
         elif not subactividad:
             self.add_error('subactividad', 'Indique la subactividad programada.')
+        elif subactividad not in SUBACTIVIDADES_POR_TIPO.get(tipo, []):
+            self.add_error(
+                'subactividad',
+                'Seleccione una subactividad válida para el tipo elegido.',
+            )
 
         if fecha_inicio and fecha_fin and fecha_fin < fecha_inicio:
             self.add_error('fecha_fin', 'La fecha final no puede ser anterior a la inicial.')
@@ -79,7 +87,11 @@ class ProgramacionSemanalConstruccionCreateView(
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update({'titulo': 'Nueva programación semanal', 'es_edicion': False})
+        context.update({
+            'titulo': 'Nueva programación semanal',
+            'es_edicion': False,
+            'subactividades_json': json.dumps(SUBACTIVIDADES_POR_TIPO),
+        })
         return context
 
     def form_valid(self, form):
@@ -104,7 +116,11 @@ class ProgramacionSemanalConstruccionUpdateView(
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update({'titulo': 'Editar programación semanal', 'es_edicion': True})
+        context.update({
+            'titulo': 'Editar programación semanal',
+            'es_edicion': True,
+            'subactividades_json': json.dumps(SUBACTIVIDADES_POR_TIPO),
+        })
         return context
 
     def form_valid(self, form):

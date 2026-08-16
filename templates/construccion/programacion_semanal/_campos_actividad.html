@@ -6,7 +6,9 @@
     </div>
     <div>
         <label for="{{ form.subactividad.id_for_label }}" class="block text-sm font-medium">Subactividad</label>
-        {{ form.subactividad }}
+        <select id="{{ form.subactividad.id_for_label }}" name="{{ form.subactividad.html_name }}" class="w-full rounded border border-gray-300 px-3 py-2" disabled>
+            <option value="">Seleccione primero un tipo de actividad</option>
+        </select>
         <p class="mt-1 text-xs text-gray-500">Obligatoria excepto para actividades complementarias.</p>
         {% for error in form.subactividad.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
     </div>
@@ -17,3 +19,56 @@
     <p class="mt-1 text-xs text-gray-500">Describa libremente la actividad cuando el tipo sea “Actividades Complementarias”.</p>
     {% for error in form.actividad_complementaria.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
 </div>
+<script type="application/json" id="psc-subactividades-data">{{ subactividades_json|safe }}</script>
+<script>
+(() => {
+    const tipoSelect = document.getElementById('{{ form.tipo_actividad.id_for_label }}');
+    const subactividadSelect = document.getElementById('{{ form.subactividad.id_for_label }}');
+    const catalogElement = document.getElementById('psc-subactividades-data');
+    const selectedValue = '{{ form.subactividad.value|default_if_none:""|escapejs }}';
+
+    if (!tipoSelect || !subactividadSelect || !catalogElement) return;
+
+    let catalogo;
+    try {
+        catalogo = JSON.parse(catalogElement.textContent);
+    } catch (error) {
+        subactividadSelect.innerHTML = '<option value="">No fue posible cargar las subactividades</option>';
+        subactividadSelect.disabled = true;
+        return;
+    }
+
+    const poblarSubactividades = () => {
+        const tipo = tipoSelect.value;
+        const subactividades = catalogo[tipo] || [];
+        const valorActual = subactividadSelect.value || selectedValue;
+        subactividadSelect.innerHTML = '';
+
+        if (!subactividades.length) {
+            subactividadSelect.add(new Option(
+                tipo === 'COMPLEMENTARIAS'
+                    ? 'No aplica para actividades complementarias'
+                    : 'Seleccione primero un tipo de actividad',
+                '',
+            ));
+            subactividadSelect.disabled = true;
+            return;
+        }
+
+        subactividadSelect.add(new Option('Seleccione una subactividad', ''));
+        subactividades.forEach((subactividad) => {
+            subactividadSelect.add(new Option(subactividad, subactividad));
+        });
+        subactividadSelect.disabled = false;
+        if (subactividades.includes(valorActual)) {
+            subactividadSelect.value = valorActual;
+        }
+    };
+
+    tipoSelect.addEventListener('change', () => {
+        subactividadSelect.value = '';
+        poblarSubactividades();
+    });
+    poblarSubactividades();
+})();
+</script>
