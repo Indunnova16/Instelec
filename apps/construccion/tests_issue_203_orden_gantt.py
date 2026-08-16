@@ -1,5 +1,7 @@
 """Contrato del selector de orden compartido por los dashboards de #203."""
 
+from datetime import date
+
 import pytest
 from django.urls import reverse
 
@@ -72,3 +74,71 @@ def test_203_selector_rechaza_parametro_invalido_y_muestra_estado_error(
     assert response.context['orden_gantt'] == 'numero'
     assert response.context['orden_gantt_invalido'] is True
     assert 'Criterio no válido; se aplicó Número de torre.' in response.content.decode()
+
+
+def test_203_motor_orden_natural_y_cronologico_desempata_por_torre():
+    """El motor compartido no usa timestamps de edición para sus desempates."""
+    from apps.construccion.calculators_avance_real import ordenar_filas_dashboard
+
+    filas = [
+        {'torre': 'T-10', 'fecha_orden': date(2025, 5, 3)},
+        {'torre': 'T-2', 'fecha_orden': date(2025, 5, 1)},
+        {'torre': 'T-1', 'fecha_orden': date(2025, 5, 1)},
+    ]
+
+    assert [fila['torre'] for fila in ordenar_filas_dashboard(filas)] == ['T-1', 'T-2', 'T-10']
+    assert [fila['torre'] for fila in ordenar_filas_dashboard(filas, 'cronologico')] == [
+        'T-1', 'T-2', 'T-10',
+    ]
+
+
+def test_203_motor_cronologico_deja_legacy_sin_fecha_al_final():
+    """Una torre legacy sin fecha real queda visible y al final, nunca cae a updated_at."""
+    from apps.construccion.calculators_avance_real import ordenar_filas_dashboard
+
+    filas = [
+        {'torre': 'T-10', 'fecha_orden': None},
+        {'torre': 'T-2', 'fecha_orden': date(2025, 7, 2)},
+        {'torre': 'T-1', 'fecha_orden': None},
+    ]
+
+    assert [fila['torre'] for fila in ordenar_filas_dashboard(filas, 'cronologico')] == [
+        'T-2', 'T-1', 'T-10',
+    ]
+
+
+@pytest.mark.django_db
+def test_203_gantt_consolidado_ordena_fechas_reales_de_los_tres_bloques(proyecto_203):
+    """OC, Montaje y Tendido usan su fecha real, incluida una fila legacy NULL."""
+    from apps.construccion.calculators_avance_real import gantt_consolidado
+    from apps.construccion.models import FaseTorre, ObraCivilTorre, TorreConstruccion
+    from apps.construccion.models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+
+    torre_oc = TorreConstruccion.objects.create(proyecto=proyecto_203, numero='T-2')
+    torre_montaje = TorreConstruccion.objects.create(proyecto=proyecto_203, numero='T-3')
+    torre_tendido = TorreConstruccion.objects.create(proyecto=proyecto_203, numero='T-1')
+    # Registro legacy existente en el fixture: no tiene fecha final y debe quedar último.
+    torre_legacy = proyecto_203.torres.get(numero='T-10')
+    ObraCivilTorre.objects.create(
+        proyecto=proyecto_203, torre=torre_oc,
+        fecha_inicio=date(2025, 1, 1), fecha_final=date(2025, 1, 10),
+    )
+    ObraCivilTorre.objects.create(
+        proyecto=proyecto_203, torre=torre_legacy, fecha_inicio=date(2025, 1, 1),
+    )
+    MontajeEstructuraTorreDetalle.objects.create(
+        proyecto=proyecto_203, torre=torre_montaje, montaje_fecha_fin=date(2025, 2, 10),
+    )
+    FaseTorre.objects.create(
+        proyecto=proyecto_203, torre=torre_tendido,
+        tendido_conductor_a_fecha=date(2025, 3, 10),
+    )
+
+    filas = gantt_consolidado(proyecto_203, orden='cronologico')
+
+    assert [(fila['bloque'], fila['torre']) for fila in filas] == [
+        ('Obra Civil', 'T-2'),
+        ('Montaje', 'T-3'),
+        ('Tendido', 'T-1'),
+        ('Obra Civil', 'T-10'),
+    ]

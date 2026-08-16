@@ -69,7 +69,9 @@ class DashboardTendidoView(_DashboardCurvaSBase):
         etapas = car.avance_por_etapa_tendido(proyecto)
         avance_conductor = etapas.get('conductor', [])
         avance_fibra = etapas.get('fibra', [])
-        vista_torres = car.vista_por_torre(proyecto, car.FASE_TENDIDO)
+        vista_torres = car.vista_por_torre(
+            proyecto, car.FASE_TENDIDO, orden=ctx.get('orden_gantt', 'numero'),
+        )
 
         # % global de cada sección (promedio del avance real por torre) — para las
         # tarjetas resumen. Derivado del real, NO del semanal vacío.
@@ -147,6 +149,8 @@ class DashboardTendidoDataView(LoginRequiredMixin, RoleRequiredMixin, View):
     def get(self, request, proyecto_id, *args, **kwargs):
         proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
         etapas = car.avance_por_etapa_tendido(proyecto)
+        from .views import orden_dashboard_desde_request
+        orden, _orden_invalido = orden_dashboard_desde_request(request)
         return JsonResponse({
             'curva_s': {
                 'ejecutado': car.serie_curva_s_real(proyecto, car.FASE_TENDIDO),
@@ -154,5 +158,5 @@ class DashboardTendidoDataView(LoginRequiredMixin, RoleRequiredMixin, View):
             },
             'avance_conductor': etapas.get('conductor', []),
             'avance_fibra': etapas.get('fibra', []),
-            'vista_torres': car.vista_por_torre(proyecto, car.FASE_TENDIDO),
+            'vista_torres': car.vista_por_torre(proyecto, car.FASE_TENDIDO, orden=orden),
         })
