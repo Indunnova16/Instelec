@@ -118,6 +118,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
             {% if request.user.is_campo %}
             {# ========== MENU PARA TRABAJADORES DE CAMPO ========== #}
 
+            {% if ok_mant %}
             <!-- Formato de Campo (4 botones) -->
             <li x-data="{ open: true }" role="none">
                 <button @click="open = !open"
@@ -155,6 +156,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     Mapa en Vivo
                 </a>
             </li>
+            {% endif %}{# ok_mant: las rutas de campo son Mantenimiento #}
 
             {% else %}
             {# ========== MENU PARA ADMINISTRATIVOS ========== #}
@@ -172,6 +174,9 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                 </a>
             </li>
 
+            {% if ok_mant %}
+            <!-- Todas las entradas de Mantenimiento se omiten del HTML si el
+                 rol no tiene el permiso general; x-show por sí solo no es RBAC. -->
             <!-- Actividades -->
             <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
                 <button @click="open = !open"
@@ -277,7 +282,6 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                 </ul>
             </li>
 
-            {% if ok_mant %}
             <!-- Separator (Mantenimiento) -->
             <li class="border-t border-gray-200 dark:border-gray-700 my-4" role="separator" aria-hidden="true" x-show="modulo === 'mantenimiento'"></li>
 
@@ -348,7 +352,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     Mapa en Vivo
                 </a>
             </li>
-            {% endif %}{# ok_mant #}
+            {% endif %}{# ok_mant: bloque completo de Mantenimiento #}
 
             {% if ok_cons %}
             <!-- Separator -->
