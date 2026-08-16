@@ -1,0 +1,40 @@
+{% extends "construccion/programacion_semanal/_base.html" %}
+
+{% block psc_content %}
+<h1 class="mb-6 text-2xl font-bold">{{ titulo }}</h1>
+<form id="psc-programacion-form" method="post" class="space-y-5 rounded-lg bg-white p-6 shadow" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+        <div class="rounded border border-red-300 bg-red-50 p-3 text-red-700" role="alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <div>
+        <label for="{{ form.proyecto.id_for_label }}" class="block text-sm font-medium">Proyecto</label>
+        {{ form.proyecto }}
+        {% for error in form.proyecto.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
+    </div>
+    {% include "construccion/programacion_semanal/_campos_actividad.html" %}
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div><label for="{{ form.fecha_inicio.id_for_label }}" class="block text-sm font-medium">Fecha inicio</label>{{ form.fecha_inicio }}{% for error in form.fecha_inicio.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}</div>
+        <div><label for="{{ form.fecha_fin.id_for_label }}" class="block text-sm font-medium">Fecha fin</label>{{ form.fecha_fin }}{% for error in form.fecha_fin.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}</div>
+        <div><label for="{{ form.hora_inicio.id_for_label }}" class="block text-sm font-medium">Hora inicio</label>{{ form.hora_inicio }}{% for error in form.hora_inicio.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}</div>
+        <div><label for="{{ form.hora_fin.id_for_label }}" class="block text-sm font-medium">Hora fin</label>{{ form.hora_fin }}{% for error in form.hora_fin.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}</div>
+    </div>
+    <div><label for="{{ form.supervisor.id_for_label }}" class="block text-sm font-medium">Supervisor</label>{{ form.supervisor }}{% for error in form.supervisor.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}</div>
+    <div><label for="{{ form.observaciones.id_for_label }}" class="block text-sm font-medium">Observaciones</label>{{ form.observaciones }}</div>
+    <div class="flex gap-3">
+        <button type="submit" class="rounded bg-blue-600 px-4 py-2 text-white">{% if es_edicion %}Guardar cambios{% else %}Crear programación{% endif %}</button>
+        {% if es_edicion %}<a class="rounded border px-4 py-2" href="{% url 'construccion:psc_programacion_detalle' pk=object.pk %}">Cancelar</a>{% endif %}
+    </div>
+    <p class="hidden text-sm text-blue-700" data-form-loading>Guardando programación…</p>
+</form>
+{% endblock %}
+
+{% block psc_extra_js %}
+<script>
+document.getElementById('psc-programacion-form').addEventListener('submit', function () {
+    const submit = this.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    this.querySelector('[data-form-loading]').classList.remove('hidden');
+});
+</script>
+{% endblock %}

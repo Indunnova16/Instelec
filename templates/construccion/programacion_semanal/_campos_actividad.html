@@ -1,0 +1,19 @@
+<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div>
+        <label for="{{ form.tipo_actividad.id_for_label }}" class="block text-sm font-medium">Tipo de actividad</label>
+        {{ form.tipo_actividad }}
+        {% for error in form.tipo_actividad.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
+    </div>
+    <div>
+        <label for="{{ form.subactividad.id_for_label }}" class="block text-sm font-medium">Subactividad</label>
+        {{ form.subactividad }}
+        <p class="mt-1 text-xs text-gray-500">Obligatoria excepto para actividades complementarias.</p>
+        {% for error in form.subactividad.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
+    </div>
+</div>
+<div class="mt-4">
+    <label for="{{ form.actividad_complementaria.id_for_label }}" class="block text-sm font-medium">Actividad complementaria</label>
+    {{ form.actividad_complementaria }}
+    <p class="mt-1 text-xs text-gray-500">Describa libremente la actividad cuando el tipo sea “Actividades Complementarias”.</p>
+    {% for error in form.actividad_complementaria.errors %}<p class="mt-1 text-sm text-red-600">{{ error }}</p>{% endfor %}
+</div>
