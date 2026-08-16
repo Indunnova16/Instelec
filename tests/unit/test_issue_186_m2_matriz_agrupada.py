@@ -86,3 +86,7 @@ class TestMatrizRolesAgrupadaPorModulo186M2:
         assert "admin_mantenimiento" in codigos
         body = response.content.decode("utf-8")
         assert "admin_mantenimiento" in body
+        # El catálogo legacy sin permiso explícito conserva el estado accesible
+        # de falta de acceso, en lugar de depender solo del color.
+        assert 'data-access-level="sin_acceso"' in body
+        assert "bg-gray-100" in body

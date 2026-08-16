@@ -124,6 +124,32 @@ class TestRoleModuloPermisoMatriz186:
         codigos_en_matriz = [f["role"].codigo for f in response.context["filas"]]
         assert "qa_e2e_a5_matriz_inact" not in codigos_en_matriz
 
+    @pytest.mark.parametrize(
+        ("nivel", "clase_esperada"),
+        [
+            (RoleModuloPermiso.SIN_ACCESO, "bg-gray-100"),
+            (RoleModuloPermiso.VER, "bg-blue-50"),
+            (RoleModuloPermiso.VER_EDITAR, "bg-emerald-50"),
+        ],
+    )
+    def test_matriz_distingue_visual_y_semanticamente_cada_nivel(
+        self, admin_client, nivel, clase_esperada
+    ):
+        """Cada nivel usa un estado visual propio y expone el valor a lectores de pantalla."""
+        role = Role.objects.create(
+            codigo=f"qa_e2e_a2_{nivel}", nombre="Rol de prueba A2", nivel=Role.NIVEL_OPERARIO
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo="MANTENIMIENTO", nivel_acceso=nivel
+        )
+
+        response = admin_client.get("/parametrizacion/roles/matriz/")
+        body = response.content.decode("utf-8")
+
+        assert f'data-access-level="{nivel}"' in body
+        assert clase_esperada in body
+        assert "aria-label=\"Nivel de acceso de Rol de prueba A2 para MANTENIMIENTO\"" in body
+
     def test_guardar_celda_modulo_crea_permiso(self, admin_client):
         role = Role.objects.create(
             codigo="qa_e2e_a5_celda_mod", nombre="X", nivel=Role.NIVEL_OPERARIO
@@ -138,6 +164,24 @@ class TestRoleModuloPermisoMatriz186:
             role=role, modulo="CONSTRUCCION", submodulo=""
         )
         assert permiso.nivel_acceso == "ver"
+
+    def test_guardar_celda_htmx_devuelve_estilo_del_nivel_persistido(self, admin_client):
+        """El reemplazo outerHTML conserva el estado visual tras cambiar a Ver y editar."""
+        role = Role.objects.create(
+            codigo="qa_e2e_a2_htmx", nombre="Rol HTMX A2", nivel=Role.NIVEL_OPERARIO
+        )
+
+        response = admin_client.post(
+            "/parametrizacion/roles/matriz/qa_e2e_a2_htmx/CONSTRUCCION/celda/",
+            {"celda_qa_e2e_a2_htmx_CONSTRUCCION": "ver_editar"},
+            HTTP_HX_REQUEST="true",
+        )
+
+        body = response.content.decode("utf-8")
+        assert response.status_code == 200
+        assert 'data-access-level="ver_editar"' in body
+        assert "bg-emerald-50" in body
+        assert 'value="ver_editar" selected' in body
 
     def test_guardar_celda_submodulo_implica_modulo_construccion(self, admin_client):
         role = Role.objects.create(
