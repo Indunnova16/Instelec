@@ -251,7 +251,11 @@
             if (!card || !estadoVisual[estado]) return;
 
             const anterior = estadoActual(card);
-            if (anterior !== estado) {
+            // 'no_ejecutado' es dato legacy fuera de la dona/contadores (issue
+            // #177 A8) -- no tiene entrada en estadoData ni stat-count-*. Si
+            // el vano viene/va a ese estado, actualizamos SOLO el color de la
+            // tarjeta (abajo) y saltamos el contador para no indexar `undefined`.
+            if (anterior !== estado && (anterior in estadoData) && (estado in estadoData)) {
                 estadoData[anterior] = Math.max(0, estadoData[anterior] - 1);
                 estadoData[estado] = (estadoData[estado] || 0) + 1;
                 document.getElementById(`stat-count-${anterior}`).textContent = estadoData[anterior];
