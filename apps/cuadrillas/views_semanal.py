@@ -188,6 +188,7 @@ def _bloque_a_dict(cuadrilla):
         "tramo_id": str(cuadrilla.tramo_id) if cuadrilla.tramo_id else "",
         "tramo": getattr(cuadrilla.tramo, "codigo", "") or "",
         "tramo_nombre": getattr(cuadrilla.tramo, "nombre", "") or "",
+        "tramo_libre": cuadrilla.tramo_libre or "",
         "vehiculo_id": str(cuadrilla.vehiculo_id) if cuadrilla.vehiculo_id else "",
         "vehiculo": getattr(cuadrilla.vehiculo, "placa", "") or "",
         "supervisor_id": str(cuadrilla.supervisor_id) if cuadrilla.supervisor_id else "",
@@ -268,9 +269,11 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
         "tramo_id": request.POST.get("tramo") or "",
         "tramo": "",
         "tramo_nombre": "",
+        "tramo_libre": (request.POST.get("tramo_libre") or "").strip(),
         "vehiculo_id": request.POST.get("vehiculo") or "",
         "supervisor_id": request.POST.get("supervisor") or "",
         "fecha": fecha,
+        "fecha_fin": (request.POST.get("fecha_fin") or "").strip(),
         # Issue #178 (D1): a diferencia de `fecha` (que llega ya parseada por
         # el caller), estos se leen crudos del POST — el input type="time"
         # espera directamente el string "HH:MM" como value, y así el usuario
@@ -310,13 +313,14 @@ def _choices_form_bloque(request=None):
     También incluye el datalist de Colaboradores activos (A5) que alimenta
     el buscador de "agregar personal" en cada card.
 
-    Issue #209: ``supervisores_bloque`` filtraba solo por ``rol='supervisor'``
-    -- no existe en el modelo ningún cargo literal "Supervisor de
-    Mantenimiento" (verificado en prod: el único cargo que mapea a
-    ``rol='supervisor'`` es ``SUPERVISOR``, sin distinción de área). Se suma
-    el mismo filtro de área compatible-con-legacy que ``PersonalCuadrilla``
-    para no mostrar, si algún día existiera, un supervisor explícitamente de
-    otra área."""
+    Issue #223: el campo etiquetado como ``Supervisor`` es el responsable
+    asignable de la cuadrilla, no un filtro por el rol técnico legacy
+    ``supervisor``. Debe ofrecer a TODOS los usuarios activos elegibles de
+    Mantenimiento, incluidos los registros legacy sin ``area``. Se excluyen
+    usuarios explícitamente clasificados en otra área.
+
+    El propio formulario permite buscar por nombre o documento; la plantilla
+    incorpora ambos valores en la etiqueta de cada opción."""
     from apps.actividades.models import TipoActividad
     from apps.lineas.models import Linea
     from apps.usuarios.models import Usuario
@@ -325,7 +329,7 @@ def _choices_form_bloque(request=None):
         "tipos_actividad_bloque": TipoActividad.objects.filter(activo=True).order_by("nombre"),
         "lineas_bloque": Linea.objects.filter(activa=True).order_by("codigo"),
         "vehiculos_bloque": Vehiculo.objects.filter(activo=True).order_by("placa"),
-        "supervisores_bloque": Usuario.objects.filter(rol="supervisor", is_active=True)
+        "supervisores_bloque": Usuario.objects.filter(is_active=True)
         .filter(Q(area=AREA_MANTENIMIENTO) | Q(area=""))
         .order_by("first_name"),
         "personal_disponible_datalist": _personal_visible_para_usuario(request).order_by("nombre"),
@@ -575,15 +579,27 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
         anio, semana = int(anio), int(semana)
         nombre = (request.POST.get("nombre") or "").strip()
         if not nombre:
-            return self._form_con_error(request, anio, semana, "El nombre del bloque es obligatorio.")
+            return self._form_con_error(request, anio, semana, "El nombre de la cuadrilla es obligatorio.")
 
-        fecha_str = (request.POST.get("fecha") or "").strip()
+        fecha_str = (request.POST.get("fecha_inicio") or request.POST.get("fecha") or "").strip()
         fecha = None
         if fecha_str:
             try:
                 fecha = date.fromisoformat(fecha_str)
             except ValueError:
                 return self._form_con_error(request, anio, semana, "La fecha ingresada no es válida.")
+
+        fecha_fin_str = (request.POST.get("fecha_fin") or "").strip()
+        fecha_fin = None
+        if fecha_fin_str:
+            try:
+                fecha_fin = date.fromisoformat(fecha_fin_str)
+            except ValueError:
+                return self._form_con_error(request, anio, semana, "La fecha de fin ingresada no es válida.")
+        if fecha and fecha_fin and fecha_fin < fecha:
+            return self._form_con_error(
+                request, anio, semana, "La fecha de fin no puede ser anterior a la fecha de inicio."
+            )
 
         # Issue #178 (D1): hora de inicio/fin PLANEADA — ambas opcionales,
         # nullable (M1). Si ambas vienen y fin < inicio, error inline (no
@@ -607,18 +623,19 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
                     nombre=nombre,
                     tipo_actividad_id=request.POST.get("tipo_actividad") or None,
                     linea_asignada_id=request.POST.get("linea_asignada") or None,
-                    tramo_id=request.POST.get("tramo") or None,
+                    tramo_libre=(request.POST.get("tramo_libre") or "").strip(),
                     vehiculo_id=request.POST.get("vehiculo") or None,
                     supervisor_id=request.POST.get("supervisor") or None,
                     observaciones=(request.POST.get("observaciones") or "").strip(),
                     fecha=fecha,
+                    fecha_fin=fecha_fin,
                     hora_inicio_planeada=hora_inicio_planeada,
                     hora_fin_planeada=hora_fin_planeada,
                     activa=True,
                 )
         except Exception as e:
             logger.exception("Error creando bloque de programación semanal (issue #188)")
-            return self._form_con_error(request, anio, semana, f"Error al crear el bloque: {e}")
+            return self._form_con_error(request, anio, semana, f"Error al crear la cuadrilla: {e}")
 
         card_html = render_to_string(
             "cuadrillas/partials/_bloque_card.html",
@@ -665,15 +682,30 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
 
         nombre = (request.POST.get("nombre") or "").strip()
         if not nombre:
-            return self._card_con_error(request, cuadrilla, anio, semana, "El nombre del bloque es obligatorio.")
+            return self._card_con_error(request, cuadrilla, anio, semana, "El nombre de la cuadrilla es obligatorio.")
 
-        fecha_str = (request.POST.get("fecha") or "").strip()
+        fecha_str = (request.POST.get("fecha_inicio") or request.POST.get("fecha") or "").strip()
         fecha = None
         if fecha_str:
             try:
                 fecha = date.fromisoformat(fecha_str)
             except ValueError:
                 return self._card_con_error(request, cuadrilla, anio, semana, "La fecha ingresada no es válida.")
+
+        fecha_fin_str = (request.POST.get("fecha_fin") or "").strip()
+        fecha_fin = None
+        if fecha_fin_str:
+            try:
+                fecha_fin = date.fromisoformat(fecha_fin_str)
+            except ValueError:
+                return self._card_con_error(
+                    request, cuadrilla, anio, semana, "La fecha de fin ingresada no es válida."
+                )
+        if fecha and fecha_fin and fecha_fin < fecha:
+            return self._card_con_error(
+                request, cuadrilla, anio, semana,
+                "La fecha de fin no puede ser anterior a la fecha de inicio.",
+            )
 
         # Issue #178 (D1): idem ProgramacionSemanalBloqueCrearView.
         try:
@@ -694,11 +726,12 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
                 cuadrilla.nombre = nombre
                 cuadrilla.tipo_actividad_id = request.POST.get("tipo_actividad") or None
                 cuadrilla.linea_asignada_id = request.POST.get("linea_asignada") or None
-                cuadrilla.tramo_id = request.POST.get("tramo") or None
+                cuadrilla.tramo_libre = (request.POST.get("tramo_libre") or "").strip()
                 cuadrilla.vehiculo_id = request.POST.get("vehiculo") or None
                 cuadrilla.supervisor_id = request.POST.get("supervisor") or None
                 cuadrilla.observaciones = (request.POST.get("observaciones") or "").strip()
                 cuadrilla.fecha = fecha
+                cuadrilla.fecha_fin = fecha_fin
                 cuadrilla.hora_inicio_planeada = hora_inicio_planeada
                 cuadrilla.hora_fin_planeada = hora_fin_planeada
                 cuadrilla.save()
@@ -925,13 +958,13 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
                 origen,
                 None,
                 None,
-                "No se pudo determinar la semana del bloque origen a partir de su código.",
+                "No se pudo determinar la semana de la cuadrilla origen a partir de su código.",
             )
 
         nombre = (request.POST.get("nombre") or "").strip()
         if not nombre:
             return self._form_con_error(
-                request, origen, anio, semana, "El nombre del bloque nuevo es obligatorio."
+                request, origen, anio, semana, "El nombre de la nueva cuadrilla es obligatorio."
             )
 
         fecha_desde_str = (request.POST.get("fecha_desde") or "").strip()
@@ -951,7 +984,7 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
                 anio,
                 semana,
                 f"La fecha debe estar dentro de la semana {semana:02d}/{anio}{rango} del "
-                f"bloque origen; reprogramar hacia otra semana no está soportado.",
+                f"cuadrilla origen; reprogramar hacia otra semana no está soportado.",
             )
         if origen.fecha and fecha_desde <= origen.fecha:
             return self._form_con_error(
@@ -959,7 +992,7 @@ class ProgramacionSemanalBloqueReprogramarView(LoginRequiredMixin, RoleRequiredM
                 origen,
                 anio,
                 semana,
-                f"La fecha debe ser posterior al inicio del bloque origen "
+                f"La fecha debe ser posterior al inicio de la cuadrilla origen "
                 f"({origen.fecha:%d/%m/%Y}).",
             )
 
@@ -1073,7 +1106,7 @@ class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, Vie
             messages.warning(
                 request,
                 f"La semana {semana:02d}/{anio} ya tiene programación. Al duplicar "
-                f"solo se agregarán los bloques que falten (los existentes NO se "
+                f"solo se agregarán las cuadrillas que falten (las existentes NO se "
                 f"sobrescriben). Confirmá para continuar.",
             )
             url = reverse("cuadrillas:semanal_grid", args=[anio, semana])
@@ -1134,14 +1167,14 @@ class ProgramacionSemanalDuplicarView(LoginRequiredMixin, RoleRequiredMixin, Vie
             extra = f" {omitidas} ya existían y se omitieron." if omitidas else ""
             messages.success(
                 request,
-                f"Semana {semana:02d}/{anio}: se duplicaron {creadas} bloque(s) y "
+                f"Semana {semana:02d}/{anio}: se duplicaron {creadas} cuadrilla(s) y "
                 f"{miembros_creados} asignación(es) desde la semana "
                 f"{origen_semana:02d}/{origen_anio}.{extra} Ahora podés editarla.",
             )
         else:
             messages.info(
                 request,
-                f"No se creó ningún bloque nuevo: los {omitidas} bloque(s) de la "
+                f"No se creó ninguna cuadrilla nueva: las {omitidas} cuadrilla(s) de la "
                 f"semana {origen_semana:02d}/{origen_anio} ya existían en la semana "
                 f"{semana:02d}/{anio}.",
             )

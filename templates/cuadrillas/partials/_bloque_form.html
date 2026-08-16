@@ -24,7 +24,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
       class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
     {% csrf_token %}
     <div class="md:col-span-3">
-        <label for="id_nombre" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del bloque</label>
+        <label for="id_nombre" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre de la cuadrilla</label>
         <input type="text" name="nombre" id="id_nombre" required maxlength="100"
                value="{{ b.nombre|default:'' }}"
                placeholder="Ej: Poda sector norte"
@@ -43,10 +43,6 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
     <div>
         <label for="id_linea" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>
         <select name="linea_asignada" id="id_linea"
-                hx-get="{% url 'cuadrillas:tramos_por_linea_api' %}"
-                hx-trigger="change"
-                hx-target="#id_tramo"
-                hx-swap="innerHTML"
                 class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-linea">
             <option value="">— Sin línea —</option>
             {% for l in lineas_bloque %}
@@ -55,12 +51,14 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
         </select>
     </div>
     <div>
-        <label for="id_tramo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tramo</label>
-        <select name="tramo" id="id_tramo"
-                class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm select-tramo">
-            <option value="{{ b.tramo_id|default:'' }}">{% if b.tramo_id %}{{ b.tramo }} - {{ b.tramo_nombre }}{% else %}— Sin tramo —{% endif %}</option>
-        </select>
-        <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Se carga según la línea seleccionada.</p>
+        <label for="id_tramo_libre" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tramo</label>
+        <input type="text" name="tramo_libre" id="id_tramo_libre" maxlength="200"
+               value="{{ b.tramo_libre|default:'' }}"
+               placeholder="Ej: Vano 25-50 o Subestación X"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+        {% if b.tramo and not b.tramo_libre %}
+        <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Tramo histórico: {{ b.tramo }}{% if b.tramo_nombre %} - {{ b.tramo_nombre }}{% endif %}</p>
+        {% endif %}
     </div>
     <div>
         <label for="id_vehiculo" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vehículo</label>
@@ -78,14 +76,20 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
                 class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
             <option value="">— Sin supervisor —</option>
             {% for s in supervisores_bloque %}
-            <option value="{{ s.id }}" {% if b.supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.get_full_name }}</option>
+            <option value="{{ s.id }}" {% if b.supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.get_full_name }}{% if s.documento %} — {{ s.documento }}{% endif %}</option>
             {% endfor %}
         </select>
     </div>
     <div>
-        <label for="id_fecha" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha</label>
-        <input type="date" name="fecha" id="id_fecha"
+        <label for="id_fecha_inicio" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha Inicio</label>
+        <input type="date" name="fecha_inicio" id="id_fecha_inicio"
                value="{{ b.fecha|date:'Y-m-d'|default:'' }}"
+               class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+    </div>
+    <div>
+        <label for="id_fecha_fin" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha Fin</label>
+        <input type="date" name="fecha_fin" id="id_fecha_fin"
+               value="{{ b.fecha_fin|date:'Y-m-d'|default:'' }}"
                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
     </div>
     <div>
@@ -119,7 +123,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
         <span class="htmx-indicator text-xs text-gray-400" role="status" aria-live="polite">Guardando…</span>
         <button type="submit"
                 class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
-            Guardar bloque
+            Guardar cuadrilla
         </button>
         <button type="button" @click="{{ cerrar_expr|default:'editando=false' }}"
                 class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
