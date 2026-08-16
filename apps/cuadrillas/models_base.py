@@ -16,9 +16,15 @@ class Vehiculo(BaseModel):
 
     class TipoVehiculo(models.TextChoices):
         CAMIONETA = 'CAMIONETA', 'Camioneta'
+        MOTO = 'MOTO', 'Moto'
         CAMION = 'CAMION', 'Camión'
         GRUA = 'GRUA', 'Grúa'
         OTRO = 'OTRO', 'Otro'
+
+    class Estado(models.TextChoices):
+        ACTIVO = 'ACTIVO', 'Activo'
+        INACTIVO = 'INACTIVO', 'Inactivo'
+        EN_MANTENIMIENTO = 'EN_MANTENIMIENTO', 'En Mantenimiento'
 
     placa = models.CharField(
         'Placa',
@@ -35,6 +41,12 @@ class Vehiculo(BaseModel):
         'Marca',
         max_length=50,
         blank=True
+    )
+    descripcion = models.TextField(
+        'Descripción',
+        blank=True,
+        default='',
+        help_text='Descripción operativa opcional del vehículo.',
     )
     modelo = models.CharField(
         'Modelo',
@@ -60,6 +72,16 @@ class Vehiculo(BaseModel):
         'Activo',
         default=True
     )
+    estado = models.CharField(
+        'Estado',
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.ACTIVO,
+        help_text=(
+            'Catálogo operativo del vehículo. `activo` se conserva como puente '
+            'compatible para los consumidores legacy.'
+        ),
+    )
     observaciones = models.TextField(
         'Observaciones',
         blank=True
@@ -73,6 +95,38 @@ class Vehiculo(BaseModel):
 
     def __str__(self):
         return f"{self.placa} - {self.marca} {self.modelo}"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._estado_original = self.estado
+        self._activo_original = self.activo
+
+    def save(self, *args, **kwargs):
+        """Mantiene el booleano legacy ``activo`` alineado con ``estado``.
+
+        Las vistas e importadores existentes siguen consultando ``activo=True``.
+        A la vez, integraciones anteriores que únicamente cambian ese booleano
+        continúan reflejándose en el nuevo catálogo de estados.
+        """
+        estado_cambio = self.estado != self._estado_original
+        activo_cambio = self.activo != self._activo_original
+
+        if self._state.adding and self.estado == self.Estado.ACTIVO and not self.activo:
+            self.estado = self.Estado.INACTIVO
+            estado_cambio = True
+        elif estado_cambio:
+            self.activo = self.estado == self.Estado.ACTIVO
+            activo_cambio = True
+        elif activo_cambio:
+            self.estado = self.Estado.ACTIVO if self.activo else self.Estado.INACTIVO
+            estado_cambio = True
+
+        if kwargs.get('update_fields') is not None and (estado_cambio or activo_cambio):
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'estado', 'activo'}
+
+        super().save(*args, **kwargs)
+        self._estado_original = self.estado
+        self._activo_original = self.activo
 
 
 class PersonalCuadrilla(BaseModel):
