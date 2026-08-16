@@ -63,6 +63,25 @@
         </div>
     </div>
 
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4"
+         data-orden-selector data-orden-state="{{ orden_gantt_estado }}">
+        <form method="get" class="flex flex-wrap items-end gap-3" data-orden-form>
+            {% if request.GET.fase %}<input type="hidden" name="fase" value="{{ request.GET.fase }}">{% endif %}
+            {% if request.GET.umbral %}<input type="hidden" name="umbral" value="{{ request.GET.umbral }}">{% endif %}
+            <label for="orden-gantt" class="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+                Ordenar Gantt por
+                <select id="orden-gantt" name="orden" class="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                        aria-describedby="orden-gantt-feedback"
+                        onchange="this.form.dataset.state='loading'; this.form.querySelector('[data-orden-feedback]').textContent='Aplicando orden…'; this.form.submit()">
+                    {% for valor, etiqueta in orden_gantt_opciones %}<option value="{{ valor }}"{% if orden_gantt == valor %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                </select>
+            </label>
+            <p id="orden-gantt-feedback" data-orden-feedback role="status" class="text-sm text-gray-500 dark:text-gray-400">
+                {% if orden_gantt_invalido %}Criterio no válido; se aplicó Número de torre.{% elif orden_gantt_estado == 'empty' %}No hay torres para ordenar todavía.{% elif orden_gantt == 'cronologico' %}Orden aplicado: Cronológico por fecha real.{% else %}Orden aplicado: Número de torre.{% endif %}
+            </p>
+        </form>
+    </div>
+
     <!-- G1 · Curva S -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
         <div class="flex items-center justify-between mb-2">

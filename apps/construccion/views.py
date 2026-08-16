@@ -13,6 +13,29 @@ from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
 from apps.contratos.models import Contrato
 
 
+# Contrato compartido de orden para los cuatro dashboards de avance (#203).
+# El motor que aplica el orden a cada dataset vive separado: esta capa solo
+# valida la URL y entrega a las plantillas un selector consistente y seguro.
+ORDENES_DASHBOARD = (
+    ('numero', 'Número de torre'),
+    ('cronologico', 'Cronológico por fecha real'),
+)
+ORDENES_DASHBOARD_VALIDOS = {valor for valor, _ in ORDENES_DASHBOARD}
+
+
+def orden_dashboard_desde_request(request):
+    """Devuelve el criterio de orden soportado y si la URL era inválida.
+
+    No se acepta una lista abierta de criterios: el contrato de #203 se limita
+    a ``numero`` y ``cronologico``. Una URL legacy/manipulada se recupera al
+    default para que nunca produzca un error 500 ni un estado ambiguo.
+    """
+    recibido = (request.GET.get('orden') or 'numero').strip().lower()
+    if recibido not in ORDENES_DASHBOARD_VALIDOS:
+        return 'numero', True
+    return recibido, False
+
+
 def ordenar_torres_construccion(qs, incluir_no_aplica=False):
     """Orden numérico ascendente por la parte numérica de ``numero`` (#100:
     evita T-1, T-10, T-2). Formatos sin número quedan al final.
@@ -959,8 +982,15 @@ class DashboardAvanceView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         proyecto = get_object_or_404(ProyectoConstruccion,
                                      id=self.kwargs['proyecto_id'])
         torres = list(proyecto.torres.all())
+        orden_gantt, orden_gantt_invalido = orden_dashboard_desde_request(self.request)
         ctx['proyecto'] = proyecto
         ctx['active_tab'] = 'dashboard_avance'
+        ctx['orden_gantt'] = orden_gantt
+        ctx['orden_gantt_opciones'] = ORDENES_DASHBOARD
+        ctx['orden_gantt_invalido'] = orden_gantt_invalido
+        ctx['orden_gantt_estado'] = (
+            'empty' if not torres else ('error' if orden_gantt_invalido else 'success')
+        )
         # #204: las tarjetas deben leer el mismo backbone real que los
         # dashboards individuales; las propiedades legacy dependen de
         # relaciones/cache que pueden estar vacías aunque exista oc_detalle,
@@ -2887,6 +2917,7 @@ class _DashboardCurvaSBase(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         proyecto = get_object_or_404(ProyectoConstruccion, id=self.kwargs['proyecto_id'])
         fase = self.request.GET.get('fase', self.FASE_DEFAULT).upper()
+        orden_gantt, orden_gantt_invalido = orden_dashboard_desde_request(self.request)
         if fase not in {f for f, _ in DashboardAvanceSemanal.Fase.choices}:
             fase = self.FASE_DEFAULT
 
@@ -2922,6 +2953,12 @@ class _DashboardCurvaSBase(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'semanas_restantes': (round(semanas_restantes, 1) if semanas_restantes else None),
             'datos_chart': self._build_chart_data(semanas),
             'active_tab': self.FASE_DEFAULT.lower() if self.FASE_DEFAULT else 'dashboard',
+            'orden_gantt': orden_gantt,
+            'orden_gantt_opciones': ORDENES_DASHBOARD,
+            'orden_gantt_invalido': orden_gantt_invalido,
+            'orden_gantt_estado': (
+                'empty' if not total_torres else ('error' if orden_gantt_invalido else 'success')
+            ),
         })
         return ctx
 
