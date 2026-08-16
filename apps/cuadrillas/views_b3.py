@@ -22,6 +22,8 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import IntegerField, Q
+from django.db.models.functions import Cast, Substr
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
@@ -50,7 +52,13 @@ _ORIG_GET_CONTEXT = _legacy_views.CuadrillaListView.get_context_data
 
 
 def _b3_get_queryset(self):
-    """Filtro tri-state activas / inactivas / todas + búsqueda por código."""
+    """Listado actual/futuro + filtros de estado, código y programación.
+
+    ``/cuadrillas/`` es el tablero operativo: no debe volver a mostrar
+    cuadrillas de semanas ISO pasadas. El historial queda deliberadamente en
+    ``/cuadrillas/semanal/<anio>/<semana>/``; por eso el corte se hace en el
+    queryset de esta vista y no en los helpers de programación semanal.
+    """
     filtro = self.request.GET.get('filtro', 'activas').strip().lower()
     if filtro not in ('activas', 'inactivas', 'todas'):
         filtro = 'activas'
@@ -73,6 +81,19 @@ def _b3_get_queryset(self):
     # filtros.py). Se combinan con AND (intersección), no OR.
     filtros = resolver_filtros(self.request.GET)
     qs = aplicar_filtros_queryset(qs, filtros)
+
+    # Issue #223: conservar únicamente semanas ISO actual/futuras. Extraemos
+    # año y semana del código ``WW-YYYY-...`` para que el límite siga siendo
+    # correcto al pasar de diciembre a enero; comparar el código como texto
+    # produciría falsos positivos (p. ej. 52-2025 > 32-2026).
+    iso_hoy = timezone.localdate().isocalendar()
+    qs = qs.annotate(
+        _b3_semana_iso=Cast(Substr("codigo", 1, 2), IntegerField()),
+        _b3_anio_iso=Cast(Substr("codigo", 4, 4), IntegerField()),
+    ).filter(
+        Q(_b3_anio_iso__gt=iso_hoy.year)
+        | Q(_b3_anio_iso=iso_hoy.year, _b3_semana_iso__gte=iso_hoy.week)
+    )
 
     # exposed para que get_context_data sepa el filtro actual sin re-parsear
     self._b3_filtro_actual = filtro

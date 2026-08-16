@@ -1,6 +1,7 @@
 """Regression tests for the weekly-crew range and free-route changes in #223."""
 
 from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
@@ -205,3 +206,61 @@ class TestCatalogoSupervisorMantenimiento(TestCase):
         self.assertEqual(response.status_code, 200)
         cuadrilla.refresh_from_db()
         self.assertEqual(cuadrilla.supervisor, supervisor)
+
+
+class TestListadoSemanasActualesOFuturas(TestCase):
+    """A3: /cuadrillas/ es operativo; /semanal conserva el historial."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(
+            email="admin_lista_223@test.local",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="Listado 223",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+        # Registro con la forma de un código legado real: debe seguir siendo
+        # consultable en su semana histórica, pero no en el tablero operativo.
+        self.pasada = Cuadrilla.objects.create(
+            codigo="31-2026-LEGACY-223",
+            nombre="Cuadrilla pasada legacy 223",
+            fecha=date(2026, 7, 27),
+            activa=True,
+        )
+        self.actual = Cuadrilla.objects.create(
+            codigo="32-2026-ACTUAL-223",
+            nombre="Cuadrilla actual 223",
+            fecha=date(2026, 8, 3),
+            activa=True,
+        )
+        self.futura = Cuadrilla.objects.create(
+            codigo="01-2027-FUTURA-223",
+            nombre="Cuadrilla futura 223",
+            fecha=date(2027, 1, 4),
+            activa=True,
+        )
+
+    @patch("apps.cuadrillas.views_b3.timezone.localdate", return_value=date(2026, 8, 3))
+    def test_lista_excluye_semana_pasada_e_incluye_actual_y_futura(self, _localdate):
+        response = self.client.get(reverse("cuadrillas:lista"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.pasada.nombre)
+        self.assertContains(response, self.actual.nombre)
+        self.assertContains(response, self.futura.nombre)
+        self.assertContains(response, "Semanas actuales y futuras")
+        self.assertContains(response, "Historial semanal")
+
+    @patch("apps.cuadrillas.views_b3.timezone.localdate", return_value=date(2026, 8, 3))
+    def test_historial_semanal_conserva_registro_legacy_pasado(self, _localdate):
+        response = self.client.get(
+            reverse("cuadrillas:semanal_grid", args=[2026, 31])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.pasada.nombre)

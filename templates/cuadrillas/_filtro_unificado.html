@@ -21,7 +21,7 @@
                 <select name="semana" id="semana"
                         onchange="this.form.submit()"
                         class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
-                    <option value="">Todas las semanas</option>
+                    <option value="">Semanas actuales y futuras</option>
                     {% for semana in semanas_filtro_disponibles %}
                     <option value="{{ semana.value }}" {% if semana.value == semana_actual %}selected{% endif %}>
                         {{ semana.label }}
