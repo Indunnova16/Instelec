@@ -13,6 +13,7 @@ from apps.core.permissions import AREA_CHOICES
 from .models import Asistencia, Cargo, Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo, TrackingUbicacion
 from .forms_personal import PersonalCuadrillaForm
 from .forms_cargo import CargoForm
+from .forms_vehiculo import VehiculoForm
 from .utils_semana import _prefijo
 
 
@@ -21,6 +22,93 @@ def _personal_visible_para_usuario(request):
     qs = PersonalCuadrilla.objects.filter(activo=True)
     area = getattr(request.user, "area", "")
     return qs.filter(area=area) if area else qs
+
+
+# ---------------------------------------------------------------------------
+# Vehículos — superficie de parametrización (issue #226, A2)
+# ---------------------------------------------------------------------------
+class VehiculoEntryView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Entrada temporal del maestro; A3 convierte esta URL en el listado."""
+
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get(self, request, *args, **kwargs):
+        return redirect('core:vehiculos_crear')
+
+
+class VehiculoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    template_name = 'cuadrillas/vehiculos_form.html'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', VehiculoForm())
+        context['modo'] = 'crear'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = VehiculoForm(request.POST)
+        if form.is_valid():
+            vehiculo = form.save()
+            messages.success(request, f'Vehículo "{vehiculo.placa}" creado exitosamente.')
+            return redirect('core:vehiculos_detalle', pk=vehiculo.pk)
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class VehiculoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    model = Vehiculo
+    template_name = 'cuadrillas/vehiculos_detalle.html'
+    context_object_name = 'vehiculo'
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['estados'] = Vehiculo.Estado.choices
+        return context
+
+
+class VehiculoEditView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    model = Vehiculo
+    template_name = 'cuadrillas/vehiculos_form.html'
+    context_object_name = 'vehiculo'
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', VehiculoForm(instance=self.object))
+        context['modo'] = 'editar'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = VehiculoForm(request.POST, instance=self.object)
+        if form.is_valid():
+            vehiculo = form.save()
+            messages.success(request, f'Vehículo "{vehiculo.placa}" actualizado exitosamente.')
+            return redirect('core:vehiculos_detalle', pk=vehiculo.pk)
+        messages.error(request, 'Revise los errores del formulario.')
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class VehiculoEstadoView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
+    model = Vehiculo
+    allowed_roles = ['admin', 'director', 'coordinador']
+
+    def post(self, request, *args, **kwargs):
+        vehiculo = self.get_object()
+        estado = (request.POST.get('estado') or '').strip()
+        estados_validos = dict(Vehiculo.Estado.choices)
+        if estado not in estados_validos:
+            messages.error(request, 'Seleccione un estado válido para el vehículo.')
+            return redirect('core:vehiculos_detalle', pk=vehiculo.pk)
+        if estado == vehiculo.estado:
+            messages.info(request, f'El vehículo "{vehiculo.placa}" ya tiene ese estado.')
+        else:
+            vehiculo.estado = estado
+            vehiculo.save(update_fields=['estado', 'updated_at'])
+            messages.success(request, f'Estado de "{vehiculo.placa}" actualizado a {estados_validos[estado]}.')
+        return redirect('core:vehiculos_detalle', pk=vehiculo.pk)
 
 
 class CuadrillaListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListView):

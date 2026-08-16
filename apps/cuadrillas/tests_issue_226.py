@@ -2,9 +2,27 @@
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TestCase, TransactionTestCase
+from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
+from django.test import Client, TestCase, TransactionTestCase
+from django.urls import reverse
 
 from apps.cuadrillas.models import Vehiculo
+
+
+Usuario = get_user_model()
+
+
+def _usuario_226(email, rol='admin'):
+    return Usuario.objects.create_user(
+        email=email,
+        password='testpass123!',
+        first_name='Usuario',
+        last_name='226',
+        rol=rol,
+        is_staff=rol == 'admin',
+        is_superuser=rol == 'admin',
+    )
 
 
 class TestVehiculoCatalogoEstado(TestCase):
@@ -39,6 +57,78 @@ class TestVehiculoCatalogoEstado(TestCase):
 
         with self.assertRaises(Exception):
             Vehiculo.objects.create(placa='226-UNICA-01', marca='Toyota')
+
+
+class TestVehiculoCRUDParametrizacion(TestCase):
+    """A2: creación, detalle, edición y cambio de estado del catálogo."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(_usuario_226('admin_226@test.com'))
+
+    def _datos(self, **overrides):
+        datos = {
+            'placa': 'abc226',
+            'marca': 'Toyota',
+            'tipo': Vehiculo.TipoVehiculo.CAMIONETA,
+            'descripcion': 'Vehículo de operación',
+            'estado': Vehiculo.Estado.ACTIVO,
+            'observaciones': 'Revisión vigente',
+            'modelo': 'Hilux',
+            'ano': '2024',
+            'capacidad_personas': '5',
+            'costo_dia': '120000.00',
+        }
+        datos.update(overrides)
+        return datos
+
+    def test_crear_muestra_detalle_y_normaliza_placa(self):
+        respuesta = self.client.post(reverse('core:vehiculos_crear'), self._datos())
+        self.assertEqual(respuesta.status_code, 302)
+        vehiculo = Vehiculo.objects.get(placa='ABC226')
+        detalle = self.client.get(reverse('core:vehiculos_detalle', args=[vehiculo.pk]))
+        self.assertContains(detalle, 'Vehículo de operación')
+        self.assertContains(detalle, 'Cambiar estado')
+
+    def test_editar_y_cambiar_estado_actualizan_activo_legacy(self):
+        vehiculo = Vehiculo.objects.create(placa='226-EDIT', marca='Chevrolet')
+        editar = self.client.post(
+            reverse('core:vehiculos_editar', args=[vehiculo.pk]),
+            self._datos(placa='226-EDIT', marca='Chevrolet Actualizada', estado=Vehiculo.Estado.ACTIVO),
+        )
+        self.assertEqual(editar.status_code, 302)
+        estado = self.client.post(
+            reverse('core:vehiculos_estado', args=[vehiculo.pk]),
+            {'estado': Vehiculo.Estado.EN_MANTENIMIENTO},
+        )
+        self.assertEqual(estado.status_code, 302)
+        vehiculo.refresh_from_db()
+        self.assertEqual(vehiculo.marca, 'Chevrolet Actualizada')
+        self.assertEqual(vehiculo.estado, Vehiculo.Estado.EN_MANTENIMIENTO)
+        self.assertFalse(vehiculo.activo)
+
+    def test_requeridos_y_placa_duplicada_re_renderizan_con_error_de_dominio(self):
+        vacio = self.client.post(reverse('core:vehiculos_crear'), self._datos(placa='', marca=''))
+        self.assertEqual(vacio.status_code, 200)
+        self.assertIn('placa', vacio.context['form'].errors)
+        self.assertIn('marca', vacio.context['form'].errors)
+
+        Vehiculo.objects.create(placa='DUP-226', marca='Nissan')
+        duplicado = self.client.post(reverse('core:vehiculos_crear'), self._datos(placa='dup-226'))
+        self.assertEqual(duplicado.status_code, 200)
+        self.assertIn('Ya existe un vehículo', duplicado.context['form'].errors['placa'][0])
+        self.assertEqual(Vehiculo.objects.filter(placa__iexact='DUP-226').count(), 1)
+
+    def test_usuario_sin_rol_autorizado_no_puede_crear_ni_cambiar_estado(self):
+        vehiculo = Vehiculo.objects.create(placa='DEN-226', marca='Mazda')
+        self.client.force_login(_usuario_226('supervisor_226@test.com', rol='supervisor'))
+        with self.assertRaises(PermissionDenied):
+            self.client.get(reverse('core:vehiculos_crear'))
+        with self.assertRaises(PermissionDenied):
+            self.client.post(
+                reverse('core:vehiculos_estado', args=[vehiculo.pk]),
+                {'estado': Vehiculo.Estado.INACTIVO},
+            )
 
 
 class TestVehiculoMigrationLegacy(TransactionTestCase):

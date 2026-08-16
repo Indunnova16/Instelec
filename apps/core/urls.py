@@ -3,6 +3,7 @@ Core URL patterns.
 """
 from django.urls import path
 from . import views
+from apps.cuadrillas import views as cuadrillas_views
 
 app_name = 'core'
 
@@ -24,4 +25,11 @@ urlpatterns = [
         views.RoleModuloPermisoCeldaView.as_view(),
         name='roles_matriz_celda',
     ),
+    # El modelo se aloja en cuadrillas por sus FKs operativas, pero el maestro
+    # se expone al usuario bajo Parametrización (issue #226, A2).
+    path('parametrizacion/vehiculos/', cuadrillas_views.VehiculoEntryView.as_view(), name='vehiculos_lista'),
+    path('parametrizacion/vehiculos/crear/', cuadrillas_views.VehiculoCreateView.as_view(), name='vehiculos_crear'),
+    path('parametrizacion/vehiculos/<uuid:pk>/', cuadrillas_views.VehiculoDetailView.as_view(), name='vehiculos_detalle'),
+    path('parametrizacion/vehiculos/<uuid:pk>/editar/', cuadrillas_views.VehiculoEditView.as_view(), name='vehiculos_editar'),
+    path('parametrizacion/vehiculos/<uuid:pk>/estado/', cuadrillas_views.VehiculoEstadoView.as_view(), name='vehiculos_estado'),
 ]

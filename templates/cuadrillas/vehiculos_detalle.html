@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}{{ vehiculo.placa }} - Vehículo - TransMaint{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <div class="flex justify-between items-start gap-4">
+        <div><h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ vehiculo.placa }}</h1><p class="text-gray-600 dark:text-gray-400">{{ vehiculo.marca }}{% if vehiculo.modelo %} · {{ vehiculo.modelo }}{% endif %}</p></div>
+        <a href="{% url 'core:vehiculos_editar' vehiculo.pk %}" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Editar vehículo</a>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div><dt class="text-sm text-gray-500">Tipo</dt><dd class="font-medium text-gray-900 dark:text-white">{{ vehiculo.get_tipo_display }}</dd></div>
+        <div><dt class="text-sm text-gray-500">Estado</dt><dd class="font-medium text-gray-900 dark:text-white">{{ vehiculo.get_estado_display }}</dd></div>
+        <div class="md:col-span-2"><dt class="text-sm text-gray-500">Descripción</dt><dd class="text-gray-900 dark:text-white">{{ vehiculo.descripcion|default:"Sin descripción" }}</dd></div>
+        <div class="md:col-span-2"><dt class="text-sm text-gray-500">Observaciones</dt><dd class="text-gray-900 dark:text-white">{{ vehiculo.observaciones|default:"Sin observaciones" }}</dd></div>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="font-semibold text-gray-900 dark:text-white mb-3">Cambiar estado</h2>
+        <form method="post" action="{% url 'core:vehiculos_estado' vehiculo.pk %}" class="flex flex-col sm:flex-row gap-3">
+            {% csrf_token %}
+            <select name="estado" class="rounded-lg border-gray-300 dark:bg-gray-700 dark:text-white" aria-label="Nuevo estado">
+                {% for value, label in estados %}<option value="{{ value }}" {% if value == vehiculo.estado %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">Actualizar estado</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
