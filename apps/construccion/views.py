@@ -970,7 +970,19 @@ class DashboardAvanceView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ctx['avance_civil_lineal'] = proyecto.porcentaje_avance_civil
         ctx['avance_montaje'] = avance_modulos['montaje']
         ctx['avance_tendido'] = avance_modulos['tendido']
-        ctx['curva_s'] = proyecto.curva_s_data()
+        # #204: el dashboard consolidado usa el mismo payload de Curva S del
+        # dashboard de Obra Civil.  Ese helper une las fechas de Planeado y
+        # Ejecutado, las ordena y completa cada serie para que Chart.js dibuje
+        # ambas líneas sobre el mismo eje; no volver a calcularlo aquí.
+        from .views_dashboards import _curva_s_chart_payload
+        curva_s = _curva_s_chart_payload(proyecto)
+        ctx['curva_s'] = curva_s
+        ctx['curva_s_disponible'] = bool(curva_s['labels'])
+        # Las series alineadas contienen ceros por carry-forward aun cuando
+        # falta la fuente original.  ``any`` conserva el estado vacío útil
+        # para que el usuario sepa qué dato debe cargar.
+        ctx['curva_s_planeado_disponible'] = any(curva_s['planeado'])
+        ctx['curva_s_ejecutado_disponible'] = any(curva_s['ejecutado'])
         ctx['total_torres'] = len(torres)
         ctx['torres_lista_montaje'] = sum(1 for t in torres if t.obra_civil_completa)
         ctx['torres_en_fases_paralelas'] = sum(
