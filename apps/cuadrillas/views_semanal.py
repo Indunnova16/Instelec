@@ -313,13 +313,14 @@ def _choices_form_bloque(request=None):
     También incluye el datalist de Colaboradores activos (A5) que alimenta
     el buscador de "agregar personal" en cada card.
 
-    Issue #209: ``supervisores_bloque`` filtraba solo por ``rol='supervisor'``
-    -- no existe en el modelo ningún cargo literal "Supervisor de
-    Mantenimiento" (verificado en prod: el único cargo que mapea a
-    ``rol='supervisor'`` es ``SUPERVISOR``, sin distinción de área). Se suma
-    el mismo filtro de área compatible-con-legacy que ``PersonalCuadrilla``
-    para no mostrar, si algún día existiera, un supervisor explícitamente de
-    otra área."""
+    Issue #223: el campo etiquetado como ``Supervisor`` es el responsable
+    asignable de la cuadrilla, no un filtro por el rol técnico legacy
+    ``supervisor``. Debe ofrecer a TODOS los usuarios activos elegibles de
+    Mantenimiento, incluidos los registros legacy sin ``area``. Se excluyen
+    usuarios explícitamente clasificados en otra área.
+
+    El propio formulario permite buscar por nombre o documento; la plantilla
+    incorpora ambos valores en la etiqueta de cada opción."""
     from apps.actividades.models import TipoActividad
     from apps.lineas.models import Linea
     from apps.usuarios.models import Usuario
@@ -328,7 +329,7 @@ def _choices_form_bloque(request=None):
         "tipos_actividad_bloque": TipoActividad.objects.filter(activo=True).order_by("nombre"),
         "lineas_bloque": Linea.objects.filter(activa=True).order_by("codigo"),
         "vehiculos_bloque": Vehiculo.objects.filter(activo=True).order_by("placa"),
-        "supervisores_bloque": Usuario.objects.filter(rol="supervisor", is_active=True)
+        "supervisores_bloque": Usuario.objects.filter(is_active=True)
         .filter(Q(area=AREA_MANTENIMIENTO) | Q(area=""))
         .order_by("first_name"),
         "personal_disponible_datalist": _personal_visible_para_usuario(request).order_by("nombre"),

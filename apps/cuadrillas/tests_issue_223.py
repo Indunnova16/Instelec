@@ -8,7 +8,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.cuadrillas.models import Cuadrilla
-from apps.cuadrillas.views_semanal import _bloque_a_dict
+from apps.cuadrillas.views_semanal import _bloque_a_dict, _choices_form_bloque
 from apps.lineas.models import Linea, Torre, Tramo
 
 
@@ -130,3 +130,78 @@ class TestProgramacionSemanalTramoLibreYRango(TestCase):
         )
         self.assertIn("Tramo 223-LEG - Tramo legado", card)
         self.assertIn("Tramo 223-LEG", pdf)
+
+
+class TestCatalogoSupervisorMantenimiento(TestCase):
+    """A2: el responsable de una cuadrilla no se limita al rol legacy."""
+
+    def _usuario(self, email, *, area, rol="operario_mantenimiento", documento=""):
+        return Usuario.objects.create_user(
+            email=email,
+            password="testpass123!",
+            first_name="Colaborador",
+            last_name=email.split("@")[0],
+            rol=rol,
+            area=area,
+            documento=documento,
+            is_active=True,
+        )
+
+    def test_lista_dos_colaboradores_elegibles_y_legacy_no_supervisor(self):
+        mantenimiento = self._usuario(
+            "mant_223@test.local", area="MANTENIMIENTO", documento="223-1001"
+        )
+        legacy = self._usuario(
+            "legacy_223@test.local", area="", rol="liniero", documento="223-1002"
+        )
+
+        choices = list(_choices_form_bloque()["supervisores_bloque"])
+
+        self.assertIn(mantenimiento, choices)
+        self.assertIn(legacy, choices)
+
+    def test_excluye_colaborador_de_otra_area_e_inactivo(self):
+        construccion = self._usuario("obra_223@test.local", area="CONSTRUCCION")
+        inactivo = self._usuario("baja_223@test.local", area="MANTENIMIENTO")
+        inactivo.is_active = False
+        inactivo.save(update_fields=["is_active"])
+
+        choices = list(_choices_form_bloque()["supervisores_bloque"])
+
+        self.assertNotIn(construccion, choices)
+        self.assertNotIn(inactivo, choices)
+
+    def test_crear_y_editar_conservan_supervisor_y_etiqueta_buscable_por_documento(self):
+        self.admin = Usuario.objects.create_user(
+            email="admin_catalogo_223@test.local",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="223",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+        supervisor = self._usuario(
+            "responsable_223@test.local", area="MANTENIMIENTO", documento="CC-223-900"
+        )
+        client = Client()
+        client.force_login(self.admin)
+        crear_url = reverse("cuadrillas:semanal_bloque_crear", args=[2099, 2])
+
+        response = client.post(
+            crear_url, {"nombre": "Cuadrilla catálogo 223", "supervisor": supervisor.pk}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("CC-223-900", response.content.decode())
+        cuadrilla = Cuadrilla.objects.get(nombre="Cuadrilla catálogo 223")
+        self.assertEqual(cuadrilla.supervisor, supervisor)
+
+        response = client.post(
+            reverse("cuadrillas:semanal_bloque_editar", args=[cuadrilla.pk]),
+            {"nombre": "Cuadrilla catálogo 223 editada", "supervisor": supervisor.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        cuadrilla.refresh_from_db()
+        self.assertEqual(cuadrilla.supervisor, supervisor)

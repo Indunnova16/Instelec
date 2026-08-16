@@ -76,7 +76,7 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
                 class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
             <option value="">— Sin supervisor —</option>
             {% for s in supervisores_bloque %}
-            <option value="{{ s.id }}" {% if b.supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.get_full_name }}</option>
+            <option value="{{ s.id }}" {% if b.supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.get_full_name }}{% if s.documento %} — {{ s.documento }}{% endif %}</option>
             {% endfor %}
         </select>
     </div>
