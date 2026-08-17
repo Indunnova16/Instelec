@@ -17,6 +17,17 @@ from .forms_vehiculo import VehiculoForm
 from .utils_semana import _prefijo
 
 
+def _valor_viatico_default():
+    """Retorna el valor vigente del viático, con el fallback legacy."""
+    from decimal import Decimal
+    from apps.financiero.models import CostoRecurso
+
+    costo_viatico = CostoRecurso.objects.filter(
+        tipo='VIATICO', activo=True
+    ).order_by('-vigencia_desde').first()
+    return costo_viatico.costo_unitario if costo_viatico else Decimal('136941')
+
+
 def _personal_visible_para_usuario(request):
     """Colaboradores asignables por el área del usuario, con compatibilidad legacy."""
     qs = PersonalCuadrilla.objects.filter(activo=True)
@@ -488,6 +499,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
         dias_semana = [lunes + timedelta(days=i) for i in range(7)]
         context['dias_semana'] = dias_semana
         context['semana_lunes'] = lunes
+        context['valor_viatico_default'] = _valor_viatico_default()
 
         # Load existing attendance for this week
         asistencias = Asistencia.objects.filter(
@@ -532,7 +544,11 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                 total_horas_extra += Decimal(str(horas_extra_val))
                 # Ordinary hours: jornada regular if PRESENTE
                 jornada = Asistencia.JORNADA_POR_DIA.get(dia.weekday(), 0)
-                if info.get('tipo_novedad') == 'PRESENTE':
+                if (
+                    info.get('tipo_novedad') == 'PRESENTE'
+                    and not info.get('he_dominical_diurna', 0)
+                    and not info.get('he_dominical_nocturna', 0)
+                ):
                     total_horas_ordinarias += Decimal(str(jornada))
                 dias.append({
                     'fecha': fecha_iso,
@@ -925,16 +941,11 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         he_dominical_nocturna = _parse_dec(request.POST.get('he_dominical_nocturna', '').strip())
         horas_extra = he_diurna + he_nocturna + he_dominical_diurna + he_dominical_nocturna
 
-        # If viatico_aplica, calculate viaticos from CostoRecurso
+        # Respeta el importe explícito enviado por el formulario. El default
+        # solo se aplica al activar viático por primera vez sin importe.
         if viatico_aplica:
-            from apps.financiero.models import CostoRecurso
-            costo_viatico = CostoRecurso.objects.filter(
-                tipo='VIATICO', activo=True
-            ).order_by('-vigencia_desde').first()
-            if costo_viatico:
-                viaticos = costo_viatico.costo_unitario
-            else:
-                viaticos = Decimal('136941')
+            if viaticos <= 0:
+                viaticos = _valor_viatico_default()
         else:
             viaticos = Decimal('0')
 
@@ -1008,6 +1019,8 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             options_html += f'<option value="{val}"{sel}>{lbl}</option>'
 
         viatico_checked = ' checked' if viatico_aplica else ''
+        viatico_visible = str(viatico_aplica).lower()
+        viatico_default = float(_valor_viatico_default())
         obs_escaped = observacion.replace('"', '&quot;')
 
         # Calculate weekly totals for OOB swap
@@ -1039,7 +1052,8 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         # aplicara en un lugar y se olvidara en los otros.
         total_hord = 0.0
         for a in week_asistencias.filter(tipo_novedad='PRESENTE'):
-            total_hord += Asistencia.JORNADA_POR_DIA.get(a.fecha.weekday(), 0)
+            if not a.he_dominical_diurna and not a.he_dominical_nocturna:
+                total_hord += Asistencia.JORNADA_POR_DIA.get(a.fecha.weekday(), 0)
         total_htotal = total_hord + total_he_fmt
 
         # Build observation field (visible when not PRESENTE)
@@ -1134,18 +1148,22 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             f'{options_html}</select>'
             f'{obs_field}'
             f'<div class="mt-1 flex items-center gap-1">'
-            f'<input type="checkbox" name="viatico_aplica" {viatico_checked} '
-            f'hx-post="{request.path}" '
-            f'hx-target="closest .asistencia-cell" '
-            f'hx-swap="innerHTML" '
-            f'hx-include="closest .asistencia-cell" '
+            f'<div x-data="{{showViatico:{viatico_visible},viaticos:{float(viaticos)},'
+            f'syncAndSubmit(){{this.$nextTick(()=>{{let c=this.$el.closest(\'.asistencia-cell\');'
+            f'let s=c.querySelector(\'[name=tipo_novedad]\');htmx.trigger(s,\'change\')}})}}}}">'
+            f'<input type="checkbox" name="viatico_aplica" x-model="showViatico" {viatico_checked} '
+            f'@change="if(showViatico&&!viaticos)viaticos={viatico_default};syncAndSubmit()" '
             f'class="rounded border-gray-300 text-green-600 cursor-pointer">'
             f'<span class="text-xs text-gray-500">V</span>'
+            f'<input x-show="showViatico" type="number" name="viaticos" x-model.number="viaticos" '
+            f'step="1" min="0" @change="syncAndSubmit()" '
+            f'class="ml-1 w-20 text-xs rounded border border-green-300 bg-green-50 px-1 py-0.5 '
+            f'text-green-700 dark:bg-gray-700 dark:border-gray-600 dark:text-green-300">'
+            f'</div>'
             f'</div>'
             f'{he_section}'
             f'<input type="hidden" name="usuario_id" value="{usuario_id}">'
             f'<input type="hidden" name="fecha" value="{fecha_str}">'
-            f'<input type="hidden" name="viaticos" value="{float(viaticos)}">'
         )
         import json
         response = HttpResponse(html)
@@ -1244,11 +1262,7 @@ class AsistenciaAccionMasivaView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
                 afectados += 1
 
         elif accion == 'viatico':
-            from apps.financiero.models import CostoRecurso
-            costo_viatico = CostoRecurso.objects.filter(
-                tipo='VIATICO', activo=True
-            ).order_by('-vigencia_desde').first()
-            valor_viatico = costo_viatico.costo_unitario if costo_viatico else Decimal('136941')
+            valor_viatico = _valor_viatico_default()
             for m in miembros_activos:
                 asist, _ = Asistencia.objects.get_or_create(
                     usuario=m.usuario, cuadrilla=cuadrilla, fecha=fecha,

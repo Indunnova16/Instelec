@@ -468,7 +468,6 @@
                             {% csrf_token %}
                             <input type="hidden" name="usuario_id" value="{{ fila.miembro.usuario_id }}">
                             <input type="hidden" name="fecha" value="{{ dia_info.fecha }}">
-                            <input type="hidden" name="viaticos" value="{% if dia_info.viaticos %}{{ dia_info.viaticos|floatformat:0 }}{% else %}0{% endif %}">
                             <select name="tipo_novedad"
                                     hx-post="{% url 'cuadrillas:asistencia_update' cuadrilla.pk %}"
                                     hx-target="closest .asistencia-cell"
@@ -507,14 +506,26 @@
                             <input type="hidden" name="observacion" value="{{ dia_info.observacion }}">
                             {% endif %}
                             <!-- Viático Sí/No -->
-                            <div class="mt-1 flex items-center gap-1">
-                                <input type="checkbox" name="viatico_aplica" {% if dia_info.viatico_aplica %}checked{% endif %}
-                                       hx-post="{% url 'cuadrillas:asistencia_update' cuadrilla.pk %}"
-                                       hx-target="closest .asistencia-cell"
-                                       hx-swap="innerHTML"
-                                       hx-include="closest .asistencia-cell"
+                            <div class="mt-1 flex items-center gap-1"
+                                 x-data="{
+                                    showViatico: {% if dia_info.viatico_aplica %}true{% else %}false{% endif %},
+                                    viaticos: {% if dia_info.viaticos %}{{ dia_info.viaticos }}{% else %}0{% endif %},
+                                    syncAndSubmit() {
+                                        this.$nextTick(() => {
+                                            let cell = this.$el.closest('.asistencia-cell');
+                                            let select = cell.querySelector('[name=tipo_novedad]');
+                                            htmx.trigger(select, 'change');
+                                        });
+                                    }
+                                 }">
+                                <input type="checkbox" name="viatico_aplica" x-model="showViatico"
+                                       @change="if(showViatico && !viaticos) viaticos = {{ valor_viatico_default }}; syncAndSubmit()"
                                        class="rounded border-gray-300 text-green-600 cursor-pointer">
                                 <span class="text-xs text-gray-500 dark:text-gray-400">V</span>
+                                <input x-show="showViatico" type="number" name="viaticos" x-model.number="viaticos"
+                                       step="1" min="0" @change="syncAndSubmit()"
+                                       class="w-20 text-xs rounded border border-green-300 bg-green-50 px-1 py-0.5 text-green-700
+                                              dark:bg-gray-700 dark:border-gray-600 dark:text-green-300">
                             </div>
                             <!-- Horas Extra -->
                             <div x-data="{
