@@ -307,3 +307,80 @@ class TestAccionMasivaViatico(TestCase):
         self.assertEqual(detalle.status_code, 200)
         self.assertIn('x-show="showViatico"', detalle.content.decode())
         self.assertIn('name="viaticos"', detalle.content.decode())
+
+
+class TestRevisionAdversarial210(TestCase):
+    """Regresiones halladas en la revisión adversarial post-cierre (2026-08-17).
+
+    El cierre anterior de #210 se validó con un viático de $0 y un festivo en
+    domingo — justo los dos únicos casos donde los defectos NO se manifiestan.
+    Estos tests fijan el caso que sí los expone.
+    """
+
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client.force_login(self.admin)
+        self.usuario = _crear_usuario("QA0210ADV", "QAE210 Adversarial")
+        # El código codifica la semana ISO que renderiza el detalle: 2099-01-05
+        # (lunes) y 2099-01-06 (martes) caen en la semana 02 de 2099.
+        self.cuadrilla = _crear_bloque_con_miembros(
+            "02-2099-0210AD-QAE", date(2099, 1, 5), [self.usuario]
+        )
+
+    def test_viatico_no_cero_no_rompe_el_js_del_template(self):
+        """El bug real: en es-CO `{{ v }}` daba "136941,00" y el x-data de
+        Alpine quedaba con JS inválido, tumbando la celda entera. Con $0 (el
+        caso que se probó al cerrar) el `{% if %}` caía al literal `0` y el
+        defecto quedaba invisible."""
+        Asistencia.objects.create(
+            usuario=self.usuario, cuadrilla=self.cuadrilla, fecha=date(2099, 1, 5),
+            tipo_novedad="PRESENTE", viatico_aplica=True, viaticos=Decimal("136941.00"),
+        )
+        resp = self.client.get(reverse("cuadrillas:detalle", args=[self.cuadrilla.pk]))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        # Separador decimal PUNTO: con coma el x-data es JS inválido.
+        self.assertIn("viaticos: 136941.0", html)
+        self.assertNotIn("viaticos: 136941,0", html)
+        # Ningún número embebido en el JS del x-data puede llevar coma decimal.
+        self.assertNotRegex(html, r"(viaticos|horas):\s*\d+,\d")
+
+    def test_viatico_cero_explicito_no_se_convierte_en_el_default(self):
+        """Marcar V con importe 0 debe persistir 0, no el default de $136.941."""
+        resp = self.client.post(
+            reverse("cuadrillas:asistencia_update", args=[self.cuadrilla.pk]),
+            data={
+                "usuario_id": str(self.usuario.pk), "fecha": "2099-01-05",
+                "tipo_novedad": "PRESENTE", "viatico_aplica": "on",
+                "viaticos": "0", "observacion": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        asist = Asistencia.objects.get(usuario=self.usuario, fecha=date(2099, 1, 5))
+        self.assertEqual(asist.viaticos, Decimal("0"))
+
+    def test_festivo_entre_semana_usa_la_jornada_del_dia_no_8h_fijas(self):
+        """Un martes son 7,5h de jornada: registrar 8h pagaba media hora de
+        más al factor dominical 2.00."""
+        martes = date(2099, 1, 6)
+        self.assertEqual(martes.weekday(), 1)
+        resp = self.client.post(
+            reverse("cuadrillas:asistencia_accion_masiva", args=[self.cuadrilla.pk]),
+            data={"accion": "festivo_domingo", "fecha": martes.isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        asist = Asistencia.objects.get(usuario=self.usuario, fecha=martes)
+        self.assertEqual(asist.he_dominical_diurna, Decimal("7.5"))
+
+    def test_festivo_en_domingo_conserva_la_jornada_completa_de_8h(self):
+        """El domingo tiene jornada 0 por definición, así que el fallback de
+        8h se mantiene — este es el caso que ya funcionaba, no debe romperse."""
+        domingo = date(2099, 1, 4)
+        self.assertEqual(domingo.weekday(), 6)
+        resp = self.client.post(
+            reverse("cuadrillas:asistencia_accion_masiva", args=[self.cuadrilla.pk]),
+            data={"accion": "festivo_domingo", "fecha": domingo.isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        asist = Asistencia.objects.get(usuario=self.usuario, fecha=domingo)
+        self.assertEqual(asist.he_dominical_diurna, Decimal("8.0"))

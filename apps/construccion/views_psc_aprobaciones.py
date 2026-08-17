@@ -17,6 +17,7 @@ from .models import (
     AsignacionPersonalProyectoConstruccion,
     ProyectoConstruccion,
 )
+from .views_psc_programacion import PSC_ADMIN_ROLES
 
 
 class AprobacionPersonalProyectoView(LoginRequiredMixin, RoleRequiredMixin, View):
@@ -27,6 +28,13 @@ class AprobacionPersonalProyectoView(LoginRequiredMixin, RoleRequiredMixin, View
     aprobaciones; por eso se rechazan únicamente ventanas que se solapan para
     la misma pareja proyecto-personal.
     """
+
+    # `RoleRequiredMixin` con `allowed_roles` vacío deja pasar a CUALQUIER
+    # usuario autenticado (apps/core/mixins.py). Esta vista ESCRIBE la tabla
+    # que gobierna toda la elegibilidad del módulo, así que debe exigir los
+    # mismos roles operativos que el resto de las mutaciones PSC: sin esto un
+    # `supervisor` (lectura) podía auto-habilitarse en cualquier proyecto.
+    allowed_roles = PSC_ADMIN_ROLES
 
     template_name = 'construccion/programacion_semanal/aprobaciones.html'
 

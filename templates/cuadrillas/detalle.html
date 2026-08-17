@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize l10n %}
 
 {% block title %}{{ cuadrilla.codigo }} - TransMaint{% endblock %}
 
@@ -507,9 +507,13 @@
                             {% endif %}
                             <!-- Viático Sí/No -->
                             <div class="mt-1 flex items-center gap-1"
+                                 {# `{{ valor }}` a secas se localiza (es-CO -> "136941,00") y rompe el
+                                    JS del x-data con un SyntaxError, dejando la celda entera sin Alpine.
+                                    `unlocalize` fuerza el punto decimal. Aplica a TODO número embebido
+                                    en JS/JSON dentro de un template. #}
                                  x-data="{
                                     showViatico: {% if dia_info.viatico_aplica %}true{% else %}false{% endif %},
-                                    viaticos: {% if dia_info.viaticos %}{{ dia_info.viaticos }}{% else %}0{% endif %},
+                                    viaticos: {% if dia_info.viaticos %}{{ dia_info.viaticos|unlocalize }}{% else %}0{% endif %},
                                     syncAndSubmit() {
                                         this.$nextTick(() => {
                                             let cell = this.$el.closest('.asistencia-cell');
@@ -519,7 +523,7 @@
                                     }
                                  }">
                                 <input type="checkbox" name="viatico_aplica" x-model="showViatico"
-                                       @change="if(showViatico && !viaticos) viaticos = {{ valor_viatico_default }}; syncAndSubmit()"
+                                       @change="if(showViatico && !viaticos) viaticos = {{ valor_viatico_default|unlocalize }}; syncAndSubmit()"
                                        class="rounded border-gray-300 text-green-600 cursor-pointer">
                                 <span class="text-xs text-gray-500 dark:text-gray-400">V</span>
                                 <input x-show="showViatico" type="number" name="viaticos" x-model.number="viaticos"
@@ -530,11 +534,12 @@
                             <!-- Horas Extra -->
                             <div x-data="{
                                 showHE: {% if dia_info.he_diurna or dia_info.he_nocturna or dia_info.he_dominical_diurna or dia_info.he_dominical_nocturna %}true{% else %}false{% endif %},
+                                {# `unlocalize` obligatorio: en es-CO un 1,5 sin filtrar rompe el JS. #}
                                 rows: [
-                                    {% if dia_info.he_diurna %}{ tipo: 'he_diurna', horas: {{ dia_info.he_diurna }} },{% endif %}
-                                    {% if dia_info.he_nocturna %}{ tipo: 'he_nocturna', horas: {{ dia_info.he_nocturna }} },{% endif %}
-                                    {% if dia_info.he_dominical_diurna %}{ tipo: 'he_dominical_diurna', horas: {{ dia_info.he_dominical_diurna }} },{% endif %}
-                                    {% if dia_info.he_dominical_nocturna %}{ tipo: 'he_dominical_nocturna', horas: {{ dia_info.he_dominical_nocturna }} },{% endif %}
+                                    {% if dia_info.he_diurna %}{ tipo: 'he_diurna', horas: {{ dia_info.he_diurna|unlocalize }} },{% endif %}
+                                    {% if dia_info.he_nocturna %}{ tipo: 'he_nocturna', horas: {{ dia_info.he_nocturna|unlocalize }} },{% endif %}
+                                    {% if dia_info.he_dominical_diurna %}{ tipo: 'he_dominical_diurna', horas: {{ dia_info.he_dominical_diurna|unlocalize }} },{% endif %}
+                                    {% if dia_info.he_dominical_nocturna %}{ tipo: 'he_dominical_nocturna', horas: {{ dia_info.he_dominical_nocturna|unlocalize }} },{% endif %}
                                 ],
                                 calcField(tipo) {
                                     return this.rows.filter(r => r.tipo === tipo).reduce((s, r) => s + (parseFloat(r.horas) || 0), 0);

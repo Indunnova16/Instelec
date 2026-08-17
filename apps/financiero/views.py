@@ -1952,7 +1952,11 @@ class NominaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                 costo = miembros_map.get(key, Decimal('0'))
 
                 if a.tipo_novedad == 'PRESENTE':
-                    total_nomina += costo
+                    # #210: el día festivo/dominical se paga por recargo, no
+                    # como jornada ordinaria — sumar `costo` acá lo cobraba
+                    # dos veces. El día SÍ cuenta como trabajado.
+                    if not a.he_dominical_diurna and not a.he_dominical_nocturna:
+                        total_nomina += costo
                     dias_trabajados += 1
 
                 if a.horas_extra and a.horas_extra > 0:
@@ -2286,8 +2290,15 @@ class CargarCostosCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
 
             # --- Nomina operacion ---
             # Sum of costo_dia for all present days
+            # #210: un día festivo/dominical trabajado se registra como
+            # PRESENTE + horas dominicales, y se PAGA por la vía de recargo
+            # (FACTOR_HE_DOMINICAL_*, abajo). Sumarle además el costo_dia
+            # ordinario lo cobraba DOS veces. Mismo criterio que el total de
+            # horas ordinarias de la grilla (apps/cuadrillas/views.py).
             nomina_mes = Decimal('0')
-            for asist in asistencias.filter(tipo_novedad='PRESENTE'):
+            for asist in asistencias.filter(tipo_novedad='PRESENTE').exclude(
+                Q(he_dominical_diurna__gt=0) | Q(he_dominical_nocturna__gt=0)
+            ):
                 # Get the member's daily cost
                 miembro = CuadrillaMiembro.objects.filter(
                     cuadrilla=asist.cuadrilla,
