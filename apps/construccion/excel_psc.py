@@ -176,10 +176,22 @@ def _parse_row(row):
 def importar_programacion_semanal(uploaded_file):
     """Valida todo el XLSX y persiste sus filas en una única transacción."""
     result = ImportResult()
+    # El cap de filas se aplica AL LEER, no después: materializar el archivo
+    # entero con `list(...)` anula el streaming de `read_only=True` y un XLSX
+    # de pocos MB con millones de filas (zip-bomb) tumbaba el contenedor por
+    # OOM antes de llegar a la validación de `MAX_IMPORT_ROWS`.
     try:
         workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
         sheet = workbook.active
-        rows = list(sheet.iter_rows(values_only=True))
+        rows = []
+        for row in sheet.iter_rows(values_only=True):
+            rows.append(row)
+            if len(rows) > MAX_IMPORT_ROWS + 1:  # +1 por la fila de encabezado
+                result.errors.append({
+                    'row': 0,
+                    'error': f'El archivo supera el máximo de {MAX_IMPORT_ROWS} filas.',
+                })
+                return result
     except Exception as exc:
         result.errors.append({'row': 0, 'error': f'No se pudo leer el archivo XLSX: {exc}'})
         return result
@@ -215,18 +227,30 @@ def importar_programacion_semanal(uploaded_file):
             result.errors.append({'row': number, 'error': 'Personal no elegible o ya ocupado: ' + ', '.join(ineligible)})
     if result.errors:
         return result
-    with transaction.atomic():
-        for _, item in parsed:
-            people, vehicles = item.pop('personal'), item.pop('vehiculos')
-            programacion = ProgramacionSemanalConstruccion.objects.create(**item)
-            validar_personal_elegible(programacion, [person.pk for person in people])
-            ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                ProgramacionSemanalConstruccionPersonal(programacion=programacion, personal=person)
-                for person in people
-            ])
-            ProgramacionSemanalConstruccionVehiculo.objects.bulk_create([
-                ProgramacionSemanalConstruccionVehiculo(programacion=programacion, vehiculo=vehicle)
-                for vehicle in vehicles
-            ])
+    # La elegibilidad ya se validó arriba, pero se revalida dentro de la
+    # transacción por si otra sesión asignó a esa persona entremedio (TOCTOU).
+    # Si eso pasa, la excepción debe volverse un error de fila reportable —
+    # dejarla escapar daba un 500 en vez del reporte que la pantalla espera.
+    try:
+        with transaction.atomic():
+            for numero, item in parsed:
+                people, vehicles = item.pop('personal'), item.pop('vehiculos')
+                programacion = ProgramacionSemanalConstruccion.objects.create(**item)
+                validar_personal_elegible(programacion, [person.pk for person in people])
+                ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
+                    ProgramacionSemanalConstruccionPersonal(programacion=programacion, personal=person)
+                    for person in people
+                ])
+                ProgramacionSemanalConstruccionVehiculo.objects.bulk_create([
+                    ProgramacionSemanalConstruccionVehiculo(programacion=programacion, vehiculo=vehicle)
+                    for vehicle in vehicles
+                ])
+    except ValidationError as exc:
+        result.errors.append({
+            'row': numero,
+            'error': 'La disponibilidad cambió mientras se importaba: '
+                     + '; '.join(exc.messages),
+        })
+        return result
     result.created = len(parsed)
     return result

@@ -4,6 +4,7 @@ User views.
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
@@ -11,7 +12,7 @@ from django.views.generic import ListView, TemplateView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
 from apps.core.models import Role
-from apps.core.permissions import AREA_CHOICES
+from apps.core.permissions import AREA_CHOICES, NIVEL_ADMIN, rol_nivel
 
 from .forms import LoginForm, PerfilForm, UsuarioChangeForm
 from .models import Usuario
@@ -199,7 +200,19 @@ class CrearUsuarioAdminView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
 
 
 class ResetPasswordView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Reset a user's password to the default formula."""
+    """Reset a user's password to the default formula.
+
+    SEGURIDAD (#186): la contraseña resultante es DERIVABLE de datos visibles
+    en el listado de usuarios (`documento` + 3 primeras letras del nombre, ver
+    `_generar_password_campo`). Eso es aceptable para el onboarding de personal
+    de campo, pero NO para cuentas privilegiadas: reseteársela a un Super Admin
+    equivale a entregar sus credenciales.
+
+    `RoleRequiredMixin` NO alcanza como gate acá: deja pasar a cualquier rol de
+    `nivel='admin'` ANTES de mirar `allowed_roles` (apps/core/mixins.py), o sea
+    9 de 15 roles. Por eso el límite de privilegio se verifica explícitamente
+    acá sobre el OBJETIVO del reset, no solo sobre el actor.
+    """
     template_name = 'usuarios/gestion.html'
     allowed_roles = ['admin']
 
@@ -207,12 +220,26 @@ class ResetPasswordView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         usuario_id = request.POST.get('usuario_id')
         try:
             usuario = Usuario.objects.get(pk=usuario_id)
-            new_password = _generar_password_campo(usuario.documento, usuario.first_name)
-            usuario.set_password(new_password)
-            usuario.save(update_fields=['password'])
-            messages.success(request, f'Contrasena restablecida para {usuario.get_full_name()}.')
-        except Usuario.DoesNotExist:
+        except (Usuario.DoesNotExist, ValidationError, ValueError):
             messages.error(request, 'Usuario no encontrado.')
+            return redirect('usuarios:gestion')
+
+        # Un no-superusuario NUNCA puede resetear la clave de un superusuario:
+        # sería escalada directa a control total (la clave resultante es
+        # derivable). Tampoco puede resetear la de otro usuario de nivel admin.
+        objetivo_privilegiado = usuario.is_superuser or rol_nivel(usuario.rol) == NIVEL_ADMIN
+        if objetivo_privilegiado and not request.user.is_superuser:
+            messages.error(
+                request,
+                'Solo un Super Admin puede restablecer la contraseña de una '
+                'cuenta administrativa.',
+            )
+            return redirect('usuarios:gestion')
+
+        new_password = _generar_password_campo(usuario.documento, usuario.first_name)
+        usuario.set_password(new_password)
+        usuario.save(update_fields=['password'])
+        messages.success(request, f'Contrasena restablecida para {usuario.get_full_name()}.')
         return redirect('usuarios:gestion')
 
 

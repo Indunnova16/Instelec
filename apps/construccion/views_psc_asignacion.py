@@ -52,12 +52,17 @@ class ProgramacionSemanalConstruccionAgregarPersonalView(_PSCAsignacionAccessMix
             if len(personas) != len(set(map(str, personal_ids))):
                 raise ValidationError('Una o más personas seleccionadas no existen.')
             with transaction.atomic():
+                # `ignore_conflicts`: un doble clic (o dos pestañas) mandaba
+                # dos POST que pasaban ambos la validación previa y el segundo
+                # reventaba con IntegrityError 500 contra el UniqueConstraint
+                # (programacion, personal). Reasignar a alguien ya asignado es
+                # idempotente, no un error que deba ver el usuario.
                 ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
                     ProgramacionSemanalConstruccionPersonal(
                         programacion=programacion, personal=persona, categoria=categoria,
                     )
                     for persona in personas
-                ])
+                ], ignore_conflicts=True)
         except ValidationError as error:
             messages.error(request, error.messages[0])
         else:
@@ -106,10 +111,17 @@ class ProgramacionSemanalConstruccionAgregarVehiculoView(_PSCAsignacionAccessMix
             if not conductor:
                 messages.error(request, 'El conductor debe estar asignado previamente a esta programación.')
                 return redirect(self.detalle_url(programacion.pk))
-        ProgramacionSemanalConstruccionVehiculo.objects.create(
-            programacion=programacion, vehiculo=vehiculo, conductor=conductor,
+        # `get_or_create` en vez de `create`: el `exists()` de arriba deja una
+        # ventana para que un doble clic cree dos veces y el segundo POST
+        # reviente con IntegrityError 500 contra el UniqueConstraint.
+        _, creado = ProgramacionSemanalConstruccionVehiculo.objects.get_or_create(
+            programacion=programacion, vehiculo=vehiculo,
+            defaults={'conductor': conductor},
         )
-        messages.success(request, 'Vehículo asignado a la programación.')
+        if creado:
+            messages.success(request, 'Vehículo asignado a la programación.')
+        else:
+            messages.error(request, 'El vehículo ya está asignado a esta programación.')
         return redirect(self.detalle_url(programacion.pk))
 
 

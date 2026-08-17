@@ -942,10 +942,15 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         horas_extra = he_diurna + he_nocturna + he_dominical_diurna + he_dominical_nocturna
 
         # Respeta el importe explícito enviado por el formulario. El default
-        # solo se aplica al activar viático por primera vez sin importe.
+        # solo se aplica cuando el campo NO vino en el POST (primera vez que se
+        # marca "V", antes de que el usuario lo edite). Distinguir "no envió el
+        # campo" de "envió 0" permite registrar un viático de $0 explícito
+        # —antes un 0 se convertía silenciosamente en el default.
         if viatico_aplica:
-            if viaticos <= 0:
+            if viaticos_str == '':
                 viaticos = _valor_viatico_default()
+            elif viaticos < 0:
+                viaticos = Decimal('0')
         else:
             viaticos = Decimal('0')
 
@@ -1244,16 +1249,21 @@ class AsistenciaAccionMasivaView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
                 afectados += 1
 
         elif accion == 'festivo_domingo':
-            # Jornada completa (8h) registrada como recargo dominical/
-            # festivo diurno -- mismo default de "un dia" que usa el resto
-            # del flujo de asistencia (ver AsistenciaUpdateView).
+            # La jornada del día se registra COMPLETA como recargo dominical/
+            # festivo diurno. #210: se toma de `JORNADA_POR_DIA` (fuente única)
+            # en vez de un 8 hardcodeado — un martes festivo son 7,5h, y
+            # registrar 8h pagaba media hora de más al factor 2.00. El domingo
+            # tiene jornada 0 por definición, así que ahí sí cae al día de 8h.
+            jornada_dia = Decimal(str(
+                Asistencia.JORNADA_POR_DIA.get(fecha.weekday(), 0) or 8
+            ))
             for m in miembros_activos:
                 asist, _ = Asistencia.objects.get_or_create(
                     usuario=m.usuario, cuadrilla=cuadrilla, fecha=fecha,
                     defaults={'registrado_por': request.user},
                 )
                 asist.tipo_novedad = Asistencia.TipoNovedad.PRESENTE
-                asist.he_dominical_diurna = Decimal('8')
+                asist.he_dominical_diurna = jornada_dia
                 asist.registrado_por = request.user
                 asist.save(update_fields=[
                     'tipo_novedad', 'he_dominical_diurna', 'horas_extra',
@@ -1513,7 +1523,12 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
                     cell = ws.cell(row=row, column=col, value=novedad_labels.get(asist.tipo_novedad, ''))
                     cell.alignment = center
                     cell.border = thin_border
-                    total_viaticos += asist.viaticos
+                    # #210: mismo criterio que la grilla y que el agregado de
+                    # `total_viaticos` (Sum con filter=viatico_aplica): un
+                    # importe residual con el check apagado no debe sumar, o
+                    # el Excel exportado difiere del total en pantalla.
+                    if asist.viatico_aplica:
+                        total_viaticos += asist.viaticos
                     total_horas_extra += asist.horas_extra
                     total_he_diurna += asist.he_diurna
                     total_he_nocturna += asist.he_nocturna
