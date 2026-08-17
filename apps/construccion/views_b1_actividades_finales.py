@@ -21,7 +21,7 @@ from django.views.decorators.http import require_POST
 from apps.core.mixins import RoleRequiredMixin
 
 from .models import ProyectoConstruccion, TorreConstruccion
-from .views import ordenar_torres_construccion
+from .views import ALL_ADMIN_ROLES, OPERARIO_ROLES, ordenar_torres_construccion
 from .models_b1_actividades_finales import (
     ACTIVIDAD_CAMPOS,
     ACTIVIDAD_NO_APLICA_CAMPOS,
@@ -124,6 +124,10 @@ def _resumen(filas) -> dict:
 class ActividadesFinalesMatrizView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Matriz 14 columnas × N torres con headers de sección colspan y toggle HTMX."""
 
+    # #235: sin `allowed_roles` el mixin deja pasar a CUALQUIER autenticado.
+    # Lectura: mismos roles que el resto de las matrices de Construcción.
+    allowed_roles = ALL_ADMIN_ROLES + OPERARIO_ROLES
+
     template_name = 'construccion/actividades_finales.html'
 
     def get(self, request, proyecto_id, *args, **kwargs):
@@ -153,6 +157,9 @@ class ActividadesFinalesMatrizView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 @method_decorator(require_POST, name='dispatch')
 class ActividadFinalToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
+    # #235: MUTACIÓN — sin `allowed_roles` cualquier autenticado podía
+    # marcar/desmarcar avance. Escritura acotada a los roles administrativos.
+    allowed_roles = ALL_ADMIN_ROLES
     """HTMX toggle de un campo BooleanField del ActividadFinalTorre.
     Espera POST con campo `campo` (slug del campo) y opcionalmente `valor`.
     Si `valor` no viene, alterna el booleano.
@@ -233,6 +240,8 @@ class ActividadFinalToggleView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 @method_decorator(require_POST, name='dispatch')
 class ActividadFinalObservacionesView(LoginRequiredMixin, RoleRequiredMixin, View):
+    # #235: MUTACIÓN — idem toggle.
+    allowed_roles = ALL_ADMIN_ROLES
     """POST de observaciones libres (textarea inline)."""
 
     def post(self, request, proyecto_id, torre_id, *args, **kwargs):

@@ -29,8 +29,25 @@ class RoleRequiredMixin(UserPassesTestMixin):
     RBAC v2 (#44): cualquier rol nivel `admin` (admin_general, coordinador_general,
     admin_mantenimiento, admin_construccion) pasa automáticamente — independientemente
     de la `allowed_roles` legacy que la vista declare.
+
+    #235 — `admin_bypass = False` desactiva ESE atajo para una vista puntual,
+    volviendo `allowed_roles` autoritativo. Existe porque el bypass hace que
+    `allowed_roles` sea decorativo para 9 de los 15 roles: una vista que
+    declara `['admin']` en realidad la ven 9 roles. Eso es tolerable —y hasta
+    deseado— en las superficies operativas (los admins de área deben ver todo
+    lo suyo), pero NO donde se otorga privilegio (gestión de usuarios, reset de
+    contraseña, matriz de permisos): ahí un `admin_construccion` no debe poder
+    tocar cuentas ni permisos.
+
+    Se optó por opt-out en vez de invertir la precedencia globalmente porque la
+    auditoría del blast radius (294 vistas alcanzables) dio: 287 romperían para
+    al menos un rol admin, y `admin_mantenimiento` perdería acceso a las 287.
+    Las `allowed_roles` del portafolio se escribieron asumiendo que el bypass
+    existía, así que invertirlas de golpe deja gente afuera de su trabajo
+    diario. El opt-out cierra el riesgo real tocando 11 vistas en vez de 287.
     """
     allowed_roles = []
+    admin_bypass = True
 
     def test_func(self):
         if not self.request.user.is_authenticated:
@@ -40,29 +57,33 @@ class RoleRequiredMixin(UserPassesTestMixin):
         if self.request.user.is_superuser:
             return True
 
-        # Check if user has is_admin property (for custom User model)
-        try:
-            if getattr(self.request.user, 'is_admin', False):
-                return True
-        except Exception:
-            pass
+        if self.admin_bypass:
+            # Check if user has is_admin property (for custom User model)
+            try:
+                if getattr(self.request.user, 'is_admin', False):
+                    return True
+            except Exception:
+                pass
 
-        # RBAC v2 (#44): rol admin nivel → pasa
-        try:
-            from .permissions import user_es_admin
-            if user_es_admin(self.request.user):
-                return True
-        except Exception:
-            pass
+            # RBAC v2 (#44): rol admin nivel → pasa
+            try:
+                from .permissions import user_es_admin
+                if user_es_admin(self.request.user):
+                    return True
+            except Exception:
+                pass
 
         # Check user rol field
         user_rol = getattr(self.request.user, 'rol', None)
         if user_rol and self.allowed_roles:
             return user_rol in self.allowed_roles
 
-        # If no specific roles required, allow authenticated users
+        # If no specific roles required, allow authenticated users.
+        # #235: pero si la vista desactivó el bypass a propósito, una lista
+        # vacía es casi siempre un descuido — ahí se falla CERRADO en vez de
+        # abrir la superficie más sensible a cualquier autenticado.
         if not self.allowed_roles:
-            return True
+            return self.admin_bypass
 
         return False
 
