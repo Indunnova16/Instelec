@@ -44,7 +44,11 @@ def test_rol_admin_no_superuser_no_puede_resetear_la_clave_del_superadmin(client
         reverse("usuarios:reset_password"), data={"usuario_id": str(superadmin.pk)}
     )
 
-    assert resp.status_code in (302, 200)
+    # Defensa en profundidad: desde #235 el atacante ni siquiera pasa el gate
+    # (403/302, `admin_bypass=False` hace autoritativo el `allowed_roles`);
+    # antes llegaba al handler y lo frenaba el chequeo sobre el objetivo. Lo
+    # que se fija acá es el invariante, no por cuál de las dos capas cayó.
+    assert resp.status_code in (302, 200, 403)
     superadmin.refresh_from_db()
     assert superadmin.password == clave_original, (
         "Un rol no-superusuario reseteó la contraseña del Super Admin: "

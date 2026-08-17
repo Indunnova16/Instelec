@@ -216,6 +216,9 @@ class RoleListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     template_name = 'core/roles_lista.html'
     context_object_name = 'roles'
     allowed_roles = _ROLES_ALLOWED
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def get_queryset(self):
         qs = Role.objects.all()
@@ -238,6 +241,9 @@ class RoleCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, TemplateV
     """Crear un nuevo Role."""
     template_name = 'core/roles_form.html'
     allowed_roles = _ROLES_ALLOWED
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -261,6 +267,9 @@ class RoleEditView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, DetailView)
     template_name = 'core/roles_form.html'
     context_object_name = 'role'
     allowed_roles = _ROLES_ALLOWED
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -285,6 +294,9 @@ class RoleInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     desaparecer -- ver PLAN §1)."""
     model = Role
     allowed_roles = _ROLES_ALLOWED
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def post(self, request, *args, **kwargs):
         role = self.get_object()
@@ -320,6 +332,9 @@ class RoleModuloPermisoMatrizView(LoginRequiredMixin, RoleRequiredMixin, Templat
     mismo, sin deploy."""
     template_name = 'core/roles_matriz.html'
     allowed_roles = _ROLES_ALLOWED
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -349,6 +364,9 @@ class RoleModuloPermisoCeldaView(LoginRequiredMixin, RoleRequiredMixin, Template
     `RoleModuloPermiso` dispara la señal de invalidación de cache
     (apps/core/models_roles.py) -- efecto inmediato, sin esperar el TTL."""
     allowed_roles = _ROLES_ALLOWED
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
     template_name = 'core/partials/_matriz_celda.html'
 
     def post(self, request, role_codigo, columna, *args, **kwargs):

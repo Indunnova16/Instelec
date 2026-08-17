@@ -60,6 +60,9 @@ class GestionUsuariosView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     template_name = 'usuarios/gestion.html'
     context_object_name = 'usuarios'
     allowed_roles = ['admin', 'director']
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def get_queryset(self):
         qs = super().get_queryset().filter(is_active=True)
@@ -107,6 +110,9 @@ class EditarUsuarioView(LoginRequiredMixin, RoleRequiredMixin, UpdateView):
     template_name = 'usuarios/editar_usuario.html'
     context_object_name = 'usuario'
     allowed_roles = ['admin', 'director']
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
     success_url = reverse_lazy('usuarios:gestion')
 
     def get_form_kwargs(self):
@@ -158,6 +164,9 @@ class CrearUsuarioAdminView(LoginRequiredMixin, RoleRequiredMixin, TemplateView)
     """Create a new admin user."""
     template_name = 'usuarios/crear_admin.html'
     allowed_roles = ['admin']
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -215,6 +224,9 @@ class ResetPasswordView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """
     template_name = 'usuarios/gestion.html'
     allowed_roles = ['admin']
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     def post(self, request, *args, **kwargs):
         usuario_id = request.POST.get('usuario_id')
@@ -247,6 +259,9 @@ class CargaMasivaUsuariosCampoView(LoginRequiredMixin, RoleRequiredMixin, Templa
     """Bulk upload of campo users from Excel."""
     template_name = 'usuarios/campo_upload.html'
     allowed_roles = ['admin', 'director', 'coordinador']
+    # #235: superficie que OTORGA privilegio -> `allowed_roles` manda,
+    # sin el atajo de nivel=admin (si no, la ven 9 roles, no los declarados).
+    admin_bypass = False
 
     CARGOS_VALIDOS = [
         'SUPERVISOR', 'LINIERO_I', 'LINIERO_II', 'AYUDANTE',
