@@ -238,6 +238,24 @@ class TestAccionMasivaFestivoDomingo(TestCase):
         # save() recalcula horas_extra como suma de los 4 detalles.
         self.assertEqual(asist.horas_extra, Decimal("8.0"))
 
+    def test_festivo_semana_no_duplica_jornada_ordinaria_en_el_total(self):
+        """Un festivo entre semana conserva PRESENTE, pero no es ordinario."""
+        fecha_festiva = date(2099, 1, 5)  # Lunes: jornada regular de 8h.
+        self.cuadrilla.codigo = "02-2099-0210FD-QAE"
+        self.cuadrilla.save(update_fields=["codigo"])
+        resp = self.client.post(
+            reverse("cuadrillas:asistencia_accion_masiva", args=[self.cuadrilla.pk]),
+            data={"accion": "festivo_domingo", "fecha": fecha_festiva.isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        detalle = self.client.get(reverse("cuadrillas:detalle", args=[self.cuadrilla.pk]))
+        self.assertEqual(detalle.status_code, 200)
+        fila = detalle.context["filas_asistencia"][0]
+        self.assertEqual(fila["total_horas_ordinarias"], Decimal("0"))
+        self.assertEqual(fila["total_horas_extra"], Decimal("8"))
+        self.assertEqual(fila["total_horas_total"], Decimal("8"))
+
 
 class TestAccionMasivaViatico(TestCase):
     def setUp(self):
@@ -259,3 +277,33 @@ class TestAccionMasivaViatico(TestCase):
         # Sin CostoRecurso(tipo='VIATICO') sembrado en este test DB, cae al
         # mismo fallback hardcodeado que ya usa AsistenciaUpdateView.
         self.assertEqual(asist.viaticos, Decimal("136941"))
+
+    def test_viatico_editado_en_formulario_se_conserva(self):
+        resp = self.client.post(
+            reverse("cuadrillas:asistencia_update", args=[self.cuadrilla.pk]),
+            data={
+                "usuario_id": str(self.usuario.pk),
+                "fecha": "2099-01-05",
+                "tipo_novedad": "PRESENTE",
+                "viatico_aplica": "on",
+                "viaticos": "175000",
+                "observacion": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        asist = Asistencia.objects.get(usuario=self.usuario, fecha=date(2099, 1, 5))
+        self.assertTrue(asist.viatico_aplica)
+        self.assertEqual(asist.viaticos, Decimal("175000"))
+        self.assertIn('x-show="showViatico"', resp.content.decode())
+
+    def test_viatico_masivo_se_muestra_editable_tras_recargar(self):
+        resp = self.client.post(
+            reverse("cuadrillas:asistencia_accion_masiva", args=[self.cuadrilla.pk]),
+            data={"accion": "viatico", "fecha": "2099-01-05"},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        detalle = self.client.get(reverse("cuadrillas:detalle", args=[self.cuadrilla.pk]))
+        self.assertEqual(detalle.status_code, 200)
+        self.assertIn('x-show="showViatico"', detalle.content.decode())
+        self.assertIn('name="viaticos"', detalle.content.decode())
