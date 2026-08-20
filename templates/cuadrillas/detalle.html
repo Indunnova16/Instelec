@@ -227,17 +227,14 @@
                 <label for="documento_input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Documento del Colaborador
                 </label>
-                <input type="text" name="documento" id="documento_input" required
-                       autocomplete="off"
-                       list="personal_disponible_list"
-                       oninput="autoCargarDatosPorDocumento()"
-                       placeholder="Ingrese documento..."
-                       class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
-                <datalist id="personal_disponible_list">
+                <select name="documento" id="documento_input" required
+                        onchange="autoCargarDatosPorDocumento()"
+                        class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                    <option value="">— Buscar por nombre o documento —</option>
                     {% for personal in personal_disponible %}
-                    <option value="{{ personal.documento }}">{{ personal.nombre }}</option>
+                    <option value="{{ personal.documento }}">{{ personal.nombre }} — {{ personal.documento }}</option>
                     {% endfor %}
-                </datalist>
+                </select>
                 <p id="documento_feedback" class="mt-1 text-xs" role="status" aria-live="polite"></p>
             </div>
             <div>
@@ -506,11 +503,13 @@
                             <input type="hidden" name="observacion" value="{{ dia_info.observacion }}">
                             {% endif %}
                             <!-- Viático Sí/No -->
+                            {% comment %}
+                            `{{ valor }}` a secas se localiza (es-CO -> "136941,00") y rompe el
+                            JS del x-data con un SyntaxError, dejando la celda entera sin Alpine.
+                            `unlocalize` fuerza el punto decimal. Aplica a TODO número embebido
+                            en JS/JSON dentro de un template.
+                            {% endcomment %}
                             <div class="mt-1 flex items-center gap-1"
-                                 {# `{{ valor }}` a secas se localiza (es-CO -> "136941,00") y rompe el
-                                    JS del x-data con un SyntaxError, dejando la celda entera sin Alpine.
-                                    `unlocalize` fuerza el punto decimal. Aplica a TODO número embebido
-                                    en JS/JSON dentro de un template. #}
                                  x-data="{
                                     showViatico: {% if dia_info.viatico_aplica %}true{% else %}false{% endif %},
                                     viaticos: {% if dia_info.viaticos %}{{ dia_info.viaticos|unlocalize }}{% else %}0{% endif %},
