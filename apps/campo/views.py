@@ -1027,6 +1027,25 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
             else (1, v.numero or ''),
         )
 
+        # El grid y las métricas deben leer la misma fuente cuando hay un
+        # período activo. ``Vano.estado`` se conserva como estado global para
+        # las pantallas históricas sin filtro, pero no representa el avance de
+        # un semestre concreto.
+        if semestre:
+            estados_por_vano = dict(
+                VanoSemestre.objects.filter(
+                    vano__in=vanos_list,
+                    semestre=semestre,
+                ).values_list('vano_id', 'estado')
+            )
+            for vano in vanos_list:
+                vano.estado_visual = estados_por_vano[vano.id]
+                vano.estado_visual_display = dict(VanoSemestre.Estado.choices)[vano.estado_visual]
+        else:
+            for vano in vanos_list:
+                vano.estado_visual = vano.estado
+                vano.estado_visual_display = vano.get_estado_display()
+
         context['linea'] = linea
         context['vanos'] = vanos_list
         context['semestre'] = semestre
@@ -1306,7 +1325,7 @@ class VanoHistorialCreateView(LoginRequiredMixin, View):
         from django.http import JsonResponse
         from django.utils import timezone
 
-        from apps.lineas.models import Vano, VanoHistorialEstado, VanoHistorialFoto
+        from apps.lineas.models import Vano, VanoHistorialEstado, VanoHistorialFoto, VanoSemestre
 
         try:
             vano = Vano.objects.select_related('linea').get(pk=pk)
@@ -1326,10 +1345,26 @@ class VanoHistorialCreateView(LoginRequiredMixin, View):
             # modelo (dato legacy) pero NO es seleccionable desde el modal.
             return JsonResponse({'error': 'Estado inválido'}, status=400)
 
+        semestre = (request.POST.get('semestre') or '').strip().upper()
+        if semestre and semestre not in dict(VanoSemestre.Semestre.choices):
+            return JsonResponse({'error': 'Semestre inválido'}, status=400)
+
         nota = (request.POST.get('nota') or '').strip()
         fotos = request.FILES.getlist('fotos')[: self.MAX_FOTOS]
 
         with transaction.atomic():
+            vano_semestre = None
+            if semestre:
+                try:
+                    vano_semestre = VanoSemestre.objects.select_for_update().get(
+                        vano=vano,
+                        semestre=semestre,
+                    )
+                except VanoSemestre.DoesNotExist:
+                    return JsonResponse(
+                        {'error': 'El vano no pertenece al semestre indicado'}, status=400
+                    )
+
             historial = VanoHistorialEstado.objects.create(
                 vano=vano,
                 usuario=usuario,
@@ -1348,6 +1383,11 @@ class VanoHistorialCreateView(LoginRequiredMixin, View):
             vano.fecha_marcado = timezone.now()
             vano.save(update_fields=['estado', 'marcado_por', 'fecha_marcado', 'updated_at'])
 
+            if vano_semestre:
+                vano_semestre.estado = estado
+                vano_semestre.actualizado_por = usuario
+                vano_semestre.save(update_fields=['estado', 'actualizado_por', 'updated_at'])
+
         # HTTP 200 (no 201) a propósito: el journey E2E de este issue
         # (Instelec_177.yaml) usa `submit_form` + `assert_status: 200`
         # contra este POST — contrato fijado por F2, no cambiar.
@@ -1357,6 +1397,7 @@ class VanoHistorialCreateView(LoginRequiredMixin, View):
                 'historial_id': str(historial.id),
                 'estado': historial.estado,
                 'estado_display': historial.get_estado_display(),
+                'semestre': semestre,
                 'fotos_guardadas': len(fotos),
             },
             status=200,
