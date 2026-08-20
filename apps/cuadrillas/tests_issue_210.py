@@ -129,7 +129,7 @@ class TestJornadaUnicaFuenteDeVerdad(TestCase):
         self.admin = _crear_admin()
         self.client.force_login(self.admin)
         self.usuario = _crear_usuario("QA0210JOR", "QAE210 Jornada")
-        # Lunes 2099-01-05 = ISO semana 02/2099 -- JORNADA_POR_DIA[0] = 8.0.
+        # Lunes 2099-01-05 = ISO semana 02/2099 -- JORNADA_POR_DIA[0] = 7.0.
         # El codigo DEBE llevar el prefijo de semana ISO real (usado por
         # _get_semana_from_codigo para anclar dias_semana en el detalle).
         self.cuadrilla = _crear_bloque_con_miembros(
@@ -144,9 +144,9 @@ class TestJornadaUnicaFuenteDeVerdad(TestCase):
         resp = self.client.get(reverse("cuadrillas:detalle", args=[self.cuadrilla.pk]))
         self.assertEqual(resp.status_code, 200)
         fila = resp.context["filas_asistencia"][0]
-        # Lunes: jornada_por_dia[0] = 8.0 (modelo, no un valor distinto
+        # Lunes: jornada_por_dia[0] = 7.0 (modelo, no un valor distinto
         # que hubiera quedado hardcodeado aparte).
-        self.assertEqual(fila["total_horas_ordinarias"], Decimal("8.0"))
+        self.assertEqual(fila["total_horas_ordinarias"], Decimal("7.0"))
         # El propio dia_info trae 'jornada' -- el template ya no calcula
         # el mapeo dia_semana->horas con tags de Django.
         self.assertEqual(fila["dias"][0]["jornada"], Asistencia.JORNADA_POR_DIA[0])
@@ -163,8 +163,8 @@ class TestJornadaUnicaFuenteDeVerdad(TestCase):
             },
         )
         self.assertEqual(resp.status_code, 200)
-        # El HTML del badge de HE embebe "({jornada}h)" -- 8.0h para un lunes.
-        self.assertIn("8.0h", resp.content.decode())
+        # El HTML del badge de HE embebe "({jornada}h)" -- 7.0h para un lunes.
+        self.assertIn("7.0h", resp.content.decode())
 
 
 class TestAccionMasivaPresente(TestCase):
@@ -226,20 +226,20 @@ class TestAccionMasivaFestivoDomingo(TestCase):
             "01-2099-0210FD-QAE", date(2099, 1, 4), [self.usuario]
         )
 
-    def test_festivo_domingo_marca_presente_y_toda_la_jornada_como_dominical(self):
+    def test_festivo_domingo_persiste_estado_y_recargo(self):
         resp = self.client.post(
             reverse("cuadrillas:asistencia_accion_masiva", args=[self.cuadrilla.pk]),
             data={"accion": "festivo_domingo", "fecha": "2099-01-04"},
         )
         self.assertEqual(resp.status_code, 200)
         asist = Asistencia.objects.get(usuario=self.usuario, fecha=date(2099, 1, 4))
-        self.assertEqual(asist.tipo_novedad, "PRESENTE")
+        self.assertEqual(asist.tipo_novedad, "FESTIVO")
         self.assertEqual(asist.he_dominical_diurna, Decimal("8.0"))
         # save() recalcula horas_extra como suma de los 4 detalles.
         self.assertEqual(asist.horas_extra, Decimal("8.0"))
 
     def test_festivo_semana_no_duplica_jornada_ordinaria_en_el_total(self):
-        """Un festivo entre semana conserva PRESENTE, pero no es ordinario."""
+        """Un festivo entre semana no se convierte en PRESENTE ni es ordinario."""
         fecha_festiva = date(2099, 1, 5)  # Lunes: jornada regular de 8h.
         self.cuadrilla.codigo = "02-2099-0210FD-QAE"
         self.cuadrilla.save(update_fields=["codigo"])
@@ -253,8 +253,8 @@ class TestAccionMasivaFestivoDomingo(TestCase):
         self.assertEqual(detalle.status_code, 200)
         fila = detalle.context["filas_asistencia"][0]
         self.assertEqual(fila["total_horas_ordinarias"], Decimal("0"))
-        self.assertEqual(fila["total_horas_extra"], Decimal("8"))
-        self.assertEqual(fila["total_horas_total"], Decimal("8"))
+        self.assertEqual(fila["total_horas_extra"], Decimal("7"))
+        self.assertEqual(fila["total_horas_total"], Decimal("7"))
 
 
 class TestAccionMasivaViatico(TestCase):
@@ -370,7 +370,7 @@ class TestRevisionAdversarial210(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         asist = Asistencia.objects.get(usuario=self.usuario, fecha=martes)
-        self.assertEqual(asist.he_dominical_diurna, Decimal("7.5"))
+        self.assertEqual(asist.he_dominical_diurna, Decimal("7"))
 
     def test_festivo_en_domingo_conserva_la_jornada_completa_de_8h(self):
         """El domingo tiene jornada 0 por definición, así que el fallback de
@@ -384,3 +384,34 @@ class TestRevisionAdversarial210(TestCase):
         self.assertEqual(resp.status_code, 200)
         asist = Asistencia.objects.get(usuario=self.usuario, fecha=domingo)
         self.assertEqual(asist.he_dominical_diurna, Decimal("8.0"))
+
+
+class TestDiaGanadoAutomatico(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client.force_login(self.admin)
+        self.usuario = _crear_usuario("QA0210DG42", "QAE210 Dia Ganado 42")
+        self.cuadrilla = _crear_bloque_con_miembros(
+            "02-2099-0210DG42-QAE", date(2099, 1, 5), [self.usuario]
+        )
+
+    def _presente(self, fecha):
+        return self.client.post(
+            reverse("cuadrillas:asistencia_accion_masiva", args=[self.cuadrilla.pk]),
+            data={"accion": "presente", "fecha": fecha.isoformat()},
+        )
+
+    def test_seis_dias_de_siete_horas_crean_dia_ganado_sin_costos(self):
+        lunes = date(2099, 1, 5)
+        for offset in range(6):
+            self.assertEqual(self._presente(lunes.fromordinal(lunes.toordinal() + offset)).status_code, 200)
+        domingo = Asistencia.objects.get(usuario=self.usuario, fecha=date(2099, 1, 11))
+        self.assertEqual(domingo.tipo_novedad, "DIA_GANADO")
+        self.assertEqual(domingo.horas_extra, Decimal("0"))
+        self.assertFalse(domingo.viatico_aplica)
+
+    def test_semana_incompleta_no_crea_dia_ganado(self):
+        lunes = date(2099, 1, 5)
+        for offset in range(5):
+            self._presente(lunes.fromordinal(lunes.toordinal() + offset))
+        self.assertFalse(Asistencia.objects.filter(usuario=self.usuario, fecha=date(2099, 1, 11)).exists())

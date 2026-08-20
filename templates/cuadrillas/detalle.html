@@ -423,7 +423,7 @@
                             {# Issue #210: acciones masivas para TODO el personal de la cuadrilla, ese dia #}
                             <div class="flex items-center justify-center gap-1 mt-1"
                                  x-data="{ enviar(accion) {
-                                     if (!confirm('¿Aplicar \'' + accion + '\' a TODO el personal de esta cuadrilla el {{ dia|date:'d/m' }}?')) return;
+                                     if (accion !== 'festivo_domingo' && !confirm('¿Aplicar \'' + accion + '\' a TODO el personal de esta cuadrilla el {{ dia|date:'d/m' }}?')) return;
                                      fetch('{% url 'cuadrillas:asistencia_accion_masiva' cuadrilla.pk %}', {
                                          method: 'POST',
                                          headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
@@ -432,8 +432,10 @@
                                  } }">
                                 <button type="button" @click="enviar('presente')" title="Marcar toda la cuadrilla Presente este día"
                                         class="text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300">Presente</button>
-                                <button type="button" @click="enviar('festivo_domingo')" title="Festivo/Domingo trabajado: jornada completa como recargo dominical para toda la cuadrilla"
+                                <button type="button" @click="enviar('festivo_domingo')" title="Festivo/Domingo trabajado: registra el estado Festivo y su recargo para toda la cuadrilla"
                                         class="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300">Festivo</button>
+                                <button type="button" @click="enviar('descanso')" title="Marcar Descanso para toda la cuadrilla este día"
+                                        class="text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300">Descanso</button>
                                 <button type="button" @click="enviar('viatico')" title="Aplicar viático default a toda la cuadrilla este día"
                                         class="text-[9px] px-1 py-0.5 rounded bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-300">Viático</button>
                             </div>
@@ -481,6 +483,7 @@
                                         {% elif dia_info.tipo_novedad == 'COMPENSATORIO' %}text-cyan-600 bg-cyan-50 border-cyan-300
                                         {% elif dia_info.tipo_novedad == 'DESCANSO' %}text-slate-600 bg-slate-50 border-slate-300
                                         {% elif dia_info.tipo_novedad == 'DIA_GANADO' %}text-emerald-700 bg-emerald-50 border-emerald-300
+                                        {% elif dia_info.tipo_novedad == 'FESTIVO' %}text-amber-700 bg-amber-50 border-amber-300
                                         {% else %}text-gray-400 bg-white border-gray-200
                                         {% endif %}
                                         dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200">

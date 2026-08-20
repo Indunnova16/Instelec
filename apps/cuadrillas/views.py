@@ -28,6 +28,42 @@ def _valor_viatico_default():
     return costo_viatico.costo_unitario if costo_viatico else Decimal('136941')
 
 
+def _sincronizar_dia_ganado(*, usuario_id, cuadrilla, fecha, registrado_por):
+    """Mantiene el domingo compensatorio sólo para semanas L-S de 42 h."""
+    from datetime import timedelta
+    from decimal import Decimal
+
+    lunes = fecha - timedelta(days=fecha.weekday())
+    sabado = lunes + timedelta(days=5)
+    domingo = lunes + timedelta(days=6)
+    asistencias = list(Asistencia.objects.filter(
+        usuario_id=usuario_id, cuadrilla=cuadrilla, fecha__gte=lunes, fecha__lte=sabado,
+        tipo_novedad__in=[Asistencia.TipoNovedad.PRESENTE, Asistencia.TipoNovedad.FESTIVO],
+    ))
+    fechas_trabajadas = {asistencia.fecha for asistencia in asistencias}
+    horas = sum(
+        (Decimal(str(Asistencia.JORNADA_POR_DIA[asistencia.fecha.weekday()]))
+         for asistencia in asistencias), Decimal('0'),
+    )
+    elegible = len(fechas_trabajadas) == 6 and horas == Decimal('42')
+    domingo_actual = Asistencia.objects.filter(
+        usuario_id=usuario_id, cuadrilla=cuadrilla, fecha=domingo,
+    ).first()
+    if elegible:
+        Asistencia.objects.update_or_create(
+            usuario_id=usuario_id, cuadrilla=cuadrilla, fecha=domingo,
+            defaults={
+                'tipo_novedad': Asistencia.TipoNovedad.DIA_GANADO,
+                'viatico_aplica': False, 'viaticos': Decimal('0'),
+                'he_diurna': Decimal('0'), 'he_nocturna': Decimal('0'),
+                'he_dominical_diurna': Decimal('0'), 'he_dominical_nocturna': Decimal('0'),
+                'registrado_por': registrado_por,
+            },
+        )
+    elif domingo_actual and domingo_actual.tipo_novedad == Asistencia.TipoNovedad.DIA_GANADO:
+        domingo_actual.delete()
+
+
 def _personal_visible_para_usuario(request):
     """Colaboradores asignables por el área del usuario, con compatibilidad legacy."""
     qs = PersonalCuadrilla.objects.filter(activo=True)
@@ -542,7 +578,7 @@ class CuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Deta
                 if info.get('viatico_aplica', False):
                     total_viaticos += Decimal(str(viaticos_val))
                 total_horas_extra += Decimal(str(horas_extra_val))
-                # Ordinary hours: jornada regular if PRESENTE
+                # FESTIVO se remunera por sus recargos, no como jornada ordinaria.
                 jornada = Asistencia.JORNADA_POR_DIA.get(dia.weekday(), 0)
                 if (
                     info.get('tipo_novedad') == 'PRESENTE'
@@ -1003,6 +1039,11 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
         else:
             return HttpResponse('Tipo de novedad invalido', status=400)
 
+        _sincronizar_dia_ganado(
+            usuario_id=usuario_id, cuadrilla=cuadrilla, fecha=fecha,
+            registrado_por=request.user,
+        )
+
         # Return the updated cell content
         color_map = {
             'PRESENTE': 'text-green-600 bg-green-50 border-green-300',
@@ -1015,6 +1056,7 @@ class AsistenciaUpdateView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
             'COMPENSATORIO': 'text-cyan-600 bg-cyan-50 border-cyan-300',
             'DESCANSO': 'text-slate-600 bg-slate-50 border-slate-300',
             'DIA_GANADO': 'text-emerald-700 bg-emerald-50 border-emerald-300',
+            'FESTIVO': 'text-amber-700 bg-amber-50 border-amber-300',
         }
         css = color_map.get(tipo_novedad, 'text-gray-400 bg-white border-gray-200')
 
@@ -1216,7 +1258,7 @@ class AsistenciaAccionMasivaView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
     model = Cuadrilla
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
 
-    ACCIONES_VALIDAS = {'presente', 'festivo_domingo', 'viatico'}
+    ACCIONES_VALIDAS = {'presente', 'festivo_domingo', 'viatico', 'descanso'}
 
     def post(self, request, *args, **kwargs):
         from datetime import date as date_cls
@@ -1246,6 +1288,7 @@ class AsistenciaAccionMasivaView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
                 asist.tipo_novedad = Asistencia.TipoNovedad.PRESENTE
                 asist.registrado_por = request.user
                 asist.save(update_fields=['tipo_novedad', 'registrado_por', 'updated_at'])
+                _sincronizar_dia_ganado(usuario_id=m.usuario_id, cuadrilla=cuadrilla, fecha=fecha, registrado_por=request.user)
                 afectados += 1
 
         elif accion == 'festivo_domingo':
@@ -1262,13 +1305,14 @@ class AsistenciaAccionMasivaView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
                     usuario=m.usuario, cuadrilla=cuadrilla, fecha=fecha,
                     defaults={'registrado_por': request.user},
                 )
-                asist.tipo_novedad = Asistencia.TipoNovedad.PRESENTE
+                asist.tipo_novedad = Asistencia.TipoNovedad.FESTIVO
                 asist.he_dominical_diurna = jornada_dia
                 asist.registrado_por = request.user
                 asist.save(update_fields=[
                     'tipo_novedad', 'he_dominical_diurna', 'horas_extra',
                     'registrado_por', 'updated_at',
                 ])
+                _sincronizar_dia_ganado(usuario_id=m.usuario_id, cuadrilla=cuadrilla, fecha=fecha, registrado_por=request.user)
                 afectados += 1
 
         elif accion == 'viatico':
@@ -1284,6 +1328,23 @@ class AsistenciaAccionMasivaView(LoginRequiredMixin, RoleRequiredMixin, DetailVi
                 asist.save(update_fields=[
                     'viatico_aplica', 'viaticos', 'registrado_por', 'updated_at',
                 ])
+                _sincronizar_dia_ganado(usuario_id=m.usuario_id, cuadrilla=cuadrilla, fecha=fecha, registrado_por=request.user)
+                afectados += 1
+
+        elif accion == 'descanso':
+            for m in miembros_activos:
+                asist, _ = Asistencia.objects.get_or_create(
+                    usuario=m.usuario, cuadrilla=cuadrilla, fecha=fecha,
+                    defaults={'registrado_por': request.user},
+                )
+                asist.tipo_novedad = Asistencia.TipoNovedad.DESCANSO
+                asist.viatico_aplica = False
+                asist.viaticos = Decimal('0')
+                asist.he_diurna = asist.he_nocturna = Decimal('0')
+                asist.he_dominical_diurna = asist.he_dominical_nocturna = Decimal('0')
+                asist.registrado_por = request.user
+                asist.save()
+                _sincronizar_dia_ganado(usuario_id=m.usuario_id, cuadrilla=cuadrilla, fecha=fecha, registrado_por=request.user)
                 afectados += 1
 
         return JsonResponse({'ok': True, 'accion': accion, 'fecha': fecha_str, 'afectados': afectados})
@@ -1549,6 +1610,7 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
                         'COMPENSATORIO': '67E8F9',
                         'DESCANSO': 'CBD5E1',
                         'DIA_GANADO': '34D399',
+                        'FESTIVO': 'FBBF24',
                     }
                     fill_color = color_map.get(asist.tipo_novedad)
                     if fill_color:

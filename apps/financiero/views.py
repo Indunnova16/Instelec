@@ -2238,7 +2238,8 @@ class CargarCostosCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateV
     FACTOR_HE_DOMINICAL_NOCTURNA = Decimal('2.50')
 
     # Standard working hours per day (average)
-    HORAS_JORNADA = Decimal('8')
+    # La tarifa hora se deriva de la jornada legal vigente (42 h / 6 días).
+    HORAS_JORNADA = Decimal('7')
 
     def post(self, request, *args, **kwargs):
         from calendar import monthrange

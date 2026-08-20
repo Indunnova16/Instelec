@@ -557,6 +557,7 @@ class Asistencia(BaseModel):
         COMPENSATORIO = 'COMPENSATORIO', 'Compensatorio'
         DESCANSO = 'DESCANSO', 'Descanso'
         DIA_GANADO = 'DIA_GANADO', 'Día ganado'
+        FESTIVO = 'FESTIVO', 'Festivo'
 
     usuario = models.ForeignKey(
         'usuarios.Usuario',
@@ -668,12 +669,13 @@ class Asistencia(BaseModel):
         ]
 
     JORNADA_POR_DIA = {
-        0: 8.0,   # Lunes
-        1: 7.5,   # Martes
-        2: 7.5,   # Miércoles
-        3: 7.5,   # Jueves
-        4: 7.5,   # Viernes
-        5: 6.0,   # Sábado
+        # Jornada legal de 42 horas: 7 h de lunes a sábado.
+        0: 7.0,   # Lunes
+        1: 7.0,   # Martes
+        2: 7.0,   # Miércoles
+        3: 7.0,   # Jueves
+        4: 7.0,   # Viernes
+        5: 7.0,   # Sábado
         6: 0.0,   # Domingo
     }
 
