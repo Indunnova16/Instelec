@@ -33,6 +33,9 @@
     </div>
 
     <form x-ref="form" @submit.prevent="guardar()" class="space-y-3">
+        {% if semestre %}
+        <input type="hidden" name="semestre" value="{{ semestre }}">
+        {% endif %}
         <div>
             <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
             {# Issue #177 (bounce=2, A6 ampliado) — el select nativo no traia #}
@@ -114,6 +117,12 @@ function vanoEstadoModal(vanoId) {
         historialHtml: '',
         estadoSeleccionado: '',
 
+        init() {
+            document.body.addEventListener('vano-modal-abierto', (event) => {
+                if (event.detail.vanoId !== this.vanoId) this.cerrar();
+            });
+        },
+
         // Issue #177 (bounce=2) — mapeo estado->color del swatch del select,
         // calcado de los hex/clases del donut (avance_registrar.html) y de
         // las tarjetas (vano_cuadro.html): convencion del Excel de control
@@ -133,6 +142,9 @@ function vanoEstadoModal(vanoId) {
         },
 
         abrir() {
+            document.body.dispatchEvent(new CustomEvent('vano-modal-abierto', {
+                detail: { vanoId: this.vanoId },
+            }));
             this.abierto = true;
             this.error = '';
             this.success = '';
@@ -188,6 +200,7 @@ function vanoEstadoModal(vanoId) {
                             vanoId: this.vanoId,
                             estado: data.estado,
                             estadoDisplay: data.estado_display || '',
+                            semestre: data.semestre || '',
                         },
                     }));
                     this.$refs.form.reset();

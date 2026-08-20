@@ -12,12 +12,12 @@
     x-data="vanoEstadoModal('{{ vano.id }}')"
     @click="abrir()"
     class="vano-item relative group cursor-pointer rounded-lg border-2 p-4 text-center transition-all hover:shadow-lg
-    {% if vano.estado == 'ejecutado' %}bg-green-50 border-green-300 hover:bg-green-100
-    {% elif vano.estado == 'sin_permiso' %}bg-red-50 border-red-300 hover:bg-red-100
-    {% elif vano.estado == 'no_ejecutado' %}bg-rose-50 border-rose-300 hover:bg-rose-100
-    {% elif vano.estado == 'en_espera' %}bg-lime-50 border-lime-300 hover:bg-lime-100
-    {% elif vano.estado == 'seccionado' %}bg-amber-50 border-amber-300 hover:bg-amber-100
-    {% elif vano.estado == 'especial' %}bg-blue-50 border-blue-300 hover:bg-blue-100
+    {% if vano.estado_visual == 'ejecutado' %}bg-green-50 border-green-300 hover:bg-green-100
+    {% elif vano.estado_visual == 'sin_permiso' %}bg-red-50 border-red-300 hover:bg-red-100
+    {% elif vano.estado_visual == 'no_ejecutado' %}bg-rose-50 border-rose-300 hover:bg-rose-100
+    {% elif vano.estado_visual == 'en_espera' %}bg-lime-50 border-lime-300 hover:bg-lime-100
+    {% elif vano.estado_visual == 'seccionado' %}bg-amber-50 border-amber-300 hover:bg-amber-100
+    {% elif vano.estado_visual == 'especial' %}bg-blue-50 border-blue-300 hover:bg-blue-100
     {% else %}bg-gray-50 border-gray-300 hover:bg-gray-100
     {% endif %}">
 
@@ -27,19 +27,19 @@
         title="Novedades registradas (cambios de historial)">{{ vano.num_novedades|default:0 }}</span>
 
     <div class="text-2xl font-bold mb-2
-        {% if vano.estado == 'ejecutado' %}text-green-700
-        {% elif vano.estado == 'sin_permiso' %}text-red-700
-        {% elif vano.estado == 'no_ejecutado' %}text-rose-700
-        {% elif vano.estado == 'en_espera' %}text-lime-700
-        {% elif vano.estado == 'seccionado' %}text-amber-700
-        {% elif vano.estado == 'especial' %}text-blue-700
+        {% if vano.estado_visual == 'ejecutado' %}text-green-700
+        {% elif vano.estado_visual == 'sin_permiso' %}text-red-700
+        {% elif vano.estado_visual == 'no_ejecutado' %}text-rose-700
+        {% elif vano.estado_visual == 'en_espera' %}text-lime-700
+        {% elif vano.estado_visual == 'seccionado' %}text-amber-700
+        {% elif vano.estado_visual == 'especial' %}text-blue-700
         {% else %}text-gray-700
         {% endif %}">
         Vano {{ vano.numero }}
     </div>
 
     <div class="text-xs text-gray-600 mb-3">
-        {{ vano.get_estado_display }}
+        {{ vano.estado_visual_display }}
     </div>
 
     <div class="text-[11px] text-gray-400 group-hover:text-gray-600 transition">
