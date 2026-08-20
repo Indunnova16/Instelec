@@ -146,6 +146,7 @@
     <!-- Simple view for field personnel -->
     <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6" aria-labelledby="mis-actividades-title">
         <h2 id="mis-actividades-title" class="text-lg font-medium text-gray-900 dark:text-white mb-4">Mis Actividades de Hoy</h2>
+        {% if puede_ver_actividades_hoy %}
         <div hx-get="{% url 'actividades:lista' %}?fecha=hoy&partial=true"
              hx-trigger="load"
              hx-swap="innerHTML"
@@ -156,6 +157,12 @@
                 Cargando...
             </div>
         </div>
+        {% else %}
+        <p class="text-center py-8 text-gray-500">
+            Su rol no tiene acceso al módulo de Mantenimiento. Contacte a su
+            administrador si considera que esto es un error.
+        </p>
+        {% endif %}
     </section>
     {% endif %}
 </main>

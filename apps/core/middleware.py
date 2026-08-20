@@ -8,6 +8,7 @@ Filtra acceso por path-prefix según el rol del usuario:
 Paths exentos (login, api pública, static, etc.) pasan sin chequear.
 """
 from django.conf import settings
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.contrib import messages
@@ -79,6 +80,20 @@ class RBACModuloMiddleware:
                 f"Acceso denegado: su rol ({getattr(request.user, 'rol', 'sin rol')}) "
                 f"no tiene permisos para el módulo {modulo_requerido}."
             )
+            # #186: un redirect() plano (302 + Location) NO es HTMX-aware. htmx
+            # sigue ese 302 con un GET normal y swapea la respuesta completa
+            # (la página home.html entera) como innerHTML del div chico que
+            # originó el hx-get -- si esa página contiene el mismo widget
+            # hx-trigger="load" que disparó la request original (caso típico:
+            # "Mis Actividades de Hoy" en home.html para roles sin acceso a
+            # Mantenimiento), el widget se re-dispara y el ciclo se repite
+            # indefinidamente (recursión real, no solo un mal UX).
+            # HX-Redirect fuerza a htmx a hacer una navegación TOP-LEVEL del
+            # browser en vez de un swap anidado, rompiendo la recursión.
+            if request.headers.get('HX-Request') == 'true':
+                response = HttpResponse()
+                response['HX-Redirect'] = reverse('core:home')
+                return response
             return redirect(reverse('core:home'))
 
         return self.get_response(request)

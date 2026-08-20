@@ -71,6 +71,15 @@ class HomeView(LoginRequiredMixin, TemplateView):
         else:
             context['show_full_dashboard'] = False
 
+        # #186: el widget "Mis Actividades de Hoy" (rama show_full_dashboard=False)
+        # hace hx-get a actividades:lista, que RBACModuloMiddleware protege bajo
+        # MODULO_MANTENIMIENTO. Roles sin acceso a ese módulo (p.ej. auxiliar,
+        # liniero según role_modulo_permisos) nunca deben intentar cargarlo --
+        # aunque el middleware ya no recursione (HX-Redirect), no tiene sentido
+        # pedir un recurso que se sabe bloqueado. Defensa en profundidad.
+        from apps.core.permissions import MODULO_MANTENIMIENTO, user_can_access_modulo
+        context['puede_ver_actividades_hoy'] = user_can_access_modulo(user, MODULO_MANTENIMIENTO)
+
         return context
 
 
