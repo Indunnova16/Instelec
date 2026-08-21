@@ -51,9 +51,9 @@ def _excel_bytes(rows, sheet_name='BD', headers=None, name='bd.xlsx'):
     return buf
 
 
-def _row(auxiliar, desc, neto, cta_equiv):
+def _row(auxiliar, desc, neto, cta_equiv, fecha=None, periodo=None):
     """Fila BD con A,B,C poblados y O (índice 15) = cta_equiv."""
-    r = [auxiliar, desc, neto, None, None, None, None, None, None, None,
+    r = [auxiliar, desc, neto, fecha, None, periodo, None, None, None, None,
          None, None, None, None, cta_equiv]
     return r
 
@@ -111,6 +111,24 @@ class TestB1Importer:
         assert res['exito'] is False
         assert res['advertencia'] is not None
 
+    def test_b1_importer_acepta_cuenta_equiv_y_filtra_por_anio(self):
+        """El alias TRANSELCA y el año seleccionado no mezclan movimientos."""
+        headers = [
+            'Auxiliar', 'Desc. auxiliar', 'Neto', 'Fecha', 'Docto.', 'Periodo',
+            'Tercero movto.', 'Razón social', 'Desc. C.O.', 'Usuario',
+            'C.O. movto.', 'Notas', 'C.Costo', 'Desc. C.Costo', 'Cuenta Equiv',
+        ]
+        archivo = _excel_bytes([
+            _row('412', '2025', -100, 'Ingresos Operacionales', periodo=202503),
+            _row('412', '2026', -200, 'Ingresos Operacionales', periodo=202601),
+        ], headers=headers)
+
+        resultado = ContableCompleteImporter().procesar_bd_completa(archivo, anio=2025)
+
+        assert resultado['exito'] is True
+        assert resultado['cuentas'] == 1
+        assert resultado['total'] == -100
+
     def test_b1_importer_edge_no_xlsx(self):
         """Edge case: extensión no .xlsx → error."""
         fake = io.BytesIO(b'not an excel')
@@ -167,8 +185,8 @@ class TestB1Views:
         """POST de carga guarda en .datos y la pestaña planeado renderiza rubros."""
         client.force_login(admin_user)
         rows = [
-            _row('41250501', 'LINEAS', -200, 'Ingresos Operacionales'),
-            _row('42100501', 'INTERESES', -50, 'Intereses'),
+            _row('41250501', 'LINEAS', -200, 'Ingresos Operacionales', periodo=202601),
+            _row('42100501', 'INTERESES', -50, 'Intereses', periodo=202601),
         ]
         archivo = _excel_bytes(rows)
         url = reverse('financiero:cargar_bd_contable') + '?anio=2026'
@@ -234,7 +252,9 @@ class TestB1Views:
             anio=2026, tipo='PLANEADO', contrato=None,
             datos={'ingreso_proyectado': {'enero': 999}},
         )
-        rows = [_row('41250501', 'LINEAS', -200, 'Ingresos Operacionales')]
+        rows = [_row(
+            '41250501', 'LINEAS', -200, 'Ingresos Operacionales', periodo=202601,
+        )]
         archivo = _excel_bytes(rows)
         url = reverse('financiero:cargar_bd_contable') + '?anio=2026'
         client.post(url, {'action': 'cargar_bd', 'anio': 2026, 'archivo': archivo}, follow=True)

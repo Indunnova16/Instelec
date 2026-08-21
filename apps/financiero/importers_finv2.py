@@ -45,7 +45,7 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 _BD_SHEET_NAMES = ('bd', 'base de datos', 'base datos')
 
 # Encabezados (normalizados) esperados en la fila 1.
-_HEADER_CTA = 'cta equivalente'   # columna O
+_HEADER_CTA_ALIASES = ('cta equivalente', 'cuenta equiv')
 _HEADER_NETO = 'neto'             # columna C
 _HEADER_DESC = 'desc auxiliar'    # columna B
 _HEADER_FECHA = 'fecha'           # columna D
@@ -143,6 +143,32 @@ def _mes_fiscal_de(fecha_val, periodo_val):
     return None
 
 
+def _anio_de(fecha_val, periodo_val):
+    """Obtiene el año de una fila desde Fecha o, como fallback, Periodo."""
+    if isinstance(fecha_val, (datetime.datetime, datetime.date)):
+        return fecha_val.year
+
+    if isinstance(fecha_val, str):
+        s = fecha_val.strip()
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d'):
+            try:
+                return datetime.datetime.strptime(s[:10], fmt).year
+            except (ValueError, TypeError):
+                continue
+
+    if periodo_val is not None:
+        p = str(periodo_val).strip().split('.', 1)[0]
+        digits = ''.join(ch for ch in p if ch.isdigit())
+        if len(digits) >= 6:
+            try:
+                year, month = int(digits[:4]), int(digits[4:6])
+                if 1 <= month <= 12:
+                    return year
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
 class ContableCompleteImporter:
     """Procesa la BD contable completa y la agrupa en rubros presupuestales."""
 
@@ -198,7 +224,10 @@ class ContableCompleteImporter:
             if val:
                 headers[_norm(val)] = col
 
-        cta_col = headers.get(_HEADER_CTA)
+        cta_col = next(
+            (headers[alias] for alias in _HEADER_CTA_ALIASES if alias in headers),
+            None,
+        )
         neto_col = headers.get(_HEADER_NETO)
         desc_col = headers.get(_HEADER_DESC) or headers.get('descripcion')
         fecha_col = headers.get(_HEADER_FECHA)
@@ -221,7 +250,7 @@ class ContableCompleteImporter:
     # ------------------------------------------------------------------ #
     # Entry point
     # ------------------------------------------------------------------ #
-    def procesar_bd_completa(self, archivo, mapeo=None):
+    def procesar_bd_completa(self, archivo, mapeo=None, anio=None):
         """Procesa el archivo y devuelve un dict de resultado.
 
         Estructura de retorno::
@@ -272,7 +301,7 @@ class ContableCompleteImporter:
         # --- Edge case 2: columna O (Cta equivalente) ausente / vacía ---
         # Validamos leyendo el encabezado real de la columna detectada.
         header_cta = _norm(sheet.cell(row=1, column=cta_col).value)
-        if header_cta and header_cta != _HEADER_CTA and 'cta' not in header_cta:
+        if header_cta and header_cta not in _HEADER_CTA_ALIASES:
             wb.close()
             return self._advertencia(
                 'Archivo sin datos válidos en columnas O (Cta equivalente) o '
@@ -296,6 +325,9 @@ class ContableCompleteImporter:
             desc_val = row[desc_col - 1] if len(row) >= desc_col else None
             fecha_val = row[fecha_col - 1] if len(row) >= fecha_col else None
             periodo_val = row[periodo_col - 1] if len(row) >= periodo_col else None
+
+            if anio is not None and _anio_de(fecha_val, periodo_val) != anio:
+                continue
 
             # Validar que la fila tenga O, C, B (requerimiento #120 paso 1).
             if cta_val is None or neto_val is None:

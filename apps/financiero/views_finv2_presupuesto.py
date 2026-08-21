@@ -134,7 +134,7 @@ class PresupuestoPlaneadoViewV2(PresupuestoDetalladoBaseView):
 
         archivo = form.cleaned_data['archivo']
         importer = ContableCompleteImporter()
-        resultado = importer.procesar_bd_completa(archivo)
+        resultado = importer.procesar_bd_completa(archivo, anio=anio)
 
         if not resultado['exito']:
             # ⚠️ advertencia o ❌ error según el importer.
