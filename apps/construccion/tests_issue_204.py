@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from django.urls import reverse
@@ -297,3 +298,17 @@ def test_dashboard_avance_renderiza_gantt_y_estado_vacio(authenticated_client, p
     )
     assert response_vacio.status_code == 200
     assert 'Aún no hay fechas de avance para mostrar el Gantt consolidado.' in response_vacio.content.decode()
+
+
+def test_sidebar_exposes_dashboard_consolidado_after_cronograma():
+    """#204: the existing dashboard must be reachable for an active project."""
+    sidebar = (Path(__file__).resolve().parents[2] / 'templates/components/sidebar.html')
+    contenido = sidebar.read_text(encoding='utf-8')
+    cronograma = contenido.index("catUrl('cronograma')")
+    dashboard = contenido.index("catUrl('dashboard-avance')")
+
+    assert cronograma < dashboard
+    bloque_dashboard = contenido[dashboard:dashboard + 800]
+    assert 'Dashboard Consolidado' in bloque_dashboard
+    assert '@click="catClick($event)"' in bloque_dashboard
+    assert ':class="proyectoId ?' in bloque_dashboard
