@@ -64,3 +64,14 @@ class TestIssue223PersonalTomSelect(TestCase):
         self.assertIn("$nextTick(() => window.initTomSelect", html)
         self.assertIn('id="id_documento"', html)
         self.assertIn("js-tomselect", html)
+
+    def test_card_semanal_permite_dropdown_fuera_de_la_card_abierta(self):
+        response = self.client.post(
+            reverse("cuadrillas:semanal_bloque_crear", args=[2099, 1]),
+            {"nombre": "Bloque overflow TomSelect 223"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn(":class=\"agregando ? 'relative z-10 overflow-visible'", html)
+        self.assertIn(": 'overflow-hidden'\"", html)
