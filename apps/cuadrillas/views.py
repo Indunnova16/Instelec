@@ -1759,8 +1759,17 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
         # Issue #176 (A4): RolCuadrilla (TextChoices) eliminado, catalogo
         # ahora es Cargo (dinamico, editable via /cuadrillas/cargos/).
         roles_validos = dict(Cargo.objects.filter(activo=True).values_list('codigo', 'nombre'))
-        # Also build reverse map: display name -> key
-        roles_por_nombre = {v.upper(): k for k, v in roles_validos.items()}
+        # Los usuarios pueden referenciar un Cargo por código o por nombre.
+        # Se normalizan ambos para que las variantes de mayúsculas/tildes no
+        # terminen asignando otro cargo por defecto.
+        roles_por_codigo = {
+            self._normalizar_texto_excel(codigo): codigo
+            for codigo in roles_validos
+        }
+        roles_por_nombre = {
+            self._normalizar_texto_excel(nombre): codigo
+            for codigo, nombre in roles_validos.items()
+        }
 
         try:
             wb = openpyxl.load_workbook(BytesIO(archivo.read()))
@@ -1808,7 +1817,7 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                         str(row[idx_documento]).strip()
                         if len(row) > idx_documento and row[idx_documento] else ''
                     )
-                    rol_raw = str(row[idx_cargo]).strip().upper() if len(row) > idx_cargo and row[idx_cargo] else ''
+                    rol_raw = row[idx_cargo] if len(row) > idx_cargo else None
                     area_raw = (
                         areas_por_alias.get(self._normalizar_texto_excel(row[idx_area]), '')
                         if idx_area is not None and len(row) > idx_area and row[idx_area] else ''
@@ -1824,8 +1833,21 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                         errores.append(f'Fila {idx}: área inválida ({row[idx_area]})')
                         continue
 
-                    # Resolve role
-                    rol = rol_raw if rol_raw in roles_validos else roles_por_nombre.get(rol_raw, 'LINIERO_I')
+                    # Nunca usar un cargo por defecto: una fila con un valor
+                    # desconocido debe ser visible para corregirla, sin alterar
+                    # silenciosamente la clasificación del colaborador.
+                    rol_normalizado = self._normalizar_texto_excel(rol_raw) if rol_raw else ''
+                    rol = (
+                        roles_por_codigo.get(rol_normalizado)
+                        or roles_por_nombre.get(rol_normalizado)
+                    )
+                    if not rol:
+                        valor_cargo = str(rol_raw).strip() if rol_raw else '(vacío)'
+                        errores.append(
+                            f'Fila {idx}: cargo inválido ({valor_cargo}). '
+                            'Use un código o nombre de Cargo activo.'
+                        )
+                        continue
                     salario_base = self._parse_decimal(salario_raw)
                     fecha_ingreso = self._parse_fecha(fecha_ingreso_raw)
                     fecha_salida = self._parse_fecha(fecha_salida_raw)
@@ -1858,7 +1880,7 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
 
             msg = f'Personal cargado: {creados} nuevos, {actualizados} actualizados.'
             if errores:
-                msg += f' Errores: {len(errores)} filas.'
+                msg += f' Errores: {"; ".join(errores)}'
             messages.success(request, msg)
 
         except Exception as e:

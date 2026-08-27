@@ -399,6 +399,78 @@ class TestIssue237A2ImportadorPorEncabezado(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Issue #237 — A3: Cargo explícito en el importador de colaboradores
+# ---------------------------------------------------------------------------
+class TestIssue237A3CargoImportacion(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.cargo = Cargo.objects.create(
+            codigo='A3-CODIGO', nombre='Cargo A3 Válido', activo=True,
+        )
+        self.inactivo = Cargo.objects.create(
+            codigo='A3-INACTIVO', nombre='Cargo A3 Inactivo', activo=False,
+        )
+
+    @staticmethod
+    def _workbook(rows):
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['Nombre', 'Documento', 'Cargo'])
+        for row in rows:
+            ws.append(row)
+        archivo = BytesIO()
+        wb.save(archivo)
+        archivo.seek(0)
+        archivo.name = 'cargos_237.xlsx'
+        return archivo
+
+    def _importar(self, rows):
+        return self.client.post(
+            reverse('cuadrillas:personal_upload'),
+            {'archivo': self._workbook(rows)},
+            follow=True,
+        )
+
+    def test_importa_cargo_activo_por_codigo(self):
+        self._importar([['Por Código', '237-A3-01', self.cargo.codigo]])
+
+        persona = PersonalCuadrilla.objects.get(documento='237-A3-01')
+        self.assertEqual(persona.rol_cuadrilla_id, self.cargo.codigo)
+
+    def test_importa_cargo_activo_por_nombre_normalizado(self):
+        self._importar([['Por Nombre', '237-A3-02', ' cargo a3 valido ']])
+
+        persona = PersonalCuadrilla.objects.get(documento='237-A3-02')
+        self.assertEqual(persona.rol_cuadrilla_id, self.cargo.codigo)
+
+    def test_cargo_desconocido_no_persiste_y_reporta_fila(self):
+        respuesta = self._importar([['Cargo Inválido', '237-A3-03', 'NO EXISTE']])
+
+        self.assertFalse(PersonalCuadrilla.objects.filter(documento='237-A3-03').exists())
+        self.assertContains(respuesta, 'Fila 2: cargo inválido (NO EXISTE)')
+
+    def test_cargo_inactivo_se_rechaza_y_no_impide_fila_valida_siguiente(self):
+        respuesta = self._importar([
+            ['Cargo Inactivo', '237-A3-04', self.inactivo.codigo],
+            ['Cargo Válido', '237-A3-05', self.cargo.codigo],
+        ])
+
+        self.assertFalse(PersonalCuadrilla.objects.filter(documento='237-A3-04').exists())
+        self.assertTrue(PersonalCuadrilla.objects.filter(documento='237-A3-05').exists())
+        self.assertContains(respuesta, 'Fila 2: cargo inválido (A3-INACTIVO)')
+
+    def test_modal_indica_rechazo_y_enlace_a_cargos(self):
+        respuesta = self.client.get(reverse('cuadrillas:colaboradores_lista'))
+
+        self.assertContains(respuesta, reverse('cuadrillas:cargos_lista'))
+        self.assertContains(respuesta, 'la fila se rechaza')
+
+
+# ---------------------------------------------------------------------------
 # A4 — Refactor asignación a cuadrilla
 # ---------------------------------------------------------------------------
 class TestA4RefactorAsignacionCuadrilla(TestCase):
