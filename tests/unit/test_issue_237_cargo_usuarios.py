@@ -15,13 +15,13 @@ def admin_client(client, user_password):
 
 
 def _usuario(documento, **kwargs):
+    kwargs.setdefault("rol", "liniero")
     return Usuario.objects.create_user(
         email=f"{documento.lower()}@issue237.test",
         password="testpass123!",
         first_name="Usuario",
         last_name=documento,
         documento=documento,
-        rol="liniero",
         **kwargs,
     )
 
