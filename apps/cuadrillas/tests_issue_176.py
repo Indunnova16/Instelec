@@ -323,6 +323,82 @@ class TestA5ImporterColaboradores(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Issue #237 — A2: encabezados canónicos de Nombre y Documento
+# ---------------------------------------------------------------------------
+class TestIssue237A2ImportadorPorEncabezado(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    @staticmethod
+    def _workbook(headers, rows):
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(headers)
+        for row in rows:
+            ws.append(row)
+        archivo = BytesIO()
+        wb.save(archivo)
+        archivo.seek(0)
+        archivo.name = 'colaboradores_237.xlsx'
+        return archivo
+
+    def test_adjunto_exportado_documento_nombre_se_importa_por_encabezado(self):
+        """El adjunto real invierte el orden legacy y debe seguir siendo importable."""
+        PersonalCuadrilla.objects.create(
+            nombre='Registro Legacy', documento='237-LEGACY-1', rol_cuadrilla_id='LINIERO_I'
+        )
+
+        exportado = self.client.get(reverse('cuadrillas:colaboradores_export'))
+        self.assertEqual(exportado.status_code, 200)
+        archivo = BytesIO(exportado.content)
+        archivo.name = 'colaboradores.xlsx'
+        respuesta = self.client.post(reverse('cuadrillas:personal_upload'), {'archivo': archivo})
+
+        self.assertIn(respuesta.status_code, (200, 302))
+        persona = PersonalCuadrilla.objects.get(documento='237-LEGACY-1')
+        self.assertEqual(persona.nombre, 'Registro Legacy')
+        self.assertEqual(PersonalCuadrilla.objects.filter(documento='237-LEGACY-1').count(), 1)
+
+    def test_plantilla_legacy_nombre_documento_conserva_posiciones_historicas(self):
+        archivo = self._workbook(
+            ['Nombre', 'Documento', 'Cargo'],
+            [['Formato Legacy', '237-LEGACY-2', 'AYUDANTE']],
+        )
+
+        self.client.post(reverse('cuadrillas:personal_upload'), {'archivo': archivo})
+
+        persona = PersonalCuadrilla.objects.get(documento='237-LEGACY-2')
+        self.assertEqual(persona.nombre, 'Formato Legacy')
+
+    def test_columnas_reordenadas_usan_nombre_y_documento_canonicos(self):
+        archivo = self._workbook(
+            ['Cargo', 'Documento', 'Fecha Salida', 'Nombre', 'Salario Base'],
+            [['AYUDANTE', '237-ORDEN-1', '2026-08-01', 'Columnas Reordenadas', 1500000]],
+        )
+
+        self.client.post(reverse('cuadrillas:personal_upload'), {'archivo': archivo})
+
+        persona = PersonalCuadrilla.objects.get(documento='237-ORDEN-1')
+        self.assertEqual(persona.nombre, 'Columnas Reordenadas')
+        self.assertEqual(persona.salario_base, Decimal('1500000'))
+        self.assertFalse(persona.activo)
+
+    def test_encabezado_canonico_incompleto_no_caen_en_posiciones_legacy(self):
+        archivo = self._workbook(
+            ['Documento', 'Cargo'],
+            [['237-INVALIDO-1', 'AYUDANTE']],
+        )
+
+        self.client.post(reverse('cuadrillas:personal_upload'), {'archivo': archivo})
+
+        self.assertFalse(PersonalCuadrilla.objects.filter(documento='237-INVALIDO-1').exists())
+
+
+# ---------------------------------------------------------------------------
 # A4 — Refactor asignación a cuadrilla
 # ---------------------------------------------------------------------------
 class TestA4RefactorAsignacionCuadrilla(TestCase):

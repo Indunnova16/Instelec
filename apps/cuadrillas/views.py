@@ -1689,6 +1689,11 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
     opcionales (retrocompatible con el formato original de 3 columnas) --
     si faltan, quedan en su default del modelo (salario_base=0,
     fecha_ingreso/fecha_salida=None -> activo=True).
+
+    Nombre y Documento se resuelven por encabezado cuando la planilla los
+    declara, porque el export vigente los entrega como Documento | Nombre.
+    La plantilla histórica sin encabezados canónicos conserva Nombre |
+    Documento en las posiciones 0 y 1.
     """
     allowed_roles = ['admin', 'director', 'coordinador']
 
@@ -1769,6 +1774,15 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                 self._normalizar_texto_excel(v): i
                 for i, v in enumerate(encabezados_fila) if v is not None
             }
+            idx_nombre = encabezados.get('NOMBRE')
+            idx_documento = encabezados.get('DOCUMENTO')
+            if idx_nombre is None and idx_documento is None:
+                # Plantilla legacy: Nombre | Documento | Cargo | ...
+                idx_nombre, idx_documento = 0, 1
+            elif idx_nombre is None or idx_documento is None:
+                raise ValueError(
+                    'El archivo debe incluir ambos encabezados: Nombre y Documento.'
+                )
             idx_area = self._indice_area(encabezados_fila)
             # Formato legacy: Nombre | Documento | Cargo | Salario Base | fechas.
             idx_cargo = encabezados.get('CARGO', 2)
@@ -1782,12 +1796,18 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
             }
 
             for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-                if not row or not row[0]:
+                if not row or not any(valor not in (None, '') for valor in row):
                     continue
 
                 try:
-                    nombre = str(row[0]).strip()
-                    documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                    nombre = (
+                        str(row[idx_nombre]).strip()
+                        if len(row) > idx_nombre and row[idx_nombre] else ''
+                    )
+                    documento = (
+                        str(row[idx_documento]).strip()
+                        if len(row) > idx_documento and row[idx_documento] else ''
+                    )
                     rol_raw = str(row[idx_cargo]).strip().upper() if len(row) > idx_cargo and row[idx_cargo] else ''
                     area_raw = (
                         areas_por_alias.get(self._normalizar_texto_excel(row[idx_area]), '')
