@@ -77,7 +77,13 @@
                     <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                         {% if u.area %}{{ u.get_area_display }}{% else %}<span class="text-gray-400 dark:text-gray-600">Sin asignar</span>{% endif %}
                     </td>
-                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ u.cargo }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        {% if u.cargo_colaborador %}
+                            {{ u.cargo_colaborador }}
+                        {% else %}
+                            <span class="text-gray-400 dark:text-gray-600">Sin colaborador asociado</span>
+                        {% endif %}
+                    </td>
                     <td class="px-6 py-4 text-sm space-x-3 whitespace-nowrap">
                         <a href="{% url 'usuarios:editar_usuario' u.pk %}" class="text-blue-600 hover:text-blue-800 text-xs">
                             Editar

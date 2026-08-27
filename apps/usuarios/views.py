@@ -6,6 +6,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import CharField, OuterRef, Subquery
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import ListView, TemplateView, UpdateView
@@ -66,6 +67,19 @@ class GestionUsuariosView(LoginRequiredMixin, RoleRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset().filter(is_active=True)
+        # #237: el Cargo que se muestra en Gestión de Usuarios debe reflejar
+        # el maestro de Colaboradores. Usuario.cargo es un campo legacy sin
+        # relación y puede diferir del Cargo vigente de PersonalCuadrilla.
+        # PersonalCuadrilla.documento es único, por lo que el subquery devuelve
+        # a lo sumo un cargo por cada Usuario.documento.
+        from apps.cuadrillas.models import PersonalCuadrilla
+
+        cargo_colaborador = PersonalCuadrilla.objects.filter(
+            documento=OuterRef('documento')
+        ).values('rol_cuadrilla__nombre')[:1]
+        qs = qs.annotate(
+            cargo_colaborador=Subquery(cargo_colaborador, output_field=CharField())
+        )
         rol = self.request.GET.get('rol')
         if rol:
             qs = qs.filter(rol=rol)
