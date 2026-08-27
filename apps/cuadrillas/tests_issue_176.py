@@ -471,6 +471,101 @@ class TestIssue237A3CargoImportacion(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Issue #237 — A4: upsert por documento sobre colaboradores legacy
+# ---------------------------------------------------------------------------
+class TestIssue237A4UpsertPorDocumento(TestCase):
+    """La reimportación reemplaza todos los datos del mismo documento."""
+
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    @staticmethod
+    def _workbook(rows):
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append([
+            'Nombre', 'Documento', 'Área', 'Cargo', 'Salario Base',
+            'Fecha Ingreso', 'Fecha Salida',
+        ])
+        for row in rows:
+            ws.append(row)
+        archivo = BytesIO()
+        wb.save(archivo)
+        archivo.seek(0)
+        archivo.name = 'upsert_colaboradores_237.xlsx'
+        return archivo
+
+    def _importar(self, rows):
+        return self.client.post(
+            reverse('cuadrillas:personal_upload'),
+            {'archivo': self._workbook(rows)},
+            follow=True,
+        )
+
+    def test_reimportar_documento_legacy_actualiza_todos_los_campos_sin_duplicar(self):
+        legacy = PersonalCuadrilla.objects.create(
+            nombre='Nombre Legacy', documento='237-A4-LEGACY',
+            rol_cuadrilla_id='LINIERO_I', area='', salario_base=Decimal('1'),
+            fecha_ingreso=date(2020, 1, 1), fecha_salida=date(2024, 1, 1),
+        )
+        self._importar([
+            ['Segundo Documento', '237-A4-OTRO', 'Mantenimiento', 'AYUDANTE', 900000, '2025-01-01', ''],
+            ['Nombre Primera Carga', legacy.documento, 'Construcción', 'AYUDANTE', 1200000, '2025-02-01', '2025-12-31'],
+        ])
+        self._importar([
+            ['Nombre Actualizado', legacy.documento, 'Mantenimiento', 'CONDUCTOR', 1850000, '2026-03-01', ''],
+        ])
+
+        actualizado = PersonalCuadrilla.objects.get(documento=legacy.documento)
+        self.assertEqual(PersonalCuadrilla.objects.filter(documento=legacy.documento).count(), 1)
+        self.assertEqual(PersonalCuadrilla.objects.filter(documento='237-A4-OTRO').count(), 1)
+        self.assertEqual(actualizado.nombre, 'Nombre Actualizado')
+        self.assertEqual(actualizado.area, 'MANTENIMIENTO')
+        self.assertEqual(actualizado.rol_cuadrilla_id, 'CONDUCTOR')
+        self.assertEqual(actualizado.salario_base, Decimal('1850000'))
+        self.assertEqual(actualizado.fecha_ingreso, date(2026, 3, 1))
+        self.assertIsNone(actualizado.fecha_salida)
+        self.assertTrue(actualizado.activo)
+
+    def test_cargo_invalido_no_muta_el_registro_legacy_existente(self):
+        legacy = PersonalCuadrilla.objects.create(
+            nombre='No Modificar', documento='237-A4-INVALIDO',
+            rol_cuadrilla_id='AYUDANTE', area='CONSTRUCCION',
+            salario_base=Decimal('700000'), fecha_ingreso=date(2024, 1, 1),
+        )
+
+        respuesta = self._importar([
+            ['Intento Inválido', legacy.documento, 'Mantenimiento', 'CARGO AUSENTE', 999999, '2026-01-01', ''],
+        ])
+
+        legacy.refresh_from_db()
+        self.assertContains(respuesta, 'Fila 2: cargo inválido (CARGO AUSENTE)')
+        self.assertEqual(legacy.nombre, 'No Modificar')
+        self.assertEqual(legacy.area, 'CONSTRUCCION')
+        self.assertEqual(legacy.salario_base, Decimal('700000'))
+        self.assertEqual(legacy.fecha_ingreso, date(2024, 1, 1))
+
+    def test_fecha_salida_reimportada_deja_inactivo_al_mismo_documento(self):
+        PersonalCuadrilla.objects.create(
+            nombre='Activo Antes', documento='237-A4-SALIDA',
+            rol_cuadrilla_id='LINIERO_I', activo=True,
+        )
+
+        self._importar([
+            ['Con Salida', '237-A4-SALIDA', 'Construcción', 'AYUDANTE', 800000, '2025-01-01', '2026-08-01'],
+        ])
+
+        actualizado = PersonalCuadrilla.objects.get(documento='237-A4-SALIDA')
+        self.assertEqual(PersonalCuadrilla.objects.filter(documento='237-A4-SALIDA').count(), 1)
+        self.assertEqual(actualizado.fecha_salida, date(2026, 8, 1))
+        self.assertFalse(actualizado.activo)
+
+
+# ---------------------------------------------------------------------------
 # A4 — Refactor asignación a cuadrilla
 # ---------------------------------------------------------------------------
 class TestA4RefactorAsignacionCuadrilla(TestCase):

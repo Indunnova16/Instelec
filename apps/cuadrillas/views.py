@@ -1693,7 +1693,9 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
     Nombre y Documento se resuelven por encabezado cuando la planilla los
     declara, porque el export vigente los entrega como Documento | Nombre.
     La plantilla histórica sin encabezados canónicos conserva Nombre |
-    Documento en las posiciones 0 y 1.
+    Documento en las posiciones 0 y 1. Documento es la clave de upsert: una
+    reimportación actualiza todos los campos soportados del mismo colaborador
+    sin crear un duplicado.
     """
     allowed_roles = ['admin', 'director', 'coordinador']
 
