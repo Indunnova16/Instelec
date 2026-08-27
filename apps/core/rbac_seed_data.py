@@ -38,6 +38,45 @@ SUBMODULOS_MANTENIMIENTO = (
     "MANTENIMIENTO_PROCEDIMIENTOS",
 )
 
+# Catálogo aditivo de #186 A2 (id:instelec-186-financiero-parent-modulo).
+#
+# DECISION DE DISEÑO (documentada para revisión, no bloqueante): estas 6 hojas
+# corresponden a `apps/financiero/` -- el dashboard/presupuesto/nómina/
+# facturación de TODA la empresa, hoy gateado solo por "es admin"
+# (`RoleRequiredMixin` + `allowed_roles` por vista, sin ninguna fila en
+# `RoleModuloPermiso`). NO son lo mismo que `SUBMODULO_FINANCIERO` de arriba
+# ("FINANCIERO", ya definido) -- ese es el tab financiero de UN proyecto de
+# construcción puntual (`apps/construccion`), una superficie distinta.
+#
+# No existe un `MODULO_FINANCIERO` de nivel superior, y el plan de A4 fija la
+# matriz en 3 columnas (Mantenimiento/Construcción/Configuración) -- Financiero
+# no es una cuarta. Se cuelgan estas hojas de `MODULO_CONFIG` junto con las de
+# Configuración/Parametrización (mismo criterio "administrativo, alcance toda
+# la empresa" que ya agrupa Usuarios/Cargos/Roles y Permisos). Sin fila previa
+# en `RoleModuloPermiso` para ningún rol -- la migración NO puede derivar de un
+# permiso "Financiero" general porque nunca existió; parte de una matriz vacía
+# (todo Sin acceso) y el `allowed_roles` legacy por vista sigue siendo el gate
+# real hasta que A3 conecte estas hojas a las vistas de `apps/financiero/`.
+SUBMODULOS_FINANCIERO_APP = (
+    "FIN_DASHBOARD",
+    "FIN_PRESUPUESTO_PLANEADO",
+    "FIN_PRESUPUESTO_REAL",
+    "FIN_CHECKLIST_FACTURACION",
+    "FIN_COSTOS_CUADRILLA",
+    "FIN_NOMINA",
+)
+
+# Catálogo aditivo de #186 A2. Mismo criterio de padre (`MODULO_CONFIG`) que
+# arriba. Tampoco tiene fila previa -- `Usuario.rol`/permisos de admin siguen
+# siendo el gate real hasta A3.
+SUBMODULOS_CONFIG_APP = (
+    "CONFIG_USUARIOS",
+    "CONFIG_CARGOS",
+    "CONFIG_ROLES_PERMISOS",
+    "CONFIG_VEHICULOS",
+    "CONFIG_COLABORADORES",
+)
+
 NIVEL_ADMIN = "admin"
 NIVEL_OPERARIO = "operario"
 

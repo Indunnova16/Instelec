@@ -116,7 +116,11 @@ class TestRoleModuloPermisoMatriz186:
         # A1 (id:instelec-186-submodulos-mantenimiento) suma las 4 hojas nuevas
         # de Mantenimiento a las 14 de Construccion ya existentes: 14 + 4 = 18.
         assert "MANTENIMIENTO_ACTIVIDADES" in columnas_sub
-        assert len(columnas_sub) == 18
+        # A2 (id:instelec-186-financiero-parent-modulo) suma 6 hojas de
+        # Financiero + 5 de Configuracion, ambas bajo CONFIG: 18 + 11 = 29.
+        assert "FIN_NOMINA" in columnas_sub
+        assert "CONFIG_ROLES_PERMISOS" in columnas_sub
+        assert len(columnas_sub) == 29
 
     def test_matriz_no_incluye_roles_inactivos(self, admin_client):
         Role.objects.create(

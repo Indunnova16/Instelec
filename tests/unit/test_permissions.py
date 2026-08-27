@@ -14,8 +14,13 @@ from django.contrib.auth import get_user_model
 
 from apps.core.models import RoleModuloPermiso
 from apps.core.permissions import (
+    MODULO_CONFIG,
     MODULO_MANTENIMIENTO,
+    SUBMODULO_A_MODULO,
+    SUBMODULO_CONFIG_ROLES_PERMISOS,
+    SUBMODULO_FIN_NOMINA,
     SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+    SUBMODULOS_CONFIG,
     SUBMODULOS_MANTENIMIENTO,
     invalidate_role_cache,
     user_can_access_modulo,
@@ -620,3 +625,75 @@ class TestSubmodulosMantenimiento186:
         assert user_can_access_submodulo(
             liniero_user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
         ) is False
+
+
+class TestSubmodulosConfigFinanciero186:
+    """A2: catálogo granular de Financiero (`apps/financiero/`) y
+    Configuración/Parametrización, ambos colgados de MODULO_CONFIG (ver
+    decisión de diseño en `rbac_seed_data.SUBMODULOS_FINANCIERO_APP`)."""
+
+    def test_las_11_hojas_nuevas_quedan_registradas_bajo_config(self):
+        for submodulo in SUBMODULOS_CONFIG:
+            assert SUBMODULO_A_MODULO[submodulo] == MODULO_CONFIG
+
+    @pytest.mark.django_db
+    def test_fila_vacia_es_sin_acceso_por_defecto(self):
+        """A diferencia de Mantenimiento (A1), Financiero/Config NO tienen
+        fila legacy previa de la cual derivar -- la migración no siembra
+        nada, así que un rol sin fila explícita debe quedar sin acceso."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="config_sin_filas", nombre="Sin filas", nivel="operario",
+        )
+        user = User.objects.create_user(
+            email="sin-filas@test.com", password="testpass123!", rol=role.codigo,
+        )
+
+        for submodulo in SUBMODULOS_CONFIG:
+            assert user_can_access_submodulo(user, submodulo) is False
+
+    @pytest.mark.django_db
+    def test_hoja_config_autoriza_con_permiso_propio_sin_modulo_completo(self):
+        """Generaliza el fix de A1: una hoja de CONFIG también autoriza sin
+        el módulo padre completo -- no es un caso especial de Mantenimiento."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="solo_nomina", nombre="Solo nómina", nivel="operario",
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_CONFIG, submodulo=SUBMODULO_FIN_NOMINA,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+        user = User.objects.create_user(
+            email="solo-nomina@test.com", password="testpass123!", rol=role.codigo,
+        )
+
+        assert user_can_access_submodulo(user, SUBMODULO_FIN_NOMINA) is True
+        assert user_can_access_modulo(user, MODULO_CONFIG) is False
+        assert user_can_access_submodulo(user, SUBMODULO_CONFIG_ROLES_PERMISOS) is False
+
+    @pytest.mark.django_db
+    def test_hoja_config_no_autoriza_si_el_modulo_padre_esta_denegado(self):
+        """Mismo edge case de seguridad que A1, generalizado a CONFIG."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="config_padre_denegado", nombre="Config padre denegado",
+            nivel="operario",
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_CONFIG, submodulo="",
+            nivel_acceso=RoleModuloPermiso.SIN_ACCESO,
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_CONFIG, submodulo=SUBMODULO_FIN_NOMINA,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+        user = User.objects.create_user(
+            email="config-padre-denegado@test.com", password="testpass123!",
+            rol=role.codigo,
+        )
+
+        assert user_can_access_submodulo(user, SUBMODULO_FIN_NOMINA) is False
