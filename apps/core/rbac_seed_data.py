@@ -40,23 +40,28 @@ SUBMODULOS_MANTENIMIENTO = (
 
 # Catálogo aditivo de #186 A2 (id:instelec-186-financiero-parent-modulo).
 #
-# DECISION DE DISEÑO (documentada para revisión, no bloqueante): estas 6 hojas
-# corresponden a `apps/financiero/` -- el dashboard/presupuesto/nómina/
-# facturación de TODA la empresa, hoy gateado solo por "es admin"
-# (`RoleRequiredMixin` + `allowed_roles` por vista, sin ninguna fila en
-# `RoleModuloPermiso`). NO son lo mismo que `SUBMODULO_FINANCIERO` de arriba
-# ("FINANCIERO", ya definido) -- ese es el tab financiero de UN proyecto de
-# construcción puntual (`apps/construccion`), una superficie distinta.
+# DECISION DE DISEÑO -- CORREGIDA (ver commit posterior que arregla el error
+# original de colgar esto de MODULO_CONFIG). Estas 6 hojas corresponden a
+# `apps/financiero/` -- dashboard/presupuesto/nómina/facturación. Cuelgan de
+# `MODULO_MANTENIMIENTO`, NO de CONFIG: dos mecanismos legacy independientes ya
+# agrupan Financiero ahí --
+#   1. `middleware.RBACModuloMiddleware` ya exige MODULO_MANTENIMIENTO para
+#      TODO el prefix `/financiero/*` (`MANTENIMIENTO_PREFIXES`).
+#   2. `templates/components/sidebar.html` ya renderiza el menú "Financiero"
+#      solo con `x-show="modulo === 'mantenimiento'"`.
+# Ninguno de los dos se escribió pensando en #186 -- son evidencia
+# independiente de cómo el resto del sistema ya modela esta superficie.
 #
-# No existe un `MODULO_FINANCIERO` de nivel superior, y el plan de A4 fija la
-# matriz en 3 columnas (Mantenimiento/Construcción/Configuración) -- Financiero
-# no es una cuarta. Se cuelgan estas hojas de `MODULO_CONFIG` junto con las de
-# Configuración/Parametrización (mismo criterio "administrativo, alcance toda
-# la empresa" que ya agrupa Usuarios/Cargos/Roles y Permisos). Sin fila previa
-# en `RoleModuloPermiso` para ningún rol -- la migración NO puede derivar de un
-# permiso "Financiero" general porque nunca existió; parte de una matriz vacía
-# (todo Sin acceso) y el `allowed_roles` legacy por vista sigue siendo el gate
-# real hasta que A3 conecte estas hojas a las vistas de `apps/financiero/`.
+# NO son lo mismo que `SUBMODULO_FINANCIERO` de arriba ("FINANCIERO", ya
+# definido) -- ese es el tab financiero de UN proyecto de construcción puntual
+# (`apps/construccion`), una superficie distinta, sin colisión de código
+# porque las hojas de acá usan prefijo `FIN_`.
+#
+# Sin fila previa en `RoleModuloPermiso` para ningún rol -- la migración NO
+# puede derivar de un permiso "Financiero" general porque nunca existió como
+# submódulo (solo como gate de módulo completo); parte de una matriz vacía
+# (todo Sin acceso) y el gate legacy (middleware + `allowed_roles` por vista)
+# sigue siendo el real hasta que A3 conecte estas hojas.
 SUBMODULOS_FINANCIERO_APP = (
     "FIN_DASHBOARD",
     "FIN_PRESUPUESTO_PLANEADO",
