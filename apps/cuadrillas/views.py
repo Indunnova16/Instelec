@@ -2626,8 +2626,17 @@ class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
         ws.title = 'Colaboradores'
         ws.append(['Documento', 'Nombre', 'Área', 'Cargo', 'Salario Base', 'Fecha Ingreso', 'Fecha Salida'])
         for p in PersonalCuadrilla.objects.select_related('rol_cuadrilla').all().order_by('nombre'):
+            # El documento sigue siendo una clave de texto en el modelo. Sólo
+            # los valores numéricos sin ceros iniciales se escriben como número
+            # para que Excel aplique el separador de miles sin alterar la clave
+            # al volver a importar el archivo.
+            documento_excel = p.documento
+            if p.documento.isascii() and p.documento.isdecimal() and (
+                p.documento == '0' or not p.documento.startswith('0')
+            ):
+                documento_excel = int(p.documento)
             ws.append([
-                p.documento,
+                documento_excel,
                 p.nombre,
                 p.get_area_display() if p.area else '',
                 p.rol_cuadrilla.nombre if p.rol_cuadrilla_id else '',
@@ -2635,6 +2644,8 @@ class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
                 p.fecha_ingreso.strftime('%Y-%m-%d') if p.fecha_ingreso else '',
                 p.fecha_salida.strftime('%Y-%m-%d') if p.fecha_salida else '',
             ])
+            if isinstance(documento_excel, int):
+                ws.cell(row=ws.max_row, column=1).number_format = '#,##0'
 
         buffer = BytesIO()
         wb.save(buffer)

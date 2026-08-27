@@ -566,6 +566,79 @@ class TestIssue237A4UpsertPorDocumento(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Issue #237 — A5: documento con separador de miles en lista y export
+# ---------------------------------------------------------------------------
+class TestIssue237A5DocumentoConMiles(TestCase):
+    def setUp(self):
+        self.admin = _crear_admin()
+        self.client = Client()
+        self.client.force_login(self.admin)
+        Cargo.objects.get_or_create(
+            codigo='LINIERO_I', defaults={'nombre': 'Liniero I', 'activo': True},
+        )
+
+    def test_lista_muestra_dos_documentos_numericos_con_miles(self):
+        for documento in ('2370001', '2370002'):
+            PersonalCuadrilla.objects.create(
+                nombre=f'Colaborador {documento}', documento=documento,
+                rol_cuadrilla_id='LINIERO_I',
+            )
+
+        respuesta = self.client.get(reverse('cuadrillas:colaboradores_lista'))
+
+        self.assertContains(respuesta, '2.370.001')
+        self.assertContains(respuesta, '2.370.002')
+        self.assertEqual(
+            list(PersonalCuadrilla.objects.filter(documento__in=('2370001', '2370002'))
+                 .order_by('documento').values_list('documento', flat=True)),
+            ['2370001', '2370002'],
+        )
+
+    def test_export_numero_documento_usa_formato_de_miles_y_es_reimportable(self):
+        legacy = PersonalCuadrilla.objects.create(
+            nombre='Registro Legacy', documento='2370001',
+            rol_cuadrilla_id='LINIERO_I', salario_base=Decimal('15000'),
+        )
+
+        exportado = self.client.get(reverse('cuadrillas:colaboradores_export'))
+        self.assertEqual(exportado.status_code, 200)
+
+        import openpyxl
+
+        wb = openpyxl.load_workbook(BytesIO(exportado.content))
+        ws = wb.active
+        fila = next(row for row in ws.iter_rows(min_row=2) if row[0].value == 2370001)
+        self.assertEqual(fila[0].number_format, '#,##0')
+        self.assertEqual(fila[0].value, 2370001)
+
+        archivo = BytesIO(exportado.content)
+        archivo.name = 'colaboradores_exportados.xlsx'
+        respuesta = self.client.post(
+            reverse('cuadrillas:personal_upload'), {'archivo': archivo}, follow=True,
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(PersonalCuadrilla.objects.filter(documento=legacy.documento).count(), 1)
+        self.assertEqual(PersonalCuadrilla.objects.get(documento=legacy.documento).nombre, legacy.nombre)
+
+    def test_export_conserva_como_texto_documentos_no_numericos_o_con_cero_inicial(self):
+        PersonalCuadrilla.objects.create(
+            nombre='Con Cero Inicial', documento='001234567', rol_cuadrilla_id='LINIERO_I',
+        )
+        PersonalCuadrilla.objects.create(
+            nombre='Documento Legacy', documento='LEG-237-1', rol_cuadrilla_id='LINIERO_I',
+        )
+
+        exportado = self.client.get(reverse('cuadrillas:colaboradores_export'))
+        import openpyxl
+
+        ws = openpyxl.load_workbook(BytesIO(exportado.content)).active
+        filas = {row[0].value: row[0] for row in ws.iter_rows(min_row=2)}
+        self.assertEqual(filas['001234567'].data_type, 's')
+        self.assertEqual(filas['LEG-237-1'].data_type, 's')
+
+
+# ---------------------------------------------------------------------------
 # A4 — Refactor asignación a cuadrilla
 # ---------------------------------------------------------------------------
 class TestA4RefactorAsignacionCuadrilla(TestCase):
