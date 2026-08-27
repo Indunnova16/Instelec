@@ -270,13 +270,63 @@ class TestImportS18:
                      'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
             ])
 
-        ProgramacionS18CuadrillaImporter().importar(_excel())
+        usuarios_antes = Usuario.objects.count()
+        primera_carga = ProgramacionS18CuadrillaImporter().importar(_excel())
         res2 = ProgramacionS18CuadrillaImporter().importar(
             _excel(), {'actualizar_existentes': True}
         )
+        assert primera_carga['miembros_agregados'] == 1
         assert res2['cuadrillas_creadas'] == 0
         assert res2['cuadrillas_actualizadas'] == 1
+        assert res2['miembros_agregados'] == 0
+        assert res2['miembros_reutilizados'] == 1
+        assert Usuario.objects.count() == usuarios_antes
         assert Cuadrilla.objects.count() == 1
+        assert CuadrillaMiembro.objects.filter(activo=True).count() == 1
+
+    def test_rerun_reutiliza_cada_documento_sin_duplicar_miembros_activos(self):
+        """Dos cargas del mismo S18 reutilizan ambos documentos existentes."""
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        _crear_usuario('1004487321', 'KEINER SERRANO')
+
+        def _excel():
+            return _build_s18_excel([
+                _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                     'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+                _miembro('KEINER SERRANO', '1004487321', 'LINIERO II'),
+            ])
+
+        usuarios_antes = Usuario.objects.count()
+        primera_carga = ProgramacionS18CuadrillaImporter().importar(_excel())
+        segunda_carga = ProgramacionS18CuadrillaImporter().importar(
+            _excel(), {'actualizar_existentes': True}
+        )
+
+        assert primera_carga['miembros_agregados'] == 2
+        assert segunda_carga['miembros_agregados'] == 0
+        assert segunda_carga['miembros_reutilizados'] == 2
+        assert Usuario.objects.count() == usuarios_antes
+        miembros_activos = CuadrillaMiembro.objects.filter(activo=True)
+        assert miembros_activos.count() == 2
+        assert set(miembros_activos.values_list('usuario__documento', flat=True)) == {
+            '1143246675', '1004487321',
+        }
+
+    def test_documento_repetido_en_el_archivo_crea_un_solo_miembro_activo(self):
+        """Una fila repetida no puede eludir el upsert activo por documento."""
+        _crear_linea('LN817')
+        _crear_usuario('1143246675', 'JHON JAIRO')
+        excel = _build_s18_excel([
+            _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
+                 'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+            _miembro('JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
+        ])
+
+        resultado = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert resultado['miembros_agregados'] == 1
+        assert resultado['miembros_reutilizados'] == 1
         assert CuadrillaMiembro.objects.filter(activo=True).count() == 1
 
     def test_cedula_nueva_se_omite_aun_con_flag_legacy(self):

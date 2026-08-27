@@ -661,6 +661,10 @@ class ProgramacionS18CuadrillaImporter:
         # (no se crean ni se actualizan). Estrategia SALTAR + RESUMEN.
         self.cuadrillas_omitidas = []
         self.miembros_agregados = 0
+        # Los miembros existentes se contabilizan por separado para que una
+        # reimportación deje explícito que reutilizó la asignación activa y no
+        # creó otra para el mismo documento.
+        self.miembros_reutilizados = 0
         self.miembros_omitidos = 0
         self.encargados_asignados = 0
         self.column_indices = {}
@@ -741,6 +745,7 @@ class ProgramacionS18CuadrillaImporter:
                 'cuadrillas_omitidas': self.cuadrillas_omitidas,
                 'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
                 'miembros_agregados': 0,
+                'miembros_reutilizados': 0,
                 'miembros_omitidos': 0,
                 'encargados_asignados': 0,
                 'novedades_creadas': 0,
@@ -768,6 +773,7 @@ class ProgramacionS18CuadrillaImporter:
             'cuadrillas_omitidas': self.cuadrillas_omitidas,
             'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
             'miembros_agregados': self.miembros_agregados,
+            'miembros_reutilizados': self.miembros_reutilizados,
             'miembros_omitidos': self.miembros_omitidos,
             'encargados_asignados': self.encargados_asignados,
             'novedades_creadas': self.novedades_creadas,
@@ -1123,11 +1129,13 @@ class ProgramacionS18CuadrillaImporter:
             self.miembros_agregados += 1
             if cargo_jerarquico == 'JT_CTA':
                 self.encargados_asignados += 1
-        elif miembro['es_jt'] and obj.cargo != 'JT_CTA':
-            # Re-import: promover a encargado si el Excel ahora lo marca como JT.
-            obj.cargo = 'JT_CTA'
-            obj.save(update_fields=['cargo', 'updated_at'])
-            self.encargados_asignados += 1
+        else:
+            self.miembros_reutilizados += 1
+            if miembro['es_jt'] and obj.cargo != 'JT_CTA':
+                # Re-import: promover a encargado si el Excel ahora lo marca como JT.
+                obj.cargo = 'JT_CTA'
+                obj.save(update_fields=['cargo', 'updated_at'])
+                self.encargados_asignados += 1
         return usuario
 
     def _guardar_novedad(self, novedad):
@@ -1375,6 +1383,7 @@ class ProgramacionS18CuadrillaImporter:
             'cuadrillas_omitidas': self.cuadrillas_omitidas,
             'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
             'miembros_agregados': 0,
+            'miembros_reutilizados': 0,
             'miembros_omitidos': 0,
             'encargados_asignados': 0,
             'novedades_creadas': 0,
