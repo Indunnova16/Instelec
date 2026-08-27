@@ -23,6 +23,23 @@ multilínea se renderiza literal en prod (memoria del portafolio).
 {% puede_submodulo 'PROGRAMACION' as ok_programacion %}
 {% puede_submodulo 'ACTIVIDADES_FINALES' as ok_actividades_finales %}
 {% puede_submodulo 'INDICADORES_CONSTRUCCION' as ok_indicadores_construccion %}
+{% comment %}
+issue #186 A3: mismo patrón de arriba (puede_submodulo -> {% if %}) aplicado
+a las hojas nuevas de Mantenimiento (A1) y Financiero (A2/A3, colgado de
+Mantenimiento -- ver rbac_seed_data.SUBMODULOS_FINANCIERO_APP). El check
+Alpine `modulo === 'mantenimiento'` (cuál pestaña superior está activa) se
+mantiene intacto; esto agrega la restricción POR HOJA por encima.
+{% endcomment %}
+{% puede_submodulo 'MANTENIMIENTO_ACTIVIDADES' as ok_mant_actividades %}
+{% puede_submodulo 'MANTENIMIENTO_LINEAS_TORRES' as ok_mant_lineas_torres %}
+{% puede_submodulo 'MANTENIMIENTO_CAMPO' as ok_mant_campo %}
+{% puede_submodulo 'MANTENIMIENTO_PROCEDIMIENTOS' as ok_mant_procedimientos %}
+{% puede_submodulo 'FIN_DASHBOARD' as ok_fin_dashboard %}
+{% puede_submodulo 'FIN_PRESUPUESTO_PLANEADO' as ok_fin_presupuesto_planeado %}
+{% puede_submodulo 'FIN_PRESUPUESTO_REAL' as ok_fin_presupuesto_real %}
+{% puede_submodulo 'FIN_CHECKLIST_FACTURACION' as ok_fin_checklist_facturacion %}
+{% puede_submodulo 'FIN_COSTOS_CUADRILLA' as ok_fin_costos_cuadrilla %}
+{% puede_submodulo 'FIN_NOMINA' as ok_fin_nomina %}
 <!-- Sidebar component -->
 <div class="flex flex-col h-full">
     <!-- Logo -->
@@ -178,6 +195,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
             <!-- Todas las entradas de Mantenimiento se omiten del HTML si el
                  rol no tiene el permiso general; x-show por sí solo no es RBAC. -->
             <!-- Actividades -->
+            {% if ok_mant_actividades %}
             <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
                 <button @click="open = !open"
                         class="w-full flex items-center justify-between px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -208,7 +226,9 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     <li role="none"><a href="{% url 'actividades:calendario' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Calendario</a></li>
                 </ul>
             </li>
+            {% endif %}
 
+            {% if ok_mant_lineas_torres %}
             <!-- Lineas -->
             <li role="none" x-show="modulo === 'mantenimiento'">
                 <a href="{% url 'lineas:lista' %}" role="menuitem" class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -218,6 +238,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     Lineas y Torres
                 </a>
             </li>
+            {% endif %}
 
             {# issue #187 -- "Campo" pasa de link plano ("Registros Campo" -> campo:lista) #}
             {# a submenu expandible con acceso directo a "Avances" (pantalla "Avances de #}
@@ -227,6 +248,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
             {# conserva como 3er item (no estaba en el alcance explicito de la spec final #}
             {# del cliente, pero se preserva el acceso existente en vez de retirarlo #}
             {# silenciosamente). #}
+            {% if ok_mant_campo %}
             <!-- Campo -->
             <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
                 <button @click="open = !open"
@@ -251,7 +273,9 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     <li role="none"><a href="{% url 'campo:lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Registros Campo</a></li>
                 </ul>
             </li>
+            {% endif %}
 
+            {% if ok_mant_procedimientos %}
             {# issue #187 -- grupo "Procedimientos" nuevo en el menu de administrativos #}
             {# (antes solo existia dentro de "Formato de Campo" para trabajadores de #}
             {# campo). Spec final del cliente: padre con 2 hijos (Guias de Mantenimiento #}
@@ -281,6 +305,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     <li role="none"><a href="{% url 'campo:procedimientos' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Fichas Tecnicas</a></li>
                 </ul>
             </li>
+            {% endif %}
 
             <!-- Separator (Mantenimiento) -->
             <li class="border-t border-gray-200 dark:border-gray-700 my-4" role="separator" aria-hidden="true" x-show="modulo === 'mantenimiento'"></li>
@@ -305,6 +330,7 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                 </a>
             </li>
 
+            {% if ok_fin_dashboard or ok_fin_presupuesto_planeado or ok_fin_presupuesto_real or ok_fin_checklist_facturacion or ok_fin_costos_cuadrilla or ok_fin_nomina %}
             <!-- Financiero (solo Mantenimiento) -->
             <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
                 <button @click="open = !open"
@@ -323,14 +349,15 @@ multilínea se renderiza literal en prod (memoria del portafolio).
                     </svg>
                 </button>
                 <ul x-show="open" x-collapse class="mt-1 ml-8 space-y-1" role="menu" aria-label="Submenu Financiero">
-                    <li role="none"><a href="{% url 'financiero:dashboard' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Dashboard</a></li>
-                    <li role="none"><a href="{% url 'financiero:presupuesto_planeado' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Presupuesto Planeado</a></li>
-                    <li role="none"><a href="{% url 'financiero:presupuesto_real' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Presupuesto Real</a></li>
-                    <li role="none"><a href="{% url 'financiero:checklist_facturacion' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Checklist Facturacion</a></li>
-                    <li role="none"><a href="{% url 'financiero:costos_cuadrilla' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Costos Cuadrilla</a></li>
-                    <li role="none"><a href="{% url 'financiero:nomina' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Nomina</a></li>
+                    {% if ok_fin_dashboard %}<li role="none"><a href="{% url 'financiero:dashboard' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Dashboard</a></li>{% endif %}
+                    {% if ok_fin_presupuesto_planeado %}<li role="none"><a href="{% url 'financiero:presupuesto_planeado' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Presupuesto Planeado</a></li>{% endif %}
+                    {% if ok_fin_presupuesto_real %}<li role="none"><a href="{% url 'financiero:presupuesto_real' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Presupuesto Real</a></li>{% endif %}
+                    {% if ok_fin_checklist_facturacion %}<li role="none"><a href="{% url 'financiero:checklist_facturacion' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Checklist Facturacion</a></li>{% endif %}
+                    {% if ok_fin_costos_cuadrilla %}<li role="none"><a href="{% url 'financiero:costos_cuadrilla' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Costos Cuadrilla</a></li>{% endif %}
+                    {% if ok_fin_nomina %}<li role="none"><a href="{% url 'financiero:nomina' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Nomina</a></li>{% endif %}
                 </ul>
             </li>
+            {% endif %}
 
             <!-- Indicadores (solo Mantenimiento) -->
             <li role="none" x-show="modulo === 'mantenimiento'">

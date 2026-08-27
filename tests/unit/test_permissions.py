@@ -224,14 +224,17 @@ class TestRoleBasedAccessControl:
         assert response.status_code == 403
 
     def test_wrong_role_denied_financiero(self, client, user_password):
-        """Test that liniero gets 403 for financiero dashboard."""
+        """liniero no tiene ninguna hoja FIN_* -- #186 A3: RBACModuloMiddleware
+        ahora gatea /financiero/* por submódulo granular ANTES de que la
+        vista corra, así que el denial llega como 302 (mismo patrón que el
+        resto del middleware RBAC), no como el 403 legacy de RoleRequiredMixin."""
         liniero = LinieroFactory()
         client.login(username=liniero.email, password=user_password)
 
         url = reverse('financiero:dashboard')
         response = client.get(url)
 
-        assert response.status_code == 403
+        assert response.status_code == 302
 
     def test_wrong_role_denied_actas(self, client, user_password):
         """Test that liniero gets 403 for actas list."""
@@ -731,3 +734,84 @@ class TestSubmodulosConfigFinanciero186:
         )
 
         assert user_can_access_submodulo(user, SUBMODULO_CONFIG_ROLES_PERMISOS) is False
+
+
+class TestMiddlewareGranularA3:
+    """#186 A3: RBACModuloMiddleware gatea por submódulo (no solo módulo) y
+    distingue Ver de Ver y editar en mutaciones."""
+
+    def test_ver_permite_get_pero_bloquea_mutacion(self, client, liniero_user, user_password):
+        """liniero tiene 'ver' (no 'ver_editar') en MANTENIMIENTO_CAMPO, vía
+        el seed de A1 (nivel operario -> ver). Debe poder LISTAR pero no
+        CREAR."""
+        client.login(username=liniero_user.email, password=user_password)
+
+        get_response = client.get(reverse('campo:lista'))
+        assert get_response.status_code == 200
+
+        post_response = client.post(reverse('campo:reportar_dano'), {})
+        assert post_response.status_code == 302
+        assert post_response.url == reverse('core:home')
+
+    def test_sin_hoja_financiero_bloquea_get_y_post(self, client, liniero_user, user_password):
+        """liniero no tiene ninguna hoja FIN_* -- bloqueado incluso para GET,
+        antes de llegar a RoleRequiredMixin."""
+        client.login(username=liniero_user.email, password=user_password)
+
+        response = client.get(reverse('financiero:dashboard'))
+        assert response.status_code == 302
+        assert response.url == reverse('core:home')
+
+    def test_hoja_mas_especifica_gana_sobre_la_generica(self, client, liniero_user, user_password):
+        """`/campo/procedimientos/` debe gatearse por
+        MANTENIMIENTO_PROCEDIMIENTOS, no por el MANTENIMIENTO_CAMPO más
+        genérico -- liniero tiene 'ver' en ambos vía el seed de A1, así que
+        esto en particular no distingue nivel, pero sí confirma que el
+        prefijo específico matchea antes que el catch-all '/campo/'."""
+        client.login(username=liniero_user.email, password=user_password)
+
+        response = client.get(reverse('campo:procedimientos'))
+        assert response.status_code == 200
+
+
+class TestSidebarGranularA3:
+    """#186 A3: el sidebar administrativo (rama `{% else %}` de
+    `request.user.is_campo` en sidebar.html) muestra/oculta cada dropdown de
+    Mantenimiento/Financiero según la hoja granular, no el módulo completo."""
+
+    @staticmethod
+    def _submenus(html):
+        import re
+        return set(re.findall(r'aria-label="Submenu ([^"]+)"', html))
+
+    @pytest.mark.django_db
+    def test_coordinador_ve_mantenimiento_y_financiero(self, client, user_password):
+        """coordinador: nivel admin, con MANTENIMIENTO, y en la lista legacy
+        de acceso a Financiero (ver rbac_seed_data) -- debe ver todo."""
+        u = CoordinadorFactory()
+        client.login(username=u.email, password=user_password)
+
+        subs = self._submenus(client.get('/').content.decode())
+
+        assert 'Actividades' in subs
+        assert 'Campo' in subs
+        assert 'Procedimientos' in subs
+        assert 'Financiero' in subs
+
+    @pytest.mark.django_db
+    def test_admin_construccion_no_ve_mantenimiento_ni_financiero(self, client, user_password):
+        """admin_construccion: nivel admin pero SOLO módulo CONSTRUCCION --
+        no debe ver ninguna hoja de Mantenimiento ni Financiero (que cuelga
+        de MANTENIMIENTO)."""
+        u = User.objects.create_user(
+            email='admin-construccion-sidebar@test.com', password=user_password,
+            rol='admin_construccion',
+        )
+        client.login(username=u.email, password=user_password)
+
+        subs = self._submenus(client.get('/').content.decode())
+
+        assert 'Actividades' not in subs
+        assert 'Campo' not in subs
+        assert 'Procedimientos' not in subs
+        assert 'Financiero' not in subs

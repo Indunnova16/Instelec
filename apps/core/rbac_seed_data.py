@@ -71,6 +71,19 @@ SUBMODULOS_FINANCIERO_APP = (
     "FIN_NOMINA",
 )
 
+# #186 A3 (migración 0004 y `seed_roles_permisos_bd` usan esta MISMA
+# constante -- fuente única de verdad, ver docstring de la migración para el
+# razonamiento completo de por qué son justo estos 6 roles).
+_ROLES_CON_ACCESO_LEGACY_A_FINANCIERO = (
+    "admin_general",
+    "coordinador_general",
+    "admin_mantenimiento",
+    "admin",
+    "director",
+    "coordinador",
+)
+NIVEL_ACCESO_VER_EDITAR = "ver_editar"
+
 # Catálogo aditivo de #186 A2. Mismo criterio de padre (`MODULO_CONFIG`) que
 # arriba. Tampoco tiene fila previa -- `Usuario.rol`/permisos de admin siguen
 # siendo el gate real hasta A3.
@@ -272,4 +285,20 @@ def seed_roles_permisos_bd():
                     modulo=MODULO_MANTENIMIENTO,
                     submodulo=submodulo,
                     defaults={"nivel_acceso": nivel_acceso},
+                )
+
+        # Compatibilidad #186 A3: preserva el acceso legacy a Financiero
+        # (apps/financiero/) de los 6 roles que hoy entran vía
+        # RoleRequiredMixin (bypass automático de nivel admin) antes de que
+        # el middleware pasara a exigir las hojas FIN_* granulares. La
+        # migración 0004 aplica esta misma regla en bases ya instaladas --
+        # ver su docstring para el razonamiento completo de por qué son
+        # justo estos 6 roles.
+        if codigo in _ROLES_CON_ACCESO_LEGACY_A_FINANCIERO:
+            for submodulo in SUBMODULOS_FINANCIERO_APP:
+                RoleModuloPermiso.objects.get_or_create(
+                    role=role,
+                    modulo=MODULO_MANTENIMIENTO,
+                    submodulo=submodulo,
+                    defaults={"nivel_acceso": NIVEL_ACCESO_VER_EDITAR},
                 )

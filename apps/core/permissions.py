@@ -48,11 +48,14 @@ AREA_CHOICES = [
     (AREA_FINANCIERO, 'Financiero'),
 ]
 
-# Debe coincidir con RoleModuloPermiso.SIN_ACCESO (apps/core/models_roles.py).
-# Literal (no import) para evitar un ciclo de import a nivel de módulo entre
-# permissions.py y models_roles.py -- _get_role_permisos() abajo sí importa
-# Role, pero de forma diferida (dentro de la función, no al tope del módulo).
+# Deben coincidir con RoleModuloPermiso.{SIN_ACCESO,VER,VER_EDITAR}
+# (apps/core/models_roles.py). Literales (no import) para evitar un ciclo de
+# import a nivel de módulo entre permissions.py y models_roles.py --
+# _get_role_permisos() abajo sí importa Role, pero de forma diferida (dentro
+# de la función, no al tope del módulo).
 _SIN_ACCESO = 'sin_acceso'
+_VER = 'ver'
+_VER_EDITAR = 'ver_editar'
 
 CACHE_TTL_ROLE_PERMISOS = 3600  # 1h -- con invalidación explícita por señal, ver arriba
 CACHE_KEY_ROLE_PERMISOS = 'instelec:rbac:role:{codigo}'
@@ -64,7 +67,8 @@ def _cache_key_role(codigo):
 
 _DICT_VACIO = {
     'modulos': set(), 'submodulos': set(),
-    'submodulos_por_modulo': {}, 'modulos_denegados': set(), 'nivel': None,
+    'submodulos_por_modulo': {}, 'modulos_denegados': set(),
+    'niveles_submodulo': {}, 'nivel': None,
 }
 
 
@@ -114,6 +118,10 @@ def _get_role_permisos(codigo):
         'modulos_denegados': {
             p.modulo for p in todos_los_permisos
             if not p.submodulo and p.nivel_acceso == _SIN_ACCESO
+        },
+        'niveles_submodulo': {
+            p.submodulo: p.nivel_acceso
+            for p in todos_los_permisos if p.submodulo
         },
         'nivel': role.nivel,
     }
@@ -319,6 +327,25 @@ def user_can_access_submodulo(user, submodulo, modulo=None):
     if modulo and modulo in _get_role_permisos(user_rol(user))['modulos_denegados']:
         return False
     return submodulo in user_submodulos(user, modulo)
+
+
+def user_nivel_acceso_submodulo(user, submodulo, modulo=None):
+    """Nivel de acceso efectivo del usuario a un submódulo: `_SIN_ACCESO`,
+    `_VER` o `_VER_EDITAR` (#186 A3, gate de mutaciones del middleware).
+
+    Superuser siempre `_VER_EDITAR`. Si `user_can_access_submodulo()` niega
+    el acceso (deny explícito del padre, o la hoja no está en el conjunto
+    accesible del usuario), devuelve `_SIN_ACCESO` -- consistente con esa
+    función, no un valor crudo de BD que podría contradecirla.
+    """
+    if not submodulo:
+        return _VER_EDITAR
+    if user and getattr(user, 'is_superuser', False):
+        return _VER_EDITAR
+    if not user_can_access_submodulo(user, submodulo, modulo=modulo):
+        return _SIN_ACCESO
+    permisos = _get_role_permisos(user_rol(user))
+    return permisos['niveles_submodulo'].get(submodulo, _SIN_ACCESO)
 
 
 def url_inicio_para_usuario(user):

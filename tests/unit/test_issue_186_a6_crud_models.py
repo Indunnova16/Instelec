@@ -163,7 +163,7 @@ class TestInvalidacionCachePorSenalDirecta:
         vacio = {
             "modulos": set(), "submodulos": set(),
             "submodulos_por_modulo": {}, "modulos_denegados": set(),
-            "nivel": None,
+            "niveles_submodulo": {}, "nivel": None,
         }
         resultado = _get_role_permisos("qa_e2e_a6_inactivo")
         assert resultado == vacio
@@ -172,7 +172,7 @@ class TestInvalidacionCachePorSenalDirecta:
         vacio = {
             "modulos": set(), "submodulos": set(),
             "submodulos_por_modulo": {}, "modulos_denegados": set(),
-            "nivel": None,
+            "niveles_submodulo": {}, "nivel": None,
         }
         resultado = _get_role_permisos("qa_e2e_a6_no_existe_nunca")
         assert resultado == vacio
@@ -181,7 +181,7 @@ class TestInvalidacionCachePorSenalDirecta:
         vacio = {
             "modulos": set(), "submodulos": set(),
             "submodulos_por_modulo": {}, "modulos_denegados": set(),
-            "nivel": None,
+            "niveles_submodulo": {}, "nivel": None,
         }
         assert _get_role_permisos("") == vacio
         assert _get_role_permisos(None) == vacio
