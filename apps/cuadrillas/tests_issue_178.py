@@ -9,8 +9,7 @@ Un solo archivo cubre los 6 sub-items del Sprint A (backend puro, sin UI):
 - A3: soporte hojas vc/C12/C16/'12 (2)'.
 - A4: columna PT SAP mapeada en ProgramacionS18CuadrillaImporter.
 - A5: choices MALACATERO/COORDINADOR_HSQ + warning explícito CARGO desconocido.
-- A6: enlace CEDULA→PersonalCuadrilla (patrón resolver-o-crear #176 + opt-in
-  crear_usuarios_faltantes #124).
+- A6: enlace CEDULA→PersonalCuadrilla sin creación implícita de cuentas.
 
 Verificado dato-por-dato con openpyxl contra el Excel real del cliente
 ("Programación - S27.xlsx", 34 hojas, adjunto del comentario del issue):
@@ -596,6 +595,7 @@ class TestA6EnlacePersonalCuadrilla:
             nombre='CASIMIRO PALOMINO ARMESTO', documento='72015917',
             rol_cuadrilla_id='SUPERVISOR', activo=True,
         )
+        _crear_usuario('72015917', 'CASIMIRO PALOMINO ARMESTO')
         bloque = [
             _act(1, 'Servidumbre', '817', date(2026, 4, 27), date(2026, 5, 3),
                  'JHON JAIRO', '1143246675', 'LINIERO I', 'JT/CTA'),
@@ -609,7 +609,7 @@ class TestA6EnlacePersonalCuadrilla:
         assert res['exito'] is True, res.get('error')
         miembro = CuadrillaMiembro.objects.get(usuario__documento='72015917')
         assert miembro.rol_cuadrilla_id == 'SUPERVISOR'
-        assert res['personal_creados'] == 0
+        assert res['miembros_omitidos'] == 0
 
     def test_edge_cedula_no_encontrada_flag_off_advertencia_y_omite(self):
         _crear_linea('LN817')
@@ -629,9 +629,9 @@ class TestA6EnlacePersonalCuadrilla:
             '11122233' in a and 'omitido' in a
             for a in res['advertencias']
         )
-        assert res['personal_creados'] == 0
+        assert res['miembros_omitidos'] == 1
 
-    def test_edge_cedula_no_encontrada_flag_on_crea_personal_cuadrilla(self):
+    def test_edge_cedula_no_encontrada_se_omite_aun_con_flag_legacy(self):
         _crear_linea('LN817')
         _crear_usuario('1143246675', 'JHON JAIRO')
         bloque = [
@@ -645,12 +645,9 @@ class TestA6EnlacePersonalCuadrilla:
         )
 
         assert res['exito'] is True, res.get('error')
-        assert res['personal_creados'] == 1
-        personal = PersonalCuadrilla.objects.get(documento='11122234')
-        assert personal.rol_cuadrilla_id == 'MALACATERO'
-        assert personal.activo is True
-        miembro = CuadrillaMiembro.objects.get(usuario__documento='11122234')
-        assert miembro.rol_cuadrilla_id == 'MALACATERO'
+        assert res['miembros_omitidos'] == 1
+        assert not PersonalCuadrilla.objects.filter(documento='11122234').exists()
+        assert not CuadrillaMiembro.objects.filter(usuario__documento='11122234').exists()
 
     def test_legacy_usuario_sin_personal_cuadrilla_preserva_comportamiento_124(self):
         """No-regresión CRÍTICA: una cédula que YA existe como Usuario (creada
@@ -673,7 +670,7 @@ class TestA6EnlacePersonalCuadrilla:
         assert res['exito'] is True, res.get('error')
         miembro = CuadrillaMiembro.objects.get(usuario__documento='8646508')
         assert miembro.rol_cuadrilla_id == 'CONDUCTOR'
-        assert res['personal_creados'] == 0
+        assert res['miembros_omitidos'] == 0
         assert not PersonalCuadrilla.objects.filter(documento='8646508').exists()
 
 

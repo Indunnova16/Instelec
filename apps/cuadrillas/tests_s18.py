@@ -27,7 +27,7 @@ from apps.cuadrillas.importers import (
     ProgramacionS18CuadrillaImporter,
     detectar_formato_cuadrillas,
 )
-from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, Vehiculo
+from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, PersonalCuadrilla, Vehiculo
 from apps.lineas.models import Linea
 from apps.usuarios.models import Usuario
 
@@ -279,7 +279,8 @@ class TestImportS18:
         assert Cuadrilla.objects.count() == 1
         assert CuadrillaMiembro.objects.filter(activo=True).count() == 1
 
-    def test_crear_usuarios_faltantes_opt_in(self):
+    def test_cedula_nueva_se_omite_aun_con_flag_legacy(self):
+        """El flag histórico no puede volver a crear cuentas implícitamente."""
         _crear_linea('LN817')
         excel = _build_s18_excel([
             _act(1, 'Hurto', '817', date(2026, 3, 26), date(2026, 3, 29),
@@ -288,11 +289,51 @@ class TestImportS18:
         res = ProgramacionS18CuadrillaImporter().importar(
             excel, {'crear_usuarios_faltantes': True}
         )
-        assert res['usuarios_creados'] == 1
-        assert res['miembros_agregados'] == 1
-        u = Usuario.objects.get(documento='9999999999')
-        assert u.email == '9999999999@instelec-import.local'
-        assert not u.has_usable_password()
+        assert res['exito'] is True
+        assert res['miembros_agregados'] == 0
+        assert res['miembros_omitidos'] == 1
+        assert not Usuario.objects.filter(documento='9999999999').exists()
+        assert not PersonalCuadrilla.objects.filter(documento='9999999999').exists()
+        assert any('miembro omitido' in advertencia for advertencia in res['advertencias'])
+
+    def test_colaborador_sin_usuario_se_omite_sin_crear_cuenta(self):
+        _crear_linea('LN817')
+        PersonalCuadrilla.objects.create(
+            nombre='COLABORADOR SIN CUENTA', documento='9999999998',
+            rol_cuadrilla_id='AYUDANTE', activo=True,
+        )
+        excel = _build_s18_excel([
+            _act(1, 'Hurto', '817', date(2026, 3, 26), date(2026, 3, 29),
+                 'COLABORADOR SIN CUENTA', '9999999998', 'AYUDANTE', 'JT/CTA'),
+        ])
+
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
+
+        assert res['exito'] is True
+        assert res['miembros_agregados'] == 0
+        assert res['miembros_omitidos'] == 1
+        assert not Usuario.objects.filter(documento='9999999998').exists()
+        assert any('no tiene una cuenta de usuario existente' in a for a in res['advertencias'])
+
+    def test_resultado_muestra_miembros_omitidos_sin_ofrecer_crear_cuentas(self):
+        from django.template.loader import render_to_string
+
+        contenido = render_to_string('cuadrillas/cuadrilla_upload.html', {
+            'resultado': {
+                'exito': True,
+                'cuadrillas_creadas': 1,
+                'cuadrillas_actualizadas': 0,
+                'miembros_agregados': 1,
+                'miembros_omitidos': 2,
+                'formato': 'S18',
+                'encargados_asignados': 0,
+                'advertencias': ['Fila 3: miembro omitido'],
+                'errores': [],
+            },
+        })
+
+        assert 'Miembros omitidos (sin cuenta existente)' in contenido
+        assert 'Crear usuarios faltantes automáticamente' not in contenido
 
     def test_dos_actividades_codigos_distintos(self):
         _crear_linea('LN805')

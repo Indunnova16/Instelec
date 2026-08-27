@@ -1025,6 +1025,7 @@ class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
         Cargo.objects.create(codigo="TECNICO_EMPALMES", nombre="Técnico Empalmes", activo=True)
         _crear_linea("LN817")
         _crear_usuario("1143246675", "JHON JAIRO")
+        _crear_usuario("11122299", "NUEVO EMPALMADOR")
 
         excel = _build_s18_excel(
             [
@@ -1042,16 +1043,12 @@ class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
                 _miembro("NUEVO EMPALMADOR", "11122299", "Tecnico Empalmes"),
             ]
         )
-        res = ProgramacionS18CuadrillaImporter().importar(excel, {"crear_usuarios_faltantes": True})
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
         self.assertTrue(res["exito"], res.get("error"))
-        self.assertEqual(res["personal_creados"], 1)
-
-        personal = PersonalCuadrilla.objects.get(documento="11122299")
-        self.assertEqual(personal.rol_cuadrilla_id, "TECNICO_EMPALMES")
         miembro = CuadrillaMiembro.objects.get(usuario__documento="11122299")
         self.assertEqual(miembro.rol_cuadrilla_id, "TECNICO_EMPALMES")
         # Anti falso-verde: confirma que NO cayó en el fallback LINIERO_I.
-        self.assertNotEqual(personal.rol_cuadrilla_id, "LINIERO_I")
+        self.assertNotEqual(miembro.rol_cuadrilla_id, "LINIERO_I")
 
     def test_cargo_verdaderamente_desconocido_sigue_con_fallback_y_mensaje_nuevo(self):
         """Un CARGO que no está ni en ROL_TEXTO_A_CHOICE ni en el catálogo
@@ -1060,6 +1057,7 @@ class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
         (/cuadrillas/cargos/), no al dict hardcoded."""
         _crear_linea("LN817")
         _crear_usuario("1143246675", "JHON JAIRO")
+        _crear_usuario("11122300", "CARGO INVENTADO")
 
         excel = _build_s18_excel(
             [
@@ -1077,10 +1075,10 @@ class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
                 _miembro("CARGO INVENTADO", "11122300", "Puesto Que No Existe"),
             ]
         )
-        res = ProgramacionS18CuadrillaImporter().importar(excel, {"crear_usuarios_faltantes": True})
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
         self.assertTrue(res["exito"], res.get("error"))
-        personal = PersonalCuadrilla.objects.get(documento="11122300")
-        self.assertEqual(personal.rol_cuadrilla_id, "LINIERO_I")
+        miembro = CuadrillaMiembro.objects.get(usuario__documento="11122300")
+        self.assertEqual(miembro.rol_cuadrilla_id, "LINIERO_I")
         self.assertTrue(
             any("/cuadrillas/cargos/" in a for a in res["advertencias"]),
             res["advertencias"],
@@ -1093,6 +1091,7 @@ class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
         Cargo.objects.create(codigo="SOLDADOR_ESPECIAL", nombre="Soldador Especial", activo=True)
         _crear_linea("LN818")
         _crear_usuario("1143246676", "PEDRO PABLO")
+        _crear_usuario("11122301", "NUEVO SOLDADOR")
 
         excel = _build_s18_excel(
             [
@@ -1110,10 +1109,10 @@ class TestMaestro3A5ImporterS18CargoDinamico(TestCase):
                 _miembro("NUEVO SOLDADOR", "11122301", "soldador especial"),
             ]
         )
-        res = ProgramacionS18CuadrillaImporter().importar(excel, {"crear_usuarios_faltantes": True})
+        res = ProgramacionS18CuadrillaImporter().importar(excel)
         self.assertTrue(res["exito"], res.get("error"))
-        personal = PersonalCuadrilla.objects.get(documento="11122301")
-        self.assertEqual(personal.rol_cuadrilla_id, "SOLDADOR_ESPECIAL")
+        miembro = CuadrillaMiembro.objects.get(usuario__documento="11122301")
+        self.assertEqual(miembro.rol_cuadrilla_id, "SOLDADOR_ESPECIAL")
 
 
 class TestAreaAsignacionIssue176(TestCase):
