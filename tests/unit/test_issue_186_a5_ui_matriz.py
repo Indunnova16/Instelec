@@ -113,7 +113,10 @@ class TestRoleModuloPermisoMatriz186:
         assert set(columnas_modulo.keys()) == {"MANTENIMIENTO", "CONSTRUCCION", "CONFIG"}
         columnas_sub = dict(response.context["columnas_submodulo"])
         assert "OBRA_CIVIL" in columnas_sub
-        assert len(columnas_sub) == 14
+        # A1 (id:instelec-186-submodulos-mantenimiento) suma las 4 hojas nuevas
+        # de Mantenimiento a las 14 de Construccion ya existentes: 14 + 4 = 18.
+        assert "MANTENIMIENTO_ACTIVIDADES" in columnas_sub
+        assert len(columnas_sub) == 18
 
     def test_matriz_no_incluye_roles_inactivos(self, admin_client):
         Role.objects.create(

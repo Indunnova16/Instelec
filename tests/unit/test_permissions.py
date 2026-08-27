@@ -15,8 +15,12 @@ from django.contrib.auth import get_user_model
 from apps.core.models import RoleModuloPermiso
 from apps.core.permissions import (
     MODULO_MANTENIMIENTO,
+    SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+    SUBMODULOS_MANTENIMIENTO,
     invalidate_role_cache,
     user_can_access_modulo,
+    user_can_access_submodulo,
+    user_submodulos,
 )
 from tests.factories import (
     AdminFactory,
@@ -545,3 +549,74 @@ class TestAccessControlEdgeCases:
 
         # Should be 405 Method Not Allowed or similar
         assert response.status_code in [200, 405]
+
+
+# ==============================================================================
+# Mantenimiento granular (#186 A1)
+# ==============================================================================
+
+@pytest.mark.django_db
+class TestSubmodulosMantenimiento186:
+    """La ampliación granular conserva acceso legacy y respeta el padre."""
+
+    def test_legacy_liniero_conserva_las_cuatro_hojas_mantenimiento(self, liniero_user):
+        """Dato legacy real del catálogo: liniero ya tenía Mantenimiento=Ver.
+
+        El seed compatible debe replicar ese nivel en las hojas nuevas, no
+        convertir a los usuarios operativos existentes en usuarios sin acceso.
+        """
+        invalidate_role_cache(liniero_user.rol)
+
+        assert user_submodulos(liniero_user, MODULO_MANTENIMIENTO) == SUBMODULOS_MANTENIMIENTO
+        for submodulo in SUBMODULOS_MANTENIMIENTO:
+            assert user_can_access_submodulo(liniero_user, submodulo) is True
+
+    def test_hoja_no_autoriza_si_el_modulo_padre_esta_denegado(self):
+        """Edge case de seguridad: una fila hija no salta el permiso padre."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="mantenimiento_padre_denegado",
+            nombre="Mantenimiento padre denegado",
+            nivel="operario",
+        )
+        RoleModuloPermiso.objects.create(
+            role=role,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo="",
+            nivel_acceso=RoleModuloPermiso.SIN_ACCESO,
+        )
+        RoleModuloPermiso.objects.create(
+            role=role,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+        user = User.objects.create_user(
+            email="padre-denegado@test.com",
+            password="testpass123!",
+            rol=role.codigo,
+        )
+
+        assert user_can_access_submodulo(
+            user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
+        ) is False
+
+    def test_cambio_de_hoja_invalida_cache_inmediatamente(self, liniero_user):
+        """Edge case: no se puede esperar el TTL tras revocar una hoja."""
+        permiso = RoleModuloPermiso.objects.get(
+            role_id=liniero_user.rol,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+        )
+        invalidate_role_cache(liniero_user.rol)
+        assert user_can_access_submodulo(
+            liniero_user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
+        ) is True
+
+        permiso.nivel_acceso = RoleModuloPermiso.SIN_ACCESO
+        permiso.save(update_fields=["nivel_acceso", "updated_at"])
+
+        assert user_can_access_submodulo(
+            liniero_user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
+        ) is False

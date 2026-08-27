@@ -28,6 +28,16 @@ MODULO_MANTENIMIENTO = "MANTENIMIENTO"
 MODULO_CONSTRUCCION = "CONSTRUCCION"
 MODULO_CONFIG = "CONFIG"
 
+# Catálogo aditivo de #186 A1. El snapshot de Construcción de abajo permanece
+# congelado para el Gate de Paridad; estas hojas nuevas se siembran desde el
+# permiso general de Mantenimiento para no retirar acceso a roles legacy.
+SUBMODULOS_MANTENIMIENTO = (
+    "MANTENIMIENTO_ACTIVIDADES",
+    "MANTENIMIENTO_LINEAS_TORRES",
+    "MANTENIMIENTO_CAMPO",
+    "MANTENIMIENTO_PROCEDIMIENTOS",
+)
+
 NIVEL_ADMIN = "admin"
 NIVEL_OPERARIO = "operario"
 
@@ -207,3 +217,15 @@ def seed_roles_permisos_bd():
                 submodulo=submodulo,
                 defaults={"nivel_acceso": nivel_acceso},
             )
+
+        # Compatibilidad #186 A1: los roles existentes que ya podían entrar
+        # a Mantenimiento reciben el mismo nivel en cada hoja nueva. La
+        # migración 0003 aplica esta misma regla en bases ya instaladas.
+        if MODULO_MANTENIMIENTO in ROL_MODULOS.get(codigo, set()):
+            for submodulo in SUBMODULOS_MANTENIMIENTO:
+                RoleModuloPermiso.objects.get_or_create(
+                    role=role,
+                    modulo=MODULO_MANTENIMIENTO,
+                    submodulo=submodulo,
+                    defaults={"nivel_acceso": nivel_acceso},
+                )

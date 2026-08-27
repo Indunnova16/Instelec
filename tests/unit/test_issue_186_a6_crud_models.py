@@ -156,13 +156,32 @@ class TestInvalidacionCachePorSenalDirecta:
         role.activo = False
         role.save()  # dispara invalidación
 
+        # A1 (id:instelec-186-submodulos-por-modulo, id:instelec-186-modulos-
+        # denegados) agrega `submodulos_por_modulo` y `modulos_denegados` al
+        # contrato de `_get_role_permisos` -- scopeo por padre y distincion
+        # deny-explicito vs ausencia.
+        vacio = {
+            "modulos": set(), "submodulos": set(),
+            "submodulos_por_modulo": {}, "modulos_denegados": set(),
+            "nivel": None,
+        }
         resultado = _get_role_permisos("qa_e2e_a6_inactivo")
-        assert resultado == {"modulos": set(), "submodulos": set(), "nivel": None}
+        assert resultado == vacio
 
     def test_get_role_permisos_codigo_inexistente(self):
+        vacio = {
+            "modulos": set(), "submodulos": set(),
+            "submodulos_por_modulo": {}, "modulos_denegados": set(),
+            "nivel": None,
+        }
         resultado = _get_role_permisos("qa_e2e_a6_no_existe_nunca")
-        assert resultado == {"modulos": set(), "submodulos": set(), "nivel": None}
+        assert resultado == vacio
 
     def test_get_role_permisos_codigo_vacio(self):
-        assert _get_role_permisos("") == {"modulos": set(), "submodulos": set(), "nivel": None}
-        assert _get_role_permisos(None) == {"modulos": set(), "submodulos": set(), "nivel": None}
+        vacio = {
+            "modulos": set(), "submodulos": set(),
+            "submodulos_por_modulo": {}, "modulos_denegados": set(),
+            "nivel": None,
+        }
+        assert _get_role_permisos("") == vacio
+        assert _get_role_permisos(None) == vacio

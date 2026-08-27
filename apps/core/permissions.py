@@ -62,15 +62,29 @@ def _cache_key_role(codigo):
     return CACHE_KEY_ROLE_PERMISOS.format(codigo=codigo)
 
 
+_DICT_VACIO = {
+    'modulos': set(), 'submodulos': set(),
+    'submodulos_por_modulo': {}, 'modulos_denegados': set(), 'nivel': None,
+}
+
+
 def _get_role_permisos(codigo):
-    """dict `{'modulos': set, 'submodulos': set, 'nivel': str|None}` para un
-    código de rol -- cacheado por `codigo`, ver docstring del módulo.
+    """dict con módulos, submódulos por padre, denegaciones explícitas y nivel
+    para un código de rol.
+
+    ``submodulos`` se mantiene como unión compatible para los consumidores
+    existentes. ``submodulos_por_modulo`` conserva el padre de cada permiso,
+    necesario desde que Mantenimiento también tiene hojas granulares.
+    ``modulos_denegados`` distingue "sin fila" (ausencia) de "fila explícita
+    SIN_ACCESO" a nivel de módulo -- un deny explícito del padre bloquea
+    cualquier hoja del mismo módulo aunque tenga su propio permiso granular
+    (edge case de seguridad, ver `user_can_access_submodulo`).
 
     Rol inexistente/inactivo o `codigo` vacío → dict "vacío" (sin acceso a
     nada), consistente con el comportamiento legacy de `dict.get(rol, set())`.
     """
     if not codigo:
-        return {'modulos': set(), 'submodulos': set(), 'nivel': None}
+        return dict(_DICT_VACIO)
 
     key = _cache_key_role(codigo)
     cached = cache.get(key)
@@ -82,14 +96,25 @@ def _get_role_permisos(codigo):
     try:
         role = Role.objects.prefetch_related('permisos').get(codigo=codigo, activo=True)
     except Role.DoesNotExist:
-        result = {'modulos': set(), 'submodulos': set(), 'nivel': None}
+        result = dict(_DICT_VACIO)
         cache.set(key, result, CACHE_TTL_ROLE_PERMISOS)
         return result
 
-    permisos_con_acceso = [p for p in role.permisos.all() if p.nivel_acceso != _SIN_ACCESO]
+    todos_los_permisos = list(role.permisos.all())
+    permisos_con_acceso = [p for p in todos_los_permisos if p.nivel_acceso != _SIN_ACCESO]
+    submodulos_por_modulo = {}
+    for permiso in permisos_con_acceso:
+        if permiso.submodulo:
+            submodulos_por_modulo.setdefault(permiso.modulo, set()).add(permiso.submodulo)
+
     result = {
         'modulos': {p.modulo for p in permisos_con_acceso if not p.submodulo},
         'submodulos': {p.submodulo for p in permisos_con_acceso if p.submodulo},
+        'submodulos_por_modulo': submodulos_por_modulo,
+        'modulos_denegados': {
+            p.modulo for p in todos_los_permisos
+            if not p.submodulo and p.nivel_acceso == _SIN_ACCESO
+        },
         'nivel': role.nivel,
     }
     cache.set(key, result, CACHE_TTL_ROLE_PERMISOS)
@@ -167,7 +192,7 @@ SUBMODULO_ACTIVIDADES_FINALES = 'ACTIVIDADES_FINALES'
 SUBMODULO_INDICADORES_CONSTRUCCION = 'INDICADORES_CONSTRUCCION'
 SUBMODULO_INDICADORES_MANTENIMIENTO_V2 = 'INDICADORES_MANTENIMIENTO_V2'
 
-TODOS_SUBMODULOS = {
+SUBMODULOS_CONSTRUCCION = {
     SUBMODULO_INGENIERIA, SUBMODULO_PRELIMINARES, SUBMODULO_OBRA_CIVIL,
     SUBMODULO_MONTAJE, SUBMODULO_SPT, SUBMODULO_TENDIDO,
     SUBMODULO_PROTECCIONES, SUBMODULO_PRUEBAS, SUBMODULO_FINANCIERO,
@@ -178,24 +203,82 @@ TODOS_SUBMODULOS = {
     SUBMODULO_INDICADORES_MANTENIMIENTO_V2,
 }
 
+# === Sub-módulos del bloque MANTENIMIENTO (issue #186, A1) ==============
+# Los códigos llevan el prefijo del módulo para que el catálogo siga siendo
+# inequívoco cuando otros módulos (p.ej. Financiero) incorporen hojas con
+# nombres similares. La etiqueta visible se resuelve en la matriz/UI.
+SUBMODULO_MANTENIMIENTO_ACTIVIDADES = 'MANTENIMIENTO_ACTIVIDADES'
+SUBMODULO_MANTENIMIENTO_LINEAS_TORRES = 'MANTENIMIENTO_LINEAS_TORRES'
+SUBMODULO_MANTENIMIENTO_CAMPO = 'MANTENIMIENTO_CAMPO'
+SUBMODULO_MANTENIMIENTO_PROCEDIMIENTOS = 'MANTENIMIENTO_PROCEDIMIENTOS'
+
+SUBMODULOS_MANTENIMIENTO = {
+    SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+    SUBMODULO_MANTENIMIENTO_LINEAS_TORRES,
+    SUBMODULO_MANTENIMIENTO_CAMPO,
+    SUBMODULO_MANTENIMIENTO_PROCEDIMIENTOS,
+}
+
+SUBMODULOS_POR_MODULO = {
+    MODULO_CONSTRUCCION: SUBMODULOS_CONSTRUCCION,
+    MODULO_MANTENIMIENTO: SUBMODULOS_MANTENIMIENTO,
+}
+
+SUBMODULO_A_MODULO = {
+    submodulo: modulo
+    for modulo, submodulos in SUBMODULOS_POR_MODULO.items()
+    for submodulo in submodulos
+}
+
+# Alias histórico: hasta #186 A1 este conjunto solo contenía Construcción.
+# Mantenerlo evita romper los consumidores existentes y hace que la matriz
+# pueda descubrir el catálogo completo durante la siguiente integración UI.
+TODOS_SUBMODULOS = set(SUBMODULO_A_MODULO)
+
 # Alias para sub-features que esperen `ALL_SUBMODULOS` (nombre del prompt F2).
 ALL_SUBMODULOS = TODOS_SUBMODULOS
 
 
-def user_submodulos(user):
-    """Conjunto de sub-módulos CONSTRUCCION accesibles. Superuser = todos."""
+def user_submodulos(user, modulo=None):
+    """Sub-módulos accesibles, opcionalmente filtrados por su módulo padre.
+
+    Sin ``modulo`` conserva el contrato legacy y devuelve la unión de todos
+    los submódulos. Los nuevos consumidores deben pasar el padre para que un
+    código de hoja nunca autorice accidentalmente otro módulo.
+    """
     if not user or not user.is_authenticated:
         return set()
     if user.is_superuser:
-        return TODOS_SUBMODULOS
-    return _get_role_permisos(user_rol(user))['submodulos']
+        return set(SUBMODULOS_POR_MODULO.get(modulo, TODOS_SUBMODULOS))
+    permisos = _get_role_permisos(user_rol(user))
+    if modulo:
+        return permisos['submodulos_por_modulo'].get(modulo, set())
+    return permisos['submodulos']
 
 
-def user_can_access_submodulo(user, submodulo):
-    """¿El usuario tiene acceso a este sub-módulo de CONSTRUCCION?"""
+def user_can_access_submodulo(user, submodulo, modulo=None):
+    """¿El usuario tiene acceso a este submódulo?
+
+    ``modulo`` es opcional para no romper los callers de Construcción; para
+    los códigos del catálogo se infiere de forma segura.
+
+    Acceso al submódulo NO requiere acceso al módulo COMPLETO -- ese es
+    justamente el punto de la matriz granular (A1): un rol puede tener SOLO
+    un submódulo habilitado sin el módulo padre entero (bug detectado por
+    test_issue_186_a5_ui_matriz.py::test_rol_nuevo_con_permiso_aparece_en_dropdown_usuarios,
+    id:instelec-186-submodulo-exige-modulo-completo).
+
+    PERO un deny EXPLÍCITO del módulo padre (fila SIN_ACCESO a nivel módulo,
+    no ausencia de fila) sí bloquea la hoja -- una fila hija no puede saltar
+    un permiso padre denegado a propósito (edge case de seguridad, ver
+    test_hoja_no_autoriza_si_el_modulo_padre_esta_denegado).
+    """
     if not submodulo:
         return True
-    return submodulo in user_submodulos(user)
+    modulo = modulo or SUBMODULO_A_MODULO.get(submodulo)
+    if modulo and modulo in _get_role_permisos(user_rol(user))['modulos_denegados']:
+        return False
+    return submodulo in user_submodulos(user, modulo)
 
 
 def url_inicio_para_usuario(user):
