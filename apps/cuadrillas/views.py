@@ -1693,6 +1693,24 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
     allowed_roles = ['admin', 'director', 'coordinador']
 
     @staticmethod
+    def _normalizar_texto_excel(valor):
+        """Normaliza tildes, espacios y mayúsculas de celdas de catálogo."""
+        import unicodedata
+
+        texto = unicodedata.normalize('NFKD', str(valor).strip())
+        texto = ''.join(caracter for caracter in texto if not unicodedata.combining(caracter))
+        return ' '.join(texto.upper().split())
+
+    @classmethod
+    def _indice_area(cls, encabezados):
+        """Encuentra únicamente los aliases soportados para la columna Área."""
+        aliases_area = {'AREA', 'AREA DE CONSTRUCCION'}
+        for indice, encabezado in enumerate(encabezados):
+            if encabezado is not None and cls._normalizar_texto_excel(encabezado) in aliases_area:
+                return indice
+        return None
+
+    @staticmethod
     def _parse_fecha(valor):
         """Acepta date/datetime nativos de openpyxl o texto 'YYYY-MM-DD'."""
         from datetime import date, datetime
@@ -1746,14 +1764,22 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
             actualizados = 0
             errores = []
 
-            encabezados = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
-            encabezados = {str(v).strip().lower(): i for i, v in enumerate(encabezados) if v}
-            idx_area = encabezados.get('área', encabezados.get('area'))
+            encabezados_fila = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+            encabezados = {
+                self._normalizar_texto_excel(v): i
+                for i, v in enumerate(encabezados_fila) if v is not None
+            }
+            idx_area = self._indice_area(encabezados_fila)
             # Formato legacy: Nombre | Documento | Cargo | Salario Base | fechas.
-            idx_cargo = encabezados.get('cargo', 2)
-            idx_salario = encabezados.get('salario base', 3)
-            idx_fecha_ingreso = encabezados.get('fecha ingreso', 4)
-            idx_fecha_salida = encabezados.get('fecha salida', 5)
+            idx_cargo = encabezados.get('CARGO', 2)
+            idx_salario = encabezados.get('SALARIO BASE', 3)
+            idx_fecha_ingreso = encabezados.get('FECHA INGRESO', 4)
+            idx_fecha_salida = encabezados.get('FECHA SALIDA', 5)
+            areas_por_alias = {
+                self._normalizar_texto_excel(alias): codigo
+                for codigo, etiqueta in AREA_CHOICES
+                for alias in (codigo, etiqueta)
+            }
 
             for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
                 if not row or not row[0]:
@@ -1763,7 +1789,10 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                     nombre = str(row[0]).strip()
                     documento = str(row[1]).strip() if len(row) > 1 and row[1] else ''
                     rol_raw = str(row[idx_cargo]).strip().upper() if len(row) > idx_cargo and row[idx_cargo] else ''
-                    area_raw = str(row[idx_area]).strip().upper() if idx_area is not None and len(row) > idx_area and row[idx_area] else ''
+                    area_raw = (
+                        areas_por_alias.get(self._normalizar_texto_excel(row[idx_area]), '')
+                        if idx_area is not None and len(row) > idx_area and row[idx_area] else ''
+                    )
                     salario_raw = row[idx_salario] if len(row) > idx_salario else None
                     fecha_ingreso_raw = row[idx_fecha_ingreso] if len(row) > idx_fecha_ingreso else None
                     fecha_salida_raw = row[idx_fecha_salida] if len(row) > idx_fecha_salida else None
@@ -1771,8 +1800,8 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                     if not nombre or not documento:
                         errores.append(f'Fila {idx}: nombre o documento vacío')
                         continue
-                    if area_raw and area_raw not in dict(AREA_CHOICES):
-                        errores.append(f'Fila {idx}: área inválida ({area_raw})')
+                    if idx_area is not None and len(row) > idx_area and row[idx_area] and not area_raw:
+                        errores.append(f'Fila {idx}: área inválida ({row[idx_area]})')
                         continue
 
                     # Resolve role

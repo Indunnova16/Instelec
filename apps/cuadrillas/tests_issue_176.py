@@ -1159,6 +1159,36 @@ class TestAreaAsignacionIssue176(TestCase):
         self.client.post(reverse("cuadrillas:personal_upload"), {"archivo": legacy})
         self.assertEqual(PersonalCuadrilla.objects.get(documento="176-AREA-4").area, "")
 
+    def test_importa_area_de_construccion_con_valor_acento(self):
+        archivo = self._build_workbook_area(
+            [["Construcción", "237-AREA-1", "Construcción", "AYUDANTE", 0, "", ""]],
+            headers=["Nombre", "Documento", "Área de Construcción", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"],
+        )
+
+        self.client.post(reverse("cuadrillas:personal_upload"), {"archivo": archivo})
+
+        self.assertEqual(PersonalCuadrilla.objects.get(documento="237-AREA-1").area, "CONSTRUCCION")
+
+    def test_importa_encabezado_area_en_mayusculas(self):
+        archivo = self._build_workbook_area(
+            [["Mayúscula", "237-AREA-2", "Construcción", "AYUDANTE", 0, "", ""]],
+            headers=["Nombre", "Documento", "ÁREA", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"],
+        )
+
+        self.client.post(reverse("cuadrillas:personal_upload"), {"archivo": archivo})
+
+        self.assertEqual(PersonalCuadrilla.objects.get(documento="237-AREA-2").area, "CONSTRUCCION")
+
+    def test_importa_encabezado_area_en_minusculas_sin_tilde(self):
+        archivo = self._build_workbook_area(
+            [["Minúscula", "237-AREA-3", "Construccion", "AYUDANTE", 0, "", ""]],
+            headers=["Nombre", "Documento", "area", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"],
+        )
+
+        self.client.post(reverse("cuadrillas:personal_upload"), {"archivo": archivo})
+
+        self.assertEqual(PersonalCuadrilla.objects.get(documento="237-AREA-3").area, "CONSTRUCCION")
+
     @staticmethod
     def _build_workbook_area(rows, headers=None):
         import openpyxl
