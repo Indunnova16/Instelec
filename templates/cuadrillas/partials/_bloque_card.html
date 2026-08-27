@@ -19,7 +19,8 @@ montado a la vez). Recibe:
 <div data-bloque-codigo="{{ b.codigo }}"
      x-data="{ editando: {{ editando_inicial|yesno:'true,false' }}, agregando: {{ agregar_state.open|yesno:'true,false' }}, reprogramando: {{ reprogramar_state.open|yesno:'true,false' }} }"
      @cerrar-form-editar.window="editando = false"
-     class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+     :class="agregando ? 'relative z-10 overflow-visible' : 'overflow-hidden'"
+     class="bg-white dark:bg-gray-800 rounded-lg shadow">
 
     <template x-if="editando">
         <div class="p-1">
