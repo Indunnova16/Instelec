@@ -8,7 +8,9 @@
 
 {% block extra_js %}
 {{ block.super }}
-{# Contratos de integración PSC: #psc-programacion-form, #psc-personal-disponible,
-   #psc-tabla-semanal, #psc-importar-form, #psc-exportar-excel y #psc-importar-excel. #}
+{% comment %}
+Contratos de integración PSC: #psc-programacion-form, #psc-personal-disponible,
+#psc-tabla-semanal, #psc-importar-form, #psc-exportar-excel y #psc-importar-excel.
+{% endcomment %}
 {% block psc_extra_js %}{% endblock %}
 {% endblock %}

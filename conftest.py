@@ -1,12 +1,53 @@
 """Pytest configuration and fixtures for TransMaint."""
 
+import re
+
 import pytest
 from datetime import date, timedelta
 from decimal import Decimal
 from django.contrib.auth import get_user_model
+from django.db.backends.signals import connection_created
+from django.dispatch import receiver
 from django.utils import timezone
 
 User = get_user_model()
+
+
+# ==============================================================================
+# Shim de `regexp_replace` para SQLite (id:instelec-regexp-replace-shim-global)
+# ==============================================================================
+
+@receiver(connection_created)
+def _registrar_regexp_replace_sqlite(sender, connection, **kwargs):
+    """Registra `regexp_replace` en toda conexion SQLite de la suite.
+
+    `apps/construccion/views.ordenar_torres_construccion` ordena las torres con
+    la funcion Postgres `regexp_replace` (extrae los digitos del numero de torre
+    para ordenar T-2 antes que T-10). En prod corre sobre Postgres, donde es
+    nativa; el gate F3 self-verify corre sobre SQLite/spatialite, que no la trae
+    -> `OperationalError: no such function: regexp_replace`.
+
+    Antes cada archivo de test que tocaba esa vista declaraba su propio fixture
+    `sqlite_regexp_replace` (duplicado en tests_issue_149.py y
+    tests_issue_150_*.py, con un comentario admitiendo el "gap"). Cualquier test
+    que la llamara sin pedir el fixture quedaba rojo: 25 de las 27 fallas
+    preexistentes de la suite salian de aca.
+
+    Se conecta por señal `connection_created` para que aplique a CUALQUIER test
+    sin que nadie tenga que acordarse del fixture. En Postgres es un no-op.
+
+    Nota: `re.sub` reemplaza todas las ocurrencias, que es exactamente la
+    semantica del flag 'g' con el que la vista la invoca.
+    """
+    if connection.vendor != 'sqlite':
+        return
+
+    def _regexp_replace(value, pattern, replacement, *flags):
+        if value is None:
+            return None
+        return re.sub(pattern, replacement, str(value))
+
+    connection.connection.create_function('regexp_replace', -1, _regexp_replace)
 
 
 # ==============================================================================

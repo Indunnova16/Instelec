@@ -62,6 +62,21 @@ DATABASES = {
 # ensuciar `media/` del repo y elimina el bucle infinito de #118.
 MEDIA_ROOT = tempfile.mkdtemp(prefix='instelec_test_media_')
 
+# Cache en memoria del proceso, NO el Redis real de base.py
+# (id:instelec-settings-ci-redis-compartido). Con Redis, el cache de permisos
+# RBAC (`apps/core/permissions._get_role_permisos`, TTL 1h) SOBREVIVE a la
+# corrida: quedan 4900+ claves que la siguiente suite lee como si fueran suyas.
+# Sintoma medido: `test_get_role_permisos_codigo_inexistente` fallaba leyendo un
+# dict cacheado por una version ANTERIOR del codigo (con una clave
+# `submodulos_por_modulo` que el codigo actual ya no produce) -> rojo que no
+# depende del arbol de trabajo sino del historial de la maquina, e imposible de
+# reproducir en limpio. Mismo criterio que `ci_postgis.py`.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
 # Django >=4.2 usa STORAGES; en repos más viejos el dict extra es inofensivo.
 try:
     del STATICFILES_STORAGE
