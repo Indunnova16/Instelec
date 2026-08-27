@@ -47,11 +47,24 @@ class TestProcedimientoUploadHardening118:
         )
 
     def test_118a_upload_rollback_si_storage_falla(self, admin_client):
-        # Simular que storage.exists devuelve False post-create (upload failed
-        # silently). El sistema debe borrar la fila y mostrar error.
+        # Simula el fallo REAL: django-storages reporta exito pero el blob nunca
+        # aterriza (timeout/permisos GCS). Se parchea `_save` para que devuelva un
+        # nombre valido SIN escribir el archivo -> el `exists()` de la vista da
+        # False por si solo, sin mockearlo.
+        #
+        # NO mockear `FileSystemStorage.exists -> False` aca (id:instelec-media-root-
+        # tests-bucle-infinito): ese mock rompe una invariante de Django. Si el
+        # archivo destino ya existe en disco, `_save` cacha FileExistsError de
+        # `os.open(O_CREAT|O_EXCL)` y pide otro nombre a `get_available_name()`,
+        # que decide con `not exists(...)` -> con el mock siempre responde "libre"
+        # y devuelve el MISMO nombre. `while True` infinito a ~35MB/s: 44GB de RSS
+        # y la maquina tumbada. Parchear `_save` mantiene `exists()` real.
+        def _save_sin_escribir(self, name, content, max_length=None):
+            return self.get_available_name(name, max_length=max_length)
+
         with patch(
-            'django.core.files.storage.FileSystemStorage.exists',
-            return_value=False,
+            'django.core.files.storage.FileSystemStorage._save',
+            new=_save_sin_escribir,
         ):
             response = self._post_upload(admin_client)
 

@@ -19,8 +19,20 @@ backend spatialite de Django (SQLite + extensión geoespacial cargable) en vez d
 sqlite3 plano — sigue siendo en-memoria y rápido, pero soporta GIS. Requiere el
 paquete de sistema `libsqlite3-mod-spatialite` instalado en el runner/VM
 (Debian/Ubuntu: `apt-get install libsqlite3-mod-spatialite`).
+
+Override Instelec (2026-08-27, id:instelec-media-root-tests-bucle-infinito):
+MEDIA_ROOT apunta a un tmpdir por corrida, NO al `media/` del repo. Sin esto los
+uploads de la suite quedan como basura en `media/` (204 archivos acumulados) y la
+suite pasa a depender del historial de la maquina. Peor: un test que mockea
+`FileSystemStorage.exists -> False` (tests/unit/test_procedimientos_118.py, #118)
+entra en BUCLE INFINITO si el archivo destino ya existe en disco — Django reintenta
+`os.open(O_CREAT|O_EXCL)`, cacha FileExistsError, pide otro nombre a
+`get_available_name()`, y esa funcion decide con `not exists(...)` -> con el mock
+siempre dice "libre" y devuelve el MISMO nombre. `while True` girando a ~35MB/s:
+medido 44GB de RSS y la maquina tumbada. Con MEDIA_ROOT aislado: 8s y 215MB.
 """
 import os
+import tempfile
 
 os.environ.setdefault('SECRET_KEY', 'ci-only-secret-key-no-prod')
 os.environ.setdefault('DJANGO_SECRET_KEY', 'ci-only-secret-key-no-prod')
@@ -45,6 +57,10 @@ DATABASES = {
         'NAME': ':memory:',
     }
 }
+
+# Uploads de la suite a un tmpdir aislado por corrida (ver docstring): evita
+# ensuciar `media/` del repo y elimina el bucle infinito de #118.
+MEDIA_ROOT = tempfile.mkdtemp(prefix='instelec_test_media_')
 
 # Django >=4.2 usa STORAGES; en repos más viejos el dict extra es inofensivo.
 try:
