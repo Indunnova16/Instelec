@@ -109,7 +109,6 @@ class CuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
 
         opciones = {
             'actualizar_existentes': request.POST.get('actualizar_existentes') == 'on',
-            'crear_usuarios_faltantes': request.POST.get('crear_usuarios_faltantes') == 'on',
             # Issue #218 (A7): línea activa en pantalla acota/valida el Excel.
             'linea_filtro_id': linea_filtro_id,
         }

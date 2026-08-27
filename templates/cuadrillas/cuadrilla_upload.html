@@ -42,11 +42,11 @@
                 <li>✓ Cuadrillas creadas: <strong>{{ resultado.cuadrillas_creadas }}</strong></li>
                 <li>📝 Cuadrillas actualizadas: <strong>{{ resultado.cuadrillas_actualizadas }}</strong></li>
                 <li>👥 Miembros agregados: <strong>{{ resultado.miembros_agregados }}</strong></li>
+                {% if resultado.miembros_omitidos %}
+                <li>⏭️ Miembros omitidos (sin cuenta existente): <strong>{{ resultado.miembros_omitidos }}</strong></li>
+                {% endif %}
                 {% if resultado.formato == 'S18' %}
                 <li>⭐ Encargados (JT/CTA) asignados: <strong>{{ resultado.encargados_asignados }}</strong></li>
-                {% if resultado.usuarios_creados %}
-                <li>🆕 Usuarios creados automáticamente: <strong>{{ resultado.usuarios_creados }}</strong></li>
-                {% endif %}
                 {% if resultado.sheets_procesadas %}
                 <li class="text-xs mt-2">Hojas procesadas: {{ resultado.sheets_procesadas|join:", " }}</li>
                 {% endif %}
@@ -168,15 +168,10 @@
             </p>
         </div>
 
-        <div>
-            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input type="checkbox" name="crear_usuarios_faltantes" class="rounded border-gray-300">
-                <span>Crear usuarios faltantes automáticamente (solo formato S18)</span>
-            </label>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-                Si está desmarcado, las cédulas que no existan en el sistema se reportan como advertencia y el miembro se omite.
-            </p>
-        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+            La carga no crea usuarios ni colaboradores. Las cédulas sin una cuenta existente
+            se omiten y quedan detalladas en las advertencias.
+        </p>
 
         <div class="flex gap-3 pt-2">
             <button type="submit"

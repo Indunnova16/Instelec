@@ -617,8 +617,8 @@ class ProgramacionS18CuadrillaImporter:
 
     Reglas de error (spec #124):
     - Línea no encontrada → advertencia + ``linea_asignada=None`` (NO fatal).
-    - Cédula no encontrada → advertencia + miembro omitido (o se crea el usuario
-      si ``crear_usuarios_faltantes=True``).
+    - Cédula no encontrada → advertencia + miembro omitido. La carga nunca crea
+      cuentas ni registros de colaboradores implícitamente.
     - Cualquier excepción inesperada revierte toda la transacción.
     """
 
@@ -661,11 +661,12 @@ class ProgramacionS18CuadrillaImporter:
         # (no se crean ni se actualizan). Estrategia SALTAR + RESUMEN.
         self.cuadrillas_omitidas = []
         self.miembros_agregados = 0
+        # Los miembros existentes se contabilizan por separado para que una
+        # reimportación deje explícito que reutilizó la asignación activa y no
+        # creó otra para el mismo documento.
+        self.miembros_reutilizados = 0
+        self.miembros_omitidos = 0
         self.encargados_asignados = 0
-        self.usuarios_creados = 0
-        # Issue #178 (A6): colaboradores nuevos dados de alta en el maestro
-        # PersonalCuadrilla (opt-in crear_usuarios_faltantes).
-        self.personal_creados = 0
         self.column_indices = {}
         self.sheets_procesadas = []
         # Issue #178 (A2): filas de la sección NOVEDADES, independientes de
@@ -681,7 +682,6 @@ class ProgramacionS18CuadrillaImporter:
     def importar(self, archivo_excel, opciones=None):
         opciones = opciones or {}
         actualizar = opciones.get('actualizar_existentes', False)
-        crear_usuarios = opciones.get('crear_usuarios_faltantes', False)
         self.linea_filtro_id = (opciones.get('linea_filtro_id') or '').strip()
 
         try:
@@ -729,7 +729,7 @@ class ProgramacionS18CuadrillaImporter:
         try:
             with transaction.atomic():
                 for bloque in bloques:
-                    self._guardar_bloque(bloque, actualizar, crear_usuarios)
+                    self._guardar_bloque(bloque, actualizar)
                 for novedad in self.novedades_pendientes:
                     self._guardar_novedad(novedad)
                 if self.errores:
@@ -745,9 +745,9 @@ class ProgramacionS18CuadrillaImporter:
                 'cuadrillas_omitidas': self.cuadrillas_omitidas,
                 'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
                 'miembros_agregados': 0,
+                'miembros_reutilizados': 0,
+                'miembros_omitidos': 0,
                 'encargados_asignados': 0,
-                'usuarios_creados': 0,
-                'personal_creados': 0,
                 'novedades_creadas': 0,
                 'advertencias': self.advertencias,
                 'errores': self.errores,
@@ -773,9 +773,9 @@ class ProgramacionS18CuadrillaImporter:
             'cuadrillas_omitidas': self.cuadrillas_omitidas,
             'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
             'miembros_agregados': self.miembros_agregados,
+            'miembros_reutilizados': self.miembros_reutilizados,
+            'miembros_omitidos': self.miembros_omitidos,
             'encargados_asignados': self.encargados_asignados,
-            'usuarios_creados': self.usuarios_creados,
-            'personal_creados': self.personal_creados,
             'novedades_creadas': self.novedades_creadas,
             'advertencias': self.advertencias,
             'errores': self.errores,
@@ -946,7 +946,7 @@ class ProgramacionS18CuadrillaImporter:
 
     # ---------- persistencia ----------
 
-    def _guardar_bloque(self, bloque, actualizar, crear_usuarios):
+    def _guardar_bloque(self, bloque, actualizar):
         from apps.cuadrillas.models import Cuadrilla, Vehiculo
 
         codigo = self._generar_codigo(
@@ -1046,7 +1046,7 @@ class ProgramacionS18CuadrillaImporter:
         # Miembros.
         supervisor_usuario = None
         for miembro in bloque['miembros']:
-            usuario = self._agregar_miembro(cuadrilla, miembro, bloque, crear_usuarios)
+            usuario = self._agregar_miembro(cuadrilla, miembro, bloque)
             if usuario and miembro['es_jt'] and supervisor_usuario is None:
                 supervisor_usuario = usuario
 
@@ -1056,7 +1056,7 @@ class ProgramacionS18CuadrillaImporter:
             cuadrilla.supervisor = supervisor_usuario
             cuadrilla.save(update_fields=['supervisor', 'updated_at'])
 
-    def _agregar_miembro(self, cuadrilla, miembro, bloque, crear_usuarios):
+    def _agregar_miembro(self, cuadrilla, miembro, bloque):
         from apps.cuadrillas.models import CuadrillaMiembro, PersonalCuadrilla
         from apps.usuarios.models import Usuario
 
@@ -1064,47 +1064,35 @@ class ProgramacionS18CuadrillaImporter:
         row_num = miembro['row_num']
         if not cedula:
             self.advertencias.append(f'Fila {row_num}: miembro sin cédula, omitido')
+            self.miembros_omitidos += 1
             return None
 
-        # Issue #178 (A6): CEDULA enlaza PRIMERO al maestro de Colaboradores
-        # (PersonalCuadrilla, #176) — fuente de verdad moderna del rol, en
-        # vez de re-parsear el CARGO del Excel cada vez. Si el colaborador
-        # YA existe como Usuario "legacy" (creado antes de #176, o por una
-        # carga S18 anterior a esa migración) SIN estar aún en el maestro,
-        # se preserva el comportamiento histórico de #124 para NO romper
-        # cuadrillas ya en producción: se sigue clasificando por el CARGO
-        # del Excel (A5). Solo para una cédula TOTALMENTE nueva (ni Usuario
-        # ni PersonalCuadrilla) aplica el flag opt-in crear_usuarios_faltantes
-        # (#124, default OFF): OFF = advertencia + se omite la fila; ON = se
-        # da de alta en PersonalCuadrilla (y su Usuario vinculado, patrón de
-        # #176 CuadrillaMiembroAddView._resolver_o_crear_usuario).
+        # CEDULA enlaza primero al maestro de Colaboradores, pero la carga S18
+        # solo puede asignar personas que ya tengan Usuario. Nunca fabrica un
+        # PersonalCuadrilla ni una cuenta durante una importación.
         personal = PersonalCuadrilla.objects.filter(documento=cedula, activo=True).first()
         rol_choice = None
 
         if personal is not None:
-            usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
+            usuario = Usuario.objects.filter(documento=personal.documento).first()
             if usuario is None:
+                self.miembros_omitidos += 1
+                self.advertencias.append(
+                    f'Fila {row_num}: colaborador {personal.nombre} (cédula {cedula}) '
+                    'no tiene una cuenta de usuario existente; miembro omitido'
+                )
                 return None
             rol_choice = personal.rol_cuadrilla_id
         else:
             usuario = Usuario.objects.filter(documento=cedula).first()
             if usuario is None:
-                if crear_usuarios:
-                    personal = self._crear_personal_cuadrilla(miembro)
-                    if personal is None:
-                        return None
-                    usuario = self._resolver_o_crear_usuario_desde_personal(personal, miembro)
-                    if usuario is None:
-                        return None
-                    rol_choice = personal.rol_cuadrilla_id
-                else:
-                    self.advertencias.append(
-                        f'Fila {row_num}: cédula "{cedula}" ({miembro["nombre"]}) no '
-                        f'está en el maestro de Colaboradores (PersonalCuadrilla) ni '
-                        f'existe como usuario; miembro omitido (activa "crear '
-                        f'faltantes" para darlo de alta)'
-                    )
-                    return None
+                self.miembros_omitidos += 1
+                self.advertencias.append(
+                    f'Fila {row_num}: cédula "{cedula}" ({miembro["nombre"]}) no '
+                    'está registrada como usuario; miembro omitido. Crea o activa '
+                    'el colaborador antes de volver a importar.'
+                )
+                return None
 
         if rol_choice is None:
             # Usuario legacy sin PersonalCuadrilla — clasificar por CARGO
@@ -1141,98 +1129,14 @@ class ProgramacionS18CuadrillaImporter:
             self.miembros_agregados += 1
             if cargo_jerarquico == 'JT_CTA':
                 self.encargados_asignados += 1
-        elif miembro['es_jt'] and obj.cargo != 'JT_CTA':
-            # Re-import: promover a encargado si el Excel ahora lo marca como JT.
-            obj.cargo = 'JT_CTA'
-            obj.save(update_fields=['cargo', 'updated_at'])
-            self.encargados_asignados += 1
+        else:
+            self.miembros_reutilizados += 1
+            if miembro['es_jt'] and obj.cargo != 'JT_CTA':
+                # Re-import: promover a encargado si el Excel ahora lo marca como JT.
+                obj.cargo = 'JT_CTA'
+                obj.save(update_fields=['cargo', 'updated_at'])
+                self.encargados_asignados += 1
         return usuario
-
-    def _crear_personal_cuadrilla(self, miembro):
-        """Da de alta un colaborador NUEVO en el maestro PersonalCuadrilla
-        (issue #178, A6) — opt-in vía crear_usuarios_faltantes (mismo flag
-        de #124). Clasifica el rol con el mismo ROL_TEXTO_A_CHOICE de A5."""
-        from apps.cuadrillas.models import PersonalCuadrilla
-
-        cedula = miembro['cedula']
-        nombre = miembro['nombre'] or f'Colaborador {cedula}'
-        cargo_raw = miembro['cargo']
-        rol_choice, reconocido = _resolver_rol_desde_cargo_raw(cargo_raw)
-        if not reconocido and cargo_raw:
-            self.advertencias.append(
-                f'Fila {miembro["row_num"]}: CARGO "{cargo_raw}" no reconocido, '
-                f'clasificado como LINIERO_I por defecto (agregarlo al maestro '
-                f'de Cargos en /cuadrillas/cargos/ si es un cargo nuevo real)'
-            )
-        try:
-            # Savepoint anidado (mismo patrón #124) para que una colisión
-            # UNIQUE (documento ya existente por carrera) no envenene la
-            # transacción externa.
-            with transaction.atomic():
-                personal = PersonalCuadrilla.objects.create(
-                    nombre=nombre,
-                    documento=cedula,
-                    rol_cuadrilla_id=rol_choice,
-                    activo=True,
-                )
-            self.personal_creados += 1
-            self.advertencias.append(
-                f'Fila {miembro["row_num"]}: colaborador {nombre} (cédula {cedula}) '
-                f'creado automáticamente en el maestro de Colaboradores (PersonalCuadrilla)'
-            )
-            return personal
-        except Exception as e:
-            self.advertencias.append(
-                f'Fila {miembro["row_num"]}: no se pudo crear el colaborador {nombre} '
-                f'(cédula {cedula}) en PersonalCuadrilla: {e}'
-            )
-            return None
-
-    def _resolver_o_crear_usuario_desde_personal(self, personal, miembro):
-        """Reusa el patrón resolver-o-crear Usuario de #176
-        (``CuadrillaMiembroAddView._resolver_o_crear_usuario``): el Usuario
-        es un registro de vínculo derivado del maestro PersonalCuadrilla,
-        NO la fuente de verdad (issue #178, A6)."""
-        from apps.usuarios.models import Usuario
-
-        usuario = Usuario.objects.filter(documento=personal.documento).first()
-        if usuario:
-            return usuario
-
-        nombre = personal.nombre or f'Usuario {personal.documento}'
-        partes = nombre.split()
-        first = partes[0] if partes else nombre
-        last = ' '.join(partes[1:]) if len(partes) > 1 else ''
-        email = f'{personal.documento}@instelec-import.local'
-        try:
-            # Issue #124: savepoint anidado para que una colisión UNIQUE
-            # (email/documento ya existente por carrera) NO envenene la txn del
-            # lote — sin él, el except de abajo atraparía la excepción pero la
-            # transacción externa quedaría rota igual.
-            with transaction.atomic():
-                usuario = Usuario.objects.create(
-                    email=email,
-                    first_name=first[:150],
-                    last_name=last[:150],
-                    documento=personal.documento,
-                    telefono=(miembro.get('celular') or '')[:20],
-                    rol='operario_general',
-                    is_active=True,
-                )
-                usuario.set_unusable_password()
-                usuario.save(update_fields=['password'])
-            self.usuarios_creados += 1
-            self.advertencias.append(
-                f'Fila {miembro["row_num"]}: usuario {nombre} (cédula '
-                f'{personal.documento}) creado automáticamente con email {email}'
-            )
-            return usuario
-        except Exception as e:
-            self.advertencias.append(
-                f'Fila {miembro["row_num"]}: no se pudo crear usuario {nombre} '
-                f'(cédula {personal.documento}): {e}'
-            )
-            return None
 
     def _guardar_novedad(self, novedad):
         """Persiste una fila de NOVEDADES como registro independiente
@@ -1479,9 +1383,9 @@ class ProgramacionS18CuadrillaImporter:
             'cuadrillas_omitidas': self.cuadrillas_omitidas,
             'cuadrillas_omitidas_count': len(self.cuadrillas_omitidas),
             'miembros_agregados': 0,
+            'miembros_reutilizados': 0,
+            'miembros_omitidos': 0,
             'encargados_asignados': 0,
-            'usuarios_creados': 0,
-            'personal_creados': 0,
             'novedades_creadas': 0,
             'advertencias': self.advertencias,
             'errores': self.errores,
