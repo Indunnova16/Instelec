@@ -245,6 +245,37 @@ def test_gantt_consolidado_usa_fechas_parciales_de_los_tres_bloques(proyecto_204
 
 
 @pytest.mark.django_db
+def test_gantt_consolidado_agrupa_bloques_por_torre_en_ambos_ordenes(proyecto_204):
+    """Cada torre legacy conserva OC→Montaje→Tendido como grupo visible."""
+    from apps.construccion.calculators_avance_real import gantt_consolidado
+    from apps.construccion.models import FaseTorre, ObraCivilTorre, TorreConstruccion
+    from apps.construccion.models_b3_mont_detalle import MontajeEstructuraTorreDetalle
+
+    torre_10 = TorreConstruccion.objects.create(proyecto=proyecto_204, numero='T-10')
+    torre_2 = proyecto_204.torres.get(numero='T1')
+    for torre, fecha in ((torre_10, date(2025, 1, 10)), (torre_2, date(2025, 2, 10))):
+        ObraCivilTorre.objects.update_or_create(
+            proyecto=proyecto_204, torre=torre,
+            defaults={'fecha_inicio': fecha, 'fecha_final': fecha},
+        )
+        montaje, _ = MontajeEstructuraTorreDetalle.objects.get_or_create(
+            proyecto=proyecto_204, torre=torre,
+        )
+        montaje.montaje_fecha_fin = fecha
+        montaje.save(update_fields=['montaje_fecha_fin'])
+        FaseTorre.objects.update_or_create(
+            proyecto=proyecto_204, torre=torre,
+            defaults={'tendido_conductor_a_fecha': fecha},
+        )
+
+    for orden, torres in (('numero', ['T-1', 'T-1', 'T-1', 'T-10', 'T-10', 'T-10']),
+                          ('cronologico', ['T-10', 'T-10', 'T-10', 'T-1', 'T-1', 'T-1'])):
+        filas = gantt_consolidado(proyecto_204, orden=orden)
+        assert [fila['torre'] for fila in filas] == torres
+        assert [fila['bloque'] for fila in filas] == ['Obra Civil', 'Montaje', 'Tendido'] * 2
+
+
+@pytest.mark.django_db
 def test_gantt_consolidado_excluye_torres_no_aplicables(proyecto_204):
     """Las tres fuentes respetan aplica=False aun cuando tengan fechas."""
     from apps.construccion.calculators_avance_real import gantt_consolidado
@@ -285,6 +316,7 @@ def test_dashboard_avance_renderiza_gantt_y_estado_vacio(authenticated_client, p
     assert response.status_code == 200
     assert 'id="gantt-consolidado-data"' in html
     assert 'id="gantt-consolidado-chart"' in html
+    assert "'Torre ' + fila.torre + ' — ' + fila.bloque" in html
 
     contrato = Contrato.objects.create(
         unidad_negocio=Contrato.UnidadNegocio.CONSTRUCCION,

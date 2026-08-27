@@ -159,7 +159,7 @@
     new Chart(canvas.getContext('2d'), {
       type: 'bar',
       data: {
-        labels: filas.map(function (fila) { return fila.bloque + ' — ' + fila.torre; }),
+        labels: filas.map(function (fila) { return 'Torre ' + fila.torre + ' — ' + fila.bloque; }),
         datasets: [{
           label: 'Avance por bloque',
           data: filas.map(function (fila) {
@@ -180,7 +180,7 @@
         },
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (item) {
           var fila = (item.dataset._filas || [])[item.dataIndex] || {};
-          return fila.bloque + ' — ' + fila.torre + ': ' + (fila.inicio || '—') + ' → ' + (fila.final || fila.esperada || '—');
+          return 'Torre ' + fila.torre + ' — ' + fila.bloque + ': ' + (fila.inicio || '—') + ' → ' + (fila.final || fila.esperada || '—');
         }}}}
       }
     });

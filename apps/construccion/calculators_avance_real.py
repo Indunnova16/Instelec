@@ -657,9 +657,28 @@ def gantt_consolidado(proyecto, orden='numero') -> list:
             'orden_bloque': 2,
         })
 
-    return _sin_fecha_orden(
-        ordenar_filas_dashboard(filas, orden, claves_precedencia=('orden_bloque',))
-    )
+    # El orden del Gantt es por *torre*, no por barra.  Ordenar cada fila por
+    # su propia fecha puede intercalar, por ejemplo, el Tendido de T-1 entre
+    # Obra Civil y Montaje de T-2.  La fecha rectora del grupo es la primera
+    # fecha real disponible de cualquiera de sus bloques; los tres bloques
+    # quedan consecutivos y conservan su secuencia de ejecución visual.
+    grupos = {}
+    for fila in filas:
+        grupos.setdefault(fila['torre'], []).append(fila)
+
+    def clave_grupo(item):
+        torre, bloques = item
+        fechas = [bloque['fecha_orden'] for bloque in bloques
+                  if bloque['fecha_orden'] is not None]
+        fecha_rectora = min(fechas) if fechas else None
+        if orden == 'cronologico':
+            return (fecha_rectora is None, fecha_rectora, _clave_natural_torre(torre))
+        return (_clave_natural_torre(torre),)
+
+    ordenadas = []
+    for _torre, bloques in sorted(grupos.items(), key=clave_grupo):
+        ordenadas.extend(sorted(bloques, key=lambda bloque: bloque['orden_bloque']))
+    return _sin_fecha_orden(ordenadas)
 
 
 # ==========================================================================
