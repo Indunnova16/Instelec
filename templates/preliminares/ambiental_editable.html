@@ -79,57 +79,57 @@
 
                         <!-- Ahuyentamiento -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="ahuyentamiento" valor=a.ahuyentamiento tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="ahuyentamiento" valor=a.ahuyentamiento tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Conteo epifitas -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="conteo_epifitas" valor=a.conteo_epifitas tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="conteo_epifitas" valor=a.conteo_epifitas tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Traslado vivero -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="traslado_vivero" valor=a.traslado_vivero tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="traslado_vivero" valor=a.traslado_vivero tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Reubicación epifitas -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="reubicacion_epifitas" valor=a.reubicacion_epifitas tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="reubicacion_epifitas" valor=a.reubicacion_epifitas tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Aprov. sitio -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="aprov_sitio" valor=a.aprov_sitio tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="aprov_sitio" valor=a.aprov_sitio tipo="date_or_na" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Aprov. vano -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="aprov_vano" valor=a.aprov_vano tipo="bool" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="aprov_vano" valor=a.aprov_vano tipo="bool" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Arqueología polígonos -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="arqueologia_poligonos" valor=a.arqueologia_poligonos tipo="choice" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="arqueologia_poligonos" valor=a.arqueologia_poligonos tipo="choice" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Rescate arqueológico -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="rescate_arqueologico" valor=a.rescate_arqueologico tipo="bool" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="rescate_arqueologico" valor=a.rescate_arqueologico tipo="bool" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Adecuación accesos -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-right">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="adecuacion_accesos" valor=a.adecuacion_accesos tipo="decimal" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="adecuacion_accesos" valor=a.adecuacion_accesos tipo="decimal" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Accesos intervenidos -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-right">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="accesos_intervenidos" valor=a.accesos_intervenidos tipo="decimal" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="accesos_intervenidos" valor=a.accesos_intervenidos tipo="decimal" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Liberación PDO -->
                         <td class="border-r border-gray-100 dark:border-gray-700 p-0 text-center">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="liberacion_pdo" valor=a.liberacion_pdo tipo="bool" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="liberacion_pdo" valor=a.liberacion_pdo tipo="bool" contrato_id=contrato.id torre_id=t.id %}
                         </td>
 
                         <!-- Semáforo -->
@@ -139,7 +139,7 @@
 
                         <!-- Observaciones -->
                         <td class="border-gray-100 dark:border-gray-700 p-0">
-                            <div class="campo-flex">{% include "preliminares/partials/_campo_ambiental.html" with campo="observaciones" valor=a.observaciones tipo="text" contrato_id=contrato.id torre_id=t.id %}</div>
+                            {% include "preliminares/partials/_campo_ambiental.html" with campo="observaciones" valor=a.observaciones tipo="text" contrato_id=contrato.id torre_id=t.id %}
                         </td>
                     </tr>
                     {% endwith %}
