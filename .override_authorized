@@ -1,1 +1,0 @@
-{"hitl": "78", "estado": "resuelta", "motivo": "Miguel autorizó en vivo (RUN_2026-08-20_1821, HITL#78 resuelto en board NOVA): mismo gotcha settings_ci GIS/SQLite que #186. Checks a/b limpios, 6/6 tests propios verdes bajo settings.local. Red real: E2E F5 post-deploy.", "ts": "2026-08-20T19:12:20+00:00", "hitl_source": "/tmp/hitl_78_instelec224.json"}
