@@ -286,25 +286,15 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
 
 
 def _personal_visible_para_usuario(request, qs=None):
-    """Colaboradores de Mantenimiento asignables al bloque (issue #209).
+    """Colaboradores activos asignables al bloque, sin restricción por área.
 
-    Antes filtraba por el área del USUARIO LOGUEADO (``request.user.area``),
-    no por el área fija de esta pantalla -- si el coordinador no tenía área
-    asignada (caso legacy frecuente en prod, ver verificación 2026-08-05) el
-    filtro simplemente no aplicaba y se mezclaba personal de Construcción /
-    Financiero en el buscador. Este formulario es EXCLUSIVO de Mantenimiento
-    (Cuadrilla.linea_asignada/tramo son conceptos de líneas de mantenimiento,
-    ver docstring del módulo), así que el área objetivo es fija.
-
-    Se incluyen también los colaboradores legacy con ``area=''`` (blank) --
-    a la fecha de este fix, 60/66 registros de ``PersonalCuadrilla`` en prod
-    nunca fueron etiquetados con un área (solo 1 tiene ``MANTENIMIENTO``
-    explícito). Excluirlos ocultaría de golpe casi todo el personal activo
-    del módulo. Coherente con el propio docstring de
-    ``PersonalCuadrilla.area``: "blank/default vacío para no romper
-    colaboradores legacy sin área asignada"."""
+    La elegibilidad de PersonalCuadrilla es común con la superficie legacy:
+    Construcción, Mantenimiento, otras áreas y registros legacy sin área se
+    pueden asignar mientras estén activos. La protección de duplicados se
+    aplica al crear el miembro activo de cada cuadrilla.
+    """
     qs = qs if qs is not None else PersonalCuadrilla.objects.filter(activo=True)
-    return qs.filter(Q(area=AREA_MANTENIMIENTO) | Q(area=""))
+    return qs
 
 
 def _choices_form_bloque(request=None, vehiculos_historicos=None):
