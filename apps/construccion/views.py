@@ -6,7 +6,7 @@ from django.views.generic import ListView, DetailView, CreateView, UpdateView, D
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404, redirect
-from django.db.models import Q, IntegerField, Value, F, Func, Max
+from django.db.models import Q, IntegerField, Value, F, Func, Max, Case, When
 from django.db.models.functions import Cast, NullIf
 
 from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
@@ -937,8 +937,18 @@ class CronogramaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             ProgramacionFase.objects.get_or_create(
                 proyecto=proyecto, seccion=seccion)
         ctx['proyecto'] = proyecto
+        # #242 — order_by('seccion') ordenaba alfabéticamente por el valor
+        # guardado (ej. 'MONTAJE' < 'OBRA_CIVIL' < 'TENDIDO'), no por el
+        # flujo real de un proyecto de construcción. `Seccion.choices` YA
+        # está declarado en el orden lógico correcto (Ingeniería → ... →
+        # Pruebas); acá se traduce ese orden a un ranking explícito para
+        # que el ORDER BY de la BD lo respete.
+        orden_seccion = Case(*[
+            When(seccion=valor, then=posicion)
+            for posicion, (valor, _etiqueta) in enumerate(ProgramacionFase.Seccion.choices)
+        ], output_field=IntegerField())
         ctx['fases'] = ProgramacionFase.objects.filter(
-            proyecto=proyecto).order_by('seccion')
+            proyecto=proyecto).annotate(_orden=orden_seccion).order_by('_orden')
         ctx['active_tab'] = 'cronograma'
         ctx['suma_pesos'] = sum(f.peso_pct for f in ctx['fases'])
         return ctx
