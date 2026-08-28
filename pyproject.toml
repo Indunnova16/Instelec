@@ -50,8 +50,8 @@ line-ending = "auto"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.local"
-python_files = ["test_*.py", "*_test.py"]
-testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py", "tests_*.py", "tests.py"]
+testpaths = ["tests", "apps"]
 addopts = [
     "--reuse-db",
     "--nomigrations",
