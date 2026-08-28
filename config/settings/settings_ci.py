@@ -8,7 +8,19 @@ corriendo (no usar MIGRATION_MODULES=None: CI sin migraciones dejó
 data-migrations sin cobertura — gotcha documentado tersaSoft/KOMSA/carnes).
 
 Rollout portafolio 2026-08-08. Este módulo NUNCA se usa en runtime de prod.
+
+Override Instelec (2026-08-20, id:instelec-tests-prefix-invisible-pytest-collection
+y id:selfverify-gis-deps-red-ambiental): este repo es GeoDjango/PostGIS
+(apps/construccion, apps/lineas usan gis_models.PointField). El SQLite plano del
+template portafolio no soporta esos campos (`AttributeError: DatabaseOperations
+object has no attribute geo_db_type`) y tumbaba el gate F3/F4 en CUALQUIER issue,
+tocara o no esas apps (bloqueó #186, #223, #224 el mismo día). Fix: usar el
+backend spatialite de Django (SQLite + extensión geoespacial cargable) en vez de
+sqlite3 plano — sigue siendo en-memoria y rápido, pero soporta GIS. Requiere el
+paquete de sistema `libsqlite3-mod-spatialite` instalado en el runner/VM
+(Debian/Ubuntu: `apt-get install libsqlite3-mod-spatialite`).
 """
+import ctypes.util
 import os
 
 os.environ.setdefault('SECRET_KEY', 'ci-only-secret-key-no-prod')
@@ -21,9 +33,16 @@ from .base import *  # noqa: F401,F403,E402
 DEBUG = False
 ALLOWED_HOSTS = ['*']
 
+# Debian/Ubuntu instalan el módulo en una ruta versionada que
+# ctypes.util.find_library("spatialite") no resuelve solo.
+SPATIALITE_LIBRARY_PATH = os.environ.get(
+    'SPATIALITE_LIBRARY_PATH',
+    '/usr/lib/x86_64-linux-gnu/mod_spatialite.so',
+)
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': 'django.contrib.gis.db.backends.spatialite',
         'NAME': ':memory:',
     }
 }
