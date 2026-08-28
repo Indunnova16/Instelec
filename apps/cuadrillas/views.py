@@ -1685,6 +1685,240 @@ class ExportarAsistenciaView(LoginRequiredMixin, RoleRequiredMixin, View):
         return None, None
 
 
+class ExportarAsistenciaRangoView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """GET /cuadrillas/exportar-asistencia-rango/?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
+    (issue #239).
+
+    Generaliza ``ExportarAsistenciaView`` -- hoy limitada a 1 sola cuadrilla
+    y 1 semana derivada del código -- a un rango de fechas arbitrario que
+    consolida TODOS los colaboradores de TODAS las cuadrillas activas en un
+    único Excel, siguiendo el MISMO patrón que #211 usó para el export de
+    programación por rango (``ProgramacionSemanalExportarRangoView``):
+    querystring ``fecha_inicio``/``fecha_fin``, cuadrillas filtradas por su
+    campo ``fecha`` dentro del rango (sin importar semana ISO), mismo
+    layout/colores/columnas de novedad que el Excel semanal que ya conoce
+    el cliente -- salvo que las columnas de día cubren TODO el rango pedido
+    (no fijas a 7) y se agrega una columna ``Cuadrilla`` al frente para
+    distinguir de qué bloque viene cada fila, dado que ahora hay más de uno
+    por archivo.
+
+    Fuera de alcance (declarado explícitamente, ver comentario del cliente
+    posterior a este issue): un botón "Importar Nómina" reutilizando el
+    mismo rango -- el cliente no especificó formato ni datos, y el pedido
+    original de este issue es EXPORTAR, no importar.
+    """
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+
+    def get(self, request, *args, **kwargs):
+        from datetime import date, timedelta
+        from decimal import Decimal
+        from io import BytesIO
+
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+
+        fecha_inicio_str = (request.GET.get('fecha_inicio') or '').strip()
+        fecha_fin_str = (request.GET.get('fecha_fin') or '').strip()
+        if not fecha_inicio_str or not fecha_fin_str:
+            return HttpResponse(
+                'Debe indicar fecha_inicio y fecha_fin para exportar el rango.', status=400
+            )
+        try:
+            fecha_inicio = date.fromisoformat(fecha_inicio_str)
+            fecha_fin = date.fromisoformat(fecha_fin_str)
+        except ValueError:
+            return HttpResponse('Las fechas ingresadas no son válidas.', status=400)
+        if fecha_fin < fecha_inicio:
+            return HttpResponse(
+                'La fecha fin no puede ser anterior a la fecha inicio.', status=400
+            )
+
+        dias_rango = [fecha_inicio + timedelta(days=i) for i in range((fecha_fin - fecha_inicio).days + 1)]
+        dias_nombres_iso = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom']
+        n_dias = len(dias_rango)
+
+        cuadrillas = list(
+            Cuadrilla.objects.filter(
+                fecha__gte=fecha_inicio, fecha__lte=fecha_fin, activa=True
+            ).order_by('fecha', 'codigo')
+        )
+
+        # Una sola consulta para TODAS las asistencias del rango (evita N+1
+        # por miembro): clave (cuadrilla_id, usuario_id, fecha_iso).
+        asist_dict = {}
+        if cuadrillas:
+            asistencias = Asistencia.objects.filter(
+                cuadrilla__in=cuadrillas,
+                fecha__gte=fecha_inicio,
+                fecha__lte=fecha_fin,
+            ).select_related('usuario')
+            for a in asistencias:
+                key = (str(a.cuadrilla_id), str(a.usuario_id))
+                asist_dict.setdefault(key, {})[a.fecha.isoformat()] = a
+
+        # Create workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Asistencia'
+
+        # Styles
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+        center = Alignment(horizontal='center', vertical='center')
+
+        # Headers: Cuadrilla, Nombre, Documento, Cargo, Rol, <dias...>, totales, Observaciones
+        headers = ['Cuadrilla', 'Nombre', 'Documento', 'Cargo', 'Rol']
+        for dia in dias_rango:
+            headers.append(f'{dias_nombres_iso[dia.weekday()]} {dia.strftime("%d/%m")}')
+        headers.extend([
+            'Total Viaticos', 'H. Extra Total',
+            'HE Diurna', 'HE Nocturna', 'HE Dom.D', 'HE Dom.N',
+            'Observaciones',
+        ])
+        ultima_col_letra = get_column_letter(len(headers))
+
+        # Title row
+        ws.merge_cells(f'A1:{ultima_col_letra}1')
+        ws['A1'] = 'Asistencia consolidada por rango de fechas'
+        ws['A1'].font = Font(bold=True, size=14)
+        ws.merge_cells(f'A2:{ultima_col_letra}2')
+        ws['A2'] = f'Rango: {fecha_inicio.strftime("%d/%m/%Y")} - {fecha_fin.strftime("%d/%m/%Y")}'
+        ws['A2'].font = Font(size=11)
+
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = thin_border
+
+        # Índices de columna calculados a partir de n_dias (variable según rango)
+        col_cuadrilla, col_nombre, col_documento, col_cargo, col_rol = 1, 2, 3, 4, 5
+        col_dia_inicio = 6
+        col_total_viaticos = col_dia_inicio + n_dias
+        col_horas_extra_total = col_total_viaticos + 1
+        col_he_diurna = col_total_viaticos + 2
+        col_he_nocturna = col_total_viaticos + 3
+        col_he_dom_diurna = col_total_viaticos + 4
+        col_he_dom_nocturna = col_total_viaticos + 5
+        col_observaciones = col_total_viaticos + 6
+
+        novedad_labels = dict(Asistencia.TipoNovedad.choices)
+        color_map = {
+            'PRESENTE': '92D050',
+            'AUSENTE': 'FF6B6B',
+            'VACACIONES': '6BB5FF',
+            'INCAPACIDAD': 'FFB366',
+            'PERMISO': 'C39BD3',
+            'LICENCIA': 'F7DC6F',
+            'CAPACITACION': '76D7C4',
+            'COMPENSATORIO': '67E8F9',
+            'DESCANSO': 'CBD5E1',
+            'DIA_GANADO': '34D399',
+            'FESTIVO': 'FBBF24',
+        }
+
+        row = 5
+        for cuadrilla in cuadrillas:
+            miembros = cuadrilla.miembros.filter(activo=True).select_related('usuario', 'rol_cuadrilla')
+            for miembro in miembros:
+                key = (str(cuadrilla.pk), str(miembro.usuario_id))
+                user_asist = asist_dict.get(key, {})
+
+                ws.cell(row=row, column=col_cuadrilla, value=cuadrilla.codigo).border = thin_border
+                ws.cell(row=row, column=col_nombre, value=miembro.usuario.get_full_name()).border = thin_border
+                ws.cell(row=row, column=col_documento, value=getattr(miembro.usuario, 'documento', '')).border = thin_border
+                ws.cell(row=row, column=col_cargo, value=miembro.get_rol_cuadrilla_display()).border = thin_border
+                ws.cell(row=row, column=col_rol, value=miembro.get_cargo_display()).border = thin_border
+
+                total_viaticos = Decimal('0')
+                total_horas_extra = Decimal('0')
+                total_he_diurna = Decimal('0')
+                total_he_nocturna = Decimal('0')
+                total_he_dom_diurna = Decimal('0')
+                total_he_dom_nocturna = Decimal('0')
+                observaciones_rango = []
+
+                for i, dia in enumerate(dias_rango):
+                    asist = user_asist.get(dia.isoformat())
+                    col = col_dia_inicio + i
+                    if asist:
+                        cell = ws.cell(row=row, column=col, value=novedad_labels.get(asist.tipo_novedad, ''))
+                        cell.alignment = center
+                        cell.border = thin_border
+                        # #210: mismo criterio que la grilla: viatico_aplica=False no suma.
+                        if asist.viatico_aplica:
+                            total_viaticos += asist.viaticos
+                        total_horas_extra += asist.horas_extra
+                        total_he_diurna += asist.he_diurna
+                        total_he_nocturna += asist.he_nocturna
+                        total_he_dom_diurna += asist.he_dominical_diurna
+                        total_he_dom_nocturna += asist.he_dominical_nocturna
+                        if asist.observacion:
+                            observaciones_rango.append(f'{dia.strftime("%d/%m")}: {asist.observacion}')
+
+                        fill_color = color_map.get(asist.tipo_novedad)
+                        if fill_color:
+                            cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type='solid')
+                    else:
+                        cell = ws.cell(row=row, column=col, value='---')
+                        cell.alignment = center
+                        cell.border = thin_border
+
+                cell_v = ws.cell(row=row, column=col_total_viaticos, value=float(total_viaticos))
+                cell_v.number_format = '$#,##0'
+                cell_v.alignment = center
+                cell_v.border = thin_border
+
+                cell_h = ws.cell(row=row, column=col_horas_extra_total, value=float(total_horas_extra))
+                cell_h.number_format = '0.0'
+                cell_h.alignment = center
+                cell_h.border = thin_border
+
+                for col_he, val in zip(
+                    (col_he_diurna, col_he_nocturna, col_he_dom_diurna, col_he_dom_nocturna),
+                    (total_he_diurna, total_he_nocturna, total_he_dom_diurna, total_he_dom_nocturna),
+                    strict=True,
+                ):
+                    c = ws.cell(row=row, column=col_he, value=float(val))
+                    c.number_format = '0.0'
+                    c.alignment = center
+                    c.border = thin_border
+
+                ws.cell(row=row, column=col_observaciones, value='; '.join(observaciones_rango)).border = thin_border
+
+                row += 1
+
+        # Auto-fit column widths (MergedCell no tiene column_letter).
+        for col in ws.columns:
+            max_len = 0
+            col_idx = col[0].column
+            if col_idx is None:
+                continue
+            for cell in col:
+                if cell.value:
+                    max_len = max(max_len, len(str(cell.value)))
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(max_len + 2, 35)
+
+        # Write to buffer
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        filename = f'asistencia_rango_{fecha_inicio.strftime("%Y%m%d")}_{fecha_fin.strftime("%Y%m%d")}.xlsx'
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
 class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Upload crew personnel from Excel/CSV.
 

@@ -25,6 +25,9 @@ urlpatterns = [
     # todo el personal activo de la cuadrilla en una fecha dada.
     path('<uuid:pk>/asistencia/masiva/', views.AsistenciaAccionMasivaView.as_view(), name='asistencia_accion_masiva'),
     path('<uuid:pk>/exportar-asistencia/', views.ExportarAsistenciaView.as_view(), name='exportar_asistencia'),
+    # Issue #239 — export consolidado de asistencia por rango de fechas
+    # arbitrario, TODAS las cuadrillas/colaboradores (no una sola cuadrilla).
+    path('exportar-asistencia-rango/', views.ExportarAsistenciaRangoView.as_view(), name='exportar_asistencia_rango'),
     path('personal/subir/', views.PersonalCuadrillaUploadView.as_view(), name='personal_upload'),
     path('api/personal/', views.PersonalCuadrillaListAPIView.as_view(), name='personal_list_api'),
     path('api/personal/detalle/', views.PersonalCuadrillaAPIView.as_view(), name='personal_detalle_api'),

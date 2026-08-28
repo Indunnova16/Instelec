@@ -20,6 +20,43 @@
                 </svg>
                 Historial semanal
             </a>
+            <!-- Exportar asistencia consolidada por rango de fechas (issue #239):
+                 TODOS los colaboradores de TODAS las cuadrillas, no una sola. -->
+            <form method="get" action="{% url 'cuadrillas:exportar_asistencia_rango' %}"
+                  x-data="{ enviando: false, error: '' }"
+                  @submit="
+                      error = '';
+                      const ini = $refs.asistFechaInicio.value, fin = $refs.asistFechaFin.value;
+                      if (ini && fin && fin < ini) {
+                          $event.preventDefault();
+                          error = 'La fecha fin no puede ser anterior a la fecha inicio.';
+                          return;
+                      }
+                      enviando = true; setTimeout(() => enviando = false, 3000);
+                  "
+                  class="flex flex-col gap-1"
+                  aria-label="Exportar asistencia consolidada por rango de fechas">
+                <div class="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg">
+                    <label class="sr-only" for="id_asistencia_fecha_inicio">Fecha inicio del rango de asistencia a exportar</label>
+                    <input type="date" id="id_asistencia_fecha_inicio" name="fecha_inicio" required
+                           x-ref="asistFechaInicio"
+                           class="text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                    <span class="text-gray-400 text-sm">—</span>
+                    <label class="sr-only" for="id_asistencia_fecha_fin">Fecha fin del rango de asistencia a exportar</label>
+                    <input type="date" id="id_asistencia_fecha_fin" name="fecha_fin" required
+                           x-ref="asistFechaFin"
+                           class="text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                    <button type="submit" :disabled="enviando"
+                            class="px-3 py-1.5 bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 transition text-sm disabled:opacity-60"
+                            aria-label="Exportar Excel de asistencia del rango de fechas elegido, todas las cuadrillas">
+                        <span x-show="!enviando">Exportar asistencia</span>
+                        <span x-show="enviando">Generando…</span>
+                    </button>
+                </div>
+                <p x-show="error" x-text="error" x-cloak
+                   class="text-xs text-red-600 dark:text-red-400" role="alert"></p>
+            </form>
+
             <!-- Maestro de Colaboradores (issue #176) -->
             <a href="{% url 'cuadrillas:colaboradores_lista' %}"
                class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition flex items-center gap-2"
