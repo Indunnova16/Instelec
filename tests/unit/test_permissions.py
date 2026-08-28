@@ -14,9 +14,19 @@ from django.contrib.auth import get_user_model
 
 from apps.core.models import RoleModuloPermiso
 from apps.core.permissions import (
+    MODULO_CONFIG,
     MODULO_MANTENIMIENTO,
+    SUBMODULO_A_MODULO,
+    SUBMODULO_CONFIG_ROLES_PERMISOS,
+    SUBMODULO_FIN_NOMINA,
+    SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+    SUBMODULOS_CONFIG,
+    SUBMODULOS_FINANCIERO,
+    SUBMODULOS_MANTENIMIENTO,
     invalidate_role_cache,
     user_can_access_modulo,
+    user_can_access_submodulo,
+    user_submodulos,
 )
 from tests.factories import (
     AdminFactory,
@@ -214,14 +224,17 @@ class TestRoleBasedAccessControl:
         assert response.status_code == 403
 
     def test_wrong_role_denied_financiero(self, client, user_password):
-        """Test that liniero gets 403 for financiero dashboard."""
+        """liniero no tiene ninguna hoja FIN_* -- #186 A3: RBACModuloMiddleware
+        ahora gatea /financiero/* por submódulo granular ANTES de que la
+        vista corra, así que el denial llega como 302 (mismo patrón que el
+        resto del middleware RBAC), no como el 403 legacy de RoleRequiredMixin."""
         liniero = LinieroFactory()
         client.login(username=liniero.email, password=user_password)
 
         url = reverse('financiero:dashboard')
         response = client.get(url)
 
-        assert response.status_code == 403
+        assert response.status_code == 302
 
     def test_wrong_role_denied_actas(self, client, user_password):
         """Test that liniero gets 403 for actas list."""
@@ -545,3 +558,260 @@ class TestAccessControlEdgeCases:
 
         # Should be 405 Method Not Allowed or similar
         assert response.status_code in [200, 405]
+
+
+# ==============================================================================
+# Mantenimiento granular (#186 A1)
+# ==============================================================================
+
+@pytest.mark.django_db
+class TestSubmodulosMantenimiento186:
+    """La ampliación granular conserva acceso legacy y respeta el padre."""
+
+    def test_legacy_liniero_conserva_las_cuatro_hojas_mantenimiento(self, liniero_user):
+        """Dato legacy real del catálogo: liniero ya tenía Mantenimiento=Ver.
+
+        El seed compatible debe replicar ese nivel en las hojas nuevas, no
+        convertir a los usuarios operativos existentes en usuarios sin acceso.
+        """
+        invalidate_role_cache(liniero_user.rol)
+
+        assert user_submodulos(liniero_user, MODULO_MANTENIMIENTO) == SUBMODULOS_MANTENIMIENTO
+        for submodulo in SUBMODULOS_MANTENIMIENTO:
+            assert user_can_access_submodulo(liniero_user, submodulo) is True
+
+    def test_hoja_no_autoriza_si_el_modulo_padre_esta_denegado(self):
+        """Edge case de seguridad: una fila hija no salta el permiso padre."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="mantenimiento_padre_denegado",
+            nombre="Mantenimiento padre denegado",
+            nivel="operario",
+        )
+        RoleModuloPermiso.objects.create(
+            role=role,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo="",
+            nivel_acceso=RoleModuloPermiso.SIN_ACCESO,
+        )
+        RoleModuloPermiso.objects.create(
+            role=role,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+        user = User.objects.create_user(
+            email="padre-denegado@test.com",
+            password="testpass123!",
+            rol=role.codigo,
+        )
+
+        assert user_can_access_submodulo(
+            user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
+        ) is False
+
+    def test_cambio_de_hoja_invalida_cache_inmediatamente(self, liniero_user):
+        """Edge case: no se puede esperar el TTL tras revocar una hoja."""
+        permiso = RoleModuloPermiso.objects.get(
+            role_id=liniero_user.rol,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=SUBMODULO_MANTENIMIENTO_ACTIVIDADES,
+        )
+        invalidate_role_cache(liniero_user.rol)
+        assert user_can_access_submodulo(
+            liniero_user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
+        ) is True
+
+        permiso.nivel_acceso = RoleModuloPermiso.SIN_ACCESO
+        permiso.save(update_fields=["nivel_acceso", "updated_at"])
+
+        assert user_can_access_submodulo(
+            liniero_user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
+        ) is False
+
+
+class TestSubmodulosConfigFinanciero186:
+    """A2: catálogo granular de Financiero (`apps/financiero/`, colgado de
+    MODULO_MANTENIMIENTO) y Configuración/Parametrización (colgado de
+    MODULO_CONFIG) -- ver decisión de diseño en
+    `rbac_seed_data.SUBMODULOS_FINANCIERO_APP`."""
+
+    def test_las_hojas_de_config_quedan_registradas_bajo_config(self):
+        for submodulo in SUBMODULOS_CONFIG:
+            assert SUBMODULO_A_MODULO[submodulo] == MODULO_CONFIG
+
+    def test_las_hojas_de_financiero_quedan_registradas_bajo_mantenimiento(self):
+        for submodulo in SUBMODULOS_FINANCIERO:
+            assert SUBMODULO_A_MODULO[submodulo] == MODULO_MANTENIMIENTO
+
+    @pytest.mark.django_db
+    def test_fila_vacia_es_sin_acceso_por_defecto(self):
+        """A diferencia de las hojas de Mantenimiento originales (A1),
+        Financiero/Config NO tienen fila legacy previa de la cual derivar --
+        la migración no siembra nada, así que un rol sin fila explícita debe
+        quedar sin acceso."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="config_sin_filas", nombre="Sin filas", nivel="operario",
+        )
+        user = User.objects.create_user(
+            email="sin-filas@test.com", password="testpass123!", rol=role.codigo,
+        )
+
+        for submodulo in SUBMODULOS_CONFIG | SUBMODULOS_FINANCIERO:
+            assert user_can_access_submodulo(user, submodulo) is False
+
+    @pytest.mark.django_db
+    def test_hoja_financiero_autoriza_con_permiso_propio_sin_modulo_completo(self):
+        """Generaliza el fix de A1: una hoja de Financiero también autoriza
+        sin el módulo (Mantenimiento) padre completo."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="solo_nomina", nombre="Solo nómina", nivel="operario",
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_MANTENIMIENTO, submodulo=SUBMODULO_FIN_NOMINA,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+        user = User.objects.create_user(
+            email="solo-nomina@test.com", password="testpass123!", rol=role.codigo,
+        )
+
+        assert user_can_access_submodulo(user, SUBMODULO_FIN_NOMINA) is True
+        assert user_can_access_modulo(user, MODULO_MANTENIMIENTO) is False
+        assert user_can_access_submodulo(
+            user, SUBMODULO_MANTENIMIENTO_ACTIVIDADES
+        ) is False
+
+    @pytest.mark.django_db
+    def test_hoja_financiero_no_autoriza_si_el_modulo_padre_esta_denegado(self):
+        """Mismo edge case de seguridad que A1, generalizado a Financiero."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="financiero_padre_denegado", nombre="Financiero padre denegado",
+            nivel="operario",
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_MANTENIMIENTO, submodulo="",
+            nivel_acceso=RoleModuloPermiso.SIN_ACCESO,
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_MANTENIMIENTO, submodulo=SUBMODULO_FIN_NOMINA,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+        user = User.objects.create_user(
+            email="financiero-padre-denegado@test.com", password="testpass123!",
+            rol=role.codigo,
+        )
+
+        assert user_can_access_submodulo(user, SUBMODULO_FIN_NOMINA) is False
+
+    @pytest.mark.django_db
+    def test_hoja_config_no_autoriza_si_el_modulo_padre_esta_denegado(self):
+        """Mismo edge case de seguridad que A1, generalizado a CONFIG (con una
+        hoja que sí es propiamente de Configuración)."""
+        from apps.core.models import Role
+
+        role = Role.objects.create(
+            codigo="config_padre_denegado", nombre="Config padre denegado",
+            nivel="operario",
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_CONFIG, submodulo="",
+            nivel_acceso=RoleModuloPermiso.SIN_ACCESO,
+        )
+        RoleModuloPermiso.objects.create(
+            role=role, modulo=MODULO_CONFIG, submodulo=SUBMODULO_CONFIG_ROLES_PERMISOS,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+        user = User.objects.create_user(
+            email="config-padre-denegado@test.com", password="testpass123!",
+            rol=role.codigo,
+        )
+
+        assert user_can_access_submodulo(user, SUBMODULO_CONFIG_ROLES_PERMISOS) is False
+
+
+class TestMiddlewareGranularA3:
+    """#186 A3: RBACModuloMiddleware gatea por submódulo (no solo módulo) y
+    distingue Ver de Ver y editar en mutaciones."""
+
+    def test_ver_permite_get_pero_bloquea_mutacion(self, client, liniero_user, user_password):
+        """liniero tiene 'ver' (no 'ver_editar') en MANTENIMIENTO_CAMPO, vía
+        el seed de A1 (nivel operario -> ver). Debe poder LISTAR pero no
+        CREAR."""
+        client.login(username=liniero_user.email, password=user_password)
+
+        get_response = client.get(reverse('campo:lista'))
+        assert get_response.status_code == 200
+
+        post_response = client.post(reverse('campo:reportar_dano'), {})
+        assert post_response.status_code == 302
+        assert post_response.url == reverse('core:home')
+
+    def test_sin_hoja_financiero_bloquea_get_y_post(self, client, liniero_user, user_password):
+        """liniero no tiene ninguna hoja FIN_* -- bloqueado incluso para GET,
+        antes de llegar a RoleRequiredMixin."""
+        client.login(username=liniero_user.email, password=user_password)
+
+        response = client.get(reverse('financiero:dashboard'))
+        assert response.status_code == 302
+        assert response.url == reverse('core:home')
+
+    def test_hoja_mas_especifica_gana_sobre_la_generica(self, client, liniero_user, user_password):
+        """`/campo/procedimientos/` debe gatearse por
+        MANTENIMIENTO_PROCEDIMIENTOS, no por el MANTENIMIENTO_CAMPO más
+        genérico -- liniero tiene 'ver' en ambos vía el seed de A1, así que
+        esto en particular no distingue nivel, pero sí confirma que el
+        prefijo específico matchea antes que el catch-all '/campo/'."""
+        client.login(username=liniero_user.email, password=user_password)
+
+        response = client.get(reverse('campo:procedimientos'))
+        assert response.status_code == 200
+
+
+class TestSidebarGranularA3:
+    """#186 A3: el sidebar administrativo (rama `{% else %}` de
+    `request.user.is_campo` en sidebar.html) muestra/oculta cada dropdown de
+    Mantenimiento/Financiero según la hoja granular, no el módulo completo."""
+
+    @staticmethod
+    def _submenus(html):
+        import re
+        return set(re.findall(r'aria-label="Submenu ([^"]+)"', html))
+
+    @pytest.mark.django_db
+    def test_coordinador_ve_mantenimiento_y_financiero(self, client, user_password):
+        """coordinador: nivel admin, con MANTENIMIENTO, y en la lista legacy
+        de acceso a Financiero (ver rbac_seed_data) -- debe ver todo."""
+        u = CoordinadorFactory()
+        client.login(username=u.email, password=user_password)
+
+        subs = self._submenus(client.get('/').content.decode())
+
+        assert 'Actividades' in subs
+        assert 'Campo' in subs
+        assert 'Procedimientos' in subs
+        assert 'Financiero' in subs
+
+    @pytest.mark.django_db
+    def test_admin_construccion_no_ve_mantenimiento_ni_financiero(self, client, user_password):
+        """admin_construccion: nivel admin pero SOLO módulo CONSTRUCCION --
+        no debe ver ninguna hoja de Mantenimiento ni Financiero (que cuelga
+        de MANTENIMIENTO)."""
+        u = User.objects.create_user(
+            email='admin-construccion-sidebar@test.com', password=user_password,
+            rol='admin_construccion',
+        )
+        client.login(username=u.email, password=user_password)
+
+        subs = self._submenus(client.get('/').content.decode())
+
+        assert 'Actividades' not in subs
+        assert 'Campo' not in subs
+        assert 'Procedimientos' not in subs
+        assert 'Financiero' not in subs

@@ -28,6 +28,73 @@ MODULO_MANTENIMIENTO = "MANTENIMIENTO"
 MODULO_CONSTRUCCION = "CONSTRUCCION"
 MODULO_CONFIG = "CONFIG"
 
+# Catálogo aditivo de #186 A1. El snapshot de Construcción de abajo permanece
+# congelado para el Gate de Paridad; estas hojas nuevas se siembran desde el
+# permiso general de Mantenimiento para no retirar acceso a roles legacy.
+SUBMODULOS_MANTENIMIENTO = (
+    "MANTENIMIENTO_ACTIVIDADES",
+    "MANTENIMIENTO_LINEAS_TORRES",
+    "MANTENIMIENTO_CAMPO",
+    "MANTENIMIENTO_PROCEDIMIENTOS",
+)
+
+# Catálogo aditivo de #186 A2 (id:instelec-186-financiero-parent-modulo).
+#
+# DECISION DE DISEÑO -- CORREGIDA (ver commit posterior que arregla el error
+# original de colgar esto de MODULO_CONFIG). Estas 6 hojas corresponden a
+# `apps/financiero/` -- dashboard/presupuesto/nómina/facturación. Cuelgan de
+# `MODULO_MANTENIMIENTO`, NO de CONFIG: dos mecanismos legacy independientes ya
+# agrupan Financiero ahí --
+#   1. `middleware.RBACModuloMiddleware` ya exige MODULO_MANTENIMIENTO para
+#      TODO el prefix `/financiero/*` (`MANTENIMIENTO_PREFIXES`).
+#   2. `templates/components/sidebar.html` ya renderiza el menú "Financiero"
+#      solo con `x-show="modulo === 'mantenimiento'"`.
+# Ninguno de los dos se escribió pensando en #186 -- son evidencia
+# independiente de cómo el resto del sistema ya modela esta superficie.
+#
+# NO son lo mismo que `SUBMODULO_FINANCIERO` de arriba ("FINANCIERO", ya
+# definido) -- ese es el tab financiero de UN proyecto de construcción puntual
+# (`apps/construccion`), una superficie distinta, sin colisión de código
+# porque las hojas de acá usan prefijo `FIN_`.
+#
+# Sin fila previa en `RoleModuloPermiso` para ningún rol -- la migración NO
+# puede derivar de un permiso "Financiero" general porque nunca existió como
+# submódulo (solo como gate de módulo completo); parte de una matriz vacía
+# (todo Sin acceso) y el gate legacy (middleware + `allowed_roles` por vista)
+# sigue siendo el real hasta que A3 conecte estas hojas.
+SUBMODULOS_FINANCIERO_APP = (
+    "FIN_DASHBOARD",
+    "FIN_PRESUPUESTO_PLANEADO",
+    "FIN_PRESUPUESTO_REAL",
+    "FIN_CHECKLIST_FACTURACION",
+    "FIN_COSTOS_CUADRILLA",
+    "FIN_NOMINA",
+)
+
+# #186 A3 (migración 0004 y `seed_roles_permisos_bd` usan esta MISMA
+# constante -- fuente única de verdad, ver docstring de la migración para el
+# razonamiento completo de por qué son justo estos 6 roles).
+_ROLES_CON_ACCESO_LEGACY_A_FINANCIERO = (
+    "admin_general",
+    "coordinador_general",
+    "admin_mantenimiento",
+    "admin",
+    "director",
+    "coordinador",
+)
+NIVEL_ACCESO_VER_EDITAR = "ver_editar"
+
+# Catálogo aditivo de #186 A2. Mismo criterio de padre (`MODULO_CONFIG`) que
+# arriba. Tampoco tiene fila previa -- `Usuario.rol`/permisos de admin siguen
+# siendo el gate real hasta A3.
+SUBMODULOS_CONFIG_APP = (
+    "CONFIG_USUARIOS",
+    "CONFIG_CARGOS",
+    "CONFIG_ROLES_PERMISOS",
+    "CONFIG_VEHICULOS",
+    "CONFIG_COLABORADORES",
+)
+
 NIVEL_ADMIN = "admin"
 NIVEL_OPERARIO = "operario"
 
@@ -207,3 +274,31 @@ def seed_roles_permisos_bd():
                 submodulo=submodulo,
                 defaults={"nivel_acceso": nivel_acceso},
             )
+
+        # Compatibilidad #186 A1: los roles existentes que ya podían entrar
+        # a Mantenimiento reciben el mismo nivel en cada hoja nueva. La
+        # migración 0003 aplica esta misma regla en bases ya instaladas.
+        if MODULO_MANTENIMIENTO in ROL_MODULOS.get(codigo, set()):
+            for submodulo in SUBMODULOS_MANTENIMIENTO:
+                RoleModuloPermiso.objects.get_or_create(
+                    role=role,
+                    modulo=MODULO_MANTENIMIENTO,
+                    submodulo=submodulo,
+                    defaults={"nivel_acceso": nivel_acceso},
+                )
+
+        # Compatibilidad #186 A3: preserva el acceso legacy a Financiero
+        # (apps/financiero/) de los 6 roles que hoy entran vía
+        # RoleRequiredMixin (bypass automático de nivel admin) antes de que
+        # el middleware pasara a exigir las hojas FIN_* granulares. La
+        # migración 0004 aplica esta misma regla en bases ya instaladas --
+        # ver su docstring para el razonamiento completo de por qué son
+        # justo estos 6 roles.
+        if codigo in _ROLES_CON_ACCESO_LEGACY_A_FINANCIERO:
+            for submodulo in SUBMODULOS_FINANCIERO_APP:
+                RoleModuloPermiso.objects.get_or_create(
+                    role=role,
+                    modulo=MODULO_MANTENIMIENTO,
+                    submodulo=submodulo,
+                    defaults={"nivel_acceso": NIVEL_ACCESO_VER_EDITAR},
+                )

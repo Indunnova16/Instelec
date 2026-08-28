@@ -554,13 +554,16 @@ class TestFinancieroViews:
         assert 'login' in response.url
 
     def test_dashboard_financiero_requires_role(self, client, liniero_user, user_password):
-        """Test financial dashboard requires specific roles."""
+        """liniero no tiene ninguna hoja FIN_* -- #186 A3: RBACModuloMiddleware
+        gatea /financiero/* por submódulo granular ANTES de la vista, así que
+        llega como 302 (patrón del resto del middleware RBAC), no el 403
+        legacy de RoleRequiredMixin."""
         client.login(username=liniero_user.email, password=user_password)
         url = reverse('financiero:dashboard')
 
         response = client.get(url)
 
-        assert response.status_code == 403
+        assert response.status_code == 302
 
     def test_dashboard_financiero_admin(self, client, admin_user, user_password):
         """Test financial dashboard for admin."""

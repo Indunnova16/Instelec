@@ -49,13 +49,12 @@ class Role(BaseModel):
 
 
 class RoleModuloPermiso(BaseModel):
-    """Permiso de un `Role` sobre un módulo (y, opcionalmente, sub-módulo de
-    CONSTRUCCION).
+    """Permiso de un `Role` sobre un módulo y, opcionalmente, un sub-módulo.
 
     Una fila con `submodulo=''` (string vacío, NO NULL -- ver nota abajo) =
     permiso a nivel de MÓDULO completo (MANTENIMIENTO/CONSTRUCCION/CONFIG).
-    Una fila con `submodulo` no vacío afina el acceso dentro de CONSTRUCCION
-    (obra civil, montaje, etc. — ver `TODOS_SUBMODULOS` en
+    Una fila con `submodulo` no vacío afina el acceso dentro de su módulo
+    (Construcción, Mantenimiento, etc. — ver `SUBMODULOS_POR_MODULO` en
     `apps.core.permissions`). La AUSENCIA de una fila para un
     módulo/submódulo dado equivale a `sin_acceso` (no se crean filas
     explícitas de `sin_acceso` en la migración de datos, ver 0002).
