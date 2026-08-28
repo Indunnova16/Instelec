@@ -1,7 +1,7 @@
 """
 Tests issue #209 — Formularios de bloque y personal: select2 (TomSelect)
 buscable en los 6 campos + filtros reales en cascada (Línea→Tramo, Supervisor
-por área, Personal por área+búsqueda).
+y Personal activo+búsqueda).
 
 Separado de #178 (ver SPRINTS/ANALISIS_2026-08-03_issue178_particion.md,
 partición N3). Depende de #178 Sprint BC (grid editable, YA en producción,
@@ -17,10 +17,9 @@ Cubre:
   TestA3CrearBloqueCascadaTramo) solo cubre el caso de una línea sin tramos.
 - A3: Supervisor solo lista `rol='supervisor'` + área compatible (MANTENIMIENTO
   o legacy sin área) — excluye explícitamente área=CONSTRUCCION/FINANCIERO.
-- A4: Personal solo lista `PersonalCuadrilla` activo de área compatible
-  (MANTENIMIENTO o legacy sin área) — excluye área=CONSTRUCCION/FINANCIERO e
-  inactivos; el <option> incluye nombre Y documento para que TomSelect pueda
-  buscar por cualquiera de los dos (cédula incluida).
+- A4: Personal lista todo `PersonalCuadrilla` activo, independientemente de
+  área, y excluye inactivos; el <option> incluye nombre Y documento para que
+  TomSelect pueda buscar por cualquiera de los dos (cédula incluida).
 
 Ejecutar con:
     pytest apps/cuadrillas/tests_issue_209.py -v
@@ -208,7 +207,7 @@ class TestA3SupervisorFiltradoPorArea(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# A4 — Personal: activos + área compatible con Mantenimiento, buscable
+# A4 — Personal activo sin restricción por área, buscable
 # ---------------------------------------------------------------------------
 class TestA4PersonalFiltradoPorAreaYActivo(TestCase):
     def _crear_personal(self, documento, nombre, area="", activo=True):
@@ -231,10 +230,10 @@ class TestA4PersonalFiltradoPorAreaYActivo(TestCase):
         visibles = list(_personal_visible_para_usuario(None))
         self.assertIn(p, visibles)
 
-    def test_personal_area_construccion_no_visible(self):
+    def test_personal_area_construccion_visible(self):
         p = self._crear_personal("209-A4-03", "De Construccion", area="CONSTRUCCION")
         visibles = list(_personal_visible_para_usuario(None))
-        self.assertNotIn(p, visibles)
+        self.assertIn(p, visibles)
 
     def test_personal_inactivo_no_visible(self):
         p = self._crear_personal("209-A4-04", "Inactivo Mant", area="MANTENIMIENTO", activo=False)

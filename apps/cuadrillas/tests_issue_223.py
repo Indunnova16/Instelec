@@ -12,7 +12,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.actividades.models import TipoActividad
-from apps.cuadrillas.models import Cuadrilla
+from apps.cuadrillas.models import Cuadrilla, CuadrillaMiembro, PersonalCuadrilla
 from apps.cuadrillas.views_semanal import _bloque_a_dict, _choices_form_bloque
 from apps.lineas.models import Linea, Torre, Tramo
 
@@ -247,6 +247,78 @@ class TestCatalogoSupervisorMantenimiento(TestCase):
         self.assertIn(tipo.nombre, html)
         self.assertIn(linea.codigo, html)
         self.assertIn(supervisor.documento, html)
+
+
+class TestPersonalActivoAsignableSinArea(TestCase):
+    """A2: legacy y grid semanal comparten la elegibilidad por estado activo."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(
+            email="admin_personal_223@test.local",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="Personal 223",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def _personal(self, documento, *, area, activo=True):
+        return PersonalCuadrilla.objects.create(
+            nombre=f"Personal {documento}",
+            documento=documento,
+            rol_cuadrilla_id="LINIERO_I",
+            salario_base=0,
+            area=area,
+            activo=activo,
+        )
+
+    def test_api_legacy_lista_personal_activo_de_todas_las_areas_y_legacy(self):
+        construccion = self._personal("223-A2-CON", area="CONSTRUCCION")
+        mantenimiento = self._personal("223-A2-MAN", area="MANTENIMIENTO")
+        otra_area = self._personal("223-A2-FIN", area="FINANCIERO")
+        legacy = self._personal("223-A2-LEG", area="")
+        inactivo = self._personal("223-A2-BAJ", area="CONSTRUCCION", activo=False)
+
+        response = self.client.get(reverse("cuadrillas:personal_list_api"))
+
+        self.assertEqual(response.status_code, 200)
+        documentos = {item["documento"] for item in response.json()}
+        self.assertTrue(
+            {construccion.documento, mantenimiento.documento, otra_area.documento, legacy.documento}
+            .issubset(documentos)
+        )
+        self.assertNotIn(inactivo.documento, documentos)
+
+    def test_post_semanal_acepta_todas_las_areas_activas_y_rechaza_duplicado_activo(self):
+        personal_activo = [
+            self._personal("223-A2-CON-POST", area="CONSTRUCCION"),
+            self._personal("223-A2-MAN-POST", area="MANTENIMIENTO"),
+            self._personal("223-A2-FIN-POST", area="FINANCIERO"),
+            self._personal("223-A2-LEG-POST", area=""),
+        ]
+        cuadrilla = Cuadrilla.objects.create(
+            codigo="02-2099-0223-A2", nombre="Bloque elegibilidad 223"
+        )
+        url = reverse("cuadrillas:semanal_miembro_agregar", args=[cuadrilla.pk])
+
+        for personal in personal_activo:
+            response = self.client.post(url, {"documento": personal.documento})
+            self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            CuadrillaMiembro.objects.filter(cuadrilla=cuadrilla, activo=True).count(), 4
+        )
+
+        duplicado = self.client.post(url, {"documento": personal_activo[0].documento})
+
+        self.assertEqual(duplicado.status_code, 400)
+        self.assertContains(duplicado, "ya es miembro activo", status_code=400)
+        self.assertEqual(
+            CuadrillaMiembro.objects.filter(cuadrilla=cuadrilla, activo=True).count(), 4
+        )
 
 
 class TestListadoSemanasActualesOFuturas(TestCase):

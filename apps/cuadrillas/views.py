@@ -65,10 +65,14 @@ def _sincronizar_dia_ganado(*, usuario_id, cuadrilla, fecha, registrado_por):
 
 
 def _personal_visible_para_usuario(request):
-    """Colaboradores asignables por el área del usuario, con compatibilidad legacy."""
-    qs = PersonalCuadrilla.objects.filter(activo=True)
-    area = getattr(request.user, "area", "")
-    return qs.filter(area=area) if area else qs
+    """Colaboradores activos asignables, sin restringirlos por área.
+
+    El catálogo de PersonalCuadrilla es compartido: tanto la superficie legacy
+    como la programación semanal deben admitir personal activo de cualquier
+    área y los registros legacy sin área. La duplicación activa se protege al
+    crear el CuadrillaMiembro, no al construir este catálogo.
+    """
+    return PersonalCuadrilla.objects.filter(activo=True)
 
 
 # ---------------------------------------------------------------------------
