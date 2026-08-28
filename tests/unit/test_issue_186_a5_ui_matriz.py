@@ -10,14 +10,34 @@ CRUD `Role` + grid HTMX bajo Parametrización. Cubre:
 """
 
 import pytest
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.http import HttpResponse
+from django.test import RequestFactory
 
+from apps.core.middleware import RBACModuloMiddleware
 from apps.core.models import Role, RoleModuloPermiso
 from apps.core.permissions import (
+    MODULO_MANTENIMIENTO,
     MODULO_CONSTRUCCION,
     user_can_access_modulo,
     user_can_access_submodulo,
 )
 from tests.factories import AdminFactory
+
+
+def _rbac_response(user, path, method="GET", htmx=False):
+    """Pasa una URL real por el middleware que protege requests directos.
+
+    La vista final devuelve 204: así un 302/HX-Redirect solo puede provenir
+    del control RBAC y no de una validación de formulario ajena al permiso.
+    """
+    request = getattr(RequestFactory(), method.lower())(
+        path, HTTP_HX_REQUEST="true" if htmx else None
+    )
+    request.user = user
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    return RBACModuloMiddleware(lambda _request: HttpResponse(status=204))(request)
 
 
 @pytest.fixture
@@ -261,3 +281,105 @@ class TestRoleModuloPermisoMatriz186:
         user = Usuario(rol=role.codigo, is_superuser=False, is_staff=False)
         assert user_can_access_submodulo(user, "OBRA_CIVIL") is True
         assert user_can_access_modulo(user, MODULO_CONSTRUCCION) is False  # solo submodulo, no modulo completo
+
+
+@pytest.mark.django_db
+class TestEnforcementGranularA5:
+    """Regresión A5 de rutas directas, incluidos GET y mutaciones HTMX.
+
+    El rol ``admin`` es legacy y está sembrado por la migración real. El
+    segundo rol es deliberadamente no-superuser: evita que el bypass global
+    oculte una regresión de nivel ``ver`` frente a ``ver_editar``.
+    """
+
+    @pytest.fixture
+    def legacy_admin(self, user_password):
+        from apps.usuarios.models import Usuario
+
+        assert Role.objects.get(codigo="admin").legacy is True
+        return Usuario.objects.create_user(
+            email="admin.legacy.186.a5@test.com",
+            password=user_password,
+            first_name="Admin",
+            last_name="Legacy",
+            rol="admin",
+            is_superuser=False,
+        )
+
+    @pytest.fixture
+    def restricted_user(self, user_password):
+        from apps.usuarios.models import Usuario
+
+        role = Role.objects.create(
+            codigo="qa_186_a5_restringido",
+            nombre="QA #186 restringido",
+            nivel=Role.NIVEL_OPERARIO,
+        )
+        user = Usuario.objects.create_user(
+            email="restringido.186.a5@test.com",
+            password=user_password,
+            first_name="QA",
+            last_name="Restringido",
+            rol=role.codigo,
+            is_superuser=False,
+        )
+        return user, role
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/construccion/proyecto/", "/construccion/obra-civil/"],
+    )
+    def test_rol_legacy_real_conserva_get_y_post_de_construccion(self, legacy_admin, path):
+        """Construcción mantiene el guard legacy previo a #186 para un rol real."""
+        assert _rbac_response(legacy_admin, path).status_code == 204
+        assert _rbac_response(legacy_admin, path, method="POST").status_code == 204
+
+    @pytest.mark.parametrize(
+        ("path", "submodulo"),
+        [
+            ("/actividades/programacion/", "MANTENIMIENTO_ACTIVIDADES"),
+            ("/campo/procedimientos/", "MANTENIMIENTO_PROCEDIMIENTOS"),
+            ("/financiero/nomina/", "FIN_NOMINA"),
+            ("/financiero/presupuesto-real/", "FIN_PRESUPUESTO_REAL"),
+        ],
+    )
+    def test_ver_permite_get_y_deniega_mutacion_directa_htmx(
+        self, restricted_user, path, submodulo
+    ):
+        user, role = restricted_user
+        RoleModuloPermiso.objects.create(
+            role=role,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=submodulo,
+            nivel_acceso=RoleModuloPermiso.VER,
+        )
+
+        assert _rbac_response(user, path).status_code == 204
+        # La navegación normal conserva redirect; HTMX usa HX-Redirect para
+        # no reintroducir el loop que cubre test_issue_186_redirect_loop.py.
+        assert _rbac_response(user, path, method="POST").status_code == 302
+        htmx_response = _rbac_response(user, path, method="POST", htmx=True)
+        assert htmx_response.status_code == 200
+        assert htmx_response["HX-Redirect"] == "/"
+
+    @pytest.mark.parametrize(
+        ("path", "submodulo"),
+        [
+            ("/actividades/programacion/", "MANTENIMIENTO_ACTIVIDADES"),
+            ("/campo/procedimientos/", "MANTENIMIENTO_PROCEDIMIENTOS"),
+            ("/financiero/nomina/", "FIN_NOMINA"),
+            ("/financiero/presupuesto-real/", "FIN_PRESUPUESTO_REAL"),
+        ],
+    )
+    def test_ver_editar_permite_get_y_mutacion_directa(self, restricted_user, path, submodulo):
+        user, role = restricted_user
+        RoleModuloPermiso.objects.create(
+            role=role,
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=submodulo,
+            nivel_acceso=RoleModuloPermiso.VER_EDITAR,
+        )
+
+        assert _rbac_response(user, path).status_code == 204
+        assert _rbac_response(user, path, method="POST").status_code == 204
+        assert _rbac_response(user, path, method="POST", htmx=True).status_code == 204
