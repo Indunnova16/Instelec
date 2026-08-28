@@ -128,7 +128,9 @@
         {% include 'cuadrillas/partials/_tab_semanas.html' %}
     </section>
 
-    <!-- Cuadrillas List grouped by week -->
+    <!-- Listado operativo: cada cuadrilla expone su resumen y acciones sin
+         requerir abrir el acordeón. El detalle expandible conserva la lista
+         nominal de miembros para no saturar el tablero semanal. -->
     {# issue #187 (freeze rows/columns): esta lista NO es una <table> -- es un #}
     {# acordeon de tarjetas agrupadas por semana (213 filas en produccion). El #}
     {# patron sticky-thead de #183 no aplica literal (no hay columnas que #}
@@ -143,9 +145,9 @@
 
             <div class="overflow-auto max-h-[70vh] space-y-4 pr-1">
             {% for semana_label, cuadrillas_grupo in cuadrillas_por_semana.items %}
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden" data-semana="{{ semana_label }}">
                 <!-- Week header (sticky -- issue #187) -->
-                <div class="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700 flex items-center justify-between sticky top-0 z-10">
+                <div class="px-4 py-3 bg-blue-50 dark:bg-blue-950 border-b border-blue-100 dark:border-blue-900 flex items-center justify-between sticky top-0 z-10">
                     <div class="flex items-center gap-2">
                         <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -160,12 +162,11 @@
                 <!-- Cuadrillas in this week -->
                 <div class="divide-y dark:divide-gray-700" role="list">
                     {% for cuadrilla in cuadrillas_grupo %}
-                    <article class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
+                    <article class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                          x-data="{ expanded: false }"
-                         @click="expanded = !expanded"
                          role="listitem"
                          aria-labelledby="cuadrilla-{{ cuadrilla.id }}-name">
-                        <div class="flex items-center justify-between">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center" aria-hidden="true">
                                     <span class="text-blue-600 dark:text-blue-300 font-medium text-xs">{{ cuadrilla.codigo|slice:":2" }}</span>
@@ -181,7 +182,7 @@
                                 {% else %}
                                 <span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 rounded-full" role="status">Inactiva</span>
                                 {% endif %}
-                                <button class="p-1"
+                                <button type="button" @click="expanded = !expanded" class="p-1"
                                         :aria-expanded="expanded.toString()"
                                         aria-label="Expandir detalles de {{ cuadrilla.codigo }}">
                                     <svg class="w-5 h-5 text-gray-400 transform transition" :class="{ 'rotate-180': expanded }"
@@ -191,6 +192,43 @@
                                 </button>
                             </div>
                         </div>
+
+                        <dl class="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumen de {{ cuadrilla.codigo }}">
+                            <div class="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
+                                <dt class="text-gray-500 dark:text-gray-400">Actividad / ID</dt>
+                                <dd class="mt-1 font-medium text-gray-900 dark:text-white">
+                                    {% if cuadrilla.tipo_actividad %}{{ cuadrilla.tipo_actividad.nombre }}{% else %}Sin actividad registrada{% endif %}
+                                    <span class="block text-xs font-normal text-gray-500">{{ cuadrilla.codigo }}</span>
+                                </dd>
+                            </div>
+                            <div class="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
+                                <dt class="text-gray-500 dark:text-gray-400">Descripción</dt>
+                                <dd class="mt-1 font-medium text-gray-900 dark:text-white">
+                                    {% if cuadrilla.tipo_actividad and cuadrilla.tipo_actividad.descripcion %}{{ cuadrilla.tipo_actividad.descripcion }}{% elif cuadrilla.observaciones %}{{ cuadrilla.observaciones }}{% else %}Sin descripción registrada{% endif %}
+                                </dd>
+                            </div>
+                            <div class="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
+                                <dt class="text-gray-500 dark:text-gray-400">Supervisor / Línea</dt>
+                                <dd class="mt-1 font-medium text-gray-900 dark:text-white">
+                                    {% if cuadrilla.supervisor %}{{ cuadrilla.supervisor.get_full_name }}{% else %}Sin supervisor asignado{% endif %}
+                                    <span class="block text-xs font-normal text-gray-500">{% if cuadrilla.linea_asignada %}{{ cuadrilla.linea_asignada.codigo }}{% else %}Sin línea asignada{% endif %}</span>
+                                </dd>
+                            </div>
+                            <div class="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
+                                <dt class="text-gray-500 dark:text-gray-400">Miembros / Estado</dt>
+                                <dd class="mt-1 font-medium text-gray-900 dark:text-white">{{ cuadrilla.miembros.count }} miembro{{ cuadrilla.miembros.count|pluralize:"s" }}</dd>
+                                <span class="block text-xs text-green-700 dark:text-green-300">{% if cuadrilla.activa %}Activa{% else %}Inactiva{% endif %}</span>
+                            </div>
+                        </dl>
+
+                        <nav class="mt-4 flex flex-wrap gap-2" aria-label="Acciones de {{ cuadrilla.codigo }}">
+                            <a @click.stop href="{% url 'cuadrillas:detalle' cuadrilla.id %}"
+                               class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Ver</a>
+                            <a @click.stop href="{% url 'cuadrillas:editar' cuadrilla.id %}"
+                               class="rounded-md bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600">Editar</a>
+                            <button type="button" @click.stop="tab = 'mapa'; $nextTick(() => { window.map && window.map.invalidateSize(); focusCuadrilla('{{ cuadrilla.id }}'); })"
+                                    class="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700">Mapa</button>
+                        </nav>
 
                         <!-- Expanded details -->
                         <div x-show="expanded" x-collapse class="mt-4 pl-13" role="region" aria-label="Detalles de {{ cuadrilla.codigo }}">
@@ -232,15 +270,6 @@
                                 </ul>
                             </div>
 
-                            <nav class="mt-3 flex gap-3" aria-label="Acciones de {{ cuadrilla.codigo }}">
-                                <a href="{% url 'cuadrillas:detalle' cuadrilla.id %}"
-                                   class="text-sm text-blue-600 hover:text-blue-800">Ver detalle</a>
-                                <a href="{% url 'cuadrillas:editar' cuadrilla.id %}"
-                                   class="text-sm text-amber-600 hover:text-amber-800">Editar</a>
-                                <button @click.stop
-                                        onclick="focusCuadrilla('{{ cuadrilla.id }}')"
-                                        class="text-sm text-green-600 hover:text-green-800">Ver en mapa</button>
-                            </nav>
                         </div>
                     </article>
                     {% endfor %}

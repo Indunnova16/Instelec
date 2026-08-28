@@ -64,7 +64,7 @@ def _b3_get_queryset(self):
         filtro = 'activas'
 
     qs = Cuadrilla.objects.all().select_related(
-        'supervisor', 'vehiculo', 'linea_asignada', 'desactivado_por',
+        'supervisor', 'vehiculo', 'linea_asignada', 'tipo_actividad', 'desactivado_por',
     ).prefetch_related('miembros__usuario')
 
     if filtro == 'activas':

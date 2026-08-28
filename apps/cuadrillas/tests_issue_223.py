@@ -326,6 +326,89 @@ class TestListadoSemanasActualesOFuturas(TestCase):
         self.assertContains(response, "Cuadrilla codigo legacy sin semana 223")
 
 
+class TestListadoOperativoSemanal(TestCase):
+    """A1 del follow-up: tarjetas operativas visibles sin desplegarlas."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(
+            email="admin_listado_operativo_223@test.local",
+            password="testpass123!",
+            first_name="Admin",
+            last_name="Operativo",
+            rol="admin",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.actividad = TipoActividad.objects.create(
+            codigo="223-OPERATIVA",
+            nombre="Inspección semanal",
+            categoria=TipoActividad.Categoria.INSPECCION,
+            descripcion="Revisión programada de la línea.",
+        )
+        self.linea = Linea.objects.create(codigo="223-OP-L", nombre="Línea operativa")
+        self.supervisor = Usuario.objects.create_user(
+            email="supervisor_operativo_223@test.local",
+            password="testpass123!",
+            first_name="Sofía",
+            last_name="Supervisora",
+            rol="supervisor",
+        )
+        self.cuadrilla = Cuadrilla.objects.create(
+            codigo="35-2026-OPERATIVA-223",
+            nombre="Cuadrilla operativa 223",
+            fecha=date(2026, 8, 24),
+            activa=True,
+            tipo_actividad=self.actividad,
+            linea_asignada=self.linea,
+            supervisor=self.supervisor,
+        )
+
+    @patch("apps.cuadrillas.views_b3.timezone.localdate", return_value=date(2026, 8, 24))
+    def test_semana_actual_agrupa_y_destaca_el_resumen_visible(self, _localdate):
+        response = self.client.get(reverse("cuadrillas:lista"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-semana="Semana 35 - 2026"')
+        self.assertContains(response, "Inspección semanal")
+        self.assertContains(response, "Revisión programada de la línea.")
+        self.assertContains(response, "Sofía Supervisora")
+        self.assertContains(response, "223-OP-L")
+        self.assertContains(response, "Miembros / Estado")
+        self.assertContains(response, "0 miembros")
+        self.assertContains(response, "bg-blue-50")
+
+    @patch("apps.cuadrillas.views_b3.timezone.localdate", return_value=date(2026, 8, 24))
+    def test_registro_legacy_sin_relaciones_muestra_resumen_seguro(self, _localdate):
+        legacy = Cuadrilla.objects.create(
+            codigo="35-2026-LEGACY-OPERATIVA",
+            nombre="Cuadrilla legacy operativa 223",
+            fecha=date(2026, 8, 24),
+            activa=True,
+        )
+
+        response = self.client.get(reverse("cuadrillas:lista"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, legacy.nombre)
+        self.assertContains(response, "Sin actividad registrada")
+        self.assertContains(response, "Sin descripción registrada")
+        self.assertContains(response, "Sin supervisor asignado")
+        self.assertContains(response, "Sin línea asignada")
+
+    @patch("apps.cuadrillas.views_b3.timezone.localdate", return_value=date(2026, 8, 24))
+    def test_acciones_conservan_destinos_y_no_activan_el_acordeon(self, _localdate):
+        response = self.client.get(reverse("cuadrillas:lista"))
+        html = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f'@click.stop href="{reverse("cuadrillas:detalle", args=[self.cuadrilla.id])}"', html)
+        self.assertIn(f'@click.stop href="{reverse("cuadrillas:editar", args=[self.cuadrilla.id])}"', html)
+        self.assertIn("@click.stop=\"tab = 'mapa';", html)
+        self.assertIn(f"focusCuadrilla('{self.cuadrilla.id}')", html)
+
+
 class TestTerminologiaCuadrilla(TestCase):
     """A4: la programación semanal usa la terminología del cliente."""
 
