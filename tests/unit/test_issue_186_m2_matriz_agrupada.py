@@ -6,11 +6,9 @@ Antes: `templates/core/roles_matriz.html` pintaba las 3 columnas de módulo
 Construcción en una sola fila de `<th>` plana, sin indicar a qué módulo
 pertenece cada sub-módulo.
 
-Después: thead de 2 filas -- fila 1 agrupa Construcción con
-`colspan="{{ N sub-módulos + 1 }}"`, fila 2 expone el leaf "General" (acceso
-al módulo Construcción completo) + cada sub-módulo, ambos anidados bajo el
-`<th>` de Construcción. Mantenimiento/Configuración siguen siendo columnas
-de 1 sola celda (`rowspan="2"`).
+Después: thead de 2 filas -- fila 1 agrupa cada módulo con
+`colspan="{{ N hojas de ese módulo + 1 }}"`; fila 2 expone el leaf "General"
+(acceso al módulo completo) más las hojas que pertenecen a ese módulo.
 
 No se tocó `_columnas_matriz()`/el contexto de la vista (`columnas_modulo`/
 `columnas_submodulo` siguen siendo las mismas tuplas que ya cubre
@@ -33,15 +31,15 @@ def admin_client(client, user_password):
 
 @pytest.mark.django_db
 class TestMatrizRolesAgrupadaPorModulo186M2:
-    def test_thead_agrupa_construccion_con_colspan(self, admin_client):
-        """La fila 1 del thead agrupa Construcción con colspan = N sub-módulos + 1 (general)."""
+    def test_thead_agrupa_cada_modulo_con_sus_hojas_y_general(self, admin_client):
+        """Cada padre tiene colspan = sus hojas reales + la columna General."""
         response = admin_client.get("/parametrizacion/roles/matriz/")
         assert response.status_code == 200
         body = response.content.decode("utf-8")
-        n_submodulos = len(response.context["columnas_submodulo"])
-        assert f'colspan="{n_submodulos + 1}"' in body, (
-            "Falta el colspan agrupado de Construcción en el thead"
-        )
+        for modulo, hojas in response.context["columnas_por_modulo"].items():
+            assert f'colspan="{len(hojas) + 1}"' in body, (
+                f"Falta el colspan agrupado de {modulo} en el thead"
+            )
 
     def test_thead_muestra_los_3_modulos_y_leaf_general(self, admin_client):
         response = admin_client.get("/parametrizacion/roles/matriz/")

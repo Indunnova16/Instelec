@@ -15,7 +15,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from .forms_roles import RoleForm
 from .mixins import HTMXMixin, RoleRequiredMixin
 from .models import Role, RoleModuloPermiso
-from .permissions import TODOS_SUBMODULOS
+from .permissions import SUBMODULO_A_MODULO, TODOS_SUBMODULOS
 from .utils import set_unidad_negocio
 
 logger = logging.getLogger(__name__)
@@ -323,13 +323,20 @@ class RoleInactivarView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
 
 
 def _columnas_matriz():
-    """(clave, etiqueta) de cada columna de la matriz: 3 módulos + N sub-módulos
-    de CONSTRUCCION (issue #186, A5)."""
+    """Columnas de la matriz, conservando el padre real de cada sub-módulo."""
     columnas_modulo = list(RoleModuloPermiso.MODULO_CHOICES)
     columnas_submodulo = [
         (s, s.replace('_', ' ').title()) for s in sorted(TODOS_SUBMODULOS)
     ]
-    return columnas_modulo, columnas_submodulo
+    columnas_por_modulo = {
+        modulo: [
+            (submodulo, etiqueta)
+            for submodulo, etiqueta in columnas_submodulo
+            if SUBMODULO_A_MODULO[submodulo] == modulo
+        ]
+        for modulo, _etiqueta in columnas_modulo
+    }
+    return columnas_modulo, columnas_submodulo, columnas_por_modulo
 
 
 class RoleModuloPermisoMatrizView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
@@ -347,7 +354,7 @@ class RoleModuloPermisoMatrizView(LoginRequiredMixin, RoleRequiredMixin, Templat
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        columnas_modulo, columnas_submodulo = _columnas_matriz()
+        columnas_modulo, columnas_submodulo, columnas_por_modulo = _columnas_matriz()
 
         roles = Role.objects.filter(activo=True).prefetch_related('permisos')
         filas = []
@@ -360,6 +367,7 @@ class RoleModuloPermisoMatrizView(LoginRequiredMixin, RoleRequiredMixin, Templat
         context['filas'] = filas
         context['columnas_modulo'] = columnas_modulo
         context['columnas_submodulo'] = columnas_submodulo
+        context['columnas_por_modulo'] = columnas_por_modulo
         context['nivel_choices'] = RoleModuloPermiso.NIVEL_ACCESO_CHOICES
         context['sin_acceso'] = RoleModuloPermiso.SIN_ACCESO
         return context
@@ -369,7 +377,7 @@ class RoleModuloPermisoCeldaView(LoginRequiredMixin, RoleRequiredMixin, Template
     """Guarda UNA celda de la matriz vía HTMX (POST) -- issue #186, A5.
 
     `columna` es el código de módulo (MANTENIMIENTO/CONSTRUCCION/CONFIG) o de
-    sub-módulo (siempre implica modulo=CONSTRUCCION). El `save()` de
+    sub-módulo. El padre de una hoja se resuelve desde el catálogo común. El `save()` de
     `RoleModuloPermiso` dispara la señal de invalidación de cache
     (apps/core/models_roles.py) -- efecto inmediato, sin esperar el TTL."""
     allowed_roles = _ROLES_ALLOWED
@@ -390,7 +398,10 @@ class RoleModuloPermisoCeldaView(LoginRequiredMixin, RoleRequiredMixin, Template
         if columna in modulos_validos:
             modulo, submodulo = columna, ""
         else:
-            modulo, submodulo = RoleModuloPermiso.MODULO_CONSTRUCCION, columna
+            modulo = SUBMODULO_A_MODULO.get(columna)
+            if modulo is None:
+                return HttpResponse(status=404)
+            submodulo = columna
 
         RoleModuloPermiso.objects.update_or_create(
             role=role, modulo=modulo, submodulo=submodulo,
