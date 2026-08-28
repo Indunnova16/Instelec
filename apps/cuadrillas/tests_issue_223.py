@@ -320,6 +320,28 @@ class TestPersonalActivoAsignableSinArea(TestCase):
             CuadrillaMiembro.objects.filter(cuadrilla=cuadrilla, activo=True).count(), 4
         )
 
+    def test_post_semanal_rechaza_inactivo_y_conserva_el_formulario_abierto(self):
+        """La exclusión por activo también se aplica al POST, no solo al API.
+
+        Es el guard que el journey de navegador no puede cubrir con un option
+        inexistente: aun si llega un documento manipulado, no se crea la
+        asignación y el operador recibe el error recuperable en el card.
+        """
+        inactivo = self._personal("223-A3-BAJ-POST", area="CONSTRUCCION", activo=False)
+        cuadrilla = Cuadrilla.objects.create(
+            codigo="02-2099-0223-A3", nombre="Bloque inactivo 223"
+        )
+
+        response = self.client.post(
+            reverse("cuadrillas:semanal_miembro_agregar", args=[cuadrilla.pk]),
+            {"documento": inactivo.documento},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "No se encontró un colaborador activo", status_code=400)
+        self.assertContains(response, 'id="form-agregar-personal"', status_code=400)
+        self.assertFalse(CuadrillaMiembro.objects.filter(cuadrilla=cuadrilla).exists())
+
 
 class TestListadoSemanasActualesOFuturas(TestCase):
     """A3: /cuadrillas/ es operativo; /semanal conserva el historial."""
