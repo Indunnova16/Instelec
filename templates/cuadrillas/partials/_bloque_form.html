@@ -31,14 +31,22 @@ del journey i188 (selectores #id_nombre/#id_linea/#id_tramo fijos).
                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
     </div>
     <div>
-        <label for="id_tipo_actividad" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de actividad</label>
+        <label for="id_tipo_actividad" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Actividad o tipo de actividad</label>
         <select name="tipo_actividad" id="id_tipo_actividad"
                 class="js-tomselect w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
             <option value="">— Sin tipo —</option>
             {% for ta in tipos_actividad_bloque %}
-            <option value="{{ ta.id }}" {% if b.tipo_actividad_id == ta.id|stringformat:'s' %}selected{% endif %}>{{ ta.nombre }}</option>
+            <option value="tipo:{{ ta.id }}" {% if not b.actividad_id and b.tipo_actividad_id == ta.id|stringformat:'s' %}selected{% endif %}>Tipo: {{ ta.nombre }}</option>
             {% endfor %}
+            {% if actividades_elegibles_bloque %}
+            <optgroup label="Actividades programadas">
+                {% for actividad in actividades_elegibles_bloque %}
+                <option value="actividad:{{ actividad.id }}" {% if b.actividad_id == actividad.id|stringformat:'s' %}selected{% endif %}>{{ actividad }} — {{ actividad.linea.codigo }}{% if actividad.tramo %} · {{ actividad.tramo.codigo }}{% endif %}</option>
+                {% endfor %}
+            </optgroup>
+            {% endif %}
         </select>
+        <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Al elegir una actividad programada se usarán su línea y tramo.</p>
     </div>
     <div>
         <label for="id_linea" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Línea</label>

@@ -42,7 +42,7 @@ montado a la vez). Recibe:
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     {% if b.reprogramado_desde_codigo %}<span class="px-2 py-1 text-xs rounded bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" title="Esta cuadrilla nació de reprogramar {{ b.reprogramado_desde_codigo }}">↩ Reprogramada desde {{ b.reprogramado_desde_codigo }}</span>{% endif %}
-                    {% if b.tipo_actividad %}<span class="px-2 py-1 text-xs rounded bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">{{ b.tipo_actividad }}</span>{% endif %}
+                    {% if b.actividad %}<span class="px-2 py-1 text-xs rounded bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" title="Actividad programada vinculada">{{ b.actividad }}</span>{% elif b.tipo_actividad %}<span class="px-2 py-1 text-xs rounded bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">{{ b.tipo_actividad }}</span>{% endif %}
                     {% if b.linea %}<span class="px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">Línea {{ b.linea }}</span>{% endif %}
                     {% if b.tramo_libre %}<span class="px-2 py-1 text-xs rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">Tramo {{ b.tramo_libre }}</span>{% elif b.tramo %}<span class="px-2 py-1 text-xs rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200">Tramo {{ b.tramo }}{% if b.tramo_nombre %} - {{ b.tramo_nombre }}{% endif %}</span>{% endif %}
                     {% if b.vehiculo %}<span class="px-2 py-1 text-xs rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">🚚 {{ b.vehiculo }}</span>{% endif %}

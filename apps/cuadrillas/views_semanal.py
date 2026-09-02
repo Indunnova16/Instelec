@@ -73,6 +73,7 @@ def _bloques_qs(anio, semana):
             "vehiculo",
             "supervisor",
             "tipo_actividad",
+            "actividad__tipo_actividad",
             "tramo",
             # Issue #178 (C1): _bloque_a_dict expone reprogramado_desde_codigo
             # -- select_related evita un N+1 por bloque reprogramado.
@@ -188,6 +189,18 @@ def _bloque_a_dict(cuadrilla):
         "nombre": cuadrilla.nombre,
         "tipo_actividad_id": str(cuadrilla.tipo_actividad_id) if cuadrilla.tipo_actividad_id else "",
         "tipo_actividad": getattr(cuadrilla.tipo_actividad, "nombre", "") or "",
+        # #240: a block based on an actual activity must reopen the same
+        # selector value, not silently degrade to its generic category.
+        "actividad_id": str(cuadrilla.actividad_id) if cuadrilla.actividad_id else "",
+        "actividad": str(cuadrilla.actividad) if cuadrilla.actividad_id else "",
+        "seleccion_tipo_actividad": (
+            f"{VALOR_ACTIVIDAD_REAL}:{cuadrilla.actividad_id}"
+            if cuadrilla.actividad_id
+            else (
+                f"{VALOR_TIPO_ACTIVIDAD}:{cuadrilla.tipo_actividad_id}"
+                if cuadrilla.tipo_actividad_id else ""
+            )
+        ),
         "linea_id": str(cuadrilla.linea_asignada_id) if cuadrilla.linea_asignada_id else "",
         "linea": getattr(cuadrilla.linea_asignada, "codigo", "") or "",
         "tramo_id": str(cuadrilla.tramo_id) if cuadrilla.tramo_id else "",
@@ -265,11 +278,21 @@ def _post_a_bloque_dict(request, fecha=None, codigo=""):
     (issue #188, A3/A4) — para reusar _bloque_form.html/_bloque_card.html y NO
     perder lo que el usuario ya había llenado cuando el submit falla por
     validación."""
+    seleccion_actividad = request.POST.get("tipo_actividad") or ""
+    tipo_actividad_id = seleccion_actividad
+    if seleccion_actividad.startswith(f"{VALOR_TIPO_ACTIVIDAD}:"):
+        tipo_actividad_id = seleccion_actividad.split(":", 1)[1]
     return {
         "id": "",
         "codigo": codigo,
         "nombre": (request.POST.get("nombre") or "").strip(),
-        "tipo_actividad_id": request.POST.get("tipo_actividad") or "",
+        "tipo_actividad_id": tipo_actividad_id,
+        "seleccion_tipo_actividad": seleccion_actividad,
+        "actividad_id": (
+            seleccion_actividad.split(":", 1)[1]
+            if seleccion_actividad.startswith(f"{VALOR_ACTIVIDAD_REAL}:") else ""
+        ),
+        "actividad": "",
         "linea_id": request.POST.get("linea_asignada") or "",
         "tramo_id": request.POST.get("tramo") or "",
         "tramo": "",
@@ -384,6 +407,31 @@ def _resolver_seleccion_tipo_actividad(valor):
         pass
 
     return None, None, "La actividad seleccionada no es válida."
+
+
+def _campos_actividad_para_bloque(tipo_actividad, actividad, request):
+    """Normaliza la selección combinada a los FKs que persiste ``Cuadrilla``.
+
+    Una actividad concreta es la fuente de verdad para categoría, línea y tramo:
+    aceptar valores manuales simultáneos permitiría crear un vínculo que apunta a
+    una actividad de otra ubicación. Una categoría mantiene exactamente el flujo
+    manual histórico.
+    """
+    if actividad:
+        return {
+            "actividad": actividad,
+            "tipo_actividad_id": actividad.tipo_actividad_id,
+            "linea_asignada_id": actividad.linea_id,
+            "tramo_id": actividad.tramo_id,
+            "tramo_libre": "",
+        }
+    return {
+        "actividad": None,
+        "tipo_actividad_id": tipo_actividad.pk if tipo_actividad else None,
+        "linea_asignada_id": request.POST.get("linea_asignada") or None,
+        "tramo_id": request.POST.get("tramo") or None,
+        "tramo_libre": (request.POST.get("tramo_libre") or "").strip(),
+    }
 
 
 def _vehiculo_permitido_para_asignacion(vehiculo_id, vehiculo_actual_id=None):
@@ -695,15 +743,20 @@ class ProgramacionSemanalBloqueCrearView(LoginRequiredMixin, RoleRequiredMixin, 
                 "El vehículo seleccionado no está activo para nuevas asignaciones.",
             )
 
+        tipo_actividad, actividad, error_actividad = _resolver_seleccion_tipo_actividad(
+            request.POST.get("tipo_actividad")
+        )
+        if error_actividad:
+            return self._form_con_error(request, anio, semana, error_actividad)
+        campos_actividad = _campos_actividad_para_bloque(tipo_actividad, actividad, request)
+
         codigo = _siguiente_codigo_bloque(anio, semana, nombre)
         try:
             with transaction.atomic():
                 cuadrilla = Cuadrilla.objects.create(
                     codigo=codigo,
                     nombre=nombre,
-                    tipo_actividad_id=request.POST.get("tipo_actividad") or None,
-                    linea_asignada_id=request.POST.get("linea_asignada") or None,
-                    tramo_libre=(request.POST.get("tramo_libre") or "").strip(),
+                    **campos_actividad,
                     vehiculo_id=request.POST.get("vehiculo") or None,
                     supervisor_id=request.POST.get("supervisor") or None,
                     observaciones=(request.POST.get("observaciones") or "").strip(),
@@ -809,12 +862,18 @@ class ProgramacionSemanalBloqueEditarView(LoginRequiredMixin, RoleRequiredMixin,
                 "El vehículo seleccionado no está activo para nuevas asignaciones.",
             )
 
+        tipo_actividad, actividad, error_actividad = _resolver_seleccion_tipo_actividad(
+            request.POST.get("tipo_actividad")
+        )
+        if error_actividad:
+            return self._card_con_error(request, cuadrilla, anio, semana, error_actividad)
+        campos_actividad = _campos_actividad_para_bloque(tipo_actividad, actividad, request)
+
         try:
             with transaction.atomic():
                 cuadrilla.nombre = nombre
-                cuadrilla.tipo_actividad_id = request.POST.get("tipo_actividad") or None
-                cuadrilla.linea_asignada_id = request.POST.get("linea_asignada") or None
-                cuadrilla.tramo_libre = (request.POST.get("tramo_libre") or "").strip()
+                for campo, valor in campos_actividad.items():
+                    setattr(cuadrilla, campo, valor)
                 cuadrilla.vehiculo_id = request.POST.get("vehiculo") or None
                 cuadrilla.supervisor_id = request.POST.get("supervisor") or None
                 cuadrilla.observaciones = (request.POST.get("observaciones") or "").strip()
