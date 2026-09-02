@@ -224,7 +224,7 @@ class TestProgramacionSemanalActividadReal(TestCase):
         self.assertEqual(datos["actividad_id"], "")
         self.assertEqual(datos["seleccion_tipo_actividad"], f"tipo:{self.tipo.pk}")
 
-        tipo, actividad, error = _resolver_seleccion_tipo_actividad(str(tipo_actividad.pk))
-        self.assertEqual(tipo, tipo_actividad)
+        tipo, actividad, error = _resolver_seleccion_tipo_actividad(str(self.tipo.pk))
+        self.assertEqual(tipo, self.tipo)
         self.assertIsNone(actividad)
         self.assertIsNone(error)
