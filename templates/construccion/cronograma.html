@@ -56,9 +56,8 @@
           <td class="px-3 py-2 text-right text-gray-600">{{ f.pct_avance_real|default_if_none:"—" }}%</td>
           <td class="px-3 py-2 text-center">
             {% if f.estado == 'ON_TIME' %}<span class="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">A tiempo</span>
-            {% elif f.estado == 'ADELANTADO' %}<span class="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">Adelantado</span>
             {% elif f.estado == 'RETRASADO' %}<span class="px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">Retrasado</span>
-            {% else %}<span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">—</span>{% endif %}
+            {% else %}<span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">Sin datos</span>{% endif %}
           </td>
         </tr>
         {% endfor %}

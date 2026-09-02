@@ -2980,15 +2980,20 @@ class ProgramacionFase(BaseModel):
 
     @property
     def estado(self):
-        """ON_TIME / ADELANTADO / RETRASADO según comparación esperado vs real."""
+        """Clasifica el avance real frente al esperado del cronograma.
+
+        El contrato del cronograma considera ``A tiempo`` todo avance que
+        alcance o supere lo esperado; solo queda ``RETRASADO`` cuando el real
+        es estrictamente menor. La ausencia de cualquiera de los dos valores
+        conserva ``SIN_DATA`` para no presentar una conclusión inventada.
+        """
         esp = self.pct_avance_esperado_hoy
         real = self.pct_avance_real
         if esp is None or real is None:
             return 'SIN_DATA'
-        diff = real - esp
-        if abs(diff) < 5:
+        if real >= esp:
             return 'ON_TIME'
-        return 'ADELANTADO' if diff > 0 else 'RETRASADO'
+        return 'RETRASADO'
 
 
 # ====================================================================
