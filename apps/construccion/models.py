@@ -2964,24 +2964,19 @@ class ProgramacionFase(BaseModel):
 
     @property
     def pct_avance_real(self):
-        """Lee el % real desde el ProyectoConstruccion según la sección.
+        """Lee su fuente rectora desde la matriz única de avance real.
 
-        #150 (bounce 5): MONTAJE usaba `porcentaje_avance_montaje`, propiedad
-        legacy que lee `FaseTorre.porcentaje_montaje` — un checklist que el
-        editor de detalle actual (`MontajeEstructuraTorreDetalle`) ya no
-        escribe (el signal de sync solo propaga `entrega_carga_ok`), por lo
-        que quedaba siempre en 0.0 → "—%". `_pct_montaje()` ya lee la fuente
-        correcta y excluye torres `aplica=False` (#160), igual que las demás
-        fases de `calculators_avance_real.FASES_GENERAL`.
+        ``None`` no equivale a 0: comunica que el módulo no tiene filas aún y
+        permite que el cronograma renderice ``SIN_DATA``. Un valor 0.0 es un
+        progreso efectivamente registrado y debe seguir siendo visible.
         """
-        from .calculators_avance_real import _pct_montaje
-        p = self.proyecto
-        mapeo = {
-            'OBRA_CIVIL': p.porcentaje_avance_civil,
-            'MONTAJE': _pct_montaje(p),
-            'TENDIDO': p.porcentaje_avance_tendido,
-        }
-        return mapeo.get(self.seccion)
+        from .calculators_avance_real import avance_general
+
+        return next(
+            (fase['pct'] for fase in avance_general(self.proyecto)['fases']
+             if fase['seccion'] == self.seccion),
+            None,
+        )
 
     @property
     def estado(self):

@@ -885,26 +885,52 @@ def vista_por_torre(proyecto, fase, orden='numero') -> list:
 
 
 # ==========================================================================
-# avance_general — punto 4 (7 fases visibles + global ponderado)
+# avance_general — matriz de fuentes rectoras por sección
 # ==========================================================================
 
-#: Las 7 fases del dashboard general -> (seccion ProgramacionFase, label,
-#: callable que devuelve el % real 0..100 dado el proyecto).
+# Cada función devuelve ``float`` cuando existe una fuente de ejecución y
+# ``None`` cuando esa fuente todavía no tiene filas.  Es una diferencia
+# importante: 0.0 significa progreso real capturado en cero; None permite al
+# cronograma mostrar SIN_DATA, sin convertir una ausencia de módulo en 0%.
+def _promedio(valores):
+    valores = list(valores)
+    return round(sum(valores) / len(valores), 2) if valores else None
+
+
 def _pct_ingenieria(proyecto):
-    # Sin modelo de ejecución dedicado: usa peso/avance esperado del cronograma.
-    from .models import ProgramacionFase
-    f = ProgramacionFase.objects.filter(proyecto=proyecto, seccion='INGENIERIA').first()
-    return float(f.pct_avance_esperado_hoy or 0) if f else 0.0
+    """Documentos de ingeniería CUMPLE sobre los que aplican.
+
+    ``NO_APLICA`` se excluye del denominador. Si aún no se ha capturado ningún
+    documento, no se infiere el avance desde el cronograma planeado.
+    """
+    from apps.ingenieria.models import IngenieriaEstado
+
+    estados = IngenieriaEstado.objects.filter(
+        torre__contrato=proyecto.contrato,
+        torre__archivada=False,
+    ).exclude(estado__isnull=True)
+    if not estados.exists():
+        return None
+    aplicables = estados.exclude(estado=IngenieriaEstado.Estado.NO_APLICA)
+    total = aplicables.count()
+    if total == 0:
+        return 100.0
+    completos = aplicables.filter(estado=IngenieriaEstado.Estado.CUMPLE).count()
+    return round((completos / total) * 100, 2)
 
 
-def _pct_preliminares(proyecto):
-    from .models import ProgramacionFase
-    vals = []
-    for sec in ('SOCIOPREDIAL', 'SOCIOAMBIENTAL'):
-        f = ProgramacionFase.objects.filter(proyecto=proyecto, seccion=sec).first()
-        if f and f.pct_avance_esperado_hoy is not None:
-            vals.append(float(f.pct_avance_esperado_hoy))
-    return round(sum(vals) / len(vals), 2) if vals else 0.0
+def _pct_sociopredial(proyecto):
+    from .models import SocialPredial
+
+    filas = SocialPredial.objects.filter(torre__proyecto=proyecto, torre__aplica=True)
+    return _promedio(100.0 if fila.liberado else 0.0 for fila in filas)
+
+
+def _pct_socioambiental(proyecto):
+    from .models import AmbientalTorre
+
+    filas = AmbientalTorre.objects.filter(torre__proyecto=proyecto, torre__aplica=True)
+    return _promedio(100.0 if fila.liberado else 0.0 for fila in filas)
 
 
 def _pct_obra_civil(proyecto):
@@ -914,7 +940,7 @@ def _pct_obra_civil(proyecto):
     by_torre = _detalles_oc_por_torre(proyecto)
     n = proyecto.torres.filter(aplica=True).count() or 0
     if n == 0 or not by_torre:
-        return 0.0
+        return None
     suma = sum(_avance_oc_torre(patas) for patas in by_torre.values())
     return round((suma / n) * 100, 2)
 
@@ -923,7 +949,7 @@ def _pct_montaje(proyecto):
     detalles = list(_detalles_montaje(proyecto))
     n = proyecto.torres.filter(aplica=True).count() or 0
     if n == 0 or not detalles:
-        return 0.0
+        return None
     suma = sum(_to_float(d.avance_ponderado) for d in detalles)
     return round((suma / n) * 100, 2)
 
@@ -932,7 +958,7 @@ def _pct_tendido(proyecto):
     torres = list(_tendido_torres(proyecto))
     n = proyecto.torres.filter(aplica=True).count() or 0
     if n == 0 or not torres:
-        return 0.0
+        return None
     suma = sum((_to_float(t.avance_conductor) + _to_float(t.avance_fibra)) / 2.0 for t in torres)
     return round((suma / n) * 100, 2)
 
@@ -940,36 +966,50 @@ def _pct_tendido(proyecto):
 def _pct_spt_pintura(proyecto):
     from .models import SPTTorre
     qs = SPTTorre.objects.filter(proyecto=proyecto, torre__aplica=True)  # #160
-    vals = [int(s.porcentaje_avance or 0) for s in qs]
-    return round(sum(vals) / len(vals), 2) if vals else 0.0
+    return _promedio(int(s.porcentaje_avance) for s in qs)
+
+
+def _pct_protecciones(proyecto):
+    from .models import TrinchoCuneta
+
+    filas = TrinchoCuneta.objects.filter(
+        proyecto=proyecto,
+        torre__aplica=True,
+        torre__obra_civil__aplica_obras_proteccion=True,
+    )
+    return _promedio(100.0 if fila.completado else 0.0 for fila in filas)
 
 
 def _pct_detalles_finales(proyecto):
     # ActividadFinalTorre se relaciona por torre (no tiene FK proyecto directa).
     from .models_b1_actividades_finales import ActividadFinalTorre
     qs = ActividadFinalTorre.objects.filter(torre__proyecto=proyecto, torre__aplica=True)  # #160
-    vals = [float(a.pct_avance) for a in qs]
-    return round(sum(vals) / len(vals), 2) if vals else 0.0
+    return _promedio(float(a.pct_avance) for a in qs)
 
 
-#: (seccion, label, fn) — orden de presentación de las 7 fases.
+#: (seccion, label, fn) — las nueve secciones del cronograma, en su orden
+#: contractual. Ninguna fuente usa el porcentaje planeado como sustituto.
 FASES_GENERAL = [
     ('INGENIERIA', 'Ingeniería', _pct_ingenieria),
-    ('SOCIOPREDIAL', 'Actividades Preliminares', _pct_preliminares),
+    ('SOCIOPREDIAL', 'Actividades Preliminares — Sociopredial', _pct_sociopredial),
+    ('SOCIOAMBIENTAL', 'Actividades Preliminares — Socioambiental', _pct_socioambiental),
     ('OBRA_CIVIL', 'Obra Civil', _pct_obra_civil),
     ('MONTAJE', 'Montaje', _pct_montaje),
-    ('TENDIDO', 'Tendido', _pct_tendido),
     ('SPT', 'SPT y Pintura', _pct_spt_pintura),
+    ('TENDIDO', 'Tendido', _pct_tendido),
+    ('PROTECCIONES', 'Trinchos y Cunetas', _pct_protecciones),
     ('PRUEBAS', 'Detalles Finales', _pct_detalles_finales),
 ]
 
 
 def avance_general(proyecto) -> dict:
-    """Dashboard GENERAL: % por cada una de las 7 fases + global ponderado.
+    """Dashboard GENERAL: % por las nueve fases + global ponderado.
 
     Los pesos salen de ``ProgramacionFase.peso_pct`` por sección; si todos son
-    0 (estado actual de prod), cae a equiponderado (1/7 cada una). El
-    ``global_pct`` es el promedio ponderado de los % de fase.
+    0 (estado actual de prod), cae a equiponderado entre las fuentes con dato.
+    ``global_pct`` es el promedio ponderado de las fases con fuente real. Las
+    secciones sin filas quedan con ``pct=None`` (SIN_DATA) y no distorsionan el
+    agregado.
 
     Devuelve {'fases':[{'seccion','label','pct','peso'}], 'global_pct':float}.
     """
@@ -981,18 +1021,22 @@ def avance_general(proyecto) -> dict:
 
     fases_out = []
     for seccion, label, fn in FASES_GENERAL:
-        pct = round(float(fn(proyecto)), 2)
+        valor = fn(proyecto)
+        pct = round(float(valor), 2) if valor is not None else None
         peso = pesos_por_seccion.get(seccion, 0)
         fases_out.append({'seccion': seccion, 'label': label, 'pct': pct, 'peso': peso})
 
-    total_peso = sum(f['peso'] for f in fases_out)
+    fases_con_dato = [fase for fase in fases_out if fase['pct'] is not None]
+    total_peso = sum(f['peso'] for f in fases_con_dato)
     if total_peso > 0:
-        global_pct = sum(f['pct'] * f['peso'] for f in fases_out) / total_peso
+        global_pct = sum(f['pct'] * f['peso'] for f in fases_con_dato) / total_peso
     else:
-        # Fallback equiponderado (estado actual de prod: peso_pct=0).
-        global_pct = sum(f['pct'] for f in fases_out) / len(fases_out) if fases_out else 0.0
+        # Fallback equiponderado cuando los pesos aún no se configuraron.
+        global_pct = (sum(f['pct'] for f in fases_con_dato) / len(fases_con_dato)
+                      if fases_con_dato else None)
 
-    return {'fases': fases_out, 'global_pct': round(global_pct, 2)}
+    return {'fases': fases_out,
+            'global_pct': round(global_pct, 2) if global_pct is not None else None}
 
 
 def avance_modulos(proyecto) -> dict:
@@ -1006,7 +1050,10 @@ def avance_modulos(proyecto) -> dict:
     por_seccion = {fase['seccion']: fase['pct']
                    for fase in avance_general(proyecto)['fases']}
     return {
-        'obra_civil': por_seccion.get('OBRA_CIVIL', 0.0),
-        'montaje': por_seccion.get('MONTAJE', 0.0),
-        'tendido': por_seccion.get('TENDIDO', 0.0),
+        # Las tarjetas históricas de módulos no tienen estado SIN_DATA; para
+        # ellas mantenemos el contrato previo de presentar cero sin convertir
+        # ese cero en el valor del cronograma.
+        'obra_civil': por_seccion.get('OBRA_CIVIL') or 0.0,
+        'montaje': por_seccion.get('MONTAJE') or 0.0,
+        'tendido': por_seccion.get('TENDIDO') or 0.0,
     }
