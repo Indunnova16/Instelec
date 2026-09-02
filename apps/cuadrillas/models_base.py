@@ -286,6 +286,19 @@ class Cuadrilla(BaseModel):
         help_text='Issue #188 (A1): tipo de actividad del bloque, cabeza de la cascada '
         'Tipo de actividad → Línea → Tramo del grid editable de programación semanal.',
     )
+    actividad = models.ForeignKey(
+        'actividades.Actividad',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bloques_programacion_semanal',
+        verbose_name='Actividad programada',
+        help_text=(
+            'Issue #240 (A1): actividad real seleccionada al programar el bloque. '
+            'Nullable para conservar bloques históricos que solo tienen una categoría; '
+            'SET_NULL evita que borrar una actividad invalide su bloque histórico.'
+        ),
+    )
     tramo = models.ForeignKey(
         'lineas.Tramo',
         on_delete=models.SET_NULL,

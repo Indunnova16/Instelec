@@ -41,6 +41,10 @@ from .utils_semana import _prefijo
 
 logger = logging.getLogger(__name__)
 
+VALOR_TIPO_ACTIVIDAD = "tipo"
+VALOR_ACTIVIDAD_REAL = "actividad"
+ESTADOS_ACTIVIDAD_NO_ELEGIBLES = ("COMPLETADA", "CANCELADA")
+
 # Roles con acceso — se replica el gate de ``CuadrillaListView`` para que la
 # programación semanal quede alineada con el resto del módulo Cuadrillas.
 # (Cualquier rol nivel admin pasa vía RoleRequiredMixin/RBAC v2 aunque no esté
@@ -312,7 +316,7 @@ def _choices_form_bloque(request=None, vehiculos_historicos=None):
 
     El propio formulario permite buscar por nombre o documento; la plantilla
     incorpora ambos valores en la etiqueta de cada opción."""
-    from apps.actividades.models import TipoActividad
+    from apps.actividades.models import Actividad, TipoActividad
     from apps.lineas.models import Linea
     from apps.usuarios.models import Usuario
 
@@ -323,6 +327,13 @@ def _choices_form_bloque(request=None, vehiculos_historicos=None):
 
     return {
         "tipos_actividad_bloque": TipoActividad.objects.filter(activo=True).order_by("nombre"),
+        # #240 (A1): el selector mezcla categorías y actividades reales. Las
+        # actividades terminadas o canceladas no se pueden volver a programar.
+        "actividades_elegibles_bloque": (
+            Actividad.objects.exclude(estado__in=ESTADOS_ACTIVIDAD_NO_ELEGIBLES)
+            .select_related("tipo_actividad", "linea", "tramo", "torre")
+            .order_by("-fecha_programada", "prioridad", "linea", "torre")
+        ),
         "lineas_bloque": Linea.objects.filter(activa=True).order_by("codigo"),
         # El estado operativo reemplaza al puente booleano legacy. Los vehículos
         # inactivos asignados a bloques existentes se incluyen solamente para
@@ -333,6 +344,46 @@ def _choices_form_bloque(request=None, vehiculos_historicos=None):
         .order_by("first_name"),
         "personal_disponible_datalist": _personal_visible_para_usuario(request).order_by("nombre"),
     }
+
+
+def _resolver_seleccion_tipo_actividad(valor):
+    """Resuelve el valor versionado del selector combinado de #240.
+
+    El formulario envía ``tipo:<uuid>`` para una categoría y
+    ``actividad:<uuid>`` para una actividad concreta. Devolver un error en
+    vez de dejar que una FK inválida llegue a ``Cuadrilla.save()`` permite a
+    la vista mostrar feedback inline y protege el endpoint frente a POSTs
+    manipulados. El UUID legacy sin prefijo sigue siendo una categoría para no
+    alterar bloques/formularios que aún no actualizaron su cliente.
+    """
+    from apps.actividades.models import Actividad, TipoActividad
+
+    valor = (valor or "").strip()
+    if not valor:
+        return None, None, None
+
+    if ":" not in valor:
+        try:
+            return TipoActividad.objects.get(pk=valor, activo=True), None, None
+        except (TipoActividad.DoesNotExist, ValidationError, ValueError):
+            return None, None, "El tipo de actividad seleccionado no es válido."
+
+    clase, separador, pk = valor.partition(":")
+    if not separador or not pk or ":" in pk:
+        return None, None, "La actividad seleccionada no es válida."
+
+    try:
+        if clase == VALOR_TIPO_ACTIVIDAD:
+            return TipoActividad.objects.get(pk=pk, activo=True), None, None
+        if clase == VALOR_ACTIVIDAD_REAL:
+            actividad = Actividad.objects.select_related("linea", "tramo", "tipo_actividad").get(pk=pk)
+            if actividad.estado in ESTADOS_ACTIVIDAD_NO_ELEGIBLES:
+                return None, None, "La actividad seleccionada ya fue completada o cancelada."
+            return None, actividad, None
+    except (Actividad.DoesNotExist, TipoActividad.DoesNotExist, ValidationError, ValueError):
+        pass
+
+    return None, None, "La actividad seleccionada no es válida."
 
 
 def _vehiculo_permitido_para_asignacion(vehiculo_id, vehiculo_actual_id=None):
