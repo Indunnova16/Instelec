@@ -12,8 +12,11 @@ alfabéticamente), ignorando el orden real de declaración de
 el cliente). Fix: anotar un ranking explícito vía `Case/When` sobre ese
 mismo orden de choices y ordenar por el ranking, no por el string.
 """
+from unittest.mock import patch
+
 import pytest
 
+from apps.construccion import calculators_avance_real as car
 from apps.construccion.models import ProgramacionFase, ProyectoConstruccion
 from apps.construccion.views import CronogramaView
 from apps.contratos.models import Contrato
@@ -83,3 +86,64 @@ class TestOrdenCronograma242:
         primera = list(view.get_context_data()['fases'].values_list('seccion', flat=True))
         segunda = list(view.get_context_data()['fases'].values_list('seccion', flat=True))
         assert primera == segunda == ORDEN_ESPERADO
+
+
+@pytest.mark.django_db
+class TestMatrizLegacyCronograma242:
+    """Regresión de la forma de datos que recibe el cronograma.
+
+    Cada fuente se mantiene independiente porque los proyectos existentes no
+    necesariamente tienen cargados todos los módulos a la vez.  En particular,
+    ``0.0`` es un avance real registrado, mientras ``None`` significa que la
+    fuente todavía no tiene filas y debe renderizarse como ``Sin datos``.
+    """
+
+    def test_nueve_fuentes_conservan_valor_y_orden_en_registro_legacy(
+        self, proyecto_242,
+    ):
+        """Un proyecto existente puede mezclar avances, cero y módulos vacíos."""
+        valores_legacy = {
+            'INGENIERIA': 100.0,
+            'SOCIOPREDIAL': 0.0,
+            'SOCIOAMBIENTAL': 50.0,
+            'OBRA_CIVIL': 25.0,
+            'MONTAJE': 75.0,
+            'SPT': 0.0,
+            'TENDIDO': 62.5,
+            'PROTECCIONES': None,
+            'PRUEBAS': 100.0,
+        }
+        fuentes = {
+            '_pct_ingenieria': valores_legacy['INGENIERIA'],
+            '_pct_sociopredial': valores_legacy['SOCIOPREDIAL'],
+            '_pct_socioambiental': valores_legacy['SOCIOAMBIENTAL'],
+            '_pct_obra_civil': valores_legacy['OBRA_CIVIL'],
+            '_pct_montaje': valores_legacy['MONTAJE'],
+            '_pct_spt_pintura': valores_legacy['SPT'],
+            '_pct_tendido': valores_legacy['TENDIDO'],
+            '_pct_protecciones': valores_legacy['PROTECCIONES'],
+            '_pct_detalles_finales': valores_legacy['PRUEBAS'],
+        }
+
+        # ``FASES_GENERAL`` guarda referencias a las funciones. Se reemplaza
+        # temporalmente por las nueve fuentes que un proyecto legado puede
+        # entregar, sin consultar ni fabricar datos de producción.
+        matriz_legacy = [
+            (seccion, etiqueta, lambda _proyecto, valor=fuentes[nombre]: valor)
+            for (seccion, etiqueta, _fn), nombre in zip(
+                car.FASES_GENERAL,
+                fuentes,
+            )
+        ]
+        with patch.object(car, 'FASES_GENERAL', matriz_legacy):
+            fases = car.avance_general(proyecto_242)['fases']
+
+        assert [fase['seccion'] for fase in fases] == ORDEN_ESPERADO
+        assert {fase['seccion']: fase['pct'] for fase in fases} == valores_legacy
+
+    def test_sin_fuentes_en_legacy_no_se_convierte_en_cero(self, proyecto_242):
+        """Borde: un proyecto anterior sin módulo conserva ``SIN_DATA``."""
+        resultado = car.avance_general(proyecto_242)
+
+        assert all(fase['pct'] is None for fase in resultado['fases'])
+        assert resultado['global_pct'] is None
