@@ -147,30 +147,79 @@ def _workbook_response(rows=()):
     return output
 
 
+def _vertical_workbook_response(rows=()):
+    """Construye el XLSX vertical contratado para la programación histórica."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = 'Programación semanal'
+    sheet.append(VERTICAL_HEADERS)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='1D4ED8')
+    sheet.freeze_panes = 'A2'
+    sheet.auto_filter.ref = f'A1:J{max(2, len(rows) + 1)}'
+    for row in rows:
+        sheet.append(row)
+    for column, width in {'A': 14, 'B': 30, 'C': 24, 'D': 35, 'E': 24,
+                          'F': 18, 'G': 30, 'H': 18, 'I': 16, 'J': 40}.items():
+        sheet.column_dimensions[column].width = width
+    output = BytesIO()
+    book.save(output)
+    output.seek(0)
+    return output
+
+
 def plantilla_programacion_semanal():
     """Devuelve la plantilla XLSX con las once columnas contratadas."""
     return _workbook_response()
 
 
 def exportar_programacion_semanal():
-    """Exporta todas las programaciones, incluyendo personal y vehículos."""
+    """Exporta las programaciones en filas verticales agrupadas por cuadrilla."""
     programaciones = ProgramacionSemanalConstruccion.objects.select_related(
         'proyecto', 'supervisor',
-    ).prefetch_related('asignaciones_personal__personal', 'asignaciones_vehiculo__vehiculo')
+    ).prefetch_related(
+        'asignaciones_personal__personal__rol_cuadrilla',
+        'asignaciones_vehiculo__vehiculo',
+    ).order_by('fecha_inicio', 'cuadrilla', 'pk')
     rows = []
     for item in programaciones:
-        personal = ', '.join(
-            asignacion.personal.documento or asignacion.personal.nombre
-            for asignacion in item.asignaciones_personal.all()
+        asignaciones = sorted(
+            item.asignaciones_personal.all(), key=lambda asignacion: (
+                asignacion.personal.nombre.casefold(), asignacion.personal.documento,
+            ),
         )
-        vehiculos = ', '.join(asignacion.vehiculo.placa for asignacion in item.asignaciones_vehiculo.all())
-        rows.append((
-            item.proyecto.nombre, item.get_tipo_actividad_display(), item.subactividad,
-            item.supervisor.email if item.supervisor else '', personal, vehiculos,
-            item.fecha_inicio, item.fecha_fin, item.hora_inicio, item.hora_fin,
-            item.observaciones,
+        vehiculos = ', '.join(sorted(
+            asignacion.vehiculo.placa for asignacion in item.asignaciones_vehiculo.all()
         ))
-    return _workbook_response(rows)
+        supervisor = item.supervisor.get_full_name() if item.supervisor else ''
+        if item.hora_inicio and item.hora_fin:
+            horario = f'{item.hora_inicio:%H:%M} - {item.hora_fin:%H:%M}'
+        else:
+            horario = ''
+        tarea = item.actividad_complementaria or item.subactividad
+        encabezado = (
+            item.fecha_inicio, tarea, item.cuadrilla, supervisor, horario,
+            vehiculos, item.observaciones,
+        )
+        if not asignaciones:
+            rows.append((*encabezado[:3], '', '', '', *encabezado[3:]))
+            continue
+        for index, asignacion in enumerate(asignaciones):
+            personal = asignacion.personal
+            cargo = personal.get_rol_cuadrilla_display()
+            if index == 0:
+                rows.append((
+                    encabezado[0], encabezado[1], encabezado[2], personal.nombre,
+                    cargo, personal.documento, encabezado[3], encabezado[4],
+                    encabezado[5], encabezado[6],
+                ))
+            else:
+                rows.append((
+                    '', '', '', personal.nombre, cargo, personal.documento,
+                    '', '', '', '',
+                ))
+    return _vertical_workbook_response(rows)
 
 
 def _as_date(value, field_name):

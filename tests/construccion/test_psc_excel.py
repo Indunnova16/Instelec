@@ -8,11 +8,14 @@ from openpyxl import load_workbook
 
 from apps.contratos.models import Contrato
 from apps.construccion.excel_psc import (
-    HEADERS, HISTORICAL_HEADERS, VERTICAL_HEADERS, importar_programacion_semanal,
+    HEADERS, HISTORICAL_HEADERS, VERTICAL_HEADERS, exportar_programacion_semanal,
+    importar_programacion_semanal,
     mapear_tarea,
 )
 from apps.construccion.models import (
-    AsignacionPersonalProyectoConstruccion, ProgramacionSemanalConstruccion, ProyectoConstruccion,
+    AsignacionPersonalProyectoConstruccion, ProgramacionSemanalConstruccion,
+    ProgramacionSemanalConstruccionPersonal, ProgramacionSemanalConstruccionVehiculo,
+    ProyectoConstruccion,
 )
 from apps.cuadrillas.models import Cargo, PersonalCuadrilla, Vehiculo
 
@@ -95,11 +98,56 @@ def test_importador_historico_renderiza_selector_de_proyecto(admin_user, client,
 
 
 @pytest.mark.django_db
-def test_exportar_xlsx_incluye_once_columnas(admin_user, client, excel_data):
+def test_exportar_xlsx_incluye_diez_columnas_verticales(admin_user, client, excel_data):
     client.force_login(admin_user)
     response = client.get(reverse('construccion:psc_exportar_excel'))
     assert response.status_code == 200
-    assert tuple(next(load_workbook(BytesIO(b''.join(response.streaming_content))).active.values)) == HEADERS
+    assert tuple(next(load_workbook(BytesIO(b''.join(response.streaming_content))).active.values)) == VERTICAL_HEADERS
+
+
+@pytest.mark.django_db
+def test_exportacion_vertical_agrupa_personal_y_deja_opcionales_vacios(excel_data):
+    proyecto, persona, vehiculo = excel_data
+    segunda = _segunda_persona(proyecto)
+    programacion = ProgramacionSemanalConstruccion.objects.create(
+        proyecto=proyecto,
+        cuadrilla='Obra Civil 1',
+        tipo_actividad='OBRA_CIVIL',
+        subactividad='Excavación',
+        fecha_inicio=date(2025, 12, 1),
+        fecha_fin=date(2025, 12, 1),
+    )
+    ProgramacionSemanalConstruccionPersonal.objects.create(programacion=programacion, personal=segunda)
+    ProgramacionSemanalConstruccionPersonal.objects.create(programacion=programacion, personal=persona)
+    ProgramacionSemanalConstruccionVehiculo.objects.create(programacion=programacion, vehiculo=vehiculo)
+
+    sheet = load_workbook(exportar_programacion_semanal()).active
+    assert tuple(sheet.iter_rows(min_row=1, max_row=1, values_only=True).__next__()) == VERTICAL_HEADERS
+    rows = list(sheet.iter_rows(min_row=2, values_only=True))
+    assert rows == [
+        (date(2025, 12, 1), 'Excavación', 'Obra Civil 1', 'Ana XLSX', 'Operario XLSX',
+         'PSC-XLSX-1', '', '', 'XLSX225', ''),
+        ('', '', '', 'Beto XLSX', 'Ayudante XLSX', 'PSC-XLSX-2', '', '', '', ''),
+    ]
+
+
+@pytest.mark.django_db
+def test_exportacion_vertical_conserva_registro_legacy_sin_cuadrilla(excel_data):
+    proyecto, persona, _ = excel_data
+    legado = ProgramacionSemanalConstruccion.objects.create(
+        proyecto=proyecto,
+        tipo_actividad='OBRA_CIVIL',
+        subactividad='Excavación',
+        fecha_inicio=date(2024, 12, 1),
+        fecha_fin=date(2024, 12, 1),
+    )
+    ProgramacionSemanalConstruccionPersonal.objects.create(programacion=legado, personal=persona)
+
+    rows = list(load_workbook(exportar_programacion_semanal()).active.iter_rows(min_row=2, values_only=True))
+    assert rows == [
+        (date(2024, 12, 1), 'Excavación', '', 'Ana XLSX', 'Operario XLSX',
+         'PSC-XLSX-1', '', '', '', ''),
+    ]
 
 
 @pytest.mark.django_db
