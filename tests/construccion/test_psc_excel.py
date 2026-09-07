@@ -179,6 +179,23 @@ def test_upload_exige_proyecto_destino_explicito(admin_user, client, excel_data)
 
 
 @pytest.mark.django_db
+def test_upload_con_proyecto_historico_vacio_no_revienta(admin_user, client, excel_data):
+    """El <select> real siempre manda el campo, vacío ('') si no se elige --
+    a diferencia de omitirlo del todo (caso del test anterior). Un UUIDField
+    rechaza el filtro por '' con ValidationError; sin capturarla, la vista
+    devolvía 500 en vez del 400 que el usuario debe ver."""
+    proyecto, persona, vehiculo = excel_data
+    client.force_login(admin_user)
+    response = client.post(reverse('construccion:psc_importar_excel'), {
+        'archivo': _file([_row(proyecto, persona.documento, vehiculo.placa)]),
+        'proyecto_historico': '',
+    })
+    assert response.status_code == 400
+    assert 'Seleccione explícitamente el proyecto destino' in response.content.decode()
+    assert ProgramacionSemanalConstruccion.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_importacion_atomica_si_una_fila_es_invalida(excel_data):
     proyecto, persona, vehiculo = excel_data
     result = importar_programacion_semanal(_file([

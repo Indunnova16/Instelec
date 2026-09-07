@@ -1,6 +1,7 @@
 """Vistas de plantilla, exportación e importación XLSX PSC (#225, B4)."""
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.http import FileResponse
 from django.shortcuts import render
 from django.views import View
@@ -37,7 +38,14 @@ class ProgramacionSemanalConstruccionExcelView(_PSCExcelAccessMixin, View):
             messages.error(request, 'El archivo debe estar en formato XLSX.')
             return render(request, self.template_name, {'proyectos': ProyectoConstruccion.objects.order_by('nombre')}, status=400)
         proyecto_id = request.POST.get('proyecto_historico')
-        proyecto_historico = ProyectoConstruccion.objects.filter(pk=proyecto_id).first()
+        try:
+            proyecto_historico = ProyectoConstruccion.objects.filter(pk=proyecto_id).first()
+        except (ValidationError, ValueError):
+            # proyecto_id vacío/mal formado (ej. placeholder "Seleccione un
+            # proyecto" del <select> sin elegir) -- UUIDField rechaza el
+            # filtro antes de poder devolver None, y sin este catch el 500
+            # tapaba el mensaje 400 que el usuario debía ver.
+            proyecto_historico = None
         if proyecto_historico is None:
             messages.error(request, 'Seleccione explícitamente el proyecto destino antes de importar.')
             return render(request, self.template_name, {
