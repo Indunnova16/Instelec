@@ -25,7 +25,9 @@ def excel_data(db):
     contrato = Contrato.objects.create(codigo='PSC-XLSX', nombre='Contrato XLSX', unidad_negocio='CONSTRUCCION')
     proyecto = ProyectoConstruccion.objects.create(contrato=contrato, nombre='Proyecto XLSX')
     cargo, _ = Cargo.objects.get_or_create(codigo='PSC-XLSX', defaults={'nombre': 'Operario XLSX'})
-    persona = PersonalCuadrilla.objects.create(nombre='Ana XLSX', documento='PSC-XLSX-1', rol_cuadrilla=cargo)
+    persona = PersonalCuadrilla.objects.create(
+        nombre='Ana XLSX', documento='PSC-XLSX-1', rol_cuadrilla=cargo, area='CONSTRUCCION',
+    )
     AsignacionPersonalProyectoConstruccion.objects.create(proyecto=proyecto, personal=persona, fecha_inicio=date(2024, 1, 1))
     vehiculo = Vehiculo.objects.create(placa='XLSX225')
     return proyecto, persona, vehiculo
@@ -154,10 +156,26 @@ def test_exportacion_vertical_conserva_registro_legacy_sin_cuadrilla(excel_data)
 def test_upload_y_reporte(admin_user, client, excel_data):
     proyecto, persona, vehiculo = excel_data
     client.force_login(admin_user)
-    response = client.post(reverse('construccion:psc_importar_excel'), {'archivo': _file([_row(proyecto, persona.documento, vehiculo.placa)])})
+    response = client.post(reverse('construccion:psc_importar_excel'), {
+        'archivo': _file([_row(proyecto, persona.documento, vehiculo.placa)]),
+        'proyecto_historico': str(proyecto.pk),
+    })
     assert response.status_code == 200
     assert ProgramacionSemanalConstruccion.objects.count() == 1
     assert 'Se importaron 1 programaciones' in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_upload_exige_proyecto_destino_explicito(admin_user, client, excel_data):
+    proyecto, persona, vehiculo = excel_data
+    client.force_login(admin_user)
+    response = client.post(
+        reverse('construccion:psc_importar_excel'),
+        {'archivo': _file([_row(proyecto, persona.documento, vehiculo.placa)])},
+    )
+    assert response.status_code == 400
+    assert 'Seleccione explícitamente el proyecto destino' in response.content.decode()
+    assert ProgramacionSemanalConstruccion.objects.count() == 0
 
 
 @pytest.mark.django_db

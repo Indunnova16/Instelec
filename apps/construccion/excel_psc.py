@@ -6,6 +6,7 @@ from datetime import date, datetime, time
 from io import BytesIO
 import re
 import unicodedata
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -150,6 +151,8 @@ def _workbook_response(rows=()):
 def _vertical_workbook_response(rows=()):
     """Construye el XLSX vertical contratado para la programación histórica."""
     book = Workbook()
+    # El contrato distingue una fecha de un datetime al reabrir el archivo.
+    book.iso_dates = True
     sheet = book.active
     sheet.title = 'Programación semanal'
     sheet.append(VERTICAL_HEADERS)
@@ -165,8 +168,31 @@ def _vertical_workbook_response(rows=()):
         sheet.column_dimensions[column].width = width
     output = BytesIO()
     book.save(output)
+    return _preservar_celdas_texto_vacias(output)
+
+
+def _preservar_celdas_texto_vacias(output):
+    """Conserva ``''`` como texto al reabrir el XLSX, no como ``None``.
+
+    openpyxl escribe una cadena vacía como ``<c t="inlineStr"></c>`` y al
+    cargarla la interpreta como ``None``. El formato vertical distingue los
+    opcionales explícitamente vacíos, por lo que se completa el nodo inline
+    string vacío que XLSX admite de forma nativa.
+    """
     output.seek(0)
-    return output
+    normalized = BytesIO()
+    with ZipFile(output) as source, ZipFile(normalized, 'w', ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            content = source.read(info.filename)
+            if info.filename.startswith('xl/worksheets/'):
+                content = re.sub(
+                    rb'(<c\b[^>]*\bt="inlineStr")></c>',
+                    rb'\1><is><t></t></is></c>',
+                    content,
+                )
+            target.writestr(info, content)
+    normalized.seek(0)
+    return normalized
 
 
 def plantilla_programacion_semanal():
@@ -184,6 +210,10 @@ def exportar_programacion_semanal():
     ).order_by('fecha_inicio', 'cuadrilla', 'pk')
     rows = []
     for item in programaciones:
+        # openpyxl serializa los ``datetime`` con formato de fecha/hora y luego
+        # los vuelve a entregar como datetime. El contrato de la exportación
+        # vertical es una fecha pura, incluso para registros legacy.
+        fecha = item.fecha_inicio.date() if isinstance(item.fecha_inicio, datetime) else item.fecha_inicio
         asignaciones = sorted(
             item.asignaciones_personal.all(), key=lambda asignacion: (
                 asignacion.personal.nombre.casefold(), asignacion.personal.documento,
@@ -197,10 +227,10 @@ def exportar_programacion_semanal():
             horario = f'{item.hora_inicio:%H:%M} - {item.hora_fin:%H:%M}'
         else:
             horario = ''
-        tarea = item.actividad_complementaria or item.subactividad
+        tarea = item.actividad_complementaria or item.subactividad or ''
         encabezado = (
-            item.fecha_inicio, tarea, item.cuadrilla, supervisor, horario,
-            vehiculos, item.observaciones,
+            fecha, tarea, item.cuadrilla or '', supervisor or '', horario or '',
+            vehiculos or '', item.observaciones or '',
         )
         if not asignaciones:
             rows.append((*encabezado[:3], '', '', '', *encabezado[3:]))
@@ -527,6 +557,14 @@ def importar_programacion_semanal(uploaded_file, proyecto_historico=None):
                 if item['fecha_inicio'] <= other_end and item['fecha_fin'] >= other_start:
                     result.errors.append({'row': number, 'error': f'Personal {person.documento} se cruza con la fila {other_row}.'})
             occupied.setdefault(person.pk, []).append((item['fecha_inicio'], item['fecha_fin'], number))
+
+    # Los cruces dentro del mismo archivo son deterministas y deben informarse
+    # antes de consultar disponibilidad persistida: de otro modo una regla de
+    # elegibilidad externa oculta la fila conflictiva que el usuario debe editar.
+    if result.errors:
+        return result
+
+    for number, item in parsed:
         eligible_ids = set(personal_elegible(item['proyecto'].pk, item['fecha_inicio'], item['fecha_fin']).values_list('pk', flat=True))
         ineligible = [person.documento for person in item['personal'] if person.pk not in eligible_ids]
         if ineligible:

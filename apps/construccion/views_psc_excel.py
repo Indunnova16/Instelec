@@ -38,6 +38,12 @@ class ProgramacionSemanalConstruccionExcelView(_PSCExcelAccessMixin, View):
             return render(request, self.template_name, {'proyectos': ProyectoConstruccion.objects.order_by('nombre')}, status=400)
         proyecto_id = request.POST.get('proyecto_historico')
         proyecto_historico = ProyectoConstruccion.objects.filter(pk=proyecto_id).first()
+        if proyecto_historico is None:
+            messages.error(request, 'Seleccione explícitamente el proyecto destino antes de importar.')
+            return render(request, self.template_name, {
+                'proyectos': ProyectoConstruccion.objects.order_by('nombre'),
+                'proyecto_historico_id': proyecto_id,
+            }, status=400)
         result = importar_programacion_semanal(uploaded_file, proyecto_historico=proyecto_historico)
         if result.ok:
             messages.success(request, f'Se importaron {result.created} programaciones de forma atómica.')
