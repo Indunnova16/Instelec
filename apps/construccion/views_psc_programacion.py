@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.views.generic import CreateView, DetailView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
+from apps.core.permissions import AREA_CONSTRUCCION
 from apps.construccion.models import (
     ProgramacionSemanalConstruccion,
     ProgramacionSemanalConstruccionPersonal,
@@ -16,6 +17,7 @@ from apps.construccion.models import (
 from apps.construccion.services_psc_disponibilidad import personal_elegible
 from apps.construccion.subactividades_psc import SUBACTIVIDADES_POR_TIPO
 from apps.cuadrillas.models import Vehiculo
+from apps.usuarios.models import Usuario
 
 
 PSC_ADMIN_ROLES = [
@@ -42,6 +44,30 @@ class ProgramacionSemanalConstruccionForm(forms.ModelForm):
             'actividad_complementaria': forms.Textarea(attrs={'rows': 3}),
             'observaciones': forms.Textarea(attrs={'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        supervisor = self.fields['supervisor']
+        supervisor.queryset = Usuario.objects.filter(
+            rol=Usuario.Rol.SUPERVISOR,
+            is_active=True,
+            area=AREA_CONSTRUCCION,
+        ).order_by('first_name', 'last_name')
+        supervisor.widget.attrs.update({
+            'class': 'js-tomselect mt-1 w-full rounded border p-2',
+            'data-testid': 'psc-supervisor-select',
+        })
+        supervisor.empty_label = 'Seleccione un supervisor'
+
+        # Una programación histórica puede conservar un supervisor que ya no
+        # está activo o cambió de área. Se muestra únicamente mientras se edita
+        # esa programación para no borrar el dato por accidente; no es una
+        # opción disponible para programaciones nuevas.
+        actual = getattr(self.instance, 'supervisor', None)
+        if actual and not supervisor.queryset.filter(pk=actual.pk).exists():
+            supervisor.queryset = (supervisor.queryset | Usuario.objects.filter(pk=actual.pk)).order_by(
+                'first_name', 'last_name',
+            )
 
     def clean(self):
         cleaned = super().clean()
@@ -153,6 +179,10 @@ class ProgramacionSemanalConstruccionDetailView(
         vehiculos_asignados = ProgramacionSemanalConstruccionVehiculo.objects.filter(
             programacion=programacion,
         ).select_related('vehiculo', 'conductor').order_by('vehiculo__placa')
+        conductores_disponibles = personal_asignado.filter(
+            personal__activo=True,
+            personal__area='CONSTRUCCION',
+        ).select_related('personal__rol_cuadrilla')
         context.update({
             # B6 — contrato de contexto para los partials de asignación.
             'personal_asignado': personal_asignado,
@@ -166,6 +196,7 @@ class ProgramacionSemanalConstruccionDetailView(
                 programacion.proyecto_id, programacion.fecha_inicio, programacion.fecha_fin,
             ),
             'vehiculos_asignados': vehiculos_asignados,
+            'conductores_disponibles': conductores_disponibles,
             'vehiculos_disponibles': Vehiculo.objects.filter(
                 estado=Vehiculo.Estado.ACTIVO,
             ).exclude(

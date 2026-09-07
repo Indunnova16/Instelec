@@ -102,15 +102,21 @@ class ProgramacionSemanalConstruccionAgregarVehiculoView(_PSCAsignacionAccessMix
         ).exists():
             messages.error(request, 'El vehículo ya está asignado a esta programación.')
             return redirect(self.detalle_url(programacion.pk))
-        conductor = None
-        if conductor_id:
-            conductor = PersonalCuadrilla.objects.filter(
-                pk=conductor_id,
-                programaciones_semanales_psc__programacion=programacion,
-            ).first()
-            if not conductor:
-                messages.error(request, 'El conductor debe estar asignado previamente a esta programación.')
-                return redirect(self.detalle_url(programacion.pk))
+        if not conductor_id:
+            messages.error(request, 'Seleccione un conductor activo antes de asociar una placa.')
+            return redirect(self.detalle_url(programacion.pk))
+        conductor = PersonalCuadrilla.objects.filter(
+            pk=conductor_id,
+            activo=True,
+            area='CONSTRUCCION',
+            programaciones_semanales_psc__programacion=programacion,
+        ).select_related('rol_cuadrilla').first()
+        if not conductor:
+            messages.error(request, 'El conductor debe estar activo, ser de Construcción y estar asignado a esta programación.')
+            return redirect(self.detalle_url(programacion.pk))
+        if not conductor.rol_cuadrilla_id.startswith('CONDUCTOR'):
+            messages.error(request, 'La placa solo puede asociarse a una persona con cargo de Conductor.')
+            return redirect(self.detalle_url(programacion.pk))
         # `get_or_create` en vez de `create`: el `exists()` de arriba deja una
         # ventana para que un doble clic cree dos veces y el segundo POST
         # reviente con IntegrityError 500 contra el UniqueConstraint.

@@ -65,7 +65,7 @@
             <ul class="mt-4 divide-y">
                 {% for asignacion in vehiculos_asignados %}
                     <li class="flex items-center justify-between gap-3 py-3">
-                        <div><p class="font-medium">{{ asignacion.vehiculo.placa }}</p><p class="text-sm text-slate-600">{{ asignacion.vehiculo.get_tipo_display }}{% if asignacion.conductor %} · Conductor: {{ asignacion.conductor.nombre }}{% else %} · Sin conductor asignado{% endif %}</p></div>
+                        <div><p class="font-medium">{{ asignacion.vehiculo.placa }}</p><p class="text-sm text-slate-600">{{ asignacion.vehiculo.get_tipo_display }} · Conductor: {{ asignacion.conductor.nombre }}</p></div>
                         {% if puede_gestionar %}
                             <form method="post" action="{% url 'construccion:psc_vehiculo_quitar' pk=programacion.pk vehiculo_pk=asignacion.vehiculo.pk %}">
                                 {% csrf_token %}<button class="rounded border border-red-600 px-3 py-1 text-sm text-red-700" type="submit">Quitar</button>

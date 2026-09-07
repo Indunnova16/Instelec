@@ -5,6 +5,7 @@ from django.urls import reverse
 
 from apps.contratos.models import Contrato
 from apps.construccion.models import ProyectoConstruccion, ProgramacionSemanalConstruccion
+from apps.usuarios.models import Usuario
 
 
 @pytest.fixture
@@ -82,3 +83,54 @@ def test_guardar_detalle_y_validar_intervalo(admin_user, client, proyecto_psc):
     detail = client.get(reverse('construccion:psc_programacion_detalle', args=[programacion.pk]))
     assert detail.status_code == 200
     assert 'Tendido conductor' in detail.content.decode()
+
+
+@pytest.mark.django_db
+def test_supervisor_activo_de_construccion_es_buscable_y_se_persiste(admin_user, client, proyecto_psc):
+    supervisor = Usuario.objects.create_user(
+        email='supervisor.psc@test.local', password='testpass123!',
+        first_name='Sara', last_name='Supervisora', rol=Usuario.Rol.SUPERVISOR,
+        area='CONSTRUCCION', is_active=True,
+    )
+    inactivo = Usuario.objects.create_user(
+        email='inactivo.psc@test.local', password='testpass123!',
+        first_name='Inés', last_name='Inactiva', rol=Usuario.Rol.SUPERVISOR,
+        area='CONSTRUCCION', is_active=False,
+    )
+    otra_area = Usuario.objects.create_user(
+        email='otra.area.psc@test.local', password='testpass123!',
+        first_name='Mario', last_name='Mantenimiento', rol=Usuario.Rol.SUPERVISOR,
+        area='MANTENIMIENTO', is_active=True,
+    )
+    client.force_login(admin_user)
+
+    form = client.get(reverse('construccion:psc_programacion_crear'))
+    html = form.content.decode()
+    assert form.status_code == 200
+    assert 'js-tomselect' in html
+    assert str(supervisor.pk) in html
+    assert str(inactivo.pk) not in html
+    assert str(otra_area.pk) not in html
+
+    response = client.post(
+        reverse('construccion:psc_programacion_crear'),
+        _payload(proyecto_psc, supervisor=str(supervisor.pk)),
+    )
+    assert response.status_code == 302
+    assert ProgramacionSemanalConstruccion.objects.get().supervisor == supervisor
+
+
+@pytest.mark.django_db
+def test_no_acepta_supervisor_inactivo_o_de_otra_area(admin_user, client, proyecto_psc):
+    inactivo = Usuario.objects.create_user(
+        email='supervisor.inactivo.psc@test.local', password='testpass123!',
+        first_name='Inés', last_name='Inactiva', rol=Usuario.Rol.SUPERVISOR,
+        area='CONSTRUCCION', is_active=False,
+    )
+    client.force_login(admin_user)
+    response = client.post(
+        reverse('construccion:psc_programacion_crear'),
+        _payload(proyecto_psc, supervisor=str(inactivo.pk)),
+    )
+    assert response.status_code == 200
+    assert not ProgramacionSemanalConstruccion.objects.exists()
