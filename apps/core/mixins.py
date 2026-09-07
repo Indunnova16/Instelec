@@ -48,6 +48,26 @@ class RoleRequiredMixin(UserPassesTestMixin):
     """
     allowed_roles = []
     admin_bypass = True
+    required_submodulo = None
+
+    def _has_required_submodulo_access(self):
+        """Evalúa una hoja RBAC cuando la vista la declara.
+
+        ``allowed_roles`` es una compatibilidad con vistas previas a la
+        matriz. Una vista que declara una hoja debe usar la matriz como
+        autoridad: de otro modo un rol con ``Ver`` seguiría siendo rechazado
+        sólo por no figurar en la lista legacy. Las mutaciones requieren
+        ``Ver y editar`` igual que el middleware de rutas directas.
+        """
+        from .models_roles import RoleModuloPermiso
+        from .permissions import user_nivel_acceso_submodulo
+
+        nivel = user_nivel_acceso_submodulo(
+            self.request.user, self.required_submodulo
+        )
+        if self.request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+            return nivel == RoleModuloPermiso.VER_EDITAR
+        return nivel in {RoleModuloPermiso.VER, RoleModuloPermiso.VER_EDITAR}
 
     def test_func(self):
         if not self.request.user.is_authenticated:
@@ -56,6 +76,11 @@ class RoleRequiredMixin(UserPassesTestMixin):
         # Superusers and admin users have full access
         if self.request.user.is_superuser:
             return True
+
+        # #186 A1: una hoja explícita vuelve a la matriz autoritativa para
+        # esta vista; no se aplica después un segundo deny de allowed_roles.
+        if self.required_submodulo:
+            return self._has_required_submodulo_access()
 
         if self.admin_bypass:
             # Check if user has is_admin property (for custom User model)
