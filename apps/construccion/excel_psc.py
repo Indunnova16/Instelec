@@ -9,6 +9,7 @@ import unicodedata
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
@@ -20,6 +21,7 @@ from .models import (
     ProgramacionSemanalConstruccionPersonal,
     ProgramacionSemanalConstruccionVehiculo,
     ProyectoConstruccion,
+    AsignacionPersonalProyectoConstruccion,
 )
 from .services_psc_disponibilidad import personal_elegible, validar_personal_elegible
 
@@ -177,10 +179,11 @@ def _as_date(value, field_name):
     if isinstance(value, date):
         return value
     if isinstance(value, str):
-        try:
-            return date.fromisoformat(value.strip())
-        except ValueError:
-            pass
+        for pattern in ('%Y-%m-%d', '%d/%m/%Y'):
+            try:
+                return datetime.strptime(value.strip(), pattern).date()
+            except ValueError:
+                continue
     raise ValidationError(f'{field_name} debe ser una fecha válida (AAAA-MM-DD).')
 
 
@@ -258,7 +261,168 @@ def _parse_row(row):
     }
 
 
-def importar_programacion_semanal(uploaded_file):
+def _historical_headers_match(header):
+    """Acepta las siete columnas del plano, aunque Excel conserve vacías A:K."""
+    return (
+        tuple(header[:len(HISTORICAL_HEADERS)]) == HISTORICAL_HEADERS
+        and all(value in (None, '') for value in header[len(HISTORICAL_HEADERS):])
+    )
+
+
+def _historical_person(documento, nombre, numero):
+    documento = str(documento or '').strip()
+    if not documento:
+        raise ValidationError('Identificación es obligatoria.')
+    person = _one(
+        PersonalCuadrilla.objects.filter(documento__iexact=documento), documento, 'Personal',
+    )
+    # El documento es la identidad contractual. El nombre queda en el XLSX como
+    # referencia humana y puede haber variado (segundo apellido, tildes) desde
+    # que se cargó la programación histórica.
+    return person
+
+
+def _parse_historical_rows(data_rows, proyecto):
+    """Convierte el plano con celdas combinadas en cabeceras PSC por cuadrilla.
+
+    El plano real repite sólo el integrante: Fecha, Tarea y Cuadrilla quedan
+    vacías en las filas siguientes del mismo bloque. Por eso se propagan hacia
+    abajo y cada combinación Fecha+Cuadrilla se persiste como una programación.
+    """
+    result = ImportResult()
+    if proyecto is None:
+        result.errors.append({
+            'row': 0,
+            'error': 'Seleccione el proyecto al que corresponde el plano histórico.',
+        })
+        return [], result
+
+    context = {'fecha': None, 'tarea': '', 'empresa': '', 'cuadrilla': ''}
+    groups = {}
+    for numero, row in data_rows:
+        if len(row) < len(HISTORICAL_HEADERS):
+            result.errors.append({'row': numero, 'error': 'La fila no contiene las 7 columnas históricas requeridas.'})
+            continue
+        fecha, tarea, empresa, cuadrilla, nombre, cargo, documento = row[:len(HISTORICAL_HEADERS)]
+        if fecha not in (None, ''):
+            try:
+                context['fecha'] = _as_date(fecha, 'Fecha')
+            except ValidationError as exc:
+                result.errors.append({'row': numero, 'error': '; '.join(exc.messages)})
+                context['fecha'] = None
+        if tarea not in (None, ''):
+            context['tarea'] = str(tarea).strip()
+        if empresa not in (None, ''):
+            context['empresa'] = str(empresa).strip()
+        if cuadrilla not in (None, ''):
+            context['cuadrilla'] = str(cuadrilla).strip()
+        if not any(value not in (None, '') for value in (nombre, cargo, documento)):
+            continue
+        if not context['fecha'] or not context['tarea'] or not context['cuadrilla']:
+            result.errors.append({
+                'row': numero,
+                'error': 'La fila necesita Fecha, Tarea y Cuadrilla propias o heredadas del bloque anterior.',
+            })
+            continue
+        try:
+            person = _historical_person(documento, nombre, numero)
+            mapeo = mapear_tarea(context['tarea'])
+        except ValidationError as exc:
+            result.errors.append({'row': numero, 'error': '; '.join(exc.messages)})
+            continue
+        key = (context['fecha'], context['cuadrilla'])
+        group = groups.get(key)
+        if group is None:
+            group = {
+                'row': numero,
+                'proyecto': proyecto,
+                'cuadrilla': context['cuadrilla'],
+                'tipo_actividad': mapeo.tipo_actividad,
+                'subactividad': mapeo.subactividad,
+                'actividad_complementaria': mapeo.actividad_complementaria,
+                'fecha_inicio': context['fecha'],
+                'fecha_fin': context['fecha'],
+                'hora_inicio': None,
+                'hora_fin': None,
+                'supervisor': None,
+                'observaciones': f"Empresa informada: {context['empresa']}" if context['empresa'] else '',
+                'personal': [],
+            }
+            groups[key] = group
+        elif (
+            group['tipo_actividad'], group['subactividad'], group['actividad_complementaria'],
+        ) != (mapeo.tipo_actividad, mapeo.subactividad, mapeo.actividad_complementaria):
+            result.errors.append({
+                'row': numero,
+                'error': 'Fecha y Cuadrilla ya están asociadas a otra Tarea; sepárelas en cuadrillas distintas.',
+            })
+            continue
+        if any(existing.pk == person.pk for _, existing in group['personal']):
+            result.errors.append({'row': numero, 'error': f'Personal {person.documento} está repetido en la cuadrilla.'})
+            continue
+        group['personal'].append((numero, person))
+    return list(groups.values()), result
+
+
+def _validar_personal_historico(group):
+    """Valida vigencia histórica, sin exigir que el excolaborador siga activo hoy."""
+    fecha = group['fecha_inicio']
+    for numero, person in group['personal']:
+        aprobado = AsignacionPersonalProyectoConstruccion.objects.filter(
+            proyecto=group['proyecto'], personal=person, fecha_inicio__lte=fecha,
+        ).filter(Q(fecha_fin__isnull=True) | Q(fecha_fin__gte=fecha)).exists()
+        vigente = (
+            (person.activo or person.fecha_salida is not None)
+            and (person.fecha_ingreso is None or person.fecha_ingreso <= fecha)
+            and (person.fecha_salida is None or person.fecha_salida >= fecha)
+        )
+        ocupado = ProgramacionSemanalConstruccionPersonal.objects.filter(
+            personal=person,
+            programacion__fecha_inicio__lte=fecha,
+            programacion__fecha_fin__gte=fecha,
+        ).exists()
+        if not aprobado or not vigente or ocupado:
+            detail = 'sin aprobación vigente en el proyecto' if not aprobado else (
+                'fuera de vigencia laboral para la fecha' if not vigente else 'ya programado para la fecha'
+            )
+            raise ValidationError(f'Fila {numero}: Personal {person.documento} {detail}.')
+
+
+def _importar_historico(data_rows, proyecto):
+    groups, result = _parse_historical_rows(data_rows, proyecto)
+    if result.errors:
+        return result
+    if not groups:
+        result.errors.append({'row': 0, 'error': 'El archivo no contiene programaciones para importar.'})
+        return result
+    occupied = {}
+    for group in groups:
+        for numero, person in group['personal']:
+            for other_date, other_row in occupied.get(person.pk, []):
+                if group['fecha_inicio'] == other_date:
+                    result.errors.append({'row': numero, 'error': f'Personal {person.documento} se cruza con la fila {other_row}.'})
+            occupied.setdefault(person.pk, []).append((group['fecha_inicio'], numero))
+    if result.errors:
+        return result
+    try:
+        with transaction.atomic():
+            for group in groups:
+                _validar_personal_historico(group)
+                people = [person for _, person in group['personal']]
+                fields = {key: value for key, value in group.items() if key not in ('row', 'personal')}
+                programacion = ProgramacionSemanalConstruccion.objects.create(**fields)
+                ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
+                    ProgramacionSemanalConstruccionPersonal(programacion=programacion, personal=person)
+                    for person in people
+                ])
+    except ValidationError as exc:
+        result.errors.append({'row': 0, 'error': '; '.join(exc.messages)})
+        return result
+    result.created = len(groups)
+    return result
+
+
+def importar_programacion_semanal(uploaded_file, proyecto_historico=None):
     """Valida todo el XLSX y persiste sus filas en una única transacción."""
     result = ImportResult()
     # El cap de filas se aplica AL LEER, no después: materializar el archivo
@@ -280,8 +444,8 @@ def importar_programacion_semanal(uploaded_file):
     except Exception as exc:
         result.errors.append({'row': 0, 'error': f'No se pudo leer el archivo XLSX: {exc}'})
         return result
-    if not rows or tuple(rows[0]) != HEADERS:
-        result.errors.append({'row': 1, 'error': 'Las columnas deben coincidir exactamente con la plantilla descargada.'})
+    if not rows:
+        result.errors.append({'row': 1, 'error': 'El archivo no contiene encabezados.'})
         return result
     data_rows = [(number, row) for number, row in enumerate(rows[1:], start=2) if any(value not in (None, '') for value in row)]
     if not data_rows:
@@ -289,6 +453,14 @@ def importar_programacion_semanal(uploaded_file):
         return result
     if len(data_rows) > MAX_IMPORT_ROWS:
         result.errors.append({'row': 0, 'error': f'El archivo supera el máximo de {MAX_IMPORT_ROWS} filas.'})
+        return result
+    if _historical_headers_match(rows[0]):
+        return _importar_historico(data_rows, proyecto_historico)
+    if tuple(rows[0]) != HEADERS:
+        result.errors.append({
+            'row': 1,
+            'error': 'Las columnas deben coincidir con la plantilla descargada o con el plano histórico de 7 columnas.',
+        })
         return result
     parsed = []
     for number, row in data_rows:

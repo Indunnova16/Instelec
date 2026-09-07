@@ -6,10 +6,11 @@
   <a id="psc-exportar-excel" class="rounded bg-blue-700 px-4 py-2 text-white" href="{% url 'construccion:psc_exportar_excel' %}">Exportar Excel</a>
 </div>
 <div class="rounded bg-white p-6 shadow">
-  <p class="mb-4 text-sm text-gray-600">La importación se valida completa: si una fila falla, no se guarda ninguna.</p>
+  <p class="mb-4 text-sm text-gray-600">La importación se valida completa: si una fila falla, no se guarda ninguna. El plano histórico usa Fecha, Tarea, Empresa, Cuadrilla, Apellidos y Nombres, Cargo e Identificación; las celdas de cabecera de una cuadrilla pueden quedar vacías en las filas siguientes.</p>
   <a class="mb-4 inline-block text-blue-700 underline" href="{% url 'construccion:psc_plantilla_excel' %}">Descargar plantilla XLSX</a>
   <form id="psc-importar-form" enctype="multipart/form-data" method="post" class="space-y-4">
     {% csrf_token %}
+    <label class="block" for="psc-proyecto-historico"><span class="font-medium">Proyecto del plano histórico</span><select id="psc-proyecto-historico" name="proyecto_historico" required class="mt-1 block w-full"><option value="">Seleccione un proyecto</option>{% for proyecto in proyectos %}<option value="{{ proyecto.pk }}"{% if proyecto_historico_id == proyecto.pk|stringformat:'s' %} selected{% endif %}>{{ proyecto.nombre }}</option>{% endfor %}</select><span class="text-sm text-gray-600">El archivo no identifica el proyecto de forma confiable; selecciónelo antes de importar.</span></label>
     <label class="block" for="psc-importar-excel"><span class="font-medium">Archivo XLSX</span><input id="psc-importar-excel" name="archivo" type="file" accept=".xlsx" required class="mt-1 block w-full" /></label>
     <button type="submit" class="rounded bg-green-700 px-4 py-2 text-white">Validar e importar</button>
   </form>

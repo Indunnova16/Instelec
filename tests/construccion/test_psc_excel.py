@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 
 import pytest
@@ -23,7 +23,7 @@ def excel_data(db):
     proyecto = ProyectoConstruccion.objects.create(contrato=contrato, nombre='Proyecto XLSX')
     cargo, _ = Cargo.objects.get_or_create(codigo='PSC-XLSX', defaults={'nombre': 'Operario XLSX'})
     persona = PersonalCuadrilla.objects.create(nombre='Ana XLSX', documento='PSC-XLSX-1', rol_cuadrilla=cargo)
-    AsignacionPersonalProyectoConstruccion.objects.create(proyecto=proyecto, personal=persona, fecha_inicio=date(2026, 1, 1))
+    AsignacionPersonalProyectoConstruccion.objects.create(proyecto=proyecto, personal=persona, fecha_inicio=date(2024, 1, 1))
     vehiculo = Vehiculo.objects.create(placa='XLSX225')
     return proyecto, persona, vehiculo
 
@@ -50,6 +50,29 @@ def _row(proyecto, persona='', vehiculo='', **overrides):
     return [mapping[key] for key in HEADERS]
 
 
+def _historical_file(rows):
+    from openpyxl import Workbook
+    book = Workbook()
+    sheet = book.active
+    sheet.append(HISTORICAL_HEADERS)
+    for row in rows:
+        sheet.append(row)
+    output = BytesIO()
+    book.save(output)
+    output.seek(0)
+    output.name = 'programacion_historica.xlsx'
+    return output
+
+
+def _segunda_persona(proyecto):
+    cargo, _ = Cargo.objects.get_or_create(codigo='PSC-XLSX-2', defaults={'nombre': 'Ayudante XLSX'})
+    persona = PersonalCuadrilla.objects.create(nombre='Beto XLSX', documento='PSC-XLSX-2', rol_cuadrilla=cargo)
+    AsignacionPersonalProyectoConstruccion.objects.create(
+        proyecto=proyecto, personal=persona, fecha_inicio=date(2024, 1, 1),
+    )
+    return persona
+
+
 @pytest.mark.django_db
 def test_http_get_xlsx(admin_user, client):
     client.force_login(admin_user)
@@ -57,6 +80,18 @@ def test_http_get_xlsx(admin_user, client):
     assert response.status_code == 200
     assert response['Content-Type'].startswith('application/vnd.openxmlformats-officedocument')
     assert tuple(next(load_workbook(BytesIO(b''.join(response.streaming_content))).active.values)) == HEADERS
+
+
+@pytest.mark.django_db
+def test_importador_historico_renderiza_selector_de_proyecto(admin_user, client, excel_data):
+    proyecto, _, _ = excel_data
+    client.force_login(admin_user)
+    response = client.get(reverse('construccion:psc_importar_excel'))
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert 'id="psc-proyecto-historico"' in content
+    assert proyecto.nombre in content
+    assert 'El archivo no identifica el proyecto de forma confiable' in content
 
 
 @pytest.mark.django_db
@@ -87,6 +122,51 @@ def test_importacion_atomica_si_una_fila_es_invalida(excel_data):
     assert not result.ok
     assert result.errors[0]['row'] == 3
     assert ProgramacionSemanalConstruccion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_importa_plano_historico_en_dos_grupos_y_hereda_celdas_combinadas(excel_data):
+    proyecto, persona, _ = excel_data
+    segunda = _segunda_persona(proyecto)
+    result = importar_programacion_semanal(_historical_file([
+        [datetime(2024, 12, 3), 'Excavación', 'Axiatech / Instelec', 'Obra Civil 1', persona.nombre, 'Operario', persona.documento],
+        [None, None, None, None, segunda.nombre, 'Ayudante', segunda.documento],
+        [datetime(2024, 12, 4), 'Replanteo topográfico', None, 'Topografía', persona.nombre, 'Operario', persona.documento],
+    ]), proyecto_historico=proyecto)
+    assert result.ok
+    assert result.created == 2
+    grupos = ProgramacionSemanalConstruccion.objects.order_by('fecha_inicio')
+    assert [(grupo.fecha_inicio, grupo.cuadrilla, grupo.subactividad) for grupo in grupos] == [
+        (date(2024, 12, 3), 'Obra Civil 1', 'Excavación'),
+        (date(2024, 12, 4), 'Topografía', 'Replanteo'),
+    ]
+    assert grupos[0].asignaciones_personal.count() == 2
+    assert grupos[0].observaciones == 'Empresa informada: Axiatech / Instelec'
+
+
+@pytest.mark.django_db
+def test_plano_historico_reporta_la_fila_y_no_persiste_parcialmente(excel_data):
+    proyecto, persona, _ = excel_data
+    result = importar_programacion_semanal(_historical_file([
+        [datetime(2024, 12, 3), 'Excavación', None, 'Obra Civil 1', persona.nombre, 'Operario', persona.documento],
+        [None, None, None, None, 'Persona inexistente', 'Ayudante', 'NO-EXISTE'],
+    ]), proyecto_historico=proyecto)
+    assert not result.ok
+    assert result.errors == [{'row': 3, 'error': 'Personal "NO-EXISTE" no existe.'}]
+    assert ProgramacionSemanalConstruccion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_plano_historico_exige_proyecto_para_no_inventar_el_destino(excel_data):
+    _, persona, _ = excel_data
+    result = importar_programacion_semanal(_historical_file([
+        [datetime(2024, 12, 3), 'Excavación', None, 'Obra Civil 1', persona.nombre, 'Operario', persona.documento],
+    ]))
+    assert not result.ok
+    assert result.errors == [{
+        'row': 0,
+        'error': 'Seleccione el proyecto al que corresponde el plano histórico.',
+    }]
 
 
 @pytest.mark.django_db

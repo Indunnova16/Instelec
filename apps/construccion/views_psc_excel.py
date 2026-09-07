@@ -12,6 +12,7 @@ from .excel_psc import (
     importar_programacion_semanal,
     plantilla_programacion_semanal,
 )
+from .models import ProyectoConstruccion
 from .views_psc_programacion import PSC_ADMIN_ROLES
 
 
@@ -23,22 +24,30 @@ class ProgramacionSemanalConstruccionExcelView(_PSCExcelAccessMixin, View):
     template_name = 'construccion/programacion_semanal/importar.html'
 
     def get(self, request):
-        return render(request, self.template_name)
+        return render(request, self.template_name, {
+            'proyectos': ProyectoConstruccion.objects.order_by('nombre'),
+        })
 
     def post(self, request):
         uploaded_file = request.FILES.get('archivo')
         if not uploaded_file:
             messages.error(request, 'Seleccione un archivo XLSX antes de importar.')
-            return render(request, self.template_name, status=400)
+            return render(request, self.template_name, {'proyectos': ProyectoConstruccion.objects.order_by('nombre')}, status=400)
         if not uploaded_file.name.lower().endswith('.xlsx'):
             messages.error(request, 'El archivo debe estar en formato XLSX.')
-            return render(request, self.template_name, status=400)
-        result = importar_programacion_semanal(uploaded_file)
+            return render(request, self.template_name, {'proyectos': ProyectoConstruccion.objects.order_by('nombre')}, status=400)
+        proyecto_id = request.POST.get('proyecto_historico')
+        proyecto_historico = ProyectoConstruccion.objects.filter(pk=proyecto_id).first()
+        result = importar_programacion_semanal(uploaded_file, proyecto_historico=proyecto_historico)
         if result.ok:
             messages.success(request, f'Se importaron {result.created} programaciones de forma atómica.')
         else:
             messages.error(request, 'No se importó ninguna programación; corrija los errores indicados.')
-        return render(request, self.template_name, {'import_result': result}, status=200 if result.ok else 400)
+        return render(request, self.template_name, {
+            'import_result': result,
+            'proyectos': ProyectoConstruccion.objects.order_by('nombre'),
+            'proyecto_historico_id': proyecto_id,
+        }, status=200 if result.ok else 400)
 
 
 class ProgramacionSemanalConstruccionPlantillaView(_PSCExcelAccessMixin, View):
