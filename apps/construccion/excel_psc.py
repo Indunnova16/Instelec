@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from io import BytesIO
+import re
+import unicodedata
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -26,6 +28,18 @@ HEADERS = (
     'Proyecto', 'Tipo Actividad', 'Sub-Actividad', 'Supervisor', 'Personal',
     'Vehículos', 'Fecha Inicio', 'Fecha Fin', 'Hora Inicio', 'Hora Fin', 'Observaciones',
 )
+
+# Contrato confirmado para la importación histórica de #225.  El archivo
+# recibido trae las siete primeras columnas; las cuatro restantes solo existen
+# en la exportación para conservar los datos opcionales de una programación.
+HISTORICAL_HEADERS = (
+    'Fecha', 'Tarea', 'Empresa', 'Cuadrilla', 'Apellidos y Nombres',
+    'CARGO PRINCIPAL', 'Identificación',
+)
+VERTICAL_HEADERS = (
+    'Fecha', 'Tarea', 'Cuadrilla', 'Personal', 'Cargo', 'Cédula',
+    'Supervisor', 'Horario', 'Vehículo', 'Observaciones',
+)
 MAX_IMPORT_ROWS = 500
 
 
@@ -37,6 +51,77 @@ class ImportResult:
     @property
     def ok(self):
         return not self.errors
+
+
+@dataclass(frozen=True)
+class TareaMapeo:
+    """Destino de una tarea histórica dentro del contrato vertical PSC."""
+
+    tipo_actividad: str
+    subactividad: str
+    actividad_complementaria: str = ''
+
+
+def _normalizar_tarea(value):
+    """Normaliza variantes de mayúsculas, tildes y puntuación del plano legado."""
+    value = unicodedata.normalize('NFKD', str(value or ''))
+    value = ''.join(char for char in value if not unicodedata.combining(char))
+    return re.sub(r'\s+', ' ', value.upper()).strip()
+
+
+# Las tareas del plano pueden llevar contexto (torre, frente o actividad
+# secundaria). El primer alias específico conserva el catálogo cerrado de PSC.
+TAREA_ALIASES = (
+    ('AHUYENTAMIENTO', 'PRELIMINARES', 'Ahuyentamiento'),
+    ('FAUNA', 'PRELIMINARES', 'Fauna y Flora'),
+    ('FLORA', 'PRELIMINARES', 'Fauna y Flora'),
+    ('ARQUEOLOG', 'PRELIMINARES', 'Arqueología'),
+    ('REPLANTEO', 'PRELIMINARES', 'Replanteo'),
+    ('LIBERACION', 'PRELIMINARES', 'Liberación Predial'),
+    ('SEMÁFORO', 'PRELIMINARES', 'Semáforos'),
+    ('SEMAFORO', 'PRELIMINARES', 'Semáforos'),
+    ('ACCESO', 'PRELIMINARES', 'Accesos'),
+    ('CERRAMIENTO', 'OBRA_CIVIL', 'Cerramiento'),
+    ('EXCAVACION', 'OBRA_CIVIL', 'Excavación'),
+    ('SOLADO', 'OBRA_CIVIL', 'Solado'),
+    ('ACERO', 'OBRA_CIVIL', 'Acero'),
+    ('VACIADO', 'OBRA_CIVIL', 'Vaciado'),
+    ('COMPACTACION', 'OBRA_CIVIL', 'Compactación'),
+    ('CUNETA', 'OBRA_CIVIL', 'Obras de Protección (Cunetas, Trinchos)'),
+    ('TRINCHO', 'OBRA_CIVIL', 'Obras de Protección (Cunetas, Trinchos)'),
+    ('PRE-ARMAD', 'MONTAJE', 'Pre-armada'),
+    ('PREARMAD', 'MONTAJE', 'Pre-armada'),
+    ('ESTRUCTURA EN SITIO', 'MONTAJE', 'Estructura en Sitio'),
+    ('TORRE MONTADA', 'MONTAJE', 'Torre Montada'),
+    ('PUESTA A TIERRA', 'MONTAJE', 'Sistemas de Puesta a Tierra'),
+    ('PINTURA', 'MONTAJE', 'Pintura'),
+    ('RIEGA MANILA', 'TENDIDO', 'Riega Manila'),
+    ('RIEGA GUAYA', 'TENDIDO', 'Riega Guayas'),
+    ('TENDIDO CONDUCTOR', 'TENDIDO', 'Tendido Conductor'),
+    ('TENDIDO FIBRA', 'TENDIDO', 'Tendido Fibra OPGW'),
+    ('EMPALME', 'TENDIDO', 'Empalmes'),
+)
+
+
+def mapear_tarea(tarea):
+    """Resuelve una ``Tarea`` del plano a tipo/subactividad PSC.
+
+    Una tarea no catalogada no se pierde: se conserva como actividad
+    complementaria para que el histórico pueda importarse sin inventar un
+    catálogo cerrado que el cliente no confirmó.
+    """
+    descripcion = str(tarea or '').strip()
+    if not descripcion:
+        raise ValidationError('Tarea es obligatoria.')
+    normalizada = _normalizar_tarea(descripcion)
+    for alias, tipo_actividad, subactividad in TAREA_ALIASES:
+        if _normalizar_tarea(alias) in normalizada:
+            return TareaMapeo(tipo_actividad, subactividad)
+    return TareaMapeo(
+        ProgramacionSemanalConstruccion.TipoActividad.COMPLEMENTARIAS,
+        descripcion,
+        descripcion,
+    )
 
 
 def _workbook_response(rows=()):

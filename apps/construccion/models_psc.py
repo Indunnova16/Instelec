@@ -42,6 +42,10 @@ class ProgramacionSemanalConstruccion(BaseModel):
         'construccion.ProyectoConstruccion', on_delete=models.CASCADE,
         related_name='programaciones_semanales_psc', verbose_name='Proyecto',
     )
+    cuadrilla = models.CharField(
+        'Cuadrilla', max_length=150, blank=True,
+        help_text='Nombre de la cuadrilla según la programación histórica.',
+    )
     tipo_actividad = models.CharField(
         'Tipo de actividad', max_length=20, choices=TipoActividad.choices,
     )

@@ -2,11 +2,15 @@ from datetime import date
 from io import BytesIO
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from openpyxl import load_workbook
 
 from apps.contratos.models import Contrato
-from apps.construccion.excel_psc import HEADERS, importar_programacion_semanal
+from apps.construccion.excel_psc import (
+    HEADERS, HISTORICAL_HEADERS, VERTICAL_HEADERS, importar_programacion_semanal,
+    mapear_tarea,
+)
 from apps.construccion.models import (
     AsignacionPersonalProyectoConstruccion, ProgramacionSemanalConstruccion, ProyectoConstruccion,
 )
@@ -94,3 +98,46 @@ def test_rechaza_cruce_de_personal_en_archivo(excel_data):
     ]))
     assert not result.ok
     assert 'se cruza con la fila 2' in result.errors[0]['error']
+
+
+def test_contrato_vertical_conserva_layout_historico_y_exportacion():
+    assert HISTORICAL_HEADERS == (
+        'Fecha', 'Tarea', 'Empresa', 'Cuadrilla', 'Apellidos y Nombres',
+        'CARGO PRINCIPAL', 'Identificación',
+    )
+    assert VERTICAL_HEADERS == (
+        'Fecha', 'Tarea', 'Cuadrilla', 'Personal', 'Cargo', 'Cédula',
+        'Supervisor', 'Horario', 'Vehículo', 'Observaciones',
+    )
+
+
+def test_mapea_tarea_historica_con_contexto_a_catalogo_psc():
+    mapeo = mapear_tarea('REPLANTEO TOPOGRÁFICO, CONTROL EXCAVACIONES T42')
+    assert (mapeo.tipo_actividad, mapeo.subactividad, mapeo.actividad_complementaria) == (
+        'PRELIMINARES', 'Replanteo', '',
+    )
+
+
+def test_tarea_no_catalogada_se_conserva_como_complementaria():
+    mapeo = mapear_tarea('Tareas de oficina')
+    assert mapeo.tipo_actividad == 'COMPLEMENTARIAS'
+    assert mapeo.subactividad == 'Tareas de oficina'
+    assert mapeo.actividad_complementaria == 'Tareas de oficina'
+
+
+def test_tarea_vacia_es_error_explicito():
+    with pytest.raises(ValidationError, match='Tarea es obligatoria'):
+        mapear_tarea('')
+
+
+@pytest.mark.django_db
+def test_registro_legacy_sin_cuadrilla_permanece_compatible(excel_data):
+    proyecto, _, _ = excel_data
+    legado = ProgramacionSemanalConstruccion.objects.create(
+        proyecto=proyecto,
+        tipo_actividad='OBRA_CIVIL',
+        subactividad='Excavación',
+        fecha_inicio=date(2025, 12, 1),
+        fecha_fin=date(2025, 12, 1),
+    )
+    assert legado.cuadrilla == ''
