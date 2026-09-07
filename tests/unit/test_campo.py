@@ -556,17 +556,29 @@ class TestReportesDanoMapaDataView:
         assert data["reportes"][0]["id"] == str(legacy.pk)
 
     def test_permisos_rol_no_permitido_403(self, client, user_password):
-        """Rol fuera de allowed_roles (ej. auxiliar) recibe 403, igual que
-        ReportesDanoListView (mismo esquema RoleRequiredMixin)."""
+        """Un deny explícito de la hoja Campo impide consultar el mapa."""
         from tests.factories import UsuarioFactory
+        from apps.core.models import RoleModuloPermiso
+        from apps.core.permissions import (
+            MODULO_MANTENIMIENTO,
+            SUBMODULO_MANTENIMIENTO_CAMPO,
+            invalidate_role_cache,
+        )
 
         usuario = UsuarioFactory(rol="auxiliar")
+        RoleModuloPermiso.objects.filter(
+            role_id="auxiliar",
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=SUBMODULO_MANTENIMIENTO_CAMPO,
+        ).update(nivel_acceso=RoleModuloPermiso.SIN_ACCESO)
+        invalidate_role_cache("auxiliar")
         client.login(username=usuario.email, password=user_password)
 
         url = reverse("campo:reportes_dano_mapa_data")
         response = client.get(url, HTTP_ACCEPT="application/json")
 
-        assert response.status_code == 403
+        assert response.status_code == 302
+        assert response.url == "/"
 
     def test_anonimo_redirige_a_login(self, client):
         """Usuario no autenticado es redirigido a login."""
@@ -597,16 +609,29 @@ class TestReportesDanoMapaView:
         assert "Mapa de Reportes de Daño" in html
 
     def test_permisos_rol_no_permitido_403(self, client, user_password):
-        """Rol fuera de allowed_roles recibe 403."""
+        """Un deny explícito de la hoja Campo impide consultar el mapa."""
         from tests.factories import UsuarioFactory
+        from apps.core.models import RoleModuloPermiso
+        from apps.core.permissions import (
+            MODULO_MANTENIMIENTO,
+            SUBMODULO_MANTENIMIENTO_CAMPO,
+            invalidate_role_cache,
+        )
 
         usuario = UsuarioFactory(rol="auxiliar")
+        RoleModuloPermiso.objects.filter(
+            role_id="auxiliar",
+            modulo=MODULO_MANTENIMIENTO,
+            submodulo=SUBMODULO_MANTENIMIENTO_CAMPO,
+        ).update(nivel_acceso=RoleModuloPermiso.SIN_ACCESO)
+        invalidate_role_cache("auxiliar")
         client.login(username=usuario.email, password=user_password)
 
         url = reverse("campo:reportes_dano_mapa")
         response = client.get(url)
 
-        assert response.status_code == 403
+        assert response.status_code == 302
+        assert response.url == "/"
 
     def test_link_ver_en_mapa_desde_lista_danos(self, client, user_password):
         """La lista de reportes de daño debe tener un link de entrada al mapa."""

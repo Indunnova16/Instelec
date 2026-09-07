@@ -11,6 +11,10 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.http import HttpResponse
 from apps.core.mixins import HTMXMixin, RoleRequiredMixin
+from apps.core.permissions import (
+    SUBMODULO_MANTENIMIENTO_CAMPO,
+    SUBMODULO_MANTENIMIENTO_PROCEDIMIENTOS,
+)
 from apps.core.cache import get_lineas_activas, get_cuadrillas_activas
 from .models import RegistroCampo, Evidencia, ReporteDano, FotoDano, Procedimiento, RegistroAvance
 
@@ -23,6 +27,7 @@ class RegistroListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListVie
     context_object_name = 'registros'
     paginate_by = 20
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_queryset(self) -> QuerySet[RegistroCampo]:
         qs = super().get_queryset().select_related(
@@ -60,6 +65,7 @@ class RegistroDetailView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Detai
     template_name = 'campo/detalle.html'
     context_object_name = 'registro'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -76,6 +82,7 @@ class EvidenciasView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     template_name = 'campo/evidencias.html'
     context_object_name = 'evidencias'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_queryset(self) -> QuerySet[Evidencia]:
         return Evidencia.objects.filter(
@@ -93,6 +100,7 @@ class RegistroCreateView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, Templ
     template_name = 'campo/crear.html'
     partial_template_name = 'campo/partials/form_registro.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     TIPOS_VEGETACION = [
         ('arboles_aislados', 'Arboles aislados'),
@@ -274,6 +282,7 @@ class ReportarDanoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
     """View for creating a damage report with geolocation."""
     template_name = 'campo/reportar_dano.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -341,6 +350,7 @@ class ReportesDanoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     context_object_name = 'reportes'
     paginate_by = 20
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_queryset(self) -> QuerySet[ReporteDano]:
         qs = super().get_queryset().select_related('usuario', 'linea', 'torre').prefetch_related('fotos')
@@ -387,6 +397,7 @@ class ReporteDanoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     template_name = 'campo/detalle_dano.html'
     context_object_name = 'reporte'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_queryset(self):
         return super().get_queryset().select_related('usuario', 'linea', 'torre').prefetch_related('fotos')
@@ -401,6 +412,7 @@ class ReportesDanoMapaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """
     template_name = 'campo/mapa_reportes_dano.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -426,6 +438,7 @@ class ReportesDanoMapaPartialView(LoginRequiredMixin, RoleRequiredMixin, Templat
     no una vista HTML con partial HTMX.
     """
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_queryset(self) -> QuerySet[ReporteDano]:
         qs = (
@@ -493,6 +506,7 @@ class ProcedimientoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     context_object_name = 'procedimientos'
     paginate_by = 20
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_PROCEDIMIENTOS
 
     def get_queryset(self) -> QuerySet[Procedimiento]:
         qs = super().get_queryset().select_related('subido_por')
@@ -546,6 +560,7 @@ class ProcedimientoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVie
     """View for uploading a new procedure document."""
     template_name = 'campo/procedimiento_crear.html'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_PROCEDIMIENTOS
 
     ALLOWED_EXTENSIONS = {'.pdf', '.xls', '.xlsx', '.docx'}
     ALLOWED_MIME_TYPES = {
@@ -642,6 +657,7 @@ class ProcedimientoViewerView(LoginRequiredMixin, RoleRequiredMixin, DetailView)
     template_name = 'campo/procedimiento_viewer.html'
     context_object_name = 'procedimiento'
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_PROCEDIMIENTOS
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -662,6 +678,7 @@ class ProcedimientoProxyView(LoginRequiredMixin, RoleRequiredMixin, View):
     Used by frontend to fetch Excel files for preview.
     """
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente', 'supervisor', 'liniero']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_PROCEDIMIENTOS
 
     def get(self, request, pk):
         from django.http import FileResponse, HttpResponse
@@ -691,6 +708,7 @@ class AvancesCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """
     template_name = 'campo/avances_cuadrilla.html'
     allowed_roles = ['supervisor', 'liniero', 'auxiliar']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -822,6 +840,7 @@ class RegistroAvanceCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
     """
     template_name = 'campo/avance_registrar.html'
     allowed_roles = ['liniero', 'auxiliar', 'supervisor', 'admin', 'director', 'coordinador', 'ing_residente']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_context_data(self, **kwargs):
         """
@@ -1232,6 +1251,7 @@ class MisAvancesListView(LoginRequiredMixin, RoleRequiredMixin, HTMXMixin, ListV
     context_object_name = 'avances'
     paginate_by = 20
     allowed_roles = ['liniero', 'auxiliar', 'supervisor', 'admin', 'director', 'coordinador']
+    required_submodulo = SUBMODULO_MANTENIMIENTO_CAMPO
 
     def get_queryset(self) -> QuerySet:
         qs = RegistroAvance.objects.select_related(
