@@ -24,10 +24,10 @@ def asignacion_data(db):
     cargo, _ = Cargo.objects.get_or_create(codigo='B6-COND', defaults={'nombre': 'Conductor B6'})
     personal = PersonalCuadrilla.objects.create(
         nombre='Carla Disponible', documento='PSC-B6-001', rol_cuadrilla=cargo,
-        fecha_ingreso=date(2025, 1, 1),
+        area='CONSTRUCCION', fecha_ingreso=date(2025, 1, 1),
     )
     no_elegible = PersonalCuadrilla.objects.create(
-        nombre='Nora Sin Aprobación', documento='PSC-B6-002', rol_cuadrilla=cargo,
+        nombre='Nora Sin Aprobación', documento='PSC-B6-002', rol_cuadrilla=cargo, area='CONSTRUCCION',
     )
     AsignacionPersonalProyectoConstruccion.objects.create(
         proyecto=proyecto, personal=personal, fecha_inicio=date(2026, 8, 1),
@@ -116,3 +116,30 @@ def test_rechaza_conductor_ajeno_y_vehiculo_inactivo(admin_user, client, asignac
     )
     assert response.status_code == 200
     assert 'no existe o no está activo' in response.content.decode().lower()
+
+
+@pytest.mark.django_db
+def test_detalle_separa_categorias_y_expone_selectores_buscables(admin_user, client, asignacion_data):
+    programacion, personal, _, _ = asignacion_data
+    administrativo = PersonalCuadrilla.objects.create(
+        nombre='Andrea Administrativa', documento='PSC-B6-003', rol_cuadrilla=personal.rol_cuadrilla,
+        area='CONSTRUCCION', fecha_ingreso=date(2025, 1, 1),
+    )
+    AsignacionPersonalProyectoConstruccion.objects.create(
+        proyecto=programacion.proyecto, personal=administrativo, fecha_inicio=date(2026, 8, 1),
+    )
+    ProgramacionSemanalConstruccionPersonal.objects.create(
+        programacion=programacion, personal=personal, categoria='OPERATIVO',
+    )
+    ProgramacionSemanalConstruccionPersonal.objects.create(
+        programacion=programacion, personal=administrativo, categoria='ADMINISTRATIVO',
+    )
+    client.force_login(admin_user)
+    response = client.get(reverse('construccion:psc_programacion_detalle', args=[programacion.pk]))
+    html = response.content.decode()
+    assert response.status_code == 200
+    assert 'Personal Administrativo' in html
+    assert 'Personal Operativo' in html
+    assert 'id="psc-personal-administrativo"' in html
+    assert 'id="psc-personal-operativo"' in html
+    assert html.count('js-tomselect') == 2

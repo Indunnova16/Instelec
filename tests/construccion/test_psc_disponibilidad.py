@@ -29,7 +29,7 @@ def psc_data(db):
     )
     persona = PersonalCuadrilla.objects.create(
         nombre='Carlos Conductor', documento='PSC-B3-001', rol_cuadrilla=cargo,
-        fecha_ingreso=date(2025, 1, 1),
+        area='CONSTRUCCION', fecha_ingreso=date(2025, 1, 1),
     )
     AsignacionPersonalProyectoConstruccion.objects.create(
         proyecto=proyecto, personal=persona, fecha_inicio=date(2026, 8, 1), fecha_fin=None,
@@ -80,3 +80,18 @@ def test_rechaza_fecha_invertida_y_personal_duplicado(psc_data):
     )
     with pytest.raises(ValidationError, match='misma persona'):
         validar_personal_elegible(programacion, [persona.pk, persona.pk])
+
+
+@pytest.mark.django_db
+def test_excluye_personal_activo_fuera_de_construccion_y_aprobacion_expirada(psc_data):
+    proyecto, persona = psc_data
+    persona.area = 'MANTENIMIENTO'
+    persona.save(update_fields=['area'])
+    assert not personal_elegible(proyecto.pk, date(2026, 8, 17), date(2026, 8, 23)).exists()
+
+    persona.area = 'CONSTRUCCION'
+    persona.save(update_fields=['area'])
+    aprobacion = AsignacionPersonalProyectoConstruccion.objects.get(personal=persona)
+    aprobacion.fecha_fin = date(2026, 8, 16)
+    aprobacion.save(update_fields=['fecha_fin'])
+    assert not personal_elegible(proyecto.pk, date(2026, 8, 17), date(2026, 8, 23)).exists()

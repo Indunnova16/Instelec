@@ -39,6 +39,7 @@ def personal_elegible(proyecto_id, fecha_inicio, fecha_fin):
     ocupados = PersonalCuadrilla.objects.filter(cruza_intervalo)
     return PersonalCuadrilla.objects.filter(
         activo=True,
+        area='CONSTRUCCION',
         aprobaciones_proyecto_construccion__in=aprobaciones_vigentes,
     ).filter(
         Q(fecha_ingreso__isnull=True) | Q(fecha_ingreso__lte=fecha_fin),

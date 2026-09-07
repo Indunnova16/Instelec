@@ -156,6 +156,12 @@ class ProgramacionSemanalConstruccionDetailView(
         context.update({
             # B6 — contrato de contexto para los partials de asignación.
             'personal_asignado': personal_asignado,
+            'personal_administrativo': personal_asignado.filter(
+                categoria=ProgramacionSemanalConstruccionPersonal.Categoria.ADMINISTRATIVO,
+            ),
+            'personal_operativo': personal_asignado.filter(
+                categoria=ProgramacionSemanalConstruccionPersonal.Categoria.OPERATIVO,
+            ),
             'personal_disponible': personal_elegible(
                 programacion.proyecto_id, programacion.fecha_inicio, programacion.fecha_fin,
             ),

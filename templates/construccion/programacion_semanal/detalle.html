@@ -4,6 +4,7 @@
 <div class="mb-6 flex items-center justify-between"><h1 class="text-2xl font-bold">Programación semanal</h1><a class="rounded bg-blue-600 px-4 py-2 text-white" href="{% url 'construccion:psc_programacion_editar' pk=programacion.pk %}">Editar</a></div>
 <dl class="grid grid-cols-1 gap-4 rounded-lg bg-white p-6 shadow md:grid-cols-2">
     <div><dt class="text-sm text-gray-500">Proyecto</dt><dd>{{ programacion.proyecto }}</dd></div>
+    <div><dt class="text-sm text-gray-500">Cuadrilla</dt><dd>{{ programacion.cuadrilla|default:'Sin asignar' }}</dd></div>
     <div><dt class="text-sm text-gray-500">Tipo / subactividad</dt><dd>{{ programacion.get_tipo_actividad_display }}{% if programacion.subactividad %} — {{ programacion.subactividad }}{% endif %}</dd></div>
     {% if programacion.actividad_complementaria %}<div class="md:col-span-2"><dt class="text-sm text-gray-500">Actividad complementaria</dt><dd>{{ programacion.actividad_complementaria }}</dd></div>{% endif %}
     <div><dt class="text-sm text-gray-500">Periodo</dt><dd>{{ programacion.fecha_inicio }} a {{ programacion.fecha_fin }}</dd></div>
@@ -12,11 +13,11 @@
     <div><dt class="text-sm text-gray-500">Observaciones</dt><dd>{{ programacion.observaciones|default:'Sin observaciones' }}</dd></div>
 </dl>
 <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-    <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="personal-asignado-titulo">
-        <h2 id="personal-asignado-titulo" class="text-xl font-semibold">Personal asignado</h2>
-        {% if personal_asignado %}
+    <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="personal-administrativo-titulo">
+        <h2 id="personal-administrativo-titulo" class="text-xl font-semibold">Personal Administrativo</h2>
+        {% if personal_administrativo %}
             <ul class="mt-4 divide-y">
-                {% for asignacion in personal_asignado %}
+                {% for asignacion in personal_administrativo %}
                     <li class="flex items-center justify-between gap-3 py-3">
                         <div>
                             <p class="font-medium">{{ asignacion.personal.nombre }}</p>
@@ -31,9 +32,32 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <p class="mt-3 text-sm text-slate-600" role="status">Sin personal programado.</p>
+            <p class="mt-3 text-sm text-slate-600" role="status">Sin personal administrativo programado.</p>
         {% endif %}
-        {% if puede_gestionar %}{% include "construccion/programacion_semanal/_asignar_personal.html" %}{% endif %}
+        {% if puede_gestionar %}{% include "construccion/programacion_semanal/_asignar_personal.html" with categoria='ADMINISTRATIVO' categoria_label='Personal Administrativo' selector_id='psc-personal-administrativo' %}{% endif %}
+    </section>
+    <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="personal-operativo-titulo">
+        <h2 id="personal-operativo-titulo" class="text-xl font-semibold">Personal Operativo</h2>
+        {% if personal_operativo %}
+            <ul class="mt-4 divide-y">
+                {% for asignacion in personal_operativo %}
+                    <li class="flex items-center justify-between gap-3 py-3">
+                        <div>
+                            <p class="font-medium">{{ asignacion.personal.nombre }}</p>
+                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}</p>
+                        </div>
+                        {% if puede_gestionar %}
+                            <form method="post" action="{% url 'construccion:psc_personal_quitar' pk=programacion.pk personal_pk=asignacion.personal.pk %}">
+                                {% csrf_token %}<button class="rounded border border-red-600 px-3 py-1 text-sm text-red-700" type="submit">Quitar</button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="mt-3 text-sm text-slate-600" role="status">Sin personal operativo programado.</p>
+        {% endif %}
+        {% if puede_gestionar %}{% include "construccion/programacion_semanal/_asignar_personal.html" with categoria='OPERATIVO' categoria_label='Personal Operativo' selector_id='psc-personal-operativo' %}{% endif %}
     </section>
     <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="vehiculos-asignados-titulo">
         <h2 id="vehiculos-asignados-titulo" class="text-xl font-semibold">Vehículos asignados</h2>
