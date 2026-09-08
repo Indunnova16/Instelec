@@ -1,0 +1,4 @@
+{% comment %}Partial reutilizable: requiere ``indicadores`` de CargaFinancieraView.{% endcomment %}
+<div id="indicadores-carga" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+  {% for indicador in indicadores %}<article class="rounded border p-4 {% if indicador.alerta %}border-amber-300 bg-amber-50{% else %}border-green-200 bg-green-50{% endif %}"><h3 class="text-sm text-gray-600">{{ indicador.nombre }}</h3><p class="mt-1 text-xl font-bold">{% if indicador.valor is None %}Sin base comparable{% elif indicador.unidad == '$' %}${{ indicador.valor }}{% else %}{{ indicador.valor }}%{% endif %}</p></article>{% endfor %}
+</div>
