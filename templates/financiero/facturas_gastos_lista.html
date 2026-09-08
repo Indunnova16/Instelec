@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block content %}
+<main class="max-w-7xl mx-auto px-4 py-6"><div class="flex justify-between items-center"><h1 class="text-2xl font-bold">Facturas de gastos</h1><a class="rounded bg-blue-600 px-4 py-2 text-white" href="{% url 'financiero:factura_gasto_nueva' %}">Registrar gasto</a></div>
+{% if messages %}{% for message in messages %}<div role="alert" class="mt-4 rounded p-3 {% if message.tags == 'error' %}bg-red-100{% else %}bg-green-100{% endif %}">{{ message }}</div>{% endfor %}{% endif %}
+<section id="facturas-gastos-tabla" class="mt-6 overflow-x-auto bg-white rounded shadow"><table class="min-w-full text-sm"><thead><tr><th>Documento</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody>{% for factura in facturas %}<tr class="border-t"><td class="p-3">{{ factura.numero_documento }}</td><td>{{ factura.proveedor }}</td><td>{{ factura.fecha|date:'d/m/Y' }}</td><td>${{ factura.total|floatformat:2 }}</td><td>{{ factura.get_estado_display }}</td><td><a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_detalle' factura.pk %}">Ver</a></td></tr>{% empty %}<tr><td colspan="6" class="p-4 text-gray-500">No hay facturas registradas.</td></tr>{% endfor %}</tbody></table></section></main>
+{% endblock %}
