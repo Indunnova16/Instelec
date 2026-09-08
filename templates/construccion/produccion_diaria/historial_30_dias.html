@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Historial de producción diaria{% endblock %}
+
+{% block content %}
+<main id="produccion-diaria-historial" class="container mx-auto max-w-6xl px-4 py-6" aria-live="polite">
+    <div class="rounded-lg bg-blue-50 p-4 text-blue-800" aria-hidden="true">Cargando historial de 30 días…</div>
+    {% if errores_alerta %}<section class="mt-4 rounded-lg bg-red-50 p-4 text-red-800" role="alert">{% for error in errores_alerta %}<p>{{ error }}</p>{% endfor %}</section>{% endif %}
+    <section class="mt-4 rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+        <h1 class="text-2xl font-bold">Historial de producción — últimos 30 días</h1>
+        {% if producciones %}<ul class="mt-5 space-y-3">{% for produccion in producciones %}<li class="rounded border p-4"><div class="flex flex-wrap justify-between gap-2"><strong>{{ produccion.fecha|date:"Y-m-d" }} · {{ produccion.programacion.cuadrilla }}</strong>{% if produccion.alerta_actual %}<span class="rounded bg-red-100 px-2 py-1 text-red-800">Alerta persistente: {{ produccion.alerta_actual.desviacion_pct }}%</span>{% else %}<span class="rounded bg-green-100 px-2 py-1 text-green-800">Sin alerta</span>{% endif %}</div><p class="mt-2 text-gray-600 dark:text-gray-300">{{ produccion.observaciones|default:"Sin observaciones." }}</p><a class="mt-2 inline-block text-blue-700 underline" href="/construccion/produccion-diaria/{{ produccion.pk }}/">Ver detalle</a></li>{% endfor %}</ul>{% else %}<p class="mt-5 rounded bg-amber-50 p-4 text-amber-800">No hay registros en los últimos 30 días.</p>{% endif %}
+    </section>
+</main>
+{% endblock %}
