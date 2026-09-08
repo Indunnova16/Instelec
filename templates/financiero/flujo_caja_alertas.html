@@ -1,0 +1,2 @@
+{% extends "base.html" %}
+{% block content %}<main class="max-w-5xl mx-auto px-4 py-6 space-y-4"><h1 class="text-2xl font-bold">Alertas de caja</h1>{% if flujo.alertas %}<ul class="rounded bg-amber-100 p-4 text-amber-900">{% for alerta in flujo.alertas %}<li>{{ alerta }}</li>{% endfor %}</ul>{% else %}<p class="rounded bg-green-100 p-4 text-green-800">No hay alertas para los supuestos actuales.</p>{% endif %}<p>Conciliaciones pendientes: {{ resumen_conciliacion.pendientes }}.</p></main>{% endblock %}

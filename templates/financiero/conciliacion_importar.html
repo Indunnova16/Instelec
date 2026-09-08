@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Importar movimientos bancarios{% endblock %}
+{% block content %}
+<main class="max-w-3xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold">Importar movimientos bancarios</h1>
+  <p class="mt-2 text-gray-600">CSV: Fecha, Referencia, Descripción, Monto, Tipo y Banco.</p>
+  {% if messages %}{% for message in messages %}<div role="alert" class="mt-4 rounded p-3 {% if message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %}">{{ message }}</div>{% endfor %}{% endif %}
+  <form id="conciliacion-importar-form" method="post" enctype="multipart/form-data" class="mt-6 space-y-4 bg-white p-5 rounded shadow" x-data="{loading:false}" @submit="loading=true">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div><label for="{{ form.archivo.id_for_label }}" class="block font-medium">{{ form.archivo.label }}</label>{{ form.archivo }}{% for error in form.archivo.errors %}<p class="text-red-700">{{ error }}</p>{% endfor %}</div>
+    <button id="importar-movimientos" type="submit" :disabled="loading" class="rounded bg-blue-700 px-4 py-2 text-white"><span x-text="loading ? 'Importando…' : 'Importar movimientos'"></span></button>
+    <p x-show="loading" class="text-sm text-gray-600">Validando y conciliando movimientos…</p>
+  </form>
+</main>
+{% endblock %}
