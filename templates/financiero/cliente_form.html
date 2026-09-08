@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="max-w-2xl mx-auto px-4 py-6"><h1 class="text-2xl font-bold">{% if editing %}Editar{% else %}Nuevo{% endif %} cliente</h1><form method="post" class="mt-5 space-y-4 rounded bg-white p-6 shadow" x-data="{sending:false}" @submit="sending=true">{% csrf_token %}{% for field in form %}<div><label class="block font-medium" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-sm text-red-700">{{ error }}</p>{% endfor %}</div>{% endfor %}<div class="flex gap-3"><button :disabled="sending" class="rounded bg-blue-600 px-4 py-2 text-white"><span x-text="sending ? 'Guardando…' : 'Guardar cliente'"></span></button><a class="rounded border px-4 py-2" href="{% url 'financiero:clientes_lista' %}">Cancelar</a></div></form></main>
+{% endblock %}
