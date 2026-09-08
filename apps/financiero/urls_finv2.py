@@ -8,6 +8,7 @@ NO declara app_name propio.
 from django.urls import path
 
 from . import views_finv2_presupuesto as v2
+from . import urls_finv2_carga
 
 urlpatterns = [
     path(
@@ -21,3 +22,6 @@ urlpatterns = [
         name='editar_mapeo',
     ),
 ]
+
+# B2 (#246, #247): workflow trazable de carga, homologación y plano CSV.
+urlpatterns += urls_finv2_carga.urlpatterns
