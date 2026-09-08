@@ -9,6 +9,7 @@ keeps working everywhere (admin, views, importers, third-party apps).
 
 NEW MODELS GO IN A NEW FILE — do not append to this aggregator.
 """
+
 from .models_base import *  # noqa: F401, F403
 from .models_cargo import *  # noqa: F401, F403 — Maestro 3: Cargos (issue #176)
 
@@ -26,4 +27,11 @@ except ImportError:
 try:
     from .models_pc import *  # noqa: F401, F403
 except Exception:
+    pass
+
+# Producción Diaria (#252). Import protegido para que ramas que no incluyan el
+# backbone sigan siendo importables durante la transición del módulo.
+try:
+    from .models_produccion_diaria import *  # noqa: F401, F403
+except ImportError:
     pass
