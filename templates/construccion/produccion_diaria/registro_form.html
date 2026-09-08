@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<main class="max-w-6xl mx-auto p-6" id="produccion-diaria-form">
+  <h1 class="text-2xl font-bold mb-4">{{ titulo }}</h1>
+  <p class="mb-4 text-gray-600">Registre el trabajo, novedades y consumos del día.</p>
+  <form method="post" enctype="multipart/form-data" class="space-y-6">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+    <section><h2 class="font-semibold">Personal</h2>{{ personal_formset.management_form }}{% for row in personal_formset %}<div class="grid gap-2 md:grid-cols-4">{{ row.as_p }}</div>{% endfor %}</section>
+    <section><h2 class="font-semibold">Actividades</h2>{{ actividad_formset.management_form }}{% for row in actividad_formset %}<div class="grid gap-2 md:grid-cols-3">{{ row.as_p }}</div>{% endfor %}</section>
+    <section><h2 class="font-semibold">Novedades y foto</h2>{{ novedad_formset.management_form }}{% for row in novedad_formset %}<div class="grid gap-2 md:grid-cols-3">{{ row.as_p }}</div>{% endfor %}</section>
+    <section><h2 class="font-semibold">Materiales</h2>{{ material_formset.management_form }}{% for row in material_formset %}<div class="grid gap-2 md:grid-cols-3">{{ row.as_p }}</div>{% endfor %}</section>
+    <button type="submit" class="rounded bg-blue-600 px-4 py-2 text-white">Guardar registro</button>
+  </form>
+</main>
+{% endblock %}

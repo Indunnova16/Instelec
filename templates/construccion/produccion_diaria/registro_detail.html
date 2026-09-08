@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<main class="max-w-5xl mx-auto p-6" id="produccion-diaria-detalle">
+  <h1 class="text-2xl font-bold">Producción del {{ produccion.fecha }}</h1>
+  <p>{{ produccion.programacion }} · Calidad: {{ produccion.get_calidad_trabajo_display }}</p>
+  {% if produccion.observaciones %}<p class="mt-3">{{ produccion.observaciones }}</p>{% endif %}
+  <section class="mt-6"><h2 class="font-semibold">Personal</h2><ul>{% for row in produccion.registros_personal.all %}<li>{{ row.personal }}: {{ row.horas_trabajadas }} h{% if row.motivo_ausencia %} — {{ row.get_motivo_ausencia_display }}{% endif %}</li>{% empty %}<li>Sin personal reportado.</li>{% endfor %}</ul></section>
+  <section class="mt-6"><h2 class="font-semibold">Actividades</h2><ul>{% for item in produccion.actividades.all %}<li>{{ item.descripcion }}: {{ item.avance_pct }}%</li>{% empty %}<li>Sin actividades reportadas.</li>{% endfor %}</ul></section>
+  <section class="mt-6"><h2 class="font-semibold">Novedades</h2><ul>{% for item in produccion.novedades.all %}<li>{{ item.get_tipo_display }}: {{ item.descripcion }} {% if item.foto %}<a href="{{ item.foto.url }}">Ver foto</a>{% endif %}</li>{% empty %}<li>Sin novedades reportadas.</li>{% endfor %}</ul></section>
+  <section class="mt-6"><h2 class="font-semibold">Materiales</h2><ul>{% for item in produccion.materiales.all %}<li>{{ item.descripcion }}: {{ item.cantidad }} ({{ item.costo_estimado }})</li>{% empty %}<li>Sin materiales reportados.</li>{% endfor %}</ul><p>Total estimado: {{ costo_materiales }}</p></section>
+</main>
+{% endblock %}
