@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<main id="flujo-caja-dashboard" class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+  <h1 class="text-2xl font-bold">Flujo de caja proyectado</h1>
+  <form method="get" class="rounded bg-white p-4 shadow space-y-3" x-data="{loading:false}" @submit="loading=true">
+    {{ form.non_field_errors }}
+    {% for field in form %}<label class="block">{{ field.label }} {{ field }} {{ field.errors }}</label>{% endfor %}
+    <button class="rounded bg-blue-700 px-3 py-2 text-white" :disabled="loading"><span x-text="loading ? 'Calculando…' : 'Actualizar proyección'"></span></button><span x-show="loading">Cargando movimientos y documentos…</span>
+  </form>
+  {% if form.errors %}<div role="alert" class="rounded bg-red-100 p-3 text-red-800">Corrija los parámetros de la proyección.</div>{% endif %}
+  {% if flujo.hay_deficit %}<div role="alert" class="rounded bg-red-100 p-4 text-red-800"><strong>Déficit proyectado:</strong> ${{ flujo.saldo_proyectado|floatformat:2 }}</div>{% else %}<div class="rounded bg-green-100 p-4 text-green-800">Caja proyectada positiva.</div>{% endif %}
+  <div class="grid gap-4 md:grid-cols-3"><section class="rounded bg-white p-4 shadow"><h2>Saldo inicial</h2><p>${{ flujo.saldo_inicial|floatformat:2 }}</p></section><section class="rounded bg-white p-4 shadow"><h2>Ingresos proyectados</h2><p>${{ flujo.ingresos_proyectados|floatformat:2 }}</p><small>Sobre ${{ flujo.ingresos_emitidos|floatformat:2 }} emitidos y no cobrados.</small></section><section class="rounded bg-white p-4 shadow"><h2>Saldo al {{ flujo.fecha_corte }}</h2><p>${{ flujo.saldo_proyectado|floatformat:2 }}</p></section></div>
+  <p><a class="text-blue-700 underline" href="{% url 'financiero:flujo_caja_exportar' %}?{{ request.GET.urlencode }}">Exportar CSV</a> · <a class="text-blue-700 underline" href="{% url 'financiero:flujo_caja_alertas' %}?{{ request.GET.urlencode }}">Ver alertas</a></p>
+</main>
+{% endblock %}
