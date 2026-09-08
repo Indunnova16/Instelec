@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Producción diaria{% endblock %}
+
+{% block content %}
+<main id="produccion-diaria-lista" class="container mx-auto max-w-6xl px-4 py-6" aria-live="polite">
+    <div class="rounded-lg bg-blue-50 p-4 text-blue-800" aria-hidden="true">Cargando producción diaria…</div>
+    {% if errores_alerta %}
+        <section class="mt-4 rounded-lg bg-red-50 p-4 text-red-800" role="alert">
+            {% for error in errores_alerta %}<p>{{ error }}</p>{% endfor %}
+        </section>
+    {% endif %}
+    <section class="mt-4 rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div><h1 class="text-2xl font-bold">Producción diaria</h1><p class="text-gray-600 dark:text-gray-300">Registros más recientes y alertas de desviación.</p></div>
+            <a class="rounded bg-blue-700 px-4 py-2 text-white" href="/construccion/produccion-diaria/registrar/">Registrar producción</a>
+        </div>
+        {% if producciones %}
+            <div class="mt-5 overflow-x-auto"><table class="min-w-full text-left"><thead><tr class="border-b"><th class="p-2">Fecha</th><th class="p-2">Cuadrilla</th><th class="p-2">Programación</th><th class="p-2">Estado</th><th class="p-2">Detalle</th></tr></thead><tbody>
+                {% for produccion in producciones %}<tr class="border-b"><td class="p-2">{{ produccion.fecha|date:"Y-m-d" }}</td><td class="p-2">{{ produccion.programacion.cuadrilla }}</td><td class="p-2">{{ produccion.programacion.anio }}-S{{ produccion.programacion.semana|stringformat:"02d" }}</td><td class="p-2">{% if produccion.alerta_actual %}<span class="rounded bg-red-100 px-2 py-1 text-red-800" title="{{ produccion.alerta_actual.mensaje }}">Alerta: {{ produccion.alerta_actual.desviacion_pct }}%</span>{% else %}<span class="rounded bg-green-100 px-2 py-1 text-green-800">Sin alerta</span>{% endif %}</td><td class="p-2"><a class="text-blue-700 underline" href="/construccion/produccion-diaria/{{ produccion.pk }}/">Ver</a></td></tr>{% endfor %}
+            </tbody></table></div>
+        {% else %}
+            <p class="mt-5 rounded bg-amber-50 p-4 text-amber-800">No hay producciones diarias registradas todavía.</p>
+        {% endif %}
+    </section>
+</main>
+{% endblock %}

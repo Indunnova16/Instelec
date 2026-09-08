@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis comparativo de producción{% endblock %}
+
+{% block content %}
+<main id="produccion-diaria-analisis" class="container mx-auto max-w-5xl px-4 py-6" aria-live="polite">
+    <div data-analisis-loading class="rounded-lg bg-blue-50 p-4 text-blue-800">
+        Cargando análisis comparativo…
+    </div>
+
+    <section data-analisis-success class="mt-4 rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Análisis: programado vs. real</h1>
+        <p class="mt-2 text-gray-600 dark:text-gray-300">
+            {{ analisis.programacion.cuadrilla }} · {{ analisis.programacion.anio }}-S{{ analisis.programacion.semana|stringformat:"02d" }}
+        </p>
+
+        <dl class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="rounded border p-4"><dt class="text-sm text-gray-500">Torres programadas</dt><dd class="text-2xl font-semibold">{{ analisis.torres_programadas }}</dd></div>
+            <div class="rounded border p-4"><dt class="text-sm text-gray-500">Torres ejecutadas</dt><dd class="text-2xl font-semibold">{{ analisis.torres_ejecutadas|default:"Sin dato" }}</dd></div>
+            <div class="rounded border p-4"><dt class="text-sm text-gray-500">Horas reales</dt><dd class="text-2xl font-semibold">{{ analisis.horas_reales }}</dd></div>
+            <div class="rounded border p-4"><dt class="text-sm text-gray-500">Días reportados</dt><dd class="text-2xl font-semibold">{{ analisis.dias_reportados }}</dd></div>
+        </dl>
+
+        {% if analisis.estado_torres == "DISPONIBLE" %}
+            <p class="mt-6 rounded p-4 {% if analisis.varianza_torres_pct < 0 %}bg-red-50 text-red-800{% else %}bg-green-50 text-green-800{% endif %}">
+                Varianza de torres: <strong>{{ analisis.varianza_torres_pct }}%</strong>.
+            </p>
+        {% elif analisis.estado_torres == "SIN_BASE" %}
+            <p class="mt-6 rounded bg-amber-50 p-4 text-amber-800">No hay torres programadas; no es posible calcular una varianza.</p>
+        {% else %}
+            <p class="mt-6 rounded bg-amber-50 p-4 text-amber-800">Aún no hay ejecución semanal registrada. La varianza queda sin dato hasta contar con el valor real.</p>
+        {% endif %}
+
+        <p class="mt-4 text-sm text-gray-600 dark:text-gray-300">
+            Actividades reportadas: {{ analisis.actividades_reportadas }}.
+            Avance promedio diario: {{ analisis.avance_promedio_pct|default_if_none:"Sin dato" }}{% if analisis.avance_promedio_pct is not None %}%{% endif %}.
+        </p>
+    </section>
+    <section data-analisis-error hidden class="mt-4 rounded-lg bg-red-50 p-4 text-red-800" role="alert">
+        No fue posible cargar el análisis. Intente de nuevo o contacte al administrador.
+    </section>
+</main>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelector("[data-analisis-loading]")?.setAttribute("hidden", "hidden");
+    });
+</script>
+{% endblock %}
