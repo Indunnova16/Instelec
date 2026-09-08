@@ -17,7 +17,7 @@ from .services_finv2_conciliacion import aplicar_override, importar_movimientos_
 class ConciliacionImportarView(LoginRequiredMixin, RoleRequiredMixin, FormView):
     template_name = "financiero/conciliacion_importar.html"
     form_class = ImportarMovimientosCsvForm
-    allowed_roles = ["tesoreria", "contador"]
+    allowed_roles = ["admin", "director", "coordinador"]
 
     def form_valid(self, form):
         try:
@@ -39,7 +39,7 @@ class ConciliacionImportarView(LoginRequiredMixin, RoleRequiredMixin, FormView):
 class MovimientosPendientesView(LoginRequiredMixin, RoleRequiredMixin, ListView):
     template_name = "financiero/conciliacion_pendientes.html"
     context_object_name = "conciliaciones"
-    allowed_roles = ["tesoreria", "contador"]
+    allowed_roles = ["admin", "director", "coordinador"]
 
     def get_queryset(self):
         return ConciliacionBancaria.objects.select_related(
