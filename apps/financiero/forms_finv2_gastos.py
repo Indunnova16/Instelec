@@ -3,11 +3,14 @@
 from django import forms
 from django.core.exceptions import ValidationError
 
-from .models import FacturaGasto, PagoFacturaGasto, Presupuesto
+from .models import FacturaGasto, PagoFacturaGasto, Presupuesto, Proveedor
 from .services_finv2_gastos import calcular_totales, estado_inicial_gasto
 
 
 class FacturaGastoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["proveedor"].queryset = Proveedor.objects.filter(activo=True)
     class Meta:
         model = FacturaGasto
         fields = (

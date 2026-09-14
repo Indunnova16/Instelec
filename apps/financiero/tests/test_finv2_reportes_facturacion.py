@@ -43,7 +43,12 @@ class TestB3ReportesFacturacion:
 
         response = client.post(
             f"/financiero/maestros/proveedores/{proveedor.pk}/",
-            {"nombre": "Proveedor B3 actualizado", "nit": "900248003", "activo": ""},
+            {
+                "nombre": "Proveedor B3 actualizado",
+                "nit": "900248003",
+                "activo": "",
+                "motivo_inactivacion": "Fin de contrato",
+            },
             follow=True,
         )
         proveedor.refresh_from_db()
