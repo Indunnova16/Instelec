@@ -1,5 +1,6 @@
 """Persistencia compartida para facturas de gastos e ingresos (S1)."""
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -37,6 +38,16 @@ class Proveedor(BaseModel):
     email = models.EmailField("Correo electrónico", blank=True)
     telefono = models.CharField("Teléfono", max_length=50, blank=True)
     activo = models.BooleanField("Activo", default=True)
+    direccion = models.CharField("Dirección", max_length=255, blank=True)
+    tipo_servicio = models.CharField("Tipo de servicio", max_length=120, blank=True)
+    plazo_pago_dias = models.PositiveIntegerField(
+        "Plazo de pago (días)", default=30,
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+    fecha_inicio_contrato = models.DateField("Inicio contractual", null=True, blank=True)
+    fecha_fin_contrato = models.DateField("Fin contractual", null=True, blank=True)
+    inactivo_desde = models.DateField("Inactivo desde", null=True, blank=True)
+    motivo_inactivacion = models.CharField("Motivo de inactivación", max_length=255, blank=True)
 
     class Meta:
         db_table = "financiero_proveedores"
@@ -52,6 +63,16 @@ class Cliente(BaseModel):
     email = models.EmailField("Correo electrónico", blank=True)
     telefono = models.CharField("Teléfono", max_length=50, blank=True)
     activo = models.BooleanField("Activo", default=True)
+    direccion = models.CharField("Dirección", max_length=255, blank=True)
+    industria = models.CharField("Industria", max_length=120, blank=True)
+    plazo_pago_dias = models.PositiveIntegerField(
+        "Plazo de pago (días)", default=30,
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+    fecha_inicio_contrato = models.DateField("Inicio contractual", null=True, blank=True)
+    fecha_fin_contrato = models.DateField("Fin contractual", null=True, blank=True)
+    inactivo_desde = models.DateField("Inactivo desde", null=True, blank=True)
+    motivo_inactivacion = models.CharField("Motivo de inactivación", max_length=255, blank=True)
 
     class Meta:
         db_table = "financiero_clientes"
@@ -59,6 +80,38 @@ class Cliente(BaseModel):
 
     def __str__(self):
         return self.nombre
+
+
+class AuditoriaTercero(BaseModel):
+    """Bitácora inmutable de cambios de los maestros financieros."""
+
+    tercero_tipo = models.CharField(max_length=12, choices=[("CLIENTE", "Cliente"), ("PROVEEDOR", "Proveedor")])
+    tercero_id = models.UUIDField()
+    campo = models.CharField(max_length=80)
+    valor_anterior = models.TextField(blank=True)
+    valor_nuevo = models.TextField(blank=True)
+    usuario = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        db_table = "financiero_auditoria_terceros"
+        ordering = ["-created_at"]
+
+
+class CargaTerceros(BaseModel):
+    """Trazabilidad de una importación de maestros, incluso si fue rechazada."""
+
+    tercero_tipo = models.CharField(max_length=12, choices=[("CLIENTE", "Cliente"), ("PROVEEDOR", "Proveedor")])
+    archivo_nombre = models.CharField(max_length=255)
+    usuario = models.CharField(max_length=150, blank=True)
+    filas_total = models.PositiveIntegerField(default=0)
+    filas_validas = models.PositiveIntegerField(default=0)
+    filas_error = models.PositiveIntegerField(default=0)
+    resultado = models.CharField(max_length=20, choices=[("PREVIEW", "Vista previa"), ("CONFIRMADA", "Confirmada"), ("RECHAZADA", "Rechazada")])
+    detalle_errores = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        db_table = "financiero_cargas_terceros"
+        ordering = ["-created_at"]
 
 
 class FacturaGasto(BaseModel):

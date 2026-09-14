@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="max-w-4xl mx-auto px-4 py-6"><h1 class="text-2xl font-bold">Historial del maestro</h1><section class="mt-5 overflow-x-auto rounded bg-white shadow"><table class="min-w-full text-sm"><thead><tr><th class="p-3 text-left">Fecha</th><th class="p-3 text-left">Usuario</th><th class="p-3 text-left">Campo</th><th class="p-3 text-left">Anterior</th><th class="p-3 text-left">Nuevo</th></tr></thead><tbody>{% for evento in auditoria %}<tr class="border-t"><td class="p-3">{{ evento.created_at|date:"d/m/Y H:i" }}</td><td class="p-3">{{ evento.usuario|default:"Sistema" }}</td><td class="p-3">{{ evento.campo }}</td><td class="p-3">{{ evento.valor_anterior|default:"—" }}</td><td class="p-3">{{ evento.valor_nuevo|default:"—" }}</td></tr>{% empty %}<tr><td class="p-3" colspan="5">Sin cambios registrados.</td></tr>{% endfor %}</tbody></table></section></main>
+{% endblock %}

@@ -5,10 +5,13 @@ from decimal import Decimal
 from django import forms
 from django.forms import inlineformset_factory
 
-from .models import CicloFacturacion, LineaFacturaIngreso, PagoFacturaIngreso
+from .models import CicloFacturacion, Cliente, LineaFacturaIngreso, PagoFacturaIngreso
 
 
 class FacturaIngresoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["cliente"].queryset = Cliente.objects.filter(activo=True)
     class Meta:
         model = CicloFacturacion
         fields = (

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="max-w-4xl mx-auto px-4 py-6 space-y-5">
+  <h1 class="text-2xl font-bold">Carga de {{ tipo }}s</h1>
+  <p>Descargue la <a class="text-blue-700 underline" href="?plantilla=csv">plantilla CSV</a>. Columnas requeridas: {{ columnas|join:", " }}.</p>
+  {% if messages %}{% for message in messages %}<p role="alert" class="rounded p-3 bg-red-100 text-red-800">{{ message }}</p>{% endfor %}{% endif %}
+  <form method="post" enctype="multipart/form-data" class="rounded bg-white p-5 shadow space-y-4">{% csrf_token %}<label class="block">Archivo CSV o XLSX<input class="block mt-1" type="file" name="archivo" accept=".csv,.xlsx" required></label><button class="btn-primary rounded bg-blue-600 px-4 py-2 text-white" type="submit">Vista previa</button></form>
+  {% if preview %}<section class="rounded bg-white p-5 shadow"><h2 class="font-semibold">Vista previa</h2>{% if preview.errores %}<ul class="mt-2 text-red-800">{% for error in preview.errores %}<li>Fila {{ error.fila }}: {{ error.error }}</li>{% endfor %}</ul>{% else %}<p>{{ preview.filas|length }} fila(s) válidas. La confirmación guarda el lote completo.</p><form method="post" class="mt-3">{% csrf_token %}<button class="btn-primary rounded bg-green-700 px-4 py-2 text-white" name="confirmar" value="1">Confirmar carga</button></form>{% endif %}</section>{% endif %}
+  <section class="rounded bg-white p-5 shadow"><h2 class="font-semibold">Historial de cargas</h2><ul>{% for carga in historial %}<li>{{ carga.created_at|date:"d/m/Y H:i" }} — {{ carga.archivo_nombre }} — {{ carga.resultado }} ({{ carga.filas_validas }} válidas, {{ carga.filas_error }} con error)</li>{% empty %}<li>Sin cargas previas.</li>{% endfor %}</ul></section>
+</main>
+{% endblock %}

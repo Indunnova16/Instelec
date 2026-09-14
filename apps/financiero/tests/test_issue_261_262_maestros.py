@@ -1,0 +1,150 @@
+from datetime import date
+
+import pytest
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+from apps.financiero.forms_finv2_gastos import FacturaGastoForm
+from apps.financiero.forms_finv2_ingresos import FacturaIngresoForm
+from apps.financiero.models import AuditoriaTercero, CargaTerceros, Cliente, Proveedor
+
+
+def _usuario_con_rol(email, rol):
+    usuario = get_user_model().objects.create(
+        email=email, rol=rol, documento=email[:10], first_name="Rol", last_name="QA",
+    )
+    usuario.set_password("testpass123!")
+    usuario.save()
+    return usuario
+
+
+@pytest.mark.django_db
+def test_cliente_ciclo_vida_auditable_y_nit_inmutable(client, admin_user):
+    client.force_login(admin_user)
+    response = client.post(
+        "/financiero/maestros/clientes/nuevo/",
+        {"nombre": "Cliente primera carga", "nit": "900261001", "plazo_pago_dias": 30, "activo": "on"},
+    )
+    assert response.status_code == 302
+    cliente = Cliente.objects.get(nit="900261001")
+    response = client.post(
+        f"/financiero/maestros/clientes/{cliente.pk}/",
+        {"nombre": cliente.nombre, "nit": "CAMBIAR", "plazo_pago_dias": 30, "activo": "", "motivo_inactivacion": "Fin de contrato"},
+    )
+    cliente.refresh_from_db()
+    assert response.status_code == 302
+    assert cliente.nit == "900261001"
+    assert not cliente.activo and cliente.inactivo_desde == date.today()
+    assert AuditoriaTercero.objects.filter(tercero_id=cliente.pk, campo="activo").exists()
+
+
+@pytest.mark.django_db
+def test_maestros_rechazan_plazo_y_fechas_invalidas(client, admin_user):
+    client.force_login(admin_user)
+    response = client.post(
+        "/financiero/maestros/proveedores/nuevo/",
+        {"nombre": "Proveedor", "nit": "900262001", "plazo_pago_dias": 0, "activo": "on"},
+    )
+    assert response.status_code == 200
+    assert "plazo_pago_dias" in response.context["form"].errors
+    response = client.post(
+        "/financiero/maestros/clientes/nuevo/",
+        {"nombre": "Cliente", "nit": "900261002", "plazo_pago_dias": 30, "fecha_inicio_contrato": "2026-12-02", "fecha_fin_contrato": "2026-12-01", "activo": "on"},
+    )
+    assert "fecha_fin_contrato" in response.context["form"].errors
+
+
+@pytest.mark.django_db
+def test_selectores_nuevos_solo_muestran_activos():
+    cliente_activo = Cliente.objects.create(nombre="Activo", nit="900261003")
+    Cliente.objects.create(nombre="Inactivo", nit="900261004", activo=False)
+    proveedor_activo = Proveedor.objects.create(nombre="Activo", nit="900262003")
+    Proveedor.objects.create(nombre="Inactivo", nit="900262004", activo=False)
+    assert list(FacturaIngresoForm().fields["cliente"].queryset) == [cliente_activo]
+    assert list(FacturaGastoForm().fields["proveedor"].queryset) == [proveedor_activo]
+
+
+@pytest.mark.django_db
+def test_filtros_preservan_activos_e_inactivos(client, admin_user):
+    client.force_login(admin_user)
+    Cliente.objects.create(nombre="Visible", nit="900261005")
+    Cliente.objects.create(nombre="Archivado", nit="900261006", activo=False)
+    assert b"Visible" in client.get("/financiero/maestros/clientes/?estado=activos").content
+    assert b"Archivado" not in client.get("/financiero/maestros/clientes/?estado=activos").content
+    assert b"Archivado" in client.get("/financiero/maestros/clientes/?estado=inactivos").content
+
+
+@pytest.mark.django_db
+def test_importador_clientes_preview_confirma_lote_y_guarda_historial(client, admin_user):
+    client.force_login(admin_user)
+    contenido = (
+        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,industria\n"
+        "Cliente importado,900261010,importado@example.test,3000000000,Calle 1,45,2026-01-01,2026-12-31,Construcción\n"
+    )
+    response = client.post("/financiero/maestros/clientes/importar/", {"archivo": SimpleUploadedFile("clientes.csv", contenido.encode(), content_type="text/csv")})
+    assert response.status_code == 200
+    assert not Cliente.objects.filter(nit="900261010").exists()
+    assert b"Vista previa" in response.content
+    response = client.post("/financiero/maestros/clientes/importar/", {"confirmar": "1"})
+    assert response.status_code == 302
+    assert Cliente.objects.filter(nit="900261010", plazo_pago_dias=45).exists()
+    assert CargaTerceros.objects.filter(tercero_tipo="CLIENTE", resultado="CONFIRMADA").exists()
+
+
+@pytest.mark.django_db
+def test_importador_proveedores_rechaza_columnas_y_nit_duplicado(client, admin_user):
+    client.force_login(admin_user)
+    Proveedor.objects.create(nombre="Existente", nit="900262010")
+    contenido = (
+        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,tipo_servicio\n"
+        "Duplicado,900262010,,,Calle 1,30,,,Servicios\n"
+    )
+    response = client.post("/financiero/maestros/proveedores/importar/", {"archivo": SimpleUploadedFile("proveedores.csv", contenido.encode(), content_type="text/csv")})
+    assert response.status_code == 200
+    assert b"NIT duplicado" in response.content
+    assert not Proveedor.objects.filter(nombre="Duplicado").exists()
+    assert CargaTerceros.objects.filter(tercero_tipo="PROVEEDOR", resultado="RECHAZADA").exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("ruta", [
+    "/financiero/maestros/clientes/",
+    "/financiero/maestros/proveedores/",
+])
+def test_roles_de_consulta_ven_listado_historial_sin_controles_de_gestion(client, ruta):
+    cliente = Cliente.objects.create(nombre="Cliente consulta", nit="900261100")
+    client.force_login(_usuario_con_rol("supervisor-maestros@test.com", "supervisor"))
+    listado = client.get(ruta)
+    assert listado.status_code == 200
+    assert b"Nuevo" not in listado.content
+    assert b"Importar" not in listado.content
+    assert b">Editar<" not in listado.content
+    historial = client.get(f"/financiero/maestros/clientes/{cliente.pk}/auditoria/")
+    assert historial.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("ruta", [
+    "/financiero/maestros/clientes/",
+    "/financiero/maestros/proveedores/",
+    "/financiero/maestros/clientes/nuevo/",
+    "/financiero/maestros/proveedores/nuevo/",
+    "/financiero/maestros/clientes/importar/",
+    "/financiero/maestros/proveedores/importar/",
+])
+def test_rol_no_autorizado_no_entra_a_ninguna_ruta_de_maestros(client, ruta):
+    client.force_login(_usuario_con_rol("operario-maestros@test.com", "operario_general"))
+    assert client.get(ruta).status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("modelo,ruta", [
+    (Cliente, "/financiero/maestros/clientes/"),
+    (Proveedor, "/financiero/maestros/proveedores/"),
+])
+def test_rol_de_consulta_no_puede_gestionar_ni_por_url_directa(client, modelo, ruta):
+    tercero = modelo.objects.create(nombre="Tercero protegido", nit="900261101")
+    client.force_login(_usuario_con_rol("coordinador-maestros@test.com", "coordinador"))
+    assert client.get(f"{ruta}{tercero.pk}/").status_code == 403
+    assert client.get(f"{ruta}nuevo/").status_code == 403
+    assert client.post(ruta, {"nombre": "Intruso"}).status_code == 403
