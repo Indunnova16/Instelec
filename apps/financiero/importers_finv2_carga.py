@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import BinaryIO
+import time
 import unicodedata
 from zipfile import BadZipFile
 
@@ -216,6 +217,9 @@ def _lineas_reales(hoja, anio, mes, catalogo):
             'fila_origen': numero,
             'homologacion': homologacion,
             'tipo_operacional': tipo_operacional,
+            'periodo': fila_anio * 100 + fila_mes,
+            'cdec_equiv': rubro,
+            'centro_costo': _texto(_valor(fila, columnas, 'c costo')),
             'datos_origen': {
                 'fecha': _texto(_valor(fila, columnas, 'fecha')),
                 'periodo': _texto(_valor(fila, columnas, 'periodo')),
@@ -256,6 +260,9 @@ def _lineas_presupuesto(hoja, proyecto, anio, mes, catalogo):
             'fila_origen': numero,
             'homologacion': homologacion,
             'tipo_operacional': tipo_operacional_fuente or LineaCargaFinanciera.TipoOperacional.SIN_CLASIFICAR,
+            'periodo': fila_anio * 100 + fila_mes,
+            'cdec_equiv': _texto(_valor(fila, columnas, 'cdec equiv')),
+            'centro_costo': _texto(_valor(fila, columnas, 'c costo')),
             'datos_origen': {
                 'clasificacion': grupo,
                 'proyecto': origen,
@@ -281,6 +288,7 @@ def procesar_carga_financiera(archivo: BinaryIO, *, proyecto, anio, mes, usuario
     """Valida y materializa un Excel TRANSELCA para un período seleccionado."""
     if not 1 <= int(mes) <= 12:
         return ResultadoCargaFinanciera(False, error='El mes debe estar entre 1 y 12.')
+    inicio = time.monotonic()
     try:
         libro = load_workbook(archivo, read_only=True, data_only=True)
         hojas = {nombre: _hoja(libro, nombre) for nombre in HOJAS_REQUERIDAS}
@@ -308,15 +316,25 @@ def procesar_carga_financiera(archivo: BinaryIO, *, proyecto, anio, mes, usuario
         'total_presupuesto': str(sum((l['valor'] for l in presupuestos), Decimal('0.00'))),
         'lineas_no_mapeadas': sum(1 for linea in [*reales, *presupuestos] if not linea['homologacion']),
         'codigos_no_mapeados': sorted({linea['concepto'] for linea in [*reales, *presupuestos] if not linea['homologacion']}),
+        'duracion_validacion_segundos': round(time.monotonic() - inicio, 3),
+        'legacy_sin_tipo': any(
+            linea['tipo_operacional'] == LineaCargaFinanciera.TipoOperacional.SIN_CLASIFICAR
+            for linea in reales
+        ),
     }
     with transaction.atomic():
-        # Eliminar sólo este período/proyecto; las cascadas eliminan sus líneas.
-        CargaFinanciera.objects.filter(proyecto=proyecto, anio=anio, mes=mes).delete()
+        anteriores = CargaFinanciera.objects.select_for_update().filter(
+            proyecto=proyecto, anio=anio, mes=mes,
+        )
+        version = max((carga.version for carga in anteriores), default=0) + 1
+        # La nueva carga pasa a ser la vigente, pero las versiones anteriores
+        # y sus líneas permanecen disponibles para auditoría.
+        anteriores.filter(vigente=True).update(vigente=False)
         carga = CargaFinanciera.objects.create(
             proyecto=proyecto, anio=anio, mes=mes, usuario=usuario,
             estado=CargaFinanciera.Estado.PROCESADA,
             nombre_archivo=_texto(getattr(archivo, 'name', '')),
-            resumen=resumen,
+            resumen={**resumen, 'version': version}, version=version, vigente=True,
         )
         LineaCargaFinanciera.objects.bulk_create([
             LineaCargaFinanciera(carga=carga, **linea) for linea in [*reales, *presupuestos]

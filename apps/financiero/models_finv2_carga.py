@@ -1,6 +1,7 @@
 """Persistencia compartida para la carga financiera y su homologación."""
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 from apps.core.models import BaseModel
 
@@ -89,6 +90,8 @@ class CargaFinanciera(BaseModel):
     )
     nombre_archivo = models.CharField('Archivo de origen', max_length=255, blank=True)
     resumen = models.JSONField('Resumen de carga', default=dict, blank=True)
+    version = models.PositiveIntegerField('Versión', default=1)
+    vigente = models.BooleanField('Vigente', default=True)
 
     class Meta:
         db_table = 'financiero_carga_financiera'
@@ -97,6 +100,14 @@ class CargaFinanciera(BaseModel):
         ordering = ['-anio', '-mes', '-created_at']
         indexes = [
             models.Index(fields=['proyecto', 'anio', 'mes'], name='idx_finv2_carga_periodo'),
+            models.Index(fields=['proyecto', 'anio', 'mes', 'vigente'], name='idx_finv2_carga_vigente'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['proyecto', 'anio', 'mes'],
+                condition=Q(vigente=True),
+                name='uq_finv2_carga_periodo_vigente',
+            ),
         ]
 
     def __str__(self):
@@ -135,6 +146,9 @@ class LineaCargaFinanciera(BaseModel):
         default=TipoOperacional.SIN_CLASIFICAR,
         help_text='Clasificación operativa o valor Tipo original del presupuesto.',
     )
+    periodo = models.PositiveIntegerField('Período YYYYMM', default=0)
+    cdec_equiv = models.CharField('CdeC equivalente', max_length=100, blank=True)
+    centro_costo = models.CharField('Centro de costo origen', max_length=100, blank=True)
     grupo = models.CharField('Grupo', max_length=255, blank=True)
     concepto = models.CharField('Concepto', max_length=255)
     rubro = models.CharField('Rubro', max_length=255, blank=True)
@@ -151,6 +165,7 @@ class LineaCargaFinanciera(BaseModel):
         indexes = [
             models.Index(fields=['carga', 'tipo'], name='idx_finv2_linea_carga_tipo'),
             models.Index(fields=['homologacion'], name='idx_finv2_linea_homolog'),
+            models.Index(fields=['periodo', 'tipo_operacional', 'centro_costo'], name='idx_finv2_linea_filtros'),
         ]
 
     def __str__(self):
