@@ -36,6 +36,7 @@
   <section id="indicadores-carga" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
     <div class="flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-lg font-semibold">Indicadores de {{ carga_actual.proyecto }} · {{ mes|stringformat:'02d' }}/{{ anio }}</h2><p class="text-sm text-gray-500">Carga procesada: {{ carga_actual.created_at|date:'d/m/Y H:i' }}</p></div><a class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white" href="{% url 'financiero:plano_financiero_csv' carga_actual.pk %}">Descargar plano CSV</a></div>
     <div class="mt-4">{% include 'financiero/_indicadores_financieros_carga.html' %}</div>
+    {% if carga_actual.resumen.lineas_no_mapeadas %}<p id="advertencia-no-mapeados" class="mt-3 text-sm text-amber-800">Advertencia: {{ carga_actual.resumen.lineas_no_mapeadas }} líneas no mapeadas ({{ carga_actual.resumen.codigos_no_mapeados|join:', ' }}). El plano conserva la marca SIN_HOMOLOGAR.</p>{% endif %}
   </section>
   {% else %}<section class="rounded-lg border border-blue-200 bg-blue-50 p-5 text-blue-900">Seleccione un período y cargue un libro válido para ver indicadores, alertas y el plano consolidado.</section>{% endif %}
 

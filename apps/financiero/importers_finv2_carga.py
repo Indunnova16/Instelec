@@ -306,6 +306,8 @@ def procesar_carga_financiera(archivo: BinaryIO, *, proyecto, anio, mes, usuario
         'lineas_homologacion_origen': homologaciones,
         'total_real': str(sum((l['valor'] for l in reales), Decimal('0.00'))),
         'total_presupuesto': str(sum((l['valor'] for l in presupuestos), Decimal('0.00'))),
+        'lineas_no_mapeadas': sum(1 for linea in [*reales, *presupuestos] if not linea['homologacion']),
+        'codigos_no_mapeados': sorted({linea['concepto'] for linea in [*reales, *presupuestos] if not linea['homologacion']}),
     }
     with transaction.atomic():
         # Eliminar sólo este período/proyecto; las cascadas eliminan sus líneas.

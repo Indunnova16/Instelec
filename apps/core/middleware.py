@@ -29,6 +29,7 @@ from .permissions import (
     SUBMODULO_FIN_COSTOS_CUADRILLA,
     SUBMODULO_FIN_DASHBOARD,
     SUBMODULO_FIN_MAESTROS,
+    SUBMODULO_FIN_HOMOLOGACION,
     SUBMODULO_FIN_NOMINA,
     SUBMODULO_FIN_PRESUPUESTO_PLANEADO,
     SUBMODULO_FIN_PRESUPUESTO_REAL,
@@ -102,12 +103,19 @@ SUBMODULO_PREFIXES = (
     ('/financiero/plantilla-excel/', SUBMODULO_FIN_PRESUPUESTO_PLANEADO),
     ('/financiero/exportar-excel/', SUBMODULO_FIN_DASHBOARD),
     ('/financiero/maestros/', SUBMODULO_FIN_MAESTROS),
+    ('/financiero/carga-financiera/', SUBMODULO_FIN_HOMOLOGACION),
     ('/financiero/', SUBMODULO_FIN_DASHBOARD),
 )
 
 
 def _denegar(request, mensaje):
     messages.error(request, mensaje)
+    # #247: la hoja de homologación se consume también por clientes de
+    # integración. Un redirect 302 oculta una denegación de escritura como
+    # navegación normal; la semántica RBAC correcta para un autenticado es
+    # 403, y evita que un rol sólo-lectura parezca haber ejecutado el POST.
+    if request.path.startswith('/financiero/carga-financiera/') and request.user.is_authenticated:
+        return HttpResponse(mensaje, status=403)
     # #186: un redirect() plano (302 + Location) NO es HTMX-aware. htmx sigue
     # ese 302 con un GET normal y swapea la respuesta completa (la página
     # home.html entera) como innerHTML del div chico que originó el hx-get --
