@@ -82,7 +82,7 @@
             {% endif %}
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
                 <label for="{{ form.anio.id_for_label }}"
                        class="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -111,6 +111,16 @@
                 {{ form.torres_programadas }}
                 {% if form.torres_programadas.errors %}
                 <p class="mt-1 text-sm text-red-600">{{ form.torres_programadas.errors|striptags }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <label for="{{ form.horas_planeadas.id_for_label }}"
+                       class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ form.horas_planeadas.label }}
+                </label>
+                {{ form.horas_planeadas }}
+                {% if form.horas_planeadas.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.horas_planeadas.errors|striptags }}</p>
                 {% endif %}
             </div>
         </div>
