@@ -72,9 +72,13 @@ def validar_filas(archivo, tipo, modelo):
         try:
             if not dato["nombre"] or not dato["nit"]:
                 raise ValidationError("nombre y NIT son obligatorios")
-            if dato["nit"] in nits or modelo.objects.filter(nit=dato["nit"]).exists():
-                raise ValidationError("NIT duplicado en archivo o base de datos")
+            if dato["nit"] in nits:
+                raise ValidationError("NIT duplicado dentro del archivo")
             nits.add(dato["nit"])
+            dato["_accion"] = (
+                "actualizar" if modelo.objects.filter(nit=dato["nit"]).exists()
+                else "crear"
+            )
             if dato["email"]:
                 validate_email(dato["email"])
             if dato["telefono"] and not TELEFONO_RE.match(dato["telefono"]):

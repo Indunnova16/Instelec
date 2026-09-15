@@ -138,18 +138,20 @@ def test_importador_clientes_rechaza_filas_invalidas(client, admin_user, fila, e
 
 
 @pytest.mark.django_db
-def test_importador_proveedores_rechaza_columnas_y_nit_duplicado(client, admin_user):
+def test_importador_proveedores_actualiza_nit_existente(client, admin_user):
     client.force_login(admin_user)
     Proveedor.objects.create(nombre="Existente", nit="900262010")
     contenido = (
         "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,activo,tipo_servicio\n"
-        "Duplicado,900262010,,,Calle 1,30,,,TRUE,Servicios\n"
+        "Proveedor actualizado,900262010,,,Calle 1,30,,,TRUE,Servicios\n"
     )
     response = client.post("/financiero/maestros/proveedores/importar/", {"archivo": SimpleUploadedFile("proveedores.csv", contenido.encode(), content_type="text/csv")})
     assert response.status_code == 200
-    assert b"NIT duplicado" in response.content
-    assert not Proveedor.objects.filter(nombre="Duplicado").exists()
-    assert CargaTerceros.objects.filter(tercero_tipo="PROVEEDOR", resultado="RECHAZADA").exists()
+    assert b"0 nueva(s) y 1 actualizar" in response.content
+    response = client.post("/financiero/maestros/proveedores/importar/", {"confirmar": "1"})
+    assert response.status_code == 302
+    assert Proveedor.objects.filter(nit="900262010", nombre="Proveedor actualizado").count() == 1
+    assert CargaTerceros.objects.filter(tercero_tipo="PROVEEDOR", resultado="CONFIRMADA").exists()
 
 
 @pytest.mark.django_db

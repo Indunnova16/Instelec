@@ -83,6 +83,26 @@ class ClienteForm(TerceroForm):
         fields = TerceroForm.Meta.fields[:5] + ("industria",) + TerceroForm.Meta.fields[5:]
 
 
+def _repr_valor_auditoria(valor):
+    """Representación estable para registrar transiciones de terceros."""
+    return "" if valor is None else str(valor)
+
+
+def registrar_auditoria_tercero(tercero, tipo, antes, campos, usuario):
+    """Reutiliza la bitácora de edición manual para cambios por importación."""
+    for campo in campos:
+        valor_nuevo = _repr_valor_auditoria(getattr(tercero, campo, None))
+        if antes.get(campo, "") != valor_nuevo:
+            AuditoriaTercero.objects.create(
+                tercero_tipo=tipo,
+                tercero_id=tercero.pk,
+                campo=campo,
+                valor_anterior=antes.get(campo, ""),
+                valor_nuevo=valor_nuevo,
+                usuario=usuario,
+            )
+
+
 class _MaestroPagoFormBase(forms.ModelForm):
     class Meta:
         fields = ("nombre", "activo")
@@ -161,13 +181,6 @@ class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         )
         return context
 
-    @staticmethod
-    def _repr_valor(valor):
-        """str() seguro para auditoría: `False or ""` colapsa a "" y borra la
-        transición real (bug real encontrado por el validador-cierre de
-        #261/#262) — acá solo None se vuelve cadena vacía."""
-        return "" if valor is None else str(valor)
-
     def post(self, request, *args, **kwargs):
         instance = self.get_object() if self.kwargs.get("pk") else None
         # ModelForm muta ``instance`` in-place dentro de is_valid() (via
@@ -181,7 +194,7 @@ class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         before = {}
         if instance:
             before = {
-                field: self._repr_valor(getattr(instance, field, None))
+                field: _repr_valor_auditoria(getattr(instance, field, None))
                 for field in self.form_class.Meta.fields
             }
         form = self.form_class(request.POST, instance=instance)
@@ -197,13 +210,9 @@ class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                 saved.motivo_inactivacion = ""
             saved.save()
             tipo = "CLIENTE" if self.model is Cliente else "PROVEEDOR"
-            for field in form.changed_data:
-                AuditoriaTercero.objects.create(
-                    tercero_tipo=tipo, tercero_id=saved.pk, campo=field,
-                    valor_anterior=before.get(field, ""),
-                    valor_nuevo=self._repr_valor(getattr(saved, field, None)),
-                    usuario=request.user.get_username(),
-                )
+            registrar_auditoria_tercero(
+                saved, tipo, before, form.changed_data, request.user.get_username(),
+            )
         accion = "actualizado" if instance else "creado"
         messages.success(request, f"{self.singular.capitalize()} {accion} correctamente.")
         return redirect(self.success_url_name)
@@ -297,7 +306,26 @@ class ImportarTercerosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                 messages.error(request, "No hay una vista previa válida para confirmar.")
                 return redirect(request.path)
             with transaction.atomic():
-                self.model.objects.bulk_create([self.model(**fila) for fila in preview["filas"]])
+                for fila_preview in preview["filas"]:
+                    fila = dict(fila_preview)
+                    accion = fila.pop("_accion", "crear")
+                    if accion == "actualizar":
+                        tercero = self.model.objects.select_for_update().get(nit=fila["nit"])
+                        antes = {
+                            campo: _repr_valor_auditoria(getattr(tercero, campo, None))
+                            for campo in fila
+                        }
+                        for campo, valor in fila.items():
+                            if campo != "nit":
+                                setattr(tercero, campo, valor)
+                        tercero.save()
+                        registrar_auditoria_tercero(
+                            tercero, self.tipo, antes,
+                            [campo for campo in fila if campo != "nit"],
+                            request.user.get_username(),
+                        )
+                    else:
+                        self.model.objects.create(**fila)
                 CargaTerceros.objects.create(
                     tercero_tipo=self.tipo, archivo_nombre=preview["archivo_nombre"],
                     usuario=request.user.get_username(), filas_total=len(preview["filas"]),
@@ -317,7 +345,9 @@ class ImportarTercerosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         preview = {"archivo_nombre": archivo.name, "filas": [
             {campo: valor.isoformat() if hasattr(valor, "isoformat") else valor for campo, valor in fila.items()}
             for fila in filas
-        ], "errores": errores}
+        ], "errores": errores,
+            "nuevas": sum(fila["_accion"] == "crear" for fila in filas),
+            "actualizaciones": sum(fila["_accion"] == "actualizar" for fila in filas)}
         request.session[clave] = preview
         CargaTerceros.objects.create(
             tercero_tipo=self.tipo, archivo_nombre=archivo.name, usuario=request.user.get_username(),
