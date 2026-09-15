@@ -13,6 +13,8 @@ from .permissions import (
     SUBMODULO_FIN_PRESUPUESTO_PLANEADO,
     SUBMODULO_FIN_PRESUPUESTO_REAL,
     user_can_access_submodulo,
+    user_es_admin,
+    user_rol,
 )
 from .utils import get_unidad_negocio
 
@@ -56,4 +58,14 @@ def financiero_menu_context(request):
         'ok_fin_costos_cuadrilla': user_can_access_submodulo(user, SUBMODULO_FIN_COSTOS_CUADRILLA),
         'ok_fin_nomina': user_can_access_submodulo(user, SUBMODULO_FIN_NOMINA),
         'ok_fin_maestros': user_can_access_submodulo(user, SUBMODULO_FIN_MAESTROS),
+        # Facturas de Ingresos y Reporte de facturación (#249) no tienen
+        # submodulo granular propio -- sus vistas usan la lista legacy
+        # allowed_roles=["admin","director","coordinador"] + admin_bypass.
+        # Reproducimos EXACTAMENTE ese criterio acá para el link del menu
+        # (bug real encontrado por el validador-cierre: la sección quedaba
+        # con las URLs funcionales pero invisibles en la navegación, mismo
+        # patrón que ya se había corregido para los Maestros).
+        'ok_fin_facturas_ingresos': (
+            user_es_admin(user) or user_rol(user) in ('admin', 'director', 'coordinador')
+        ),
     }

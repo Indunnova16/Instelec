@@ -330,7 +330,7 @@ mantiene intacto; esto agrega la restricción POR HOJA por encima.
                 </a>
             </li>
 
-            {% if ok_fin_dashboard or ok_fin_presupuesto_planeado or ok_fin_presupuesto_real or ok_fin_checklist_facturacion or ok_fin_costos_cuadrilla or ok_fin_nomina or ok_fin_maestros %}
+            {% if ok_fin_dashboard or ok_fin_presupuesto_planeado or ok_fin_presupuesto_real or ok_fin_checklist_facturacion or ok_fin_costos_cuadrilla or ok_fin_nomina or ok_fin_maestros or ok_fin_facturas_ingresos %}
             <!-- Financiero (solo Mantenimiento) -->
             <li x-data="{ open: false }" role="none" x-show="modulo === 'mantenimiento'">
                 <button @click="open = !open"
@@ -356,6 +356,7 @@ mantiene intacto; esto agrega la restricción POR HOJA por encima.
                     {% if ok_fin_costos_cuadrilla %}<li role="none"><a href="{% url 'financiero:costos_cuadrilla' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Costos Cuadrilla</a></li>{% endif %}
                     {% if ok_fin_nomina %}<li role="none"><a href="{% url 'financiero:nomina' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Nomina</a></li>{% endif %}
                     {% if ok_fin_maestros %}<li role="none"><a href="{% url 'financiero:clientes_lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Maestro de Clientes</a></li><li role="none"><a href="{% url 'financiero:proveedores_lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Maestro de Proveedores</a></li>{% endif %}
+                    {% if ok_fin_facturas_ingresos %}<li role="none"><a href="{% url 'financiero:facturas_ingresos' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Facturas de Ingresos</a></li><li role="none"><a href="{% url 'financiero:reporte_facturacion' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Reporte de Facturación</a></li>{% endif %}
                 </ul>
             </li>
             {% endif %}
