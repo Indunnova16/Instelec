@@ -45,7 +45,10 @@ def _normalizar(valor) -> str:
     texto = '' if valor is None else str(valor).strip().lower()
     texto = unicodedata.normalize('NFD', texto)
     texto = ''.join(c for c in texto if unicodedata.category(c) != 'Mn')
-    return ' '.join(texto.replace('_', ' ').split())
+    # Los encabezados TRANSELCA mezclan puntuación (``Desc. C.O. movto.``),
+    # mayúsculas, acentos y espacios finales. La clave de contrato no depende
+    # de ninguna de esas presentaciones.
+    return ' '.join(''.join(' ' if not c.isalnum() else c for c in texto).split())
 
 
 def _texto(valor) -> str:
@@ -54,28 +57,70 @@ def _texto(valor) -> str:
 
 def _decimal(valor, *, hoja: str, fila: int, columna: str) -> Decimal:
     if valor is None or (isinstance(valor, str) and not valor.strip()):
-        raise ValueError(f"{hoja}, fila {fila}: '{columna}' es obligatorio.")
+        raise ValueError(f"{hoja}, fila {fila}, columna '{columna}': es obligatorio.")
     try:
         return Decimal(str(valor).replace(',', '').strip()).quantize(Decimal('0.01'))
     except (InvalidOperation, AttributeError):
         raise ValueError(
-            f"{hoja}, fila {fila}: '{columna}' debe ser un valor numérico válido."
+            f"{hoja}, fila {fila}, columna '{columna}': debe ser un valor numérico válido."
         ) from None
 
 
-def _periodo_real(valor_periodo, valor_fecha, *, hoja: str, fila: int) -> tuple[int, int]:
-    if isinstance(valor_fecha, datetime):
-        return valor_fecha.year, valor_fecha.month
-    if isinstance(valor_fecha, date):
-        return valor_fecha.year, valor_fecha.month
-    digits = ''.join(ch for ch in _texto(valor_periodo) if ch.isdigit())
-    if len(digits) >= 6:
-        anio, mes = int(digits[:4]), int(digits[4:6])
+def resolver_periodo_flexible(fila, columnas: dict[str, int], *, hoja: str, fila_numero: int) -> tuple[int, int]:
+    """Resuelve ``Periodo`` YYYYMM o la pareja real ``mes`` + ``año``.
+
+    El error incluye siempre el libro lógico, fila de Excel y columna implicada
+    para que el usuario pueda corregir el archivo sin inspección técnica.
+    """
+    periodo = _valor(fila, columnas, 'periodo')
+    fecha = _valor(fila, columnas, 'fecha')
+    if periodo is not None and _texto(periodo):
+        digits = ''.join(ch for ch in _texto(periodo) if ch.isdigit())
+        if len(digits) >= 6:
+            anio, mes = int(digits[:4]), int(digits[4:6])
+            if 1 <= mes <= 12:
+                return anio, mes
+        raise ValueError(f"{hoja}, fila {fila_numero}, columna 'Periodo': debe identificar YYYYMM válido.")
+    if 'mes' in columnas and 'ano' in columnas:
+        try:
+            anio, mes = int(_valor(fila, columnas, 'ano')), int(_valor(fila, columnas, 'mes'))
+        except (TypeError, ValueError):
+            raise ValueError(f"{hoja}, fila {fila_numero}, columnas 'año'/'mes': deben ser enteros válidos.") from None
         if 1 <= mes <= 12:
             return anio, mes
-    raise ValueError(
-        f"{hoja}, fila {fila}: 'Periodo' o 'Fecha' debe identificar un mes válido."
-    )
+        raise ValueError(f"{hoja}, fila {fila_numero}, columna 'mes': debe estar entre 1 y 12.")
+    if isinstance(fecha, datetime):
+        return fecha.year, fecha.month
+    if isinstance(fecha, date):
+        return fecha.year, fecha.month
+    raise ValueError(f"{hoja}, fila {fila_numero}, columna 'Periodo' o 'Fecha': debe identificar un mes válido.")
+
+
+# Matriz explícita de etiquetas vistas en TRANSELCA y en el contrato anterior.
+# Todas pasan además por _normalizar: caso, tilde, puntos y espacios son inocuos.
+SINONIMOS_HEADERS = {
+    'cuenta equiv': {'cuenta equiv', 'cta equivalente'},
+    'cdec equiv': {'cdec equiv', 'c de c equiv'},
+    'desc auxiliar': {'desc auxiliar', 'descripcion auxiliar'},
+    'desc c o movto': {'desc c o movto'},
+    'docto': {'docto', 'documento'},
+    'ano': {'ano'},
+}
+
+
+def normalizar_headers(hoja) -> dict[str, int]:
+    """Devuelve columnas canónicas del Excel, con aliases TRANSELCA."""
+    encabezados = {
+        _normalizar(celda.value): indice
+        for indice, celda in enumerate(hoja[1], start=1)
+        if _normalizar(celda.value)
+    }
+    for canonico, aliases in SINONIMOS_HEADERS.items():
+        for alias in aliases:
+            if alias in encabezados:
+                encabezados.setdefault(canonico, encabezados[alias])
+                break
+    return encabezados
 
 
 def _hoja(libro, nombre):
@@ -84,20 +129,11 @@ def _hoja(libro, nombre):
 
 
 def _columnas(hoja, requeridas: set[str]) -> dict[str, int]:
-    encabezados = {
-        _normalizar(celda.value): indice
-        for indice, celda in enumerate(hoja[1], start=1)
-        if _normalizar(celda.value)
-    }
-    # El libro TRANSELCA usa ``Cuenta Equiv``; el contrato #120 documentó
-    # ``Cta equivalente``. Ambos designan exactamente la misma columna.
-    if 'cta equivalente' in encabezados and 'cuenta equiv' not in encabezados:
-        encabezados['cuenta equiv'] = encabezados['cta equivalente']
+    encabezados = normalizar_headers(hoja)
     faltantes = sorted(requeridas - encabezados.keys())
     if faltantes:
         raise ValueError(
-            f"La hoja '{hoja.title}' no tiene las columnas requeridas: "
-            f"{', '.join(faltantes)}."
+            f"{hoja.title}, fila 1, columna de encabezados: faltan {', '.join(faltantes)}."
         )
     return encabezados
 
@@ -122,15 +158,34 @@ def _buscar_homologacion(catalogo, tipo, grupo, concepto, rubro):
     )
 
 
+def _tipo_operacional_real(fila, columnas, *, hoja: str, fila_numero: int) -> tuple[str, dict]:
+    """Clasifica sólo cuando la descripción operacional lo sustenta."""
+    columna = 'desc c o movto'
+    valor_fuente = _texto(_valor(fila, columnas, columna))
+    normalizado = _normalizar(valor_fuente)
+    if 'mantenimiento' in normalizado:
+        valor = LineaCargaFinanciera.TipoOperacional.MANTENIMIENTO
+    elif 'construccion' in normalizado:
+        valor = LineaCargaFinanciera.TipoOperacional.CONSTRUCCION
+    else:
+        valor = LineaCargaFinanciera.TipoOperacional.SIN_CLASIFICAR
+    return valor, {
+        'valor_fuente': valor_fuente or None,
+        'columna_fuente': 'Desc. C.O. movto.',
+        'hoja_fuente': hoja,
+        'fila_fuente': fila_numero,
+        'regla': 'descripcion_operacional',
+    }
+
+
 def _lineas_reales(hoja, anio, mes, catalogo):
-    columnas = _columnas(hoja, {'neto', 'fecha', 'periodo', 'cuenta equiv', 'cdec equiv'})
+    columnas = _columnas(hoja, {'neto', 'periodo', 'cuenta equiv', 'cdec equiv'})
     lineas = []
     for numero, fila in enumerate(hoja.iter_rows(min_row=2, values_only=True), start=2):
         if not any(valor is not None and _texto(valor) for valor in fila):
             continue
-        fila_anio, fila_mes = _periodo_real(
-            _valor(fila, columnas, 'periodo'), _valor(fila, columnas, 'fecha'),
-            hoja=hoja.title, fila=numero,
+        fila_anio, fila_mes = resolver_periodo_flexible(
+            fila, columnas, hoja=hoja.title, fila_numero=numero,
         )
         if (fila_anio, fila_mes) != (anio, mes):
             continue
@@ -139,9 +194,16 @@ def _lineas_reales(hoja, anio, mes, catalogo):
         )
         grupo = _texto(_valor(fila, columnas, 'cuenta equiv'))
         rubro = _texto(_valor(fila, columnas, 'cdec equiv'))
-        if not concepto or not grupo:
-            raise ValueError(f"{hoja.title}, fila {numero}: falta cuenta o concepto contable.")
+        if not grupo:
+            raise ValueError(f"{hoja.title}, fila {numero}, columna 'Cuenta Equiv': es obligatorio.")
+        if not concepto:
+            raise ValueError(
+                f"{hoja.title}, fila {numero}, columna 'Desc. auxiliar' o 'Cuenta Equiv': es obligatorio."
+            )
         homologacion = _buscar_homologacion(catalogo, 'REAL', grupo, concepto, rubro)
+        tipo_operacional, trazabilidad_tipo = _tipo_operacional_real(
+            fila, columnas, hoja=hoja.title, fila_numero=numero,
+        )
         lineas.append({
             'tipo': LineaCargaFinanciera.Tipo.REAL,
             'grupo': grupo,
@@ -151,24 +213,26 @@ def _lineas_reales(hoja, anio, mes, catalogo):
             'referencia': _texto(_valor(fila, columnas, 'docto.')),
             'fila_origen': numero,
             'homologacion': homologacion,
-            'datos_origen': {'fecha': _texto(_valor(fila, columnas, 'fecha')), 'periodo': _texto(_valor(fila, columnas, 'periodo'))},
+            'tipo_operacional': tipo_operacional,
+            'datos_origen': {
+                'fecha': _texto(_valor(fila, columnas, 'fecha')),
+                'periodo': _texto(_valor(fila, columnas, 'periodo')),
+                'tipo_operacional': trazabilidad_tipo,
+            },
         })
     return lineas
 
 
 def _lineas_presupuesto(hoja, proyecto, anio, mes, catalogo):
-    columnas = _columnas(hoja, {'proyecto', 'rubro', 'clasificacion', 'valor', 'mes', 'ano'})
+    columnas = _columnas(hoja, {'tipo', 'proyecto', 'rubro', 'clasificacion', 'valor', 'mes', 'ano'})
     lineas = []
     nombre_proyecto = _normalizar(proyecto.nombre)
     for numero, fila in enumerate(hoja.iter_rows(min_row=2, values_only=True), start=2):
         if not any(valor is not None and _texto(valor) for valor in fila):
             continue
-        try:
-            fila_anio, fila_mes = int(_valor(fila, columnas, 'ano')), int(_valor(fila, columnas, 'mes'))
-        except (TypeError, ValueError):
-            raise ValueError(f"{hoja.title}, fila {numero}: 'año' y 'mes' deben ser enteros válidos.") from None
-        if not 1 <= fila_mes <= 12:
-            raise ValueError(f"{hoja.title}, fila {numero}: 'mes' debe estar entre 1 y 12.")
+        fila_anio, fila_mes = resolver_periodo_flexible(
+            fila, columnas, hoja=hoja.title, fila_numero=numero,
+        )
         if (fila_anio, fila_mes) != (anio, mes):
             continue
         origen = _texto(_valor(fila, columnas, 'proyecto'))
@@ -177,8 +241,9 @@ def _lineas_presupuesto(hoja, proyecto, anio, mes, catalogo):
         concepto = _texto(_valor(fila, columnas, 'rubro'))
         grupo = _texto(_valor(fila, columnas, 'clasificacion'))
         if not concepto:
-            raise ValueError(f"{hoja.title}, fila {numero}: 'Rubro' es obligatorio.")
+            raise ValueError(f"{hoja.title}, fila {numero}, columna 'Rubro': es obligatorio.")
         homologacion = _buscar_homologacion(catalogo, 'PRESUPUESTO', grupo, concepto, concepto)
+        tipo_operacional_fuente = _texto(_valor(fila, columnas, 'tipo'))
         lineas.append({
             'tipo': LineaCargaFinanciera.Tipo.PRESUPUESTO,
             'grupo': grupo,
@@ -188,7 +253,18 @@ def _lineas_presupuesto(hoja, proyecto, anio, mes, catalogo):
             'referencia': origen,
             'fila_origen': numero,
             'homologacion': homologacion,
-            'datos_origen': {'clasificacion': grupo, 'proyecto': origen},
+            'tipo_operacional': tipo_operacional_fuente or LineaCargaFinanciera.TipoOperacional.SIN_CLASIFICAR,
+            'datos_origen': {
+                'clasificacion': grupo,
+                'proyecto': origen,
+                'tipo_operacional': {
+                    'valor_fuente': tipo_operacional_fuente or None,
+                    'columna_fuente': 'Tipo',
+                    'hoja_fuente': hoja.title,
+                    'fila_fuente': numero,
+                    'regla': 'columna_tipo_directa',
+                },
+            },
         })
     return lineas
 

@@ -82,6 +82,11 @@ class LineaCargaFinanciera(BaseModel):
         REAL = 'REAL', 'Real'
         PRESUPUESTO = 'PRESUPUESTO', 'Presupuesto'
 
+    class TipoOperacional(models.TextChoices):
+        CONSTRUCCION = 'Construcción', 'Construcción'
+        MANTENIMIENTO = 'Mantenimiento', 'Mantenimiento'
+        SIN_CLASIFICAR = 'sin_clasificar', 'Sin clasificar'
+
     carga = models.ForeignKey(
         CargaFinanciera,
         on_delete=models.CASCADE,
@@ -97,6 +102,11 @@ class LineaCargaFinanciera(BaseModel):
         verbose_name='Homologación contable',
     )
     tipo = models.CharField('Tipo', max_length=15, choices=Tipo.choices)
+    tipo_operacional = models.CharField(
+        'Tipo operacional', max_length=50,
+        default=TipoOperacional.SIN_CLASIFICAR,
+        help_text='Clasificación operativa o valor Tipo original del presupuesto.',
+    )
     grupo = models.CharField('Grupo', max_length=255, blank=True)
     concepto = models.CharField('Concepto', max_length=255)
     rubro = models.CharField('Rubro', max_length=255, blank=True)
