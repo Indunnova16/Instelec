@@ -63,12 +63,23 @@ def construir_analisis(programacion):
         torres_ejecutadas = ejecucion.torres_ejecutadas
         varianza_torres = calcular_varianza_pct(torres_ejecutadas, torres_programadas)
 
+    horas_planeadas = programacion.horas_planeadas
+    if horas_planeadas is None or horas_planeadas <= 0:
+        estado_horas = ESTADO_SIN_BASE
+        varianza_horas = None
+    else:
+        estado_horas = ESTADO_DISPONIBLE
+        varianza_horas = calcular_varianza_pct(horas_reales, horas_planeadas)
+
     return {
         "programacion": programacion,
         "estado_torres": estado_torres,
         "torres_programadas": torres_programadas,
         "torres_ejecutadas": torres_ejecutadas,
         "varianza_torres_pct": varianza_torres,
+        "estado_horas": estado_horas,
+        "horas_planeadas": horas_planeadas,
+        "varianza_horas_pct": varianza_horas,
         "dias_reportados": dias_reportados,
         "horas_reales": horas_reales or Decimal("0"),
         "avance_promedio_pct": avance_real,

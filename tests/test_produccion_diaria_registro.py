@@ -119,7 +119,7 @@ class TestProduccionDiariaRegistro(TestCase):
         )
         asistencia = Asistencia.objects.create(
             usuario=trabajador, cuadrilla=self.cuadrilla, fecha=date.today(),
-            hora_entrada=time(7), hora_salida=time(15), horas_extra=Decimal("2"),
+            hora_entrada=time(7), hora_salida=time(15), he_diurna=Decimal("2"),
         )
 
         produccion, creada, omitidas = importar_asistencias(

@@ -73,6 +73,14 @@ class ProgramacionSemanalCuadrilla(BaseModel):
         default=0,
         help_text='Cantidad de torres planeadas para la semana',
     )
+    horas_planeadas = models.DecimalField(
+        'Horas planeadas',
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Horas de trabajo planeadas para la semana',
+    )
     actividades_programadas = models.TextField(
         'Actividades programadas',
         blank=True,

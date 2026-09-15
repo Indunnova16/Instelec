@@ -73,6 +73,7 @@ def importar_asistencias(programacion, fecha, registrado_por=None):
             continue
         horas = horas_de_asistencia(asistencia)
         defaults = {
+            "produccion": produccion,
             "personal": personal,
             "horas_trabajadas": horas,
             "motivo_ausencia": MOTIVOS_ASISTENCIA.get(asistencia.tipo_novedad, ""),

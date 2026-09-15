@@ -36,7 +36,7 @@ class ProgramacionSemanalCuadrillaForm(forms.ModelForm):
         model = ProgramacionSemanalCuadrilla
         fields = [
             'cuadrilla', 'proyecto', 'bloque', 'anio', 'semana',
-            'torres_programadas', 'actividades_programadas', 'observaciones',
+            'torres_programadas', 'horas_planeadas', 'actividades_programadas', 'observaciones',
         ]
         widgets = {
             # #155: clase js-tomselect → buscador (init global único en base.html).
@@ -53,6 +53,9 @@ class ProgramacionSemanalCuadrillaForm(forms.ModelForm):
             }),
             'torres_programadas': forms.NumberInput(attrs={
                 'class': INPUT_CLS, 'min': 0, 'step': 1, 'placeholder': '0',
+            }),
+            'horas_planeadas': forms.NumberInput(attrs={
+                'class': INPUT_CLS, 'min': 0, 'step': '0.01', 'placeholder': '0.00',
             }),
             'actividades_programadas': forms.Textarea(attrs={
                 'class': INPUT_CLS, 'rows': 3,

@@ -128,11 +128,15 @@ class ProduccionDiariaListView(_ProduccionDiariaBaseListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        try:
-            fecha = date.fromisoformat(self.request.GET.get("fecha", ""))
-        except ValueError:
+        fecha_param = self.request.GET.get("fecha")
+        if fecha_param:
+            try:
+                fecha = date.fromisoformat(fecha_param)
+            except ValueError:
+                fecha = timezone.localdate()
+                context["error_filtro"] = "La fecha indicada no es válida. Se muestra hoy."
+        else:
             fecha = timezone.localdate()
-            context["error_filtro"] = "La fecha indicada no es válida. Se muestra hoy."
         context["fecha_consulta"] = fecha
         context["filas_diarias"] = filas_diarias(fecha, self.request.GET.get("proyecto"))
         return context

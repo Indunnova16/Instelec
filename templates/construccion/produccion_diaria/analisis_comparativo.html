@@ -14,9 +14,10 @@
             {{ analisis.programacion.cuadrilla }} · {{ analisis.programacion.anio }}-S{{ analisis.programacion.semana|stringformat:"02d" }}
         </p>
 
-        <dl class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div class="rounded border p-4"><dt class="text-sm text-gray-500">Torres programadas</dt><dd class="text-2xl font-semibold">{{ analisis.torres_programadas }}</dd></div>
             <div class="rounded border p-4"><dt class="text-sm text-gray-500">Torres ejecutadas</dt><dd class="text-2xl font-semibold">{{ analisis.torres_ejecutadas|default:"Sin dato" }}</dd></div>
+            <div class="rounded border p-4"><dt class="text-sm text-gray-500">Horas planeadas</dt><dd class="text-2xl font-semibold">{{ analisis.horas_planeadas|default:"Sin dato" }}</dd></div>
             <div class="rounded border p-4"><dt class="text-sm text-gray-500">Horas reales</dt><dd class="text-2xl font-semibold">{{ analisis.horas_reales }}</dd></div>
             <div class="rounded border p-4"><dt class="text-sm text-gray-500">Días reportados</dt><dd class="text-2xl font-semibold">{{ analisis.dias_reportados }}</dd></div>
         </dl>
@@ -29,6 +30,14 @@
             <p class="mt-6 rounded bg-amber-50 p-4 text-amber-800">No hay torres programadas; no es posible calcular una varianza.</p>
         {% else %}
             <p class="mt-6 rounded bg-amber-50 p-4 text-amber-800">Aún no hay ejecución semanal registrada. La varianza queda sin dato hasta contar con el valor real.</p>
+        {% endif %}
+
+        {% if analisis.estado_horas == "DISPONIBLE" %}
+            <p class="mt-6 rounded p-4 {% if analisis.varianza_horas_pct < 0 %}bg-red-50 text-red-800{% else %}bg-green-50 text-green-800{% endif %}">
+                Varianza de horas: <strong>{{ analisis.varianza_horas_pct }}%</strong>.
+            </p>
+        {% else %}
+            <p class="mt-6 rounded bg-amber-50 p-4 text-amber-800">No hay horas planeadas; no es posible calcular una varianza.</p>
         {% endif %}
 
         <p class="mt-4 text-sm text-gray-600 dark:text-gray-300">
