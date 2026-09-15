@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+from io import BytesIO
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
@@ -14,13 +15,18 @@ from django.views.generic import TemplateView
 
 from apps.contratos.models import Contrato
 from apps.core.mixins import RoleRequiredMixin
+from apps.core.models_roles import RoleModuloPermiso
+from apps.core.permissions import SUBMODULO_FIN_HOMOLOGACION, user_nivel_acceso_submodulo
 
-from .forms_finv2_carga import CargaFinancieraForm
-from .importers_finv2_carga import procesar_carga_financiera
+from openpyxl import Workbook
+
+from .forms_finv2_carga import CargaFinancieraForm, ImportarTablaMaestraForm
+from .importers_finv2_carga import confirmar_tabla_maestra, previsualizar_tabla_maestra, procesar_carga_financiera
 from .models_finv2_carga import (
     CargaFinanciera,
     HomologacionProjectsContable,
     LineaCargaFinanciera,
+    VersionHomologacionProjectsContable,
 )
 
 
@@ -38,7 +44,8 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Carga un libro por proyecto/período y conserva su auditoría inmutable."""
 
     template_name = 'financiero/carga_financiera.html'
-    allowed_roles = ['admin', 'director', 'coordinador']
+    required_submodulo = SUBMODULO_FIN_HOMOLOGACION
+    admin_bypass = False
 
     def _proyecto_seleccionado(self):
         proyecto_id = self.request.GET.get('proyecto') or self.request.POST.get('proyecto')
@@ -87,6 +94,18 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         carga = None
         if proyecto and periodo_valido:
             carga = CargaFinanciera.objects.filter(proyecto=proyecto, anio=anio, mes=mes).first()
+        estado = self.request.GET.get('estado', 'vigentes')
+        homologaciones = HomologacionProjectsContable.objects.all()
+        if estado != 'archivadas':
+            homologaciones = homologaciones.filter(activo=True)
+        elif estado == 'archivadas':
+            homologaciones = homologaciones.filter(activo=False)
+        buscar = (self.request.GET.get('buscar') or '').strip()
+        tipo = (self.request.GET.get('tipo') or '').strip()
+        if buscar:
+            homologaciones = homologaciones.filter(concepto__icontains=buscar)
+        if tipo:
+            homologaciones = homologaciones.filter(tipo__iexact=tipo)
         context.update({
             'carga_form': kwargs.get('carga_form') or CargaFinancieraForm(),
             'proyectos': Contrato.objects.filter(estado=Contrato.Estado.ACTIVO),
@@ -96,7 +115,16 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'periodo_valido': periodo_valido,
             'carga_actual': carga,
             'historial_cargas': CargaFinanciera.objects.select_related('proyecto', 'usuario').all()[:20],
-            'homologaciones': HomologacionProjectsContable.objects.all()[:100],
+            'homologaciones': homologaciones[:100],
+            'buscar_homologacion': buscar,
+            'tipo_homologacion': tipo,
+            'estado_homologacion': estado,
+            'puede_editar_homologacion': user_nivel_acceso_submodulo(
+                self.request.user, SUBMODULO_FIN_HOMOLOGACION
+            ) == RoleModuloPermiso.VER_EDITAR,
+            'versiones_homologacion': VersionHomologacionProjectsContable.objects.select_related('autor').all()[:20],
+            'preview_homologacion': self.request.session.get('homologacion_preview'),
+            'importar_homologacion_form': ImportarTablaMaestraForm(),
             'indicadores': self._indicadores(carga),
         })
         return context
@@ -105,8 +133,20 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         accion = request.POST.get('accion')
         if accion == 'homologar':
             return self._crear_homologacion()
-        if accion == 'eliminar_homologacion':
-            return self._eliminar_homologacion()
+        if accion == 'editar_homologacion':
+            return self._editar_homologacion()
+        if accion == 'archivar_homologacion':
+            return self._archivar_homologacion()
+        if accion == 'previsualizar_tabla_maestra':
+            return self._previsualizar_tabla_maestra()
+        if accion == 'confirmar_tabla_maestra':
+            return self._confirmar_tabla_maestra()
+        if accion == 'cancelar_tabla_maestra':
+            self.request.session.pop('homologacion_preview', None)
+            messages.info(self.request, 'Importación cancelada; no se modificó la tabla maestra.')
+            return self._redirect_periodo(self._proyecto_seleccionado(), *self._periodo()[:2])
+        if accion == 'restaurar_version_tabla_maestra':
+            return self._restaurar_version_tabla_maestra()
         return self._cargar_archivo()
 
     def _redirect_periodo(self, proyecto=None, anio=None, mes=None):
@@ -133,6 +173,8 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             )
             if resultado.exito:
                 messages.success(self.request, f'Carga procesada: {resultado.resumen["lineas_reales"] + resultado.resumen["lineas_presupuesto"]} líneas.')
+                if resultado.resumen['lineas_no_mapeadas']:
+                    messages.warning(self.request, f"Advertencia: {resultado.resumen['lineas_no_mapeadas']} líneas sin homologación; el plano las identifica como SIN_HOMOLOGAR.")
             else:
                 messages.error(self.request, resultado.error or 'No fue posible procesar el archivo.')
         else:
@@ -151,19 +193,73 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             messages.success(self.request, 'Homologación creada.' if creada else f'Homologación {obj.concepto} actualizada.')
         return self._redirect_periodo(self._proyecto_seleccionado(), *self._periodo()[:2])
 
-    def _eliminar_homologacion(self):
-        eliminado, _ = HomologacionProjectsContable.objects.filter(pk=self.request.POST.get('pk')).delete()
-        if eliminado:
-            messages.success(self.request, 'Homologación eliminada.')
+    def _editar_homologacion(self):
+        obj = HomologacionProjectsContable.objects.filter(pk=self.request.POST.get('pk'), activo=True).first()
+        if not obj:
+            messages.error(self.request, 'La homologación solicitada no está vigente.')
         else:
-            messages.error(self.request, 'La homologación solicitada ya no existe.')
+            for campo in ('codigo_contable', 'centro_costo'):
+                setattr(obj, campo, (self.request.POST.get(campo) or '').strip())
+            if not obj.codigo_contable:
+                messages.error(self.request, 'El código contable es obligatorio.')
+            else:
+                obj.save(update_fields=['codigo_contable', 'centro_costo', 'updated_at'])
+                messages.success(self.request, f'Homologación {obj.concepto} actualizada.')
+        return self._redirect_periodo(self._proyecto_seleccionado(), *self._periodo()[:2])
+
+    def _archivar_homologacion(self):
+        archivada = HomologacionProjectsContable.objects.filter(
+            pk=self.request.POST.get('pk'), activo=True
+        ).update(activo=False)
+        if archivada:
+            messages.success(self.request, 'Homologación archivada; el historial y sus referencias se conservan.')
+        else:
+            messages.error(self.request, 'La homologación solicitada no está vigente.')
+        return self._redirect_periodo(self._proyecto_seleccionado(), *self._periodo()[:2])
+
+    def _previsualizar_tabla_maestra(self):
+        form = ImportarTablaMaestraForm(self.request.POST, self.request.FILES)
+        if not form.is_valid():
+            messages.error(self.request, form.errors.get('archivo', ['Archivo inválido.'])[0])
+        else:
+            preview = previsualizar_tabla_maestra(form.cleaned_data['archivo'])
+            self.request.session['homologacion_preview'] = preview
+            if preview['errores']:
+                messages.error(self.request, f"Preview listo: {len(preview['filas'])} filas válidas y {len(preview['errores'])} errores. No se guardó nada.")
+            else:
+                messages.success(self.request, f"Preview listo: {len(preview['filas'])} filas válidas. Confirme para reemplazar la tabla maestra.")
+        return self._redirect_periodo(self._proyecto_seleccionado(), *self._periodo()[:2])
+
+    def _confirmar_tabla_maestra(self):
+        preview = self.request.session.get('homologacion_preview')
+        if not preview:
+            messages.error(self.request, 'No hay un preview pendiente para confirmar.')
+        elif preview['errores']:
+            messages.error(self.request, 'Corrija los errores del preview antes de confirmar.')
+        elif not preview['filas']:
+            messages.error(self.request, 'El preview no contiene filas válidas.')
+        else:
+            version = confirmar_tabla_maestra(preview['filas'], usuario=self.request.user)
+            self.request.session.pop('homologacion_preview', None)
+            messages.success(self.request, f'Tabla maestra reemplazada atómicamente en versión {version.numero}.')
+        return self._redirect_periodo(self._proyecto_seleccionado(), *self._periodo()[:2])
+
+    def _restaurar_version_tabla_maestra(self):
+        version = VersionHomologacionProjectsContable.objects.filter(pk=self.request.POST.get('version')).first()
+        if not version:
+            messages.error(self.request, 'La versión solicitada no existe.')
+        else:
+            filas = list(version.homologaciones.values('tipo', 'grupo', 'concepto', 'rubro', 'codigo_contable', 'centro_costo'))
+            nueva = confirmar_tabla_maestra(filas, usuario=self.request.user, origen=f'RESTAURACION:{version.numero}')
+            messages.success(self.request, f'Versión {version.numero} restaurada como nueva versión {nueva.numero}.')
         return self._redirect_periodo(self._proyecto_seleccionado(), *self._periodo()[:2])
 
 
 class PlanoFinancieroCsvView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Entrega el plano contable definitivo, agregado por código y trazable."""
 
-    allowed_roles = ['admin', 'director', 'coordinador']
+    required_submodulo = SUBMODULO_FIN_HOMOLOGACION
+    admin_bypass = False
 
     def get(self, request, carga_id, *args, **kwargs):
         carga = CargaFinanciera.objects.select_related('proyecto').filter(pk=carga_id).first()
@@ -188,4 +284,46 @@ class PlanoFinancieroCsvView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
                 agrupadas[llave]['referencias'].add(linea.referencia)
         for (codigo, concepto, centro), datos in sorted(agrupadas.items()):
             writer.writerow([codigo, concepto, centro, carga.proyecto.nombre, f'{carga.mes:02d}-{carga.anio}', datos['valor'], ' | '.join(sorted(datos['referencias']))])
+        return response
+
+
+class DescargarVersionHomologacionXlsxView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Descarga un snapshot, sin reconstruirlo desde el catálogo vigente."""
+    required_submodulo = SUBMODULO_FIN_HOMOLOGACION
+    admin_bypass = False
+
+    def get(self, request, version_id, *args, **kwargs):
+        version = VersionHomologacionProjectsContable.objects.filter(pk=version_id).first()
+        if not version:
+            raise Http404('La versión solicitada no existe.')
+        libro = Workbook()
+        libro.remove(libro.active)
+        for nombre, filas in {'INGRESOS': version.homologaciones.filter(grupo__icontains='ingreso'), 'GASTOS': version.homologaciones.exclude(grupo__icontains='ingreso')}.items():
+            hoja = libro.create_sheet(nombre)
+            hoja.append(['Tipo', 'Grupo', 'Concepto', 'Rubro', 'Código contable', 'Centro de costo'])
+            for fila in filas.order_by('grupo', 'concepto'):
+                hoja.append([fila.tipo, fila.grupo, fila.concepto, fila.rubro, fila.codigo_contable, fila.centro_costo])
+        salida = BytesIO()
+        libro.save(salida)
+        response = HttpResponse(salida.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="Tabla_maestra_version_{version.numero}.xlsx"'
+        return response
+
+
+class ExportarTablaMaestraXlsxView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Exporta únicamente el catálogo vigente, nunca los registros archivados."""
+    required_submodulo = SUBMODULO_FIN_HOMOLOGACION
+    admin_bypass = False
+
+    def get(self, request, *args, **kwargs):
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = 'TABLA_MAESTRA_VIGENTE'
+        hoja.append(['Tipo', 'Grupo', 'Concepto', 'Rubro', 'Código contable', 'Centro de costo'])
+        for fila in HomologacionProjectsContable.objects.filter(activo=True).order_by('tipo', 'grupo', 'concepto'):
+            hoja.append([fila.tipo, fila.grupo, fila.concepto, fila.rubro, fila.codigo_contable, fila.centro_costo])
+        salida = BytesIO()
+        libro.save(salida)
+        response = HttpResponse(salida.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="Tabla_maestra_vigente.xlsx"'
         return response

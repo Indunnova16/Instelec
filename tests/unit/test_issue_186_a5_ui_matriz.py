@@ -142,7 +142,10 @@ class TestRoleModuloPermisoMatriz186:
         assert "FIN_NOMINA" in columnas_sub
         assert "FIN_MAESTROS" in columnas_sub
         assert "CONFIG_ROLES_PERMISOS" in columnas_sub
-        assert len(columnas_sub) == 30
+        # #247 agrega la hoja FIN_HOMOLOGACION (Tabla Maestra de Homologación
+        # Projects->Contabilidad), con lo que el catálogo llega a 31.
+        assert "FIN_HOMOLOGACION" in columnas_sub
+        assert len(columnas_sub) == 31
 
     def test_matriz_no_incluye_roles_inactivos(self, admin_client):
         Role.objects.create(

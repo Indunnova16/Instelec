@@ -21,10 +21,12 @@ from .models_finv2_carga import (
     CargaFinanciera,
     HomologacionProjectsContable,
     LineaCargaFinanciera,
+    VersionHomologacionProjectsContable,
 )
 
 
 HOJAS_REQUERIDAS = ('BD Real', 'BD Ppto', 'Homologacion')
+HOJAS_TABLA_MAESTRA = ('INGRESOS', 'GASTOS')
 
 
 @dataclass
@@ -304,6 +306,8 @@ def procesar_carga_financiera(archivo: BinaryIO, *, proyecto, anio, mes, usuario
         'lineas_homologacion_origen': homologaciones,
         'total_real': str(sum((l['valor'] for l in reales), Decimal('0.00'))),
         'total_presupuesto': str(sum((l['valor'] for l in presupuestos), Decimal('0.00'))),
+        'lineas_no_mapeadas': sum(1 for linea in [*reales, *presupuestos] if not linea['homologacion']),
+        'codigos_no_mapeados': sorted({linea['concepto'] for linea in [*reales, *presupuestos] if not linea['homologacion']}),
     }
     with transaction.atomic():
         # Eliminar sólo este período/proyecto; las cascadas eliminan sus líneas.
@@ -318,3 +322,79 @@ def procesar_carga_financiera(archivo: BinaryIO, *, proyecto, anio, mes, usuario
             LineaCargaFinanciera(carga=carga, **linea) for linea in [*reales, *presupuestos]
         ], batch_size=1000)
     return ResultadoCargaFinanciera(True, carga=carga, resumen=resumen)
+
+
+def previsualizar_tabla_maestra(archivo: BinaryIO) -> dict:
+    """Lee el XLSX de catálogo sin tocar la BD; cada error conserva hoja/fila."""
+    try:
+        libro = load_workbook(archivo, read_only=True, data_only=True)
+    except (OSError, BadZipFile) as exc:
+        return {'filas': [], 'errores': [str(exc)]}
+    hojas = {nombre: _hoja(libro, nombre) for nombre in HOJAS_TABLA_MAESTRA}
+    faltantes = [nombre for nombre, hoja in hojas.items() if hoja is None]
+    if faltantes:
+        return {'filas': [], 'errores': [f"Faltan hojas requeridas: {', '.join(faltantes)}."]}
+    filas, errores, codigos = [], [], set()
+    requeridas = {'grupo', 'concepto', 'codigo contable', 'tipo'}
+    for nombre, hoja in hojas.items():
+        try:
+            columnas = _columnas(hoja, requeridas)
+        except ValueError as exc:
+            errores.append(str(exc))
+            continue
+        for numero, fila in enumerate(hoja.iter_rows(min_row=2, values_only=True), start=2):
+            if not any(_texto(v) for v in fila):
+                continue
+            dato = {
+                'tipo': _texto(_valor(fila, columnas, 'tipo')),
+                'grupo': _texto(_valor(fila, columnas, 'grupo')),
+                'concepto': _texto(_valor(fila, columnas, 'concepto')),
+                'rubro': _texto(_valor(fila, columnas, 'rubro')),
+                'codigo_contable': _texto(_valor(fila, columnas, 'codigo contable')),
+                'centro_costo': _texto(_valor(fila, columnas, 'centro de costo')),
+                'hoja': nombre, 'fila': numero,
+            }
+            errores_fila = []
+            for campo in ('tipo', 'grupo', 'concepto', 'codigo_contable'):
+                if not dato[campo]:
+                    errores_fila.append(f'{nombre}, fila {numero}, columna {campo}: es obligatorio.')
+            if dato['tipo'].lower() not in {'fijo', 'variable'}:
+                errores_fila.append(f'{nombre}, fila {numero}, columna Tipo: debe ser Fijo o Variable.')
+            codigo = dato['codigo_contable']
+            if not (codigo.isdigit() and 5000 <= int(codigo) <= 6999):
+                errores_fila.append(f'{nombre}, fila {numero}, columna Código contable: debe estar entre 5XXX y 6XXX.')
+            if codigo in codigos:
+                errores_fila.append(f'{nombre}, fila {numero}, columna Código contable: está duplicado.')
+            else:
+                codigos.add(codigo)
+            if errores_fila:
+                errores.extend(errores_fila)
+            else:
+                filas.append(dato)
+    return {'filas': filas, 'errores': errores}
+
+
+def confirmar_tabla_maestra(filas: list[dict], *, usuario, origen='IMPORTACION'):
+    """Reemplaza el catálogo vigente de manera atómica y preserva snapshots."""
+    with transaction.atomic():
+        anterior = list(HomologacionProjectsContable.objects.filter(activo=True).values(
+            'tipo', 'grupo', 'concepto', 'rubro', 'codigo_contable', 'centro_costo'
+        ))
+        numero = (VersionHomologacionProjectsContable.objects.order_by('-numero').values_list('numero', flat=True).first() or 0) + 1
+        nueva_llaves = {(f['tipo'], f['grupo'], f['concepto'], f['rubro'], f['codigo_contable']) for f in filas}
+        anterior_llaves = {(f['tipo'], f['grupo'], f['concepto'], f['rubro'], f['codigo_contable']) for f in anterior}
+        version = VersionHomologacionProjectsContable.objects.create(
+            numero=numero, autor=usuario, origen=origen,
+            diff={'agregadas': len(nueva_llaves - anterior_llaves), 'retiradas': len(anterior_llaves - nueva_llaves)},
+        )
+        # Sólo se desactiva el catálogo vigente. Registros usados por líneas históricas
+        # siguen existiendo y sus FK PROTECT no se ven afectados.
+        HomologacionProjectsContable.objects.filter(activo=True).update(activo=False)
+        HomologacionProjectsContable.objects.bulk_create([
+            HomologacionProjectsContable(
+                tipo=f['tipo'], grupo=f['grupo'], concepto=f['concepto'], rubro=f['rubro'],
+                codigo_contable=f['codigo_contable'], centro_costo=f['centro_costo'],
+                activo=True, version=version,
+            ) for f in filas
+        ])
+    return version
