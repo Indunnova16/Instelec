@@ -1,6 +1,7 @@
 """Cobertura B1: registro diario con sus validaciones de dominio (#252)."""
 
-from datetime import date
+from datetime import date, time
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -13,9 +14,10 @@ from apps.cuadrillas.forms_produccion_diaria import (
     NovedadProduccionForm,
     RegistroPersonalProduccionForm,
 )
-from apps.cuadrillas.models import Cuadrilla
+from apps.cuadrillas.models import Asistencia, Cuadrilla, PersonalCuadrilla
 from apps.cuadrillas.models_pc import ProgramacionSemanalCuadrilla
 from apps.cuadrillas.models_produccion_diaria import ProduccionDiaria
+from apps.cuadrillas.services_produccion_diaria import importar_asistencias
 
 
 class TestProduccionDiariaRegistro(TestCase):
@@ -107,3 +109,57 @@ class TestProduccionDiariaRegistro(TestCase):
         response = self._post_base(fecha=otra_fecha.isoformat())
         self.assertEqual(response.status_code, 400)
         self.assertEqual(ProduccionDiaria.objects.count(), 0)
+
+    def test_importacion_es_idempotente_y_conserva_fuente_de_asistencia(self):
+        trabajador = get_user_model().objects.create_user(
+            email="operario-importado@test.local", password="testpass123!", documento="PD-IMPORT-1"
+        )
+        personal = PersonalCuadrilla.objects.create(
+            nombre="Operario importado", documento="PD-IMPORT-1", salario_base=Decimal("2400000")
+        )
+        asistencia = Asistencia.objects.create(
+            usuario=trabajador, cuadrilla=self.cuadrilla, fecha=date.today(),
+            hora_entrada=time(7), hora_salida=time(15), horas_extra=Decimal("2"),
+        )
+
+        produccion, creada, omitidas = importar_asistencias(
+            self.programacion, date.today(), self.usuario
+        )
+        repetir, creada_repetida, _ = importar_asistencias(self.programacion, date.today(), self.usuario)
+        registro = produccion.registros_personal.get()
+
+        self.assertTrue(creada)
+        self.assertFalse(creada_repetida)
+        self.assertEqual(produccion, repetir)
+        self.assertEqual(omitidas, [])
+        self.assertEqual(registro.personal, personal)
+        self.assertEqual(registro.asistencia_origen, asistencia)
+        self.assertEqual(registro.horas_trabajadas, Decimal("10"))
+        self.assertEqual(produccion.registros_personal.count(), 1)
+
+    def test_importacion_de_ausencia_y_fecha_fuera_de_semana_es_explicita(self):
+        trabajador = get_user_model().objects.create_user(
+            email="ausente-importado@test.local", password="testpass123!", documento="PD-IMPORT-2"
+        )
+        PersonalCuadrilla.objects.create(nombre="Operario ausente", documento="PD-IMPORT-2")
+        Asistencia.objects.create(
+            usuario=trabajador, cuadrilla=self.cuadrilla, fecha=date.today(),
+            tipo_novedad=Asistencia.TipoNovedad.INCAPACIDAD,
+        )
+        produccion, _, _ = importar_asistencias(self.programacion, date.today(), self.usuario)
+        registro = produccion.registros_personal.get()
+        self.assertEqual(registro.horas_trabajadas, Decimal("0"))
+        self.assertEqual(registro.motivo_ausencia, "ENFERMEDAD")
+        with self.assertRaisesMessage(ValueError, "semana ISO"):
+            importar_asistencias(self.programacion, date.fromordinal(date.today().toordinal() + 14))
+
+    def test_listado_muestra_programacion_pendiente_y_enlace_de_importacion(self):
+        self.programacion.actividades_programadas = "Preliminares y Obra Civil"
+        self.programacion.save(update_fields=["actividades_programadas", "updated_at"])
+
+        response = self.client.get(reverse("construccion:produccion_diaria_lista"))
+
+        self.assertContains(response, "Pendiente")
+        self.assertContains(response, "Preliminares y Obra Civil")
+        self.assertContains(response, "+ Registrar")
+        self.assertContains(response, f"programacion={self.programacion.pk}")

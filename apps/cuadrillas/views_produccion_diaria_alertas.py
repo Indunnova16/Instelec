@@ -1,7 +1,7 @@
 """Listado, historial y notificación de alertas de Producción Diaria (#252)."""
 
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -14,7 +14,7 @@ from apps.core.mixins import RoleRequiredMixin
 from apps.usuarios.models import Usuario
 
 from .models_produccion_diaria import AlertaProduccion, ProduccionDiaria
-from .services_produccion_diaria import sincronizar_alerta_desviacion
+from .services_produccion_diaria import filas_diarias, sincronizar_alerta_desviacion
 
 logger = logging.getLogger(__name__)
 PRODUCCION_DIARIA_ROLES = ["admin", "director", "coordinador", "supervisor"]
@@ -125,6 +125,17 @@ class ProduccionDiariaListView(_ProduccionDiariaBaseListView):
     """Lista diaria con badge para desviaciones persistentes superiores a 20 %."""
 
     template_name = "construccion/produccion_diaria/listado_diario.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            fecha = date.fromisoformat(self.request.GET.get("fecha", ""))
+        except ValueError:
+            fecha = timezone.localdate()
+            context["error_filtro"] = "La fecha indicada no es válida. Se muestra hoy."
+        context["fecha_consulta"] = fecha
+        context["filas_diarias"] = filas_diarias(fecha, self.request.GET.get("proyecto"))
+        return context
 
 
 class ProduccionDiariaHistorialView(_ProduccionDiariaBaseListView):

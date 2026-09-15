@@ -41,6 +41,12 @@ class ProduccionDiaria(BaseModel):
         related_name="producciones_diarias_registradas",
         verbose_name="Registrado por",
     )
+    importada_en = models.DateTimeField("Importada desde asistencia", null=True, blank=True)
+    ultima_edicion_por = models.ForeignKey(
+        "usuarios.Usuario", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="producciones_diarias_editadas", verbose_name="Última edición por",
+    )
+    ultima_edicion_en = models.DateTimeField("Última edición", null=True, blank=True)
 
     class Meta:
         db_table = "produccion_diaria"
@@ -91,6 +97,10 @@ class RegistroPersonalProduccion(BaseModel):
         blank=True,
     )
     observacion = models.TextField("Observación", blank=True)
+    asistencia_origen = models.OneToOneField(
+        "cuadrillas.Asistencia", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="registro_produccion_diaria", verbose_name="Asistencia de origen",
+    )
 
     class Meta:
         db_table = "registro_personal_produccion"
