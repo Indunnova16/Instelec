@@ -100,8 +100,9 @@ def test_filtros_preservan_activos_e_inactivos(client, admin_user):
 def test_importador_clientes_preview_confirma_lote_y_guarda_historial(client, admin_user):
     client.force_login(admin_user)
     contenido = (
-        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,industria\n"
-        "Cliente importado,900261010,importado@example.test,3000000000,Calle 1,45,2026-01-01,2026-12-31,Construcción\n"
+        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,activo,industria\n"
+        "Cliente importado,900261010,importado@example.test,3000000000,Calle 1,45,2026-01-01,2026-12-31,TRUE,Infraestructura\n"
+        "Cliente inactivo importado,900261011,,,Calle 2,30,,,FALSE,Servicios\n"
     )
     response = client.post("/financiero/maestros/clientes/importar/", {"archivo": SimpleUploadedFile("clientes.csv", contenido.encode(), content_type="text/csv")})
     assert response.status_code == 200
@@ -109,8 +110,31 @@ def test_importador_clientes_preview_confirma_lote_y_guarda_historial(client, ad
     assert b"Vista previa" in response.content
     response = client.post("/financiero/maestros/clientes/importar/", {"confirmar": "1"})
     assert response.status_code == 302
-    assert Cliente.objects.filter(nit="900261010", plazo_pago_dias=45).exists()
+    assert Cliente.objects.filter(nit="900261010", plazo_pago_dias=45, activo=True).exists()
+    assert Cliente.objects.filter(nit="900261011", activo=False).exists()
     assert CargaTerceros.objects.filter(tercero_tipo="CLIENTE", resultado="CONFIRMADA").exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("fila,error_esperado", [
+    ("Tel invalido,900261020,,abc,Calle 1,30,,,TRUE,Servicios", "telefono"),
+    ("Industria mala,900261021,,,Calle 1,30,,,TRUE,Sector Inventado", "industria"),
+    ("Plazo alto,900261022,,,Calle 1,250,,,TRUE,Servicios", "plazo_pago_dias"),
+    ("Activo raro,900261023,,,Calle 1,30,,,tal_vez,Servicios", "activo"),
+])
+def test_importador_clientes_rechaza_filas_invalidas(client, admin_user, fila, error_esperado):
+    """Regresión de los 4 huecos que encontró el validador-cierre de #261:
+    teléfono sin formato, industria fuera del catálogo, plazo fuera de
+    1-120 (desalineado del viejo tope 365) y columna activo no reconocida."""
+    client.force_login(admin_user)
+    contenido = (
+        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,activo,industria\n"
+        f"{fila}\n"
+    )
+    response = client.post("/financiero/maestros/clientes/importar/", {"archivo": SimpleUploadedFile("clientes.csv", contenido.encode(), content_type="text/csv")})
+    assert response.status_code == 200
+    assert error_esperado.encode() in response.content
+    assert not Cliente.objects.filter(nombre__startswith=fila.split(",")[0]).exists()
 
 
 @pytest.mark.django_db
@@ -118,14 +142,30 @@ def test_importador_proveedores_rechaza_columnas_y_nit_duplicado(client, admin_u
     client.force_login(admin_user)
     Proveedor.objects.create(nombre="Existente", nit="900262010")
     contenido = (
-        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,tipo_servicio\n"
-        "Duplicado,900262010,,,Calle 1,30,,,Servicios\n"
+        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,activo,tipo_servicio\n"
+        "Duplicado,900262010,,,Calle 1,30,,,TRUE,Servicios\n"
     )
     response = client.post("/financiero/maestros/proveedores/importar/", {"archivo": SimpleUploadedFile("proveedores.csv", contenido.encode(), content_type="text/csv")})
     assert response.status_code == 200
     assert b"NIT duplicado" in response.content
     assert not Proveedor.objects.filter(nombre="Duplicado").exists()
     assert CargaTerceros.objects.filter(tercero_tipo="PROVEEDOR", resultado="RECHAZADA").exists()
+
+
+@pytest.mark.django_db
+def test_importador_proveedores_respeta_columna_activo(client, admin_user):
+    """Regresión: el importador ignoraba la columna Activo por completo y
+    creaba todo como activo=True sin importar lo que dijera el archivo."""
+    client.force_login(admin_user)
+    contenido = (
+        "nombre,nit,email,telefono,direccion,plazo_pago_dias,fecha_inicio_contrato,fecha_fin_contrato,activo,tipo_servicio\n"
+        "Prov activo,900262020,,,Calle 1,30,,,1,Servicios\n"
+        "Prov inactivo,900262021,,,Calle 1,30,,,0,Servicios\n"
+    )
+    client.post("/financiero/maestros/proveedores/importar/", {"archivo": SimpleUploadedFile("proveedores.csv", contenido.encode(), content_type="text/csv")})
+    client.post("/financiero/maestros/proveedores/importar/", {"confirmar": "1"})
+    assert Proveedor.objects.get(nit="900262020").activo is True
+    assert Proveedor.objects.get(nit="900262021").activo is False
 
 
 @pytest.mark.django_db
