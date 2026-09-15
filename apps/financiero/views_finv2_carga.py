@@ -47,19 +47,37 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         return Contrato.objects.filter(pk=proyecto_id, estado=Contrato.Estado.ACTIVO).first()
 
     def _periodo(self):
-        anio = self.request.GET.get('anio') or self.request.POST.get('anio') or timezone.now().year
-        mes = self.request.GET.get('mes') or self.request.POST.get('mes') or timezone.now().month
+        periodo = self.request.GET.get('periodo') or self.request.POST.get('periodo')
+        if periodo:
+            try:
+                anio, mes = int(periodo[:4]), int(periodo[4:])
+            except (TypeError, ValueError):
+                return timezone.now().year, timezone.now().month, False
+        else:
+            anio = self.request.GET.get('anio') or self.request.POST.get('anio') or timezone.now().year
+            mes = self.request.GET.get('mes') or self.request.POST.get('mes') or timezone.now().month
         try:
             anio, mes = int(anio), int(mes)
         except (TypeError, ValueError):
             return timezone.now().year, timezone.now().month, False
         return anio, mes, 1 <= mes <= 12
 
+    def _filtros(self):
+        """Valores GET validados después de período y proyecto."""
+        return (
+            (self.request.GET.get('tipo') or self.request.POST.get('tipo') or '').strip(),
+            (self.request.GET.get('centro_costo') or self.request.POST.get('centro_costo') or '').strip(),
+        )
+
     @staticmethod
-    def _indicadores(carga):
+    def _indicadores(carga, *, tipo_operacional='', centro_costo=''):
         if not carga:
             return []
         lineas = carga.lineas.all()
+        if tipo_operacional:
+            lineas = lineas.filter(tipo_operacional=tipo_operacional)
+        if centro_costo:
+            lineas = lineas.filter(centro_costo=centro_costo)
         real = sum((linea.valor for linea in lineas.filter(tipo=LineaCargaFinanciera.Tipo.REAL)), ZERO)
         presupuesto = sum((linea.valor for linea in lineas.filter(tipo=LineaCargaFinanciera.Tipo.PRESUPUESTO)), ZERO)
         margen = real - presupuesto
@@ -68,9 +86,12 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         ).exclude(pk=carga.pk).order_by('-anio', '-mes', '-created_at').first()
         real_anterior = ZERO
         if anterior:
-            real_anterior = sum(
-                (linea.valor for linea in anterior.lineas.filter(tipo=LineaCargaFinanciera.Tipo.REAL)), ZERO
-            )
+            anteriores = anterior.lineas.all()
+            if tipo_operacional:
+                anteriores = anteriores.filter(tipo_operacional=tipo_operacional)
+            if centro_costo:
+                anteriores = anteriores.filter(centro_costo=centro_costo)
+            real_anterior = sum((linea.valor for linea in anteriores.filter(tipo=LineaCargaFinanciera.Tipo.REAL)), ZERO)
         return [
             {'nombre': 'Facturación vs meta', 'valor': _porcentaje(real - presupuesto, presupuesto), 'unidad': '%', 'alerta': presupuesto > real},
             {'nombre': 'Margen bruto', 'valor': margen, 'unidad': '$', 'alerta': margen < ZERO},
@@ -84,20 +105,44 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         anio, mes, periodo_valido = self._periodo()
         proyecto = self._proyecto_seleccionado()
+        tipo_operacional, centro_costo = self._filtros()
+        cargas_vigentes = CargaFinanciera.objects.filter(vigente=True)
+        periodos_disponibles = list(cargas_vigentes.order_by('-anio', '-mes').values_list('anio', 'mes'))
+        proyectos_disponibles = Contrato.objects.filter(estado=Contrato.Estado.ACTIVO)
+        if periodo_valido:
+            proyectos_disponibles = proyectos_disponibles.filter(
+                cargas_financieras__vigente=True, cargas_financieras__anio=anio, cargas_financieras__mes=mes,
+            ).distinct()
         carga = None
         if proyecto and periodo_valido:
-            carga = CargaFinanciera.objects.filter(proyecto=proyecto, anio=anio, mes=mes).first()
+            carga = CargaFinanciera.objects.filter(
+                proyecto=proyecto, anio=anio, mes=mes, vigente=True,
+            ).first()
+        base_lineas = carga.lineas.all() if carga else LineaCargaFinanciera.objects.none()
+        tipos_disponibles = list(base_lineas.order_by('tipo_operacional').values_list('tipo_operacional', flat=True).distinct())
+        if tipo_operacional and tipo_operacional not in tipos_disponibles:
+            tipo_operacional = ''
+        lineas_por_tipo = base_lineas.filter(tipo_operacional=tipo_operacional) if tipo_operacional else base_lineas
+        centros_disponibles = list(lineas_por_tipo.exclude(centro_costo='').order_by('centro_costo').values_list('centro_costo', flat=True).distinct())
+        if centro_costo and centro_costo not in centros_disponibles:
+            centro_costo = ''
         context.update({
             'carga_form': kwargs.get('carga_form') or CargaFinancieraForm(),
             'proyectos': Contrato.objects.filter(estado=Contrato.Estado.ACTIVO),
+            'proyectos_disponibles': proyectos_disponibles,
+            'periodos_disponibles': periodos_disponibles,
             'proyecto_seleccionado': proyecto,
             'anio': anio,
             'mes': mes,
             'periodo_valido': periodo_valido,
             'carga_actual': carga,
+            'tipo_seleccionado': tipo_operacional,
+            'centro_costo_seleccionado': centro_costo,
+            'tipos_disponibles': tipos_disponibles,
+            'centros_disponibles': centros_disponibles,
             'historial_cargas': CargaFinanciera.objects.select_related('proyecto', 'usuario').all()[:20],
             'homologaciones': HomologacionProjectsContable.objects.all()[:100],
-            'indicadores': self._indicadores(carga),
+            'indicadores': self._indicadores(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo),
         })
         return context
 
@@ -109,7 +154,7 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             return self._eliminar_homologacion()
         return self._cargar_archivo()
 
-    def _redirect_periodo(self, proyecto=None, anio=None, mes=None):
+    def _redirect_periodo(self, proyecto=None, anio=None, mes=None, tipo_operacional=None, centro_costo=None):
         params = []
         if proyecto:
             params.append(f'proyecto={proyecto.pk}')
@@ -117,6 +162,12 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             params.append(f'anio={anio}')
         if mes:
             params.append(f'mes={mes}')
+        tipo_operacional = tipo_operacional if tipo_operacional is not None else self._filtros()[0]
+        centro_costo = centro_costo if centro_costo is not None else self._filtros()[1]
+        if tipo_operacional:
+            params.append(f'tipo={tipo_operacional}')
+        if centro_costo:
+            params.append(f'centro_costo={centro_costo}')
         return redirect(f'{self.request.path}?{"&".join(params)}')
 
     def _cargar_archivo(self):

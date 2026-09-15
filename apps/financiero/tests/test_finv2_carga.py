@@ -36,14 +36,18 @@ def proyecto(db):
 
 
 @pytest.mark.django_db
-def test_carga_transelca_reemplaza_periodo(proyecto):
+def test_carga_transelca_versiona_periodo_sin_borrar_historico(proyecto):
     primero = procesar_carga_financiera(_libro(neto=100), proyecto=proyecto, anio=2026, mes=1, usuario=None)
     assert primero.exito
     assert LineaCargaFinanciera.objects.filter(carga=primero.carga).count() == 2
 
     segundo = procesar_carga_financiera(_libro(neto=250), proyecto=proyecto, anio=2026, mes=1, usuario=None)
     assert segundo.exito
-    assert CargaFinanciera.objects.filter(proyecto=proyecto, anio=2026, mes=1).count() == 1
+    cargas = CargaFinanciera.objects.filter(proyecto=proyecto, anio=2026, mes=1)
+    assert cargas.count() == 2
+    assert cargas.get(pk=primero.carga.pk).vigente is False
+    assert segundo.carga.vigente is True
+    assert segundo.carga.version == 2
     lineas = LineaCargaFinanciera.objects.filter(carga=segundo.carga)
     assert lineas.count() == 2
     assert lineas.get(tipo='REAL').valor == 250
