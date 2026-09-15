@@ -102,6 +102,16 @@ class TestIssue252Rework(TestCase):
         self.assertEqual(analisis["estado_horas"], ESTADO_SIN_BASE)
         self.assertIsNone(analisis["varianza_horas_pct"])
 
+    def test_form_crear_programacion_renderiza_input_horas_planeadas(self):
+        """El validador de cierre encontró que el campo estaba en el ModelForm
+        (Meta.fields) pero el template de crear/editar lo omitía por completo:
+        el cliente nunca podía setearlo desde la UI real."""
+        url = reverse("construccion:programacion_cuadrilla_crear")
+
+        response = self.client.get(url)
+
+        self.assertContains(response, 'name="horas_planeadas"')
+
     def test_listado_solo_muestra_error_para_fecha_malformada(self):
         url = reverse("construccion:produccion_diaria_lista")
 
