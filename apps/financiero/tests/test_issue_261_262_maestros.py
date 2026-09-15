@@ -174,3 +174,41 @@ def test_rol_de_consulta_no_puede_gestionar_ni_por_url_directa(client, modelo, r
     # Las mutaciones se interceptan primero en RBACModuloMiddleware, cuyo
     # contrato establecido es redirigir al inicio con un mensaje flash.
     assert client.post(ruta, {"nombre": "Intruso"}).status_code == 302
+
+
+@pytest.mark.django_db
+def test_auditoria_inactivar_registra_valor_anterior_y_nuevo_no_vacios(client, admin_user):
+    """Regresión: el validador-cierre de #261/#262 encontró que inactivar/
+    reactivar dejaba valor_anterior/valor_nuevo vacíos o duplicados en la
+    auditoría — la causa era doble: (a) el "antes" se leía después de que
+    ModelForm.is_valid() ya había mutado la instancia in-place, y (b)
+    `False or ""` colapsaba el booleano activo=False a cadena vacía."""
+    client.force_login(admin_user)
+    client.post(
+        "/financiero/maestros/clientes/nuevo/",
+        {"nombre": "Cliente auditoria", "nit": "900261900", "plazo_pago_dias": 30, "activo": "on"},
+    )
+    cliente = Cliente.objects.get(nit="900261900")
+    client.post(
+        f"/financiero/maestros/clientes/{cliente.pk}/",
+        {"nombre": cliente.nombre, "nit": cliente.nit, "plazo_pago_dias": 30, "activo": "",
+         "motivo_inactivacion": "Regresion QA"},
+    )
+    evento = AuditoriaTercero.objects.get(tercero_id=cliente.pk, campo="activo")
+    assert evento.valor_anterior == "True"
+    assert evento.valor_nuevo == "False"
+    assert evento.valor_anterior != evento.valor_nuevo
+
+
+@pytest.mark.django_db
+def test_plazo_pago_dias_rechaza_por_encima_de_120(client, admin_user):
+    """Regresión: el plan (#261/#262) especifica el rango 1-120; el validador
+    encontró que plazo=121 era ACEPTADO por el MaxValueValidator(365)."""
+    client.force_login(admin_user)
+    response = client.post(
+        "/financiero/maestros/proveedores/nuevo/",
+        {"nombre": "Proveedor plazo alto", "nit": "900262900", "plazo_pago_dias": 121, "activo": "on"},
+    )
+    assert response.status_code == 200
+    assert "plazo_pago_dias" in response.context["form"].errors
+    assert not Proveedor.objects.filter(nit="900262900").exists()

@@ -42,7 +42,7 @@ class Proveedor(BaseModel):
     tipo_servicio = models.CharField("Tipo de servicio", max_length=120, blank=True)
     plazo_pago_dias = models.PositiveIntegerField(
         "Plazo de pago (días)", default=30,
-        validators=[MinValueValidator(1), MaxValueValidator(365)],
+        validators=[MinValueValidator(1), MaxValueValidator(120)],
     )
     fecha_inicio_contrato = models.DateField("Inicio contractual", null=True, blank=True)
     fecha_fin_contrato = models.DateField("Fin contractual", null=True, blank=True)
@@ -67,7 +67,7 @@ class Cliente(BaseModel):
     industria = models.CharField("Industria", max_length=120, blank=True)
     plazo_pago_dias = models.PositiveIntegerField(
         "Plazo de pago (días)", default=30,
-        validators=[MinValueValidator(1), MaxValueValidator(365)],
+        validators=[MinValueValidator(1), MaxValueValidator(120)],
     )
     fecha_inicio_contrato = models.DateField("Inicio contractual", null=True, blank=True)
     fecha_fin_contrato = models.DateField("Fin contractual", null=True, blank=True)

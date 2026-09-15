@@ -161,20 +161,34 @@ class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         )
         return context
 
+    @staticmethod
+    def _repr_valor(valor):
+        """str() seguro para auditoría: `False or ""` colapsa a "" y borra la
+        transición real (bug real encontrado por el validador-cierre de
+        #261/#262) — acá solo None se vuelve cadena vacía."""
+        return "" if valor is None else str(valor)
+
     def post(self, request, *args, **kwargs):
         instance = self.get_object() if self.kwargs.get("pk") else None
-        # ModelForm construye valores sobre ``instance`` durante is_valid();
-        # conservar el estado previo antes de validar para detectar la
-        # transición activo → inactivo correctamente.
+        # ModelForm muta ``instance`` in-place dentro de is_valid() (via
+        # _post_clean/construct_instance) ANTES de que este método pueda
+        # leerla — capturar el "antes" real tiene que pasar ACÁ, antes de
+        # construir el form con los datos del POST (bug real encontrado por
+        # el validador-cierre de #261/#262: el "antes" quedaba vacío/duplicado
+        # porque se leía después de que Django ya había escrito los valores
+        # nuevos sobre la instancia).
         estaba_activo = instance.activo if instance else None
+        before = {}
+        if instance:
+            before = {
+                field: self._repr_valor(getattr(instance, field, None))
+                for field in self.form_class.Meta.fields
+            }
         form = self.form_class(request.POST, instance=instance)
         if not form.is_valid():
             messages.error(request, "Corrija los campos marcados antes de guardar.")
             return self.render_to_response(self.get_context_data(form=form))
         with transaction.atomic():
-            before = {}
-            if instance:
-                before = {field: str(getattr(instance, field) or "") for field in form.changed_data}
             saved = form.save(commit=False)
             if instance and estaba_activo and not saved.activo:
                 saved.inactivo_desde = timezone.localdate()
@@ -186,7 +200,8 @@ class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             for field in form.changed_data:
                 AuditoriaTercero.objects.create(
                     tercero_tipo=tipo, tercero_id=saved.pk, campo=field,
-                    valor_anterior=before.get(field, ""), valor_nuevo=str(getattr(saved, field) or ""),
+                    valor_anterior=before.get(field, ""),
+                    valor_nuevo=self._repr_valor(getattr(saved, field, None)),
                     usuario=request.user.get_username(),
                 )
         accion = "actualizado" if instance else "creado"
