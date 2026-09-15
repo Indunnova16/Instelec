@@ -195,6 +195,17 @@ CicloFacturacion.add_to_class(
     ),
 )
 CicloFacturacion.add_to_class(
+    "proyecto",
+    models.ForeignKey(
+        "contratos.Contrato",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="facturas_ingreso",
+        verbose_name="Proyecto",
+    ),
+)
+CicloFacturacion.add_to_class(
     "banco_pago",
     models.ForeignKey(
         Banco,

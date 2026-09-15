@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -18,8 +18,9 @@ from .forms_finv2_ingresos import (
     LineaFacturaIngresoFormSet,
     PagoFacturaIngresoForm,
 )
-from .models import CicloFacturacion
-from .services_finv2_ingresos import generar_numero_factura
+from .models import CicloFacturacion, Cliente, Presupuesto
+from apps.contratos.models import Contrato
+from .services_finv2_ingresos import facturacion_real_vs_meta, generar_numero_factura
 
 
 class IngresoListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
@@ -86,7 +87,40 @@ class IngresoCreateView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             messages.error(request, "Otra emisión tomó ese consecutivo. Intente nuevamente.")
             return self.render_to_response(self.get_context_data(form=form, lineas_formset=lineas))
         messages.success(request, f"Factura {factura.numero_factura} emitida correctamente.")
+        if factura.presupuesto_id and facturacion_real_vs_meta(factura.presupuesto)["supera_meta"]:
+            messages.warning(
+                request,
+                "La facturación real asociada supera la meta del presupuesto; la factura fue emitida.",
+            )
         return redirect("financiero:factura_ingreso_detalle", pk=factura.pk)
+
+
+class IngresoContextoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Opciones dependientes del contexto comercial para el formulario de emisión."""
+
+    allowed_roles = ["admin", "director", "coordinador"]
+
+    def get(self, request, *args, **kwargs):
+        cliente = Cliente.objects.filter(pk=request.GET.get("cliente"), activo=True).first()
+        proyecto_id = request.GET.get("proyecto")
+        if not cliente:
+            return JsonResponse({"proyectos": [], "presupuestos": []})
+        proyectos = Contrato.objects.filter(
+            estado=Contrato.Estado.ACTIVO, cliente__iexact=cliente.nombre
+        )
+        presupuestos = Presupuesto.objects.none()
+        if proyecto_id:
+            presupuestos = Presupuesto.objects.filter(cliente=cliente, proyecto_id=proyecto_id)
+            fecha = request.GET.get("fecha")
+            try:
+                anio, mes = map(int, fecha.split("-")[:2])
+                presupuestos = presupuestos.filter(anio=anio, mes=mes)
+            except (AttributeError, TypeError, ValueError):
+                pass
+        return JsonResponse({
+            "proyectos": [{"id": str(item.pk), "label": str(item)} for item in proyectos],
+            "presupuestos": [{"id": str(item.pk), "label": str(item)} for item in presupuestos.select_related("linea")],
+        })
 
 
 class IngresoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
@@ -97,7 +131,7 @@ class IngresoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
     def get_queryset(self):
         return (
             CicloFacturacion.objects.filter(numero_secuencial__isnull=False)
-            .select_related("cliente", "presupuesto")
+            .select_related("cliente", "proyecto", "presupuesto")
             .prefetch_related(
                 "lineas_factura", "pagos_factura__banco", "pagos_factura__metodo_pago"
             )
@@ -139,7 +173,7 @@ class IngresoPdfView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     def get(self, request, pk, *args, **kwargs):
         factura = (
             CicloFacturacion.objects.filter(numero_secuencial__isnull=False)
-            .select_related("cliente", "presupuesto")
+            .select_related("cliente", "proyecto", "presupuesto")
             .prefetch_related("lineas_factura")
             .filter(pk=pk)
             .first()

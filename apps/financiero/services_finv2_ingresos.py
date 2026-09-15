@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from django.db.models import Max
+from django.db.models import Max, Sum
 
 from .models import CicloFacturacion
 
@@ -24,3 +24,12 @@ def generar_numero_factura(fecha_emision) -> str:
         or 0
     )
     return f"FI-{fecha_emision.year}-{ultimo + 1:05d}"
+
+
+def facturacion_real_vs_meta(presupuesto):
+    """Resume la facturación emitida asociada a un presupuesto sin bloquearla."""
+    real = presupuesto.ciclos_facturacion.filter(numero_secuencial__isnull=False).aggregate(
+        total=Sum("total")
+    )["total"] or 0
+    meta = presupuesto.facturacion_esperada
+    return {"presupuesto": presupuesto, "real": real, "meta": meta, "supera_meta": bool(meta and real > meta)}
