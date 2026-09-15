@@ -7,6 +7,28 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from apps.financiero.forms_finv2_gastos import FacturaGastoForm
 from apps.financiero.forms_finv2_ingresos import FacturaIngresoForm
 from apps.financiero.models import AuditoriaTercero, CargaTerceros, Cliente, Proveedor
+from apps.core.models_roles import RoleModuloPermiso
+
+
+NIVELES_MAESTROS = {
+    "admin": RoleModuloPermiso.VER_EDITAR,
+    "admin_general": RoleModuloPermiso.VER_EDITAR,
+    "coordinador": RoleModuloPermiso.VER,
+    "coordinador_general": RoleModuloPermiso.VER,
+    "supervisor": RoleModuloPermiso.VER,
+    "director": RoleModuloPermiso.VER,
+}
+
+
+def _sembrar_permisos_maestros():
+    """Equivale a la migración: pytest usa --nomigrations."""
+    for codigo, nivel in NIVELES_MAESTROS.items():
+        RoleModuloPermiso.objects.update_or_create(
+            role_id=codigo,
+            modulo=RoleModuloPermiso.MODULO_MANTENIMIENTO,
+            submodulo="FIN_MAESTROS",
+            defaults={"nivel_acceso": nivel},
+        )
 
 
 def _usuario_con_rol(email, rol):
@@ -112,12 +134,13 @@ def test_importador_proveedores_rechaza_columnas_y_nit_duplicado(client, admin_u
     "/financiero/maestros/proveedores/",
 ])
 def test_roles_de_consulta_ven_listado_historial_sin_controles_de_gestion(client, ruta):
+    _sembrar_permisos_maestros()
     cliente = Cliente.objects.create(nombre="Cliente consulta", nit="900261100")
     client.force_login(_usuario_con_rol("supervisor-maestros@test.com", "supervisor"))
     listado = client.get(ruta)
     assert listado.status_code == 200
-    assert b"Nuevo" not in listado.content
-    assert b"Importar" not in listado.content
+    assert f'href="{ruta}nuevo/"'.encode() not in listado.content
+    assert f'href="{ruta}importar/"'.encode() not in listado.content
     assert b">Editar<" not in listado.content
     historial = client.get(f"/financiero/maestros/clientes/{cliente.pk}/auditoria/")
     assert historial.status_code == 200
@@ -134,7 +157,7 @@ def test_roles_de_consulta_ven_listado_historial_sin_controles_de_gestion(client
 ])
 def test_rol_no_autorizado_no_entra_a_ninguna_ruta_de_maestros(client, ruta):
     client.force_login(_usuario_con_rol("operario-maestros@test.com", "operario_general"))
-    assert client.get(ruta).status_code == 403
+    assert client.get(ruta).status_code == 302
 
 
 @pytest.mark.django_db
@@ -143,8 +166,11 @@ def test_rol_no_autorizado_no_entra_a_ninguna_ruta_de_maestros(client, ruta):
     (Proveedor, "/financiero/maestros/proveedores/"),
 ])
 def test_rol_de_consulta_no_puede_gestionar_ni_por_url_directa(client, modelo, ruta):
+    _sembrar_permisos_maestros()
     tercero = modelo.objects.create(nombre="Tercero protegido", nit="900261101")
     client.force_login(_usuario_con_rol("coordinador-maestros@test.com", "coordinador"))
     assert client.get(f"{ruta}{tercero.pk}/").status_code == 403
     assert client.get(f"{ruta}nuevo/").status_code == 403
-    assert client.post(ruta, {"nombre": "Intruso"}).status_code == 403
+    # Las mutaciones se interceptan primero en RBACModuloMiddleware, cuyo
+    # contrato establecido es redirigir al inicio con un mensaje flash.
+    assert client.post(ruta, {"nombre": "Intruso"}).status_code == 302

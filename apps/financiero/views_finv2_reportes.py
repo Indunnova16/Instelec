@@ -15,6 +15,8 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 
 from apps.core.mixins import RoleRequiredMixin
+from apps.core.models_roles import RoleModuloPermiso
+from apps.core.permissions import SUBMODULO_FIN_MAESTROS, user_nivel_acceso_submodulo
 
 from .models import (
     AuditoriaTercero, Banco, CargaTerceros, CicloFacturacion, Cliente, FacturaGasto, MetodoPago, Proveedor,
@@ -95,31 +97,34 @@ class MaestroPagoForm(forms.ModelForm):
 class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """CRUD de terceros con desactivación segura para registros con facturas."""
 
-    ROLES_GESTION = ["admin", "admin_general"]
-    ROLES_CONSULTA = [
-        "admin", "admin_general", "coordinador_general", "coordinador",
-        "supervisor", "director",
-    ]
-
     model = None
     template_name = ""
     context_object_name = "terceros"
     singular = "registro"
     form_class = TerceroForm
     success_url_name = ""
-    # Este maestro no admite el bypass por nivel administrativo: los códigos
-    # declarados son el contrato de acceso del cliente.
+    required_submodulo = SUBMODULO_FIN_MAESTROS
+    # Este maestro no admite el bypass por nivel administrativo: la matriz
+    # granular es el contrato de acceso del cliente.
     admin_bypass = False
-    allowed_roles = ROLES_CONSULTA
+    requiere_gestion_para_ver = False
 
     def test_func(self):
         if not self.request.user.is_authenticated:
             return False
         if self.request.user.is_superuser:
             return True
-        es_mutacion = self.request.method != "GET" or bool(self.kwargs.get("pk"))
-        roles = self.ROLES_GESTION if es_mutacion else self.ROLES_CONSULTA
-        return getattr(self.request.user, "rol", None) in roles
+        nivel = user_nivel_acceso_submodulo(
+            self.request.user, self.required_submodulo
+        )
+        necesita_edicion = (
+            self.requiere_gestion_para_ver
+            or self.request.method != "GET"
+            or bool(self.kwargs.get("pk"))
+        )
+        if necesita_edicion:
+            return nivel == RoleModuloPermiso.VER_EDITAR
+        return nivel in (RoleModuloPermiso.VER, RoleModuloPermiso.VER_EDITAR)
 
     def get_queryset(self):
         estado = self.request.GET.get("estado", "activos")
@@ -139,7 +144,11 @@ class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         context[self.context_object_name] = self.get_queryset()
         context["form"] = kwargs.get("form") or self.form_class(instance=instance)
         context["editing"] = instance
-        context["puede_gestionar"] = getattr(self.request.user, "rol", None) in self.ROLES_GESTION
+        context["puede_gestionar"] = (
+            user_nivel_acceso_submodulo(
+                self.request.user, self.required_submodulo
+            ) == RoleModuloPermiso.VER_EDITAR
+        )
         return context
 
     def post(self, request, *args, **kwargs):
@@ -186,6 +195,7 @@ class ProveedorCrudView(BaseTerceroCrudView):
 
 class ProveedorFormView(ProveedorCrudView):
     template_name = "financiero/proveedor_form.html"
+    requiere_gestion_para_ver = True
 
 
 class ClienteCrudView(BaseTerceroCrudView):
@@ -199,12 +209,14 @@ class ClienteCrudView(BaseTerceroCrudView):
 
 class ClienteFormView(ClienteCrudView):
     template_name = "financiero/cliente_form.html"
+    requiere_gestion_para_ver = True
 
 
 class TerceroAuditoriaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     template_name = "financiero/tercero_auditoria.html"
-    allowed_roles = BaseTerceroCrudView.ROLES_CONSULTA
+    required_submodulo = SUBMODULO_FIN_MAESTROS
     admin_bypass = False
+    requiere_gestion_para_ver = False
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -218,8 +230,19 @@ class ImportarTercerosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Preview primero; la confirmación crea todo el lote o nada."""
 
     template_name = "financiero/terceros_importar.html"
-    allowed_roles = BaseTerceroCrudView.ROLES_GESTION
+    required_submodulo = SUBMODULO_FIN_MAESTROS
     admin_bypass = False
+    requiere_gestion_para_ver = True
+
+    def test_func(self):
+        if not self.request.user.is_authenticated:
+            return False
+        if self.request.user.is_superuser:
+            return True
+        nivel = user_nivel_acceso_submodulo(
+            self.request.user, self.required_submodulo
+        )
+        return nivel == RoleModuloPermiso.VER_EDITAR
     tipo = None
     model = None
     listado_url = ""

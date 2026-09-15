@@ -137,10 +137,12 @@ class TestRoleModuloPermisoMatriz186:
         # de Mantenimiento a las 14 de Construccion ya existentes: 14 + 4 = 18.
         assert "MANTENIMIENTO_ACTIVIDADES" in columnas_sub
         # A2 (id:instelec-186-financiero-parent-modulo) suma 6 hojas de
-        # Financiero + 5 de Configuracion, ambas bajo CONFIG: 18 + 11 = 29.
+        # Financiero + 5 de Configuracion: 18 + 11 = 29. #261/#262 agrega
+        # la hoja independiente de Maestros, con lo que el catálogo llega a 30.
         assert "FIN_NOMINA" in columnas_sub
+        assert "FIN_MAESTROS" in columnas_sub
         assert "CONFIG_ROLES_PERMISOS" in columnas_sub
-        assert len(columnas_sub) == 29
+        assert len(columnas_sub) == 30
 
     def test_matriz_no_incluye_roles_inactivos(self, admin_client):
         Role.objects.create(
@@ -341,6 +343,7 @@ class TestEnforcementGranularA5:
             ("/campo/procedimientos/", "MANTENIMIENTO_PROCEDIMIENTOS"),
             ("/financiero/nomina/", "FIN_NOMINA"),
             ("/financiero/presupuesto-real/", "FIN_PRESUPUESTO_REAL"),
+            ("/financiero/maestros/", "FIN_MAESTROS"),
         ],
     )
     def test_ver_permite_get_y_deniega_mutacion_directa_htmx(
@@ -369,6 +372,7 @@ class TestEnforcementGranularA5:
             ("/campo/procedimientos/", "MANTENIMIENTO_PROCEDIMIENTOS"),
             ("/financiero/nomina/", "FIN_NOMINA"),
             ("/financiero/presupuesto-real/", "FIN_PRESUPUESTO_REAL"),
+            ("/financiero/maestros/", "FIN_MAESTROS"),
         ],
     )
     def test_ver_editar_permite_get_y_mutacion_directa(self, restricted_user, path, submodulo):
