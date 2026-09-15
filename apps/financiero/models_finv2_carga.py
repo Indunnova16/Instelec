@@ -15,6 +15,11 @@ class HomologacionProjectsContable(BaseModel):
     codigo_contable = models.CharField('Código contable', max_length=50)
     centro_costo = models.CharField('Centro de costo', max_length=100, blank=True)
     activo = models.BooleanField('Activo', default=True)
+    version = models.ForeignKey(
+        'VersionHomologacionProjectsContable', on_delete=models.PROTECT,
+        related_name='homologaciones', null=True, blank=True,
+        verbose_name='Versión de catálogo',
+    )
 
     class Meta:
         db_table = 'financiero_homologacion_projects_contable'
@@ -23,13 +28,36 @@ class HomologacionProjectsContable(BaseModel):
         ordering = ['tipo', 'grupo', 'concepto', 'rubro']
         constraints = [
             models.UniqueConstraint(
-                fields=['tipo', 'grupo', 'concepto', 'rubro'],
-                name='uq_finv2_homologacion_origen',
+                fields=['version', 'tipo', 'grupo', 'concepto', 'rubro'],
+                name='uq_finv2_homologacion_version_origen',
             ),
         ]
 
     def __str__(self):
         return f'{self.concepto} → {self.codigo_contable}'
+
+
+class VersionHomologacionProjectsContable(BaseModel):
+    """Snapshot inmutable de una importación/restauración del catálogo."""
+
+    numero = models.PositiveIntegerField('Número de versión', unique=True)
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='versiones_homologacion_projects', verbose_name='Autor',
+    )
+    origen = models.CharField('Origen', max_length=20, default='IMPORTACION')
+    diff = models.JSONField('Diferencias con versión anterior', default=dict, blank=True)
+
+    class Meta:
+        db_table = 'financiero_version_homologacion_projects'
+        ordering = ['-numero']
+        verbose_name = 'Versión de tabla maestra'
+        verbose_name_plural = 'Versiones de tabla maestra'
+
+    def save(self, *args, **kwargs):
+        if self.pk and self.__class__.objects.filter(pk=self.pk).exists():
+            raise ValueError('Las versiones de homologación son inmutables.')
+        return super().save(*args, **kwargs)
 
 
 class CargaFinanciera(BaseModel):

@@ -1,6 +1,21 @@
 <section id="homologacion-projects-panel" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
   <h2 class="text-lg font-semibold">Tabla maestra Projects → Contabilidad</h2>
-  <p class="mt-1 text-sm text-gray-500">Cree o actualice el código y centro de costo que se usarán en el plano exportado.</p>
+  <p class="mt-1 text-sm text-gray-500">El catálogo vigente conserva versiones inmutables y sus homologaciones históricas.</p>
+  <form id="importar-tabla-maestra-form" method="post" enctype="multipart/form-data" class="mt-4 rounded border border-indigo-200 bg-indigo-50 p-4">
+    {% csrf_token %}<input type="hidden" name="accion" value="previsualizar_tabla_maestra">
+    <label class="text-sm font-medium">Importar Tabla Maestra (.xlsx con hojas INGRESOS y GASTOS) {{ importar_homologacion_form.archivo }}</label>
+    <button type="submit" class="ml-2 rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white">Ver preview</button>
+  </form>
+  {% if preview_homologacion %}
+  <section id="preview-tabla-maestra" class="mt-4 rounded border p-4">
+    <h3 class="font-semibold">Preview de importación</h3>
+    <p class="text-sm">{{ preview_homologacion.filas|length }} filas válidas · {{ preview_homologacion.errores|length }} filas con error. Nada se ha persistido.</p>
+    {% if preview_homologacion.filas %}<table class="mt-2 text-sm"><tbody>{% for fila in preview_homologacion.filas %}<tr><td>{{ fila.hoja }}</td><td>{{ fila.fila }}</td><td>{{ fila.concepto }}</td><td>{{ fila.codigo_contable }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+    {% if preview_homologacion.errores %}<ul class="mt-2 text-sm text-red-700">{% for error in preview_homologacion.errores %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+    <form method="post" class="mt-3 inline">{% csrf_token %}<input type="hidden" name="accion" value="confirmar_tabla_maestra"><button {% if preview_homologacion.errores %}disabled{% endif %} class="rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Confirmar reemplazo</button></form>
+    <form method="post" class="mt-3 inline">{% csrf_token %}<input type="hidden" name="accion" value="cancelar_tabla_maestra"><button class="rounded border px-3 py-2 text-sm">Cancelar</button></form>
+  </section>
+  {% endif %}
   <form method="post" class="mt-4 grid gap-3 md:grid-cols-3">
     {% csrf_token %}<input type="hidden" name="accion" value="homologar">
     <label class="text-sm">Tipo<input name="tipo" required placeholder="REAL o PRESUPUESTO" class="mt-1 block w-full rounded border-gray-300"></label>
@@ -12,4 +27,8 @@
     <div class="md:col-span-3"><button class="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white">Guardar homologación</button></div>
   </form>
   <div class="mt-5 overflow-x-auto"><table class="min-w-full text-sm"><thead><tr class="border-b text-left"><th class="p-2">Tipo</th><th class="p-2">Origen</th><th class="p-2">Código</th><th class="p-2">Centro</th><th class="p-2"></th></tr></thead><tbody>{% for homologacion in homologaciones %}<tr class="border-b"><td class="p-2">{{ homologacion.tipo }}</td><td class="p-2">{{ homologacion.grupo }} · {{ homologacion.concepto }} · {{ homologacion.rubro }}</td><td class="p-2">{{ homologacion.codigo_contable }}</td><td class="p-2">{{ homologacion.centro_costo }}</td><td class="p-2"><form method="post">{% csrf_token %}<input type="hidden" name="accion" value="eliminar_homologacion"><input type="hidden" name="pk" value="{{ homologacion.pk }}"><button class="text-red-700 underline" onclick="return confirm('¿Eliminar homologación?')">Eliminar</button></form></td></tr>{% empty %}<tr><td colspan="5" class="p-3 text-gray-500">No hay homologaciones configuradas.</td></tr>{% endfor %}</tbody></table></div>
+  <section id="historial-versiones-tabla-maestra" class="mt-6">
+    <h3 class="font-semibold">Historial de versiones</h3>
+    <table class="mt-2 min-w-full text-sm"><thead><tr><th class="p-2 text-left">Versión</th><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Autor</th><th class="p-2 text-left">Diff</th><th></th></tr></thead><tbody>{% for version in versiones_homologacion %}<tr class="border-b"><td class="p-2">{{ version.numero }}</td><td class="p-2">{{ version.created_at|date:'d/m/Y H:i' }}</td><td class="p-2">{{ version.autor|default:'Sistema' }}</td><td class="p-2">+{{ version.diff.agregadas|default:0 }} / -{{ version.diff.retiradas|default:0 }}</td><td class="p-2"><a class="text-blue-700 underline" href="{% url 'financiero:descargar_version_homologacion_xlsx' version.pk %}">Descargar XLSX</a><form method="post" class="inline">{% csrf_token %}<input type="hidden" name="accion" value="restaurar_version_tabla_maestra"><input type="hidden" name="version" value="{{ version.pk }}"><button class="ml-2 text-indigo-700 underline">Restaurar</button></form></td></tr>{% empty %}<tr><td colspan="5" class="p-3 text-gray-500">Aún no hay versiones importadas.</td></tr>{% endfor %}</tbody></table>
+  </section>
 </section>

@@ -16,3 +16,7 @@ class CargaFinancieraArchivoForm(forms.Form):
 
 # Nombre semántico para la vista B2; se conserva el alias para no acoplarla al UI.
 CargaFinancieraForm = CargaFinancieraArchivoForm
+
+
+class ImportarTablaMaestraForm(CargaFinancieraArchivoForm):
+    """Archivo para el preview explícito de INGRESOS/GASTOS."""
