@@ -78,6 +78,14 @@ class ProgramacionSemanalConstruccionPersonal(BaseModel):
         OPERATIVO = 'OPERATIVO', 'Operativo'
         ADMINISTRATIVO = 'ADMINISTRATIVO', 'Administrativo'
 
+    class RolPresupuesto(models.TextChoices):
+        SUPERVISOR = 'SUPERVISOR', 'Supervisor presupuestario'
+        COLABORADOR = 'COLABORADOR', 'Colaborador presupuestario'
+
+    class FuenteTarifa(models.TextChoices):
+        PERSONAL = 'PERSONAL', 'Salario individual'
+        CARGO = 'CARGO', 'Salario del cargo'
+
     programacion = models.ForeignKey(
         ProgramacionSemanalConstruccion, on_delete=models.CASCADE,
         related_name='asignaciones_personal', verbose_name='Programación',
@@ -89,6 +97,29 @@ class ProgramacionSemanalConstruccionPersonal(BaseModel):
     categoria = models.CharField(
         'Categoría', max_length=20, choices=Categoria.choices, default=Categoria.OPERATIVO,
     )
+    rol_presupuesto = models.CharField(
+        'Rol en presupuesto', max_length=15, choices=RolPresupuesto.choices,
+        default=RolPresupuesto.COLABORADOR,
+        help_text='Rol de esta persona dentro del plan presupuestario; no reemplaza el supervisor legacy de la cabecera.',
+    )
+    salario_mensual_snapshot = models.DecimalField(
+        'Salario mensual snapshot', max_digits=12, decimal_places=2, null=True, blank=True,
+    )
+    divisor_snapshot = models.PositiveSmallIntegerField(
+        'Divisor snapshot', null=True, blank=True,
+        help_text='Divisor usado para calcular la tarifa diaria (actualmente 30).',
+    )
+    tarifa_diaria_snapshot = models.DecimalField(
+        'Tarifa diaria snapshot', max_digits=14, decimal_places=4, null=True, blank=True,
+    )
+    fuente_tarifa = models.CharField(
+        'Fuente de tarifa', max_length=10, choices=FuenteTarifa.choices, blank=True,
+    )
+    cargo_snapshot_codigo = models.CharField(
+        'Código de cargo snapshot', max_length=20, blank=True,
+        help_text='Cargo que respaldó la tarifa cuando la fuente fue CARGO.',
+    )
+    snapshot_tomado_en = models.DateTimeField('Snapshot tomado en', null=True, blank=True)
 
     class Meta:
         db_table = 'construccion_programacion_semanal_personal'
@@ -98,7 +129,34 @@ class ProgramacionSemanalConstruccionPersonal(BaseModel):
             models.UniqueConstraint(
                 fields=['programacion', 'personal'], name='psc_programacion_personal_unico',
             ),
+            models.UniqueConstraint(
+                fields=['programacion'], condition=models.Q(rol_presupuesto='SUPERVISOR'),
+                name='psc_un_supervisor_presupuestario',
+            ),
         ]
+
+
+class ProgramacionSemanalConstruccionPlanPresupuesto(BaseModel):
+    """Versión inmutable del presupuesto PSC tras el primer real de #252."""
+
+    programacion = models.OneToOneField(
+        ProgramacionSemanalConstruccion, on_delete=models.CASCADE,
+        related_name='plan_presupuesto_congelado', verbose_name='Programación',
+    )
+    primer_real = models.ForeignKey(
+        'cuadrillas.ProduccionDiaria', on_delete=models.PROTECT,
+        related_name='planes_presupuesto_psc_congelados', verbose_name='Primer real',
+    )
+    congelado_en = models.DateTimeField('Congelado en')
+    snapshot = models.JSONField(
+        'Snapshot del plan', default=dict,
+        help_text='Contrato serializado para conservar el comparativo aunque cambie el plan editable.',
+    )
+
+    class Meta:
+        db_table = 'construccion_programacion_semanal_plan_presupuesto'
+        verbose_name = 'Plan presupuestario congelado de construcción'
+        verbose_name_plural = 'Planes presupuestarios congelados de construcción'
 
 
 class ProgramacionSemanalConstruccionVehiculo(BaseModel):

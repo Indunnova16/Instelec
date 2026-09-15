@@ -17,6 +17,7 @@ from .models import (
     ProgramacionSemanalConstruccionVehiculo,
 )
 from .services_psc_disponibilidad import validar_personal_elegible
+from .services_psc_presupuesto import construir_asignacion_presupuestada
 from .views_psc_programacion import PSC_ADMIN_ROLES
 
 
@@ -58,8 +59,8 @@ class ProgramacionSemanalConstruccionAgregarPersonalView(_PSCAsignacionAccessMix
                 # (programacion, personal). Reasignar a alguien ya asignado es
                 # idempotente, no un error que deba ver el usuario.
                 ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                    ProgramacionSemanalConstruccionPersonal(
-                        programacion=programacion, personal=persona, categoria=categoria,
+                    construir_asignacion_presupuestada(
+                        programacion, persona, categoria=categoria,
                     )
                     for persona in personas
                 ], ignore_conflicts=True)

@@ -17,6 +17,7 @@ from .models import (
     ProgramacionSemanalConstruccionVehiculo,
 )
 from .views_psc_programacion import PSC_ADMIN_ROLES
+from .services_psc_presupuesto import construir_asignacion_presupuestada
 
 
 PSC_READ_ROLES = [*PSC_ADMIN_ROLES, 'supervisor']
@@ -110,10 +111,9 @@ class ProgramacionSemanalConstruccionDuplicateView(_PSCManageAccessMixin, View):
                 observaciones=origen.observaciones,
             )
             ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                ProgramacionSemanalConstruccionPersonal(
-                    programacion=copia,
-                    personal=asignacion.personal,
-                    categoria=asignacion.categoria,
+                construir_asignacion_presupuestada(
+                    copia, asignacion.personal, categoria=asignacion.categoria,
+                    rol_presupuesto=asignacion.rol_presupuesto,
                 )
                 for asignacion in origen.asignaciones_personal.all()
             ])

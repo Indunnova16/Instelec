@@ -25,6 +25,7 @@ from .models import (
     AsignacionPersonalProyectoConstruccion,
 )
 from .services_psc_disponibilidad import personal_elegible, validar_personal_elegible
+from .services_psc_presupuesto import construir_asignacion_presupuestada
 
 
 HEADERS = (
@@ -491,7 +492,7 @@ def _importar_historico(data_rows, proyecto):
                 fields = {key: value for key, value in group.items() if key not in ('row', 'personal')}
                 programacion = ProgramacionSemanalConstruccion.objects.create(**fields)
                 ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                    ProgramacionSemanalConstruccionPersonal(programacion=programacion, personal=person)
+                    construir_asignacion_presupuestada(programacion, person)
                     for person in people
                 ])
     except ValidationError as exc:
@@ -582,7 +583,7 @@ def importar_programacion_semanal(uploaded_file, proyecto_historico=None):
                 programacion = ProgramacionSemanalConstruccion.objects.create(**item)
                 validar_personal_elegible(programacion, [person.pk for person in people])
                 ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                    ProgramacionSemanalConstruccionPersonal(programacion=programacion, personal=person)
+                    construir_asignacion_presupuestada(programacion, person)
                     for person in people
                 ])
                 ProgramacionSemanalConstruccionVehiculo.objects.bulk_create([
