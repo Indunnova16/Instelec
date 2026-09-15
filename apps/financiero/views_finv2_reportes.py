@@ -23,7 +23,7 @@ from .models import (
 )
 from .importers_terceros import columnas_para, validar_filas
 from .services_finv2_gastos import calcular_totales
-from .services_finv2_ingresos import generar_numero_factura
+from .services_finv2_ingresos import facturacion_real_vs_meta, generar_numero_factura
 
 
 class TerceroForm(forms.ModelForm):
@@ -361,7 +361,7 @@ class ReporteFacturacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
 
         facturas = list(
             CicloFacturacion.objects.filter(numero_secuencial__isnull=False).select_related(
-                "cliente"
+                "cliente", "presupuesto", "proyecto"
             )
         )
         hoy = timezone.localdate()
@@ -391,6 +391,8 @@ class ReporteFacturacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
 
         total_facturas = len(facturas)
         tasa_morosidad = round((vencidas / total_facturas) * 100, 1) if total_facturas else None
+        presupuestos = {factura.presupuesto_id: factura.presupuesto for factura in facturas if factura.presupuesto_id}
+        indicadores_meta = [facturacion_real_vs_meta(presupuesto) for presupuesto in presupuestos.values()]
 
         # Contratos B1/B2: se llaman con la firma publicada por las sub-features dueñas.
         total_estimado_gastos = (
@@ -413,6 +415,7 @@ class ReporteFacturacionView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
                 "facturas_cartera": facturas,
                 "gastos_historicos": gastos,
                 "proximo_numero_factura": generar_numero_factura(hoy),
+                "indicadores_meta": indicadores_meta,
             }
         )
         return context

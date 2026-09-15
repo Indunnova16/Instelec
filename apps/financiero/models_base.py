@@ -79,6 +79,25 @@ class Presupuesto(BaseModel):
         related_name='presupuestos',
         verbose_name='Línea'
     )
+    # Los presupuestos históricos sólo estaban asociados a una línea.  Estos
+    # vínculos son aditivos para que una factura nueva pueda encontrar su meta
+    # por el contexto comercial sin invalidar los registros ya existentes.
+    cliente = models.ForeignKey(
+        "financiero.Cliente",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="presupuestos",
+        verbose_name="Cliente",
+    )
+    proyecto = models.ForeignKey(
+        "contratos.Contrato",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="presupuestos_facturacion",
+        verbose_name="Proyecto",
+    )
 
     estado = models.CharField(
         'Estado',
@@ -299,7 +318,9 @@ class CicloFacturacion(BaseModel):
 
     presupuesto = models.ForeignKey(
         Presupuesto,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='ciclos_facturacion',
         verbose_name='Presupuesto'
     )
