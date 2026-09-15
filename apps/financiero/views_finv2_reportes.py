@@ -83,7 +83,7 @@ class ClienteForm(TerceroForm):
         fields = TerceroForm.Meta.fields[:5] + ("industria",) + TerceroForm.Meta.fields[5:]
 
 
-class MaestroPagoForm(forms.ModelForm):
+class _MaestroPagoFormBase(forms.ModelForm):
     class Meta:
         fields = ("nombre", "activo")
 
@@ -92,6 +92,16 @@ class MaestroPagoForm(forms.ModelForm):
         if not nombre:
             raise forms.ValidationError("El nombre es obligatorio.")
         return nombre
+
+
+class BancoPagoForm(_MaestroPagoFormBase):
+    class Meta(_MaestroPagoFormBase.Meta):
+        model = Banco
+
+
+class MetodoPagoForm(_MaestroPagoFormBase):
+    class Meta(_MaestroPagoFormBase.Meta):
+        model = MetodoPago
 
 
 class BaseTerceroCrudView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
@@ -318,8 +328,10 @@ class MaestrosPagoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["bancos"] = Banco.objects.all()
         context["metodos_pago"] = MetodoPago.objects.all()
-        context["form"] = kwargs.get("form") or MaestroPagoForm()
-        context["tipo"] = kwargs.get("tipo", "banco")
+        tipo = kwargs.get("tipo", "banco")
+        form_class = BancoPagoForm if tipo == "banco" else MetodoPagoForm
+        context["form"] = kwargs.get("form") or form_class()
+        context["tipo"] = tipo
         return context
 
     def post(self, request, *args, **kwargs):
@@ -327,10 +339,11 @@ class MaestrosPagoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         if modelo is None:
             messages.error(request, "El tipo de maestro solicitado no es válido.")
             return redirect("financiero:maestros_pago")
+        form_class = BancoPagoForm if modelo is Banco else MetodoPagoForm
         instance = None
         if request.POST.get("pk"):
             instance = get_object_or_404(modelo, pk=request.POST["pk"])
-        form = MaestroPagoForm(request.POST, instance=instance)
+        form = form_class(request.POST, instance=instance)
         if not form.is_valid():
             messages.error(request, "Corrija el maestro de pago antes de guardar.")
             return self.render_to_response(
