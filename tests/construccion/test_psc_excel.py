@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from io import BytesIO
 
 import pytest
@@ -6,17 +7,22 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from openpyxl import load_workbook
 
-from apps.contratos.models import Contrato
 from apps.construccion.excel_psc import (
-    HEADERS, HISTORICAL_HEADERS, VERTICAL_HEADERS, exportar_programacion_semanal,
+    HEADERS,
+    HISTORICAL_HEADERS,
+    VERTICAL_HEADERS,
+    exportar_programacion_semanal,
     importar_programacion_semanal,
     mapear_tarea,
 )
 from apps.construccion.models import (
-    AsignacionPersonalProyectoConstruccion, ProgramacionSemanalConstruccion,
-    ProgramacionSemanalConstruccionPersonal, ProgramacionSemanalConstruccionVehiculo,
+    AsignacionPersonalProyectoConstruccion,
+    ProgramacionSemanalConstruccion,
+    ProgramacionSemanalConstruccionPersonal,
+    ProgramacionSemanalConstruccionVehiculo,
     ProyectoConstruccion,
 )
+from apps.contratos.models import Contrato
 from apps.cuadrillas.models import Cargo, PersonalCuadrilla, Vehiculo
 
 
@@ -27,6 +33,7 @@ def excel_data(db):
     cargo, _ = Cargo.objects.get_or_create(codigo='PSC-XLSX', defaults={'nombre': 'Operario XLSX'})
     persona = PersonalCuadrilla.objects.create(
         nombre='Ana XLSX', documento='PSC-XLSX-1', rol_cuadrilla=cargo, area='CONSTRUCCION',
+        salario_base=Decimal('9000.00'),
     )
     AsignacionPersonalProyectoConstruccion.objects.create(proyecto=proyecto, personal=persona, fecha_inicio=date(2024, 1, 1))
     vehiculo = Vehiculo.objects.create(placa='XLSX225')
@@ -71,7 +78,10 @@ def _historical_file(rows):
 
 def _segunda_persona(proyecto):
     cargo, _ = Cargo.objects.get_or_create(codigo='PSC-XLSX-2', defaults={'nombre': 'Ayudante XLSX'})
-    persona = PersonalCuadrilla.objects.create(nombre='Beto XLSX', documento='PSC-XLSX-2', rol_cuadrilla=cargo)
+    persona = PersonalCuadrilla.objects.create(
+        nombre='Beto XLSX', documento='PSC-XLSX-2', rol_cuadrilla=cargo, area='CONSTRUCCION',
+        salario_base=Decimal('6000.00'),
+    )
     AsignacionPersonalProyectoConstruccion.objects.create(
         proyecto=proyecto, personal=persona, fecha_inicio=date(2024, 1, 1),
     )
@@ -100,7 +110,7 @@ def test_importador_historico_renderiza_selector_de_proyecto(admin_user, client,
 
 
 @pytest.mark.django_db
-def test_exportar_xlsx_incluye_diez_columnas_verticales(admin_user, client, excel_data):
+def test_exportar_xlsx_incluye_trece_columnas_verticales(admin_user, client, excel_data):
     client.force_login(admin_user)
     response = client.get(reverse('construccion:psc_exportar_excel'))
     assert response.status_code == 200
@@ -119,6 +129,9 @@ def test_exportacion_vertical_agrupa_personal_y_deja_opcionales_vacios(excel_dat
         fecha_inicio=date(2025, 12, 1),
         fecha_fin=date(2025, 12, 1),
     )
+    # Se crean directo (no vía `construir_asignacion_presupuestada`), por lo
+    # que quedan sin snapshot de tarifa -- Tarifa/Día vacía es el
+    # comportamiento correcto para este caso legacy/manual.
     ProgramacionSemanalConstruccionPersonal.objects.create(programacion=programacion, personal=segunda)
     ProgramacionSemanalConstruccionPersonal.objects.create(programacion=programacion, personal=persona)
     ProgramacionSemanalConstruccionVehiculo.objects.create(programacion=programacion, vehiculo=vehiculo)
@@ -128,8 +141,9 @@ def test_exportacion_vertical_agrupa_personal_y_deja_opcionales_vacios(excel_dat
     rows = list(sheet.iter_rows(min_row=2, values_only=True))
     assert rows == [
         (date(2025, 12, 1), 'Excavación', 'Obra Civil 1', 'Ana XLSX', 'Operario XLSX',
-         'PSC-XLSX-1', '', '', 'XLSX225', ''),
-        ('', '', '', 'Beto XLSX', 'Ayudante XLSX', 'PSC-XLSX-2', '', '', '', ''),
+         'PSC-XLSX-1', '', '', 'XLSX225', '', 'Colaborador presupuestario', '', '$0'),
+        ('', '', '', 'Beto XLSX', 'Ayudante XLSX', 'PSC-XLSX-2', '', '', '', '',
+         'Colaborador presupuestario', '', ''),
     ]
 
 
@@ -148,7 +162,45 @@ def test_exportacion_vertical_conserva_registro_legacy_sin_cuadrilla(excel_data)
     rows = list(load_workbook(exportar_programacion_semanal()).active.iter_rows(min_row=2, values_only=True))
     assert rows == [
         (date(2024, 12, 1), 'Excavación', '', 'Ana XLSX', 'Operario XLSX',
-         'PSC-XLSX-1', '', '', '', ''),
+         'PSC-XLSX-1', '', '', '', '', 'Colaborador presupuestario', '', '$0'),
+    ]
+
+
+@pytest.mark.django_db
+def test_exportacion_vertical_incluye_rol_tarifa_y_presupuesto_total(excel_data):
+    """Cobertura #225 Sprint C: las 3 columnas nuevas con valores correctos,
+    calculadas vía el snapshot de tarifa y `obtener_plan_presupuesto_para_real`
+    (Sprint A/B), no recalculadas a mano en el exportador."""
+    from apps.construccion.services_psc_presupuesto import construir_asignacion_presupuestada
+
+    proyecto, persona, _ = excel_data  # salario_base=9000 -> tarifa/día=300
+    segunda = _segunda_persona(proyecto)  # salario_base=6000 -> tarifa/día=200
+    programacion = ProgramacionSemanalConstruccion.objects.create(
+        proyecto=proyecto,
+        cuadrilla='Obra Civil 2',
+        tipo_actividad='OBRA_CIVIL',
+        subactividad='Excavación',
+        fecha_inicio=date(2026, 1, 1),
+        fecha_fin=date(2026, 1, 1),
+    )
+    ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
+        construir_asignacion_presupuestada(
+            programacion, persona,
+            rol_presupuesto=ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR,
+        ),
+        construir_asignacion_presupuestada(
+            programacion, segunda,
+            rol_presupuesto=ProgramacionSemanalConstruccionPersonal.RolPresupuesto.COLABORADOR,
+        ),
+    ])
+
+    rows = list(load_workbook(exportar_programacion_semanal()).active.iter_rows(min_row=2, values_only=True))
+    # Presupuesto total = (300 + 200) * 1 día = $500, solo en la fila de encabezado (index 0).
+    assert rows == [
+        (date(2026, 1, 1), 'Excavación', 'Obra Civil 2', 'Ana XLSX', 'Operario XLSX',
+         'PSC-XLSX-1', '', '', '', '', 'Supervisor presupuestario', '$300', '$500'),
+        ('', '', '', 'Beto XLSX', 'Ayudante XLSX', 'PSC-XLSX-2', '', '', '', '',
+         'Colaborador presupuestario', '$200', ''),
     ]
 
 
@@ -162,7 +214,13 @@ def test_upload_y_reporte(admin_user, client, excel_data):
     })
     assert response.status_code == 200
     assert ProgramacionSemanalConstruccion.objects.count() == 1
-    assert 'Se importaron 1 programaciones' in response.content.decode()
+    contenido = response.content.decode()
+    assert 'Se importaron 1 programaciones' in contenido
+    # #225 Sprint C: el reporte renderizado (no solo el resultado en memoria)
+    # debe mostrar el presupuesto calculado -- 9000/30=$300/día x 5 días=$1.500,
+    # única persona = supervisor presupuestario por defecto.
+    assert 'Presupuesto total' in contenido
+    assert '$1.500' in contenido
 
 
 @pytest.mark.django_db
@@ -205,6 +263,87 @@ def test_importacion_atomica_si_una_fila_es_invalida(excel_data):
     assert not result.ok
     assert result.errors[0]['row'] == 3
     assert ProgramacionSemanalConstruccion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_importar_asigna_primer_documento_como_supervisor_presupuestario(excel_data):
+    """Cobertura #225 Sprint C: primer documento de 'Personal' -> SUPERVISOR,
+    el resto -> COLABORADOR. Decisión de diseño confirmada con Miguel: el
+    orden textual en la columna 'Personal' es el contrato, sin columnas
+    nuevas en la plantilla de 11 columnas ya en uso."""
+    proyecto, persona, vehiculo = excel_data
+    segunda = _segunda_persona(proyecto)
+    personal_csv = f'{persona.documento}, {segunda.documento}'
+    result = importar_programacion_semanal(_file([
+        _row(proyecto, personal_csv, vehiculo.placa),
+    ]))
+    assert result.ok, result.errors
+    programacion = ProgramacionSemanalConstruccion.objects.get()
+    asignaciones = {
+        asignacion.personal_id: asignacion.rol_presupuesto
+        for asignacion in programacion.asignaciones_personal.all()
+    }
+    assert asignaciones[persona.pk] == ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR
+    assert asignaciones[segunda.pk] == ProgramacionSemanalConstruccionPersonal.RolPresupuesto.COLABORADOR
+    # El reporte post-import (sin paso de preview separado, ver `views_psc_excel.py`)
+    # expone el presupuesto total calculado para que el usuario lo vea sin
+    # tener que abrir el detalle de la programación.
+    assert result.presupuestos == [{
+        'programacion_id': str(programacion.pk),
+        'cuadrilla': programacion.subactividad,
+        'fecha_inicio': programacion.fecha_inicio.isoformat(),
+        'presupuesto_total': result.presupuestos[0]['presupuesto_total'],
+    }]
+    assert result.presupuestos[0]['presupuesto_total'].startswith('$')
+
+
+@pytest.mark.django_db
+def test_importar_un_solo_documento_lo_asigna_como_supervisor(excel_data):
+    """Con un único documento en 'Personal', ese documento es el supervisor
+    presupuestario (no queda sin supervisor)."""
+    proyecto, persona, vehiculo = excel_data
+    result = importar_programacion_semanal(_file([
+        _row(proyecto, persona.documento, vehiculo.placa),
+    ]))
+    assert result.ok, result.errors
+    asignacion = ProgramacionSemanalConstruccionPersonal.objects.get(personal=persona)
+    assert asignacion.rol_presupuesto == ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR
+
+
+@pytest.mark.django_db
+def test_importar_sin_personal_es_error_de_validacion(excel_data):
+    """Decisión #225 Sprint C: 'Personal' vacío es un error explícito, no una
+    programación sin supervisor presupuestario -- consistente con la regla ya
+    validada en Sprint B (exactamente 1 supervisor obligatorio)."""
+    proyecto, _, vehiculo = excel_data
+    result = importar_programacion_semanal(_file([
+        _row(proyecto, '', vehiculo.placa),
+    ]))
+    assert not result.ok
+    assert 'Personal es obligatorio' in result.errors[0]['error']
+    assert ProgramacionSemanalConstruccion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_importar_historico_asigna_primera_fila_del_bloque_como_supervisor(excel_data):
+    """Mismo contrato aplicado al importador histórico (7 columnas): también
+    termina en `construir_asignacion_presupuestada`, así que la primera fila
+    de cada bloque Fecha+Cuadrilla es el supervisor presupuestario."""
+    proyecto, persona, _ = excel_data
+    segunda = _segunda_persona(proyecto)
+    result = importar_programacion_semanal(_historical_file([
+        [datetime(2024, 12, 3), 'Excavación', 'Axiatech / Instelec', 'Obra Civil 1', persona.nombre, 'Operario', persona.documento],
+        [None, None, None, None, segunda.nombre, 'Ayudante', segunda.documento],
+    ]), proyecto_historico=proyecto)
+    assert result.ok, result.errors
+    programacion = ProgramacionSemanalConstruccion.objects.get()
+    asignaciones = {
+        asignacion.personal_id: asignacion.rol_presupuesto
+        for asignacion in programacion.asignaciones_personal.all()
+    }
+    assert asignaciones[persona.pk] == ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR
+    assert asignaciones[segunda.pk] == ProgramacionSemanalConstruccionPersonal.RolPresupuesto.COLABORADOR
+    assert result.presupuestos and result.presupuestos[0]['presupuesto_total'].startswith('$')
 
 
 @pytest.mark.django_db
@@ -271,6 +410,7 @@ def test_contrato_vertical_conserva_layout_historico_y_exportacion():
     assert VERTICAL_HEADERS == (
         'Fecha', 'Tarea', 'Cuadrilla', 'Personal', 'Cargo', 'Cédula',
         'Supervisor', 'Horario', 'Vehículo', 'Observaciones',
+        'Rol Presupuesto', 'Tarifa/Día', 'Presupuesto Total',
     )
 
 
