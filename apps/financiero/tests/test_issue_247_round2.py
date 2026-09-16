@@ -193,6 +193,37 @@ def test_247_r2_gap2_tabla_maestra_rango_codigo_5000_6999_sigue_vigente():
     assert len(preview['filas']) == 1
 
 
+@pytest.mark.django_db
+def test_247_r2_gap2_codigo_y_cuenta_contable_son_columnas_distintas_no_sinonimos():
+    """Reproduce el hallazgo del validador-cierre round-2: 'Código' (numérico)
+    y 'Cuenta Contable' (texto descriptivo) son DOS columnas reales distintas
+    del formato documentado al cliente. Con valores DIFERENTES entre sí (a
+    diferencia de los tests anteriores, que por accidente repetían el mismo
+    valor en ambas columnas y no habrían atrapado el bug), 'codigo_contable'
+    debe resolver siempre desde 'Código' -nunca desde 'Cuenta Contable'-."""
+    libro = Workbook()
+    ingresos = libro.active
+    ingresos.title = 'INGRESOS'
+    ingresos.append(['Concepto Projects', 'Código', 'Cuenta Contable', 'Descripción'])
+    ingresos.append(['Venta de energía', '5510', 'Ingresos Servicios Preliminares', 'Servicios previos a obra'])
+    gastos = libro.create_sheet('GASTOS')
+    gastos.append(['Concepto Projects', 'Código', 'Cuenta Contable', 'Tipo', 'Descripción'])
+    gastos.append(['Nómina', '5110', 'Gastos de Personal', 'Fijo', 'Salarios operarios'])
+    salida = io.BytesIO()
+    libro.save(salida)
+    salida.seek(0)
+    salida.name = 'codigo_vs_cuenta_contable.xlsx'
+    preview = previsualizar_tabla_maestra(salida)
+    assert preview['errores'] == [], preview['errores']
+    assert len(preview['filas']) == 2
+    ingreso = next(f for f in preview['filas'] if f['hoja'] == 'INGRESOS')
+    gasto = next(f for f in preview['filas'] if f['hoja'] == 'GASTOS')
+    assert ingreso['codigo_contable'] == '5510'
+    assert ingreso['rubro'] == 'Ingresos Servicios Preliminares'
+    assert gasto['codigo_contable'] == '5110'
+    assert gasto['rubro'] == 'Gastos de Personal'
+
+
 # ---------------------------------------------------------------------------
 # Gap 3 -- navegabilidad: el módulo debe ser alcanzable desde el sidebar.
 # ---------------------------------------------------------------------------

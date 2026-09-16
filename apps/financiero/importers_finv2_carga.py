@@ -115,7 +115,13 @@ SINONIMOS_HEADERS = {
     # exactos). Mismo patrón que el parser TRANSELCA: sinónimos
     # case/acento-insensitive, no un check exacto de string.
     'concepto': {'concepto', 'concepto projects'},
-    'codigo contable': {'codigo contable', 'cuenta contable', 'codigo'},
+    # 'Código' y 'Cuenta Contable' son DOS columnas reales distintas en el
+    # archivo documentado al cliente (numérico vs. texto descriptivo) -- NO
+    # sinónimos entre sí. Confundirlas hacía que, con un set sin orden
+    # garantizado, el código numérico terminara resuelto desde la columna de
+    # texto según el orden de iteración (validador-cierre round-2, #247).
+    'codigo contable': {'codigo contable', 'codigo'},
+    'rubro': {'rubro', 'cuenta contable'},
     'descripcion': {'descripcion'},
 }
 
