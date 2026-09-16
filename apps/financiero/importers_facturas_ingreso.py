@@ -130,12 +130,12 @@ def validar_filas(archivo, cliente_model, metodo_pago_model, ciclo_model):
 
             limpias.append(
                 {
-                    "cliente_id": cliente.pk,
+                    "cliente_id": str(cliente.pk),
                     "cliente_nombre": cliente.nombre,
                     "fecha_factura": fecha_factura,
                     "concepto": concepto,
                     "valor_neto": valor_neto,
-                    "metodo_pago_id": metodo_pago.pk if metodo_pago else None,
+                    "metodo_pago_id": str(metodo_pago.pk) if metodo_pago else None,
                     "metodo_pago_nombre": metodo_nombre,
                     "observaciones": observaciones,
                     "accion_carga": "actualizar" if existente else "crear",
