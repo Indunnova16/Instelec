@@ -143,8 +143,23 @@ def test_dato_legacy_preservado(datos_factura):
 
 
 @pytest.mark.django_db
-def test_consecutivo_anual_reinicia_y_valida_fecha(datos_factura):
+def test_consecutivo_es_global_y_no_reinicia_por_anio(datos_factura):
+    """#249 v2 (gap 4): la numeración es secuencial GLOBAL, no anual.
+
+    Antes de este fix, `generar_numero_factura` calculaba el máximo filtrado
+    por año -- la primera factura de 2027 habría vuelto a pedir
+    numero_secuencial=1, que ya usó la primera factura de 2026 histórica
+    creada más abajo, y habría reventado el `unique=True` del campo en
+    producción (IntegrityError en la primera emisión de cada año nuevo).
+    """
     presupuesto, cliente, _, _, _ = datos_factura
+    CicloFacturacion.objects.create(
+        presupuesto=presupuesto,
+        cliente=cliente,
+        fecha_factura=date(2026, 1, 1),
+        numero_factura="FI-2026-00001",
+        numero_secuencial=1,
+    )
     CicloFacturacion.objects.create(
         presupuesto=presupuesto,
         cliente=cliente,
@@ -153,7 +168,9 @@ def test_consecutivo_anual_reinicia_y_valida_fecha(datos_factura):
         numero_secuencial=7,
     )
     assert generar_numero_factura(date(2026, 9, 8)) == "FI-2026-00008"
-    assert generar_numero_factura(date(2027, 1, 1)) == "FI-2027-00001"
+    # El folio del año siguiente muestra el año 2027, pero el consecutivo
+    # sigue la secuencia global (8, no reinicia a 1).
+    assert generar_numero_factura(date(2027, 1, 1)) == "FI-2027-00008"
     with pytest.raises(ValueError):
         generar_numero_factura(None)
 

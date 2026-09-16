@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views_finv2_ingresos import (
+    ImportarFacturasIngresoView,
     IngresoCreateView,
     IngresoContextoView,
     IngresoDetailView,
@@ -12,6 +13,11 @@ urlpatterns = [
     path("facturas-ingresos/", IngresoListView.as_view(), name="facturas_ingresos"),
     path("facturas-ingresos/nueva/", IngresoCreateView.as_view(), name="factura_ingreso_nueva"),
     path("facturas-ingresos/contexto/", IngresoContextoView.as_view(), name="factura_ingreso_contexto"),
+    path(
+        "facturas-ingresos/importar/",
+        ImportarFacturasIngresoView.as_view(),
+        name="facturas_ingresos_importar",
+    ),
     path(
         "facturas-ingresos/<uuid:pk>/", IngresoDetailView.as_view(), name="factura_ingreso_detalle"
     ),
