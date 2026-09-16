@@ -1,11 +1,11 @@
 """Archivo Excel para Programación Semanal de Construcción (#225, B4)."""
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from io import BytesIO
-import re
-import unicodedata
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.core.exceptions import ValidationError
@@ -14,19 +14,22 @@ from django.db.models import Q
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
+from apps.core.utils import format_currency
 from apps.cuadrillas.models import PersonalCuadrilla, Vehiculo
 from apps.usuarios.models import Usuario
 
 from .models import (
+    AsignacionPersonalProyectoConstruccion,
     ProgramacionSemanalConstruccion,
     ProgramacionSemanalConstruccionPersonal,
     ProgramacionSemanalConstruccionVehiculo,
     ProyectoConstruccion,
-    AsignacionPersonalProyectoConstruccion,
 )
 from .services_psc_disponibilidad import personal_elegible, validar_personal_elegible
-from .services_psc_presupuesto import construir_asignacion_presupuestada
-
+from .services_psc_presupuesto import (
+    construir_asignacion_presupuestada,
+    obtener_plan_presupuesto_para_real,
+)
 
 HEADERS = (
     'Proyecto', 'Tipo Actividad', 'Sub-Actividad', 'Supervisor', 'Personal',
@@ -40,9 +43,12 @@ HISTORICAL_HEADERS = (
     'Fecha', 'Tarea', 'Empresa', 'Cuadrilla', 'Apellidos y Nombres',
     'CARGO PRINCIPAL', 'Identificación',
 )
+# #225 Sprint C: se agregan 3 columnas al final para no romper el layout de
+# las 10 columnas históricas que ya consume un cliente (índices 0-9 intactos).
 VERTICAL_HEADERS = (
     'Fecha', 'Tarea', 'Cuadrilla', 'Personal', 'Cargo', 'Cédula',
     'Supervisor', 'Horario', 'Vehículo', 'Observaciones',
+    'Rol Presupuesto', 'Tarifa/Día', 'Presupuesto Total',
 )
 MAX_IMPORT_ROWS = 500
 
@@ -51,6 +57,12 @@ MAX_IMPORT_ROWS = 500
 class ImportResult:
     created: int = 0
     errors: list[dict] = field(default_factory=list)
+    # #225 Sprint C: no hay un paso de preview separado (el import es directo,
+    # ver `views_psc_excel.py`), así que el presupuesto calculado por cada
+    # programación creada se expone en el reporte post-import mostrado al
+    # usuario. Cada entrada: {'programacion_id', 'cuadrilla', 'fecha_inicio',
+    # 'presupuesto_total'} (moneda ya formateada).
+    presupuestos: list[dict] = field(default_factory=list)
 
     @property
     def ok(self):
@@ -161,11 +173,12 @@ def _vertical_workbook_response(rows=()):
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = PatternFill('solid', fgColor='1D4ED8')
     sheet.freeze_panes = 'A2'
-    sheet.auto_filter.ref = f'A1:J{max(2, len(rows) + 1)}'
+    sheet.auto_filter.ref = f'A1:M{max(2, len(rows) + 1)}'
     for row in rows:
         sheet.append(row)
     for column, width in {'A': 14, 'B': 30, 'C': 24, 'D': 35, 'E': 24,
-                          'F': 18, 'G': 30, 'H': 18, 'I': 16, 'J': 40}.items():
+                          'F': 18, 'G': 30, 'H': 18, 'I': 16, 'J': 40,
+                          'K': 18, 'L': 14, 'M': 20}.items():
         sheet.column_dimensions[column].width = width
     output = BytesIO()
     book.save(output)
@@ -201,6 +214,13 @@ def plantilla_programacion_semanal():
     return _workbook_response()
 
 
+def _formato_tarifa_dia(tarifa_diaria_snapshot):
+    """Tarifa/día formateada como moneda COP (ej. ``$300``), reusando ``format_currency``."""
+    if tarifa_diaria_snapshot is None:
+        return ''
+    return format_currency(tarifa_diaria_snapshot)
+
+
 def exportar_programacion_semanal():
     """Exporta las programaciones en filas verticales agrupadas por cuadrilla."""
     programaciones = ProgramacionSemanalConstruccion.objects.select_related(
@@ -233,22 +253,28 @@ def exportar_programacion_semanal():
             fecha, tarea, item.cuadrilla or '', supervisor or '', horario or '',
             vehiculos or '', item.observaciones or '',
         )
+        # #225 Sprint C: reusa el contrato ya probado de #252 (Sprint A/B) en
+        # vez de recalcular el presupuesto a mano en el exportador.
+        presupuesto_total = obtener_plan_presupuesto_para_real(item.pk).presupuesto_total
         if not asignaciones:
-            rows.append((*encabezado[:3], '', '', '', *encabezado[3:]))
+            rows.append((*encabezado[:3], '', '', '', *encabezado[3:], '', '', format_currency(presupuesto_total)))
             continue
         for index, asignacion in enumerate(asignaciones):
             personal = asignacion.personal
             cargo = personal.get_rol_cuadrilla_display()
+            rol_presupuesto = asignacion.get_rol_presupuesto_display()
+            tarifa_dia = _formato_tarifa_dia(asignacion.tarifa_diaria_snapshot)
             if index == 0:
                 rows.append((
                     encabezado[0], encabezado[1], encabezado[2], personal.nombre,
                     cargo, personal.documento, encabezado[3], encabezado[4],
-                    encabezado[5], encabezado[6],
+                    encabezado[5], encabezado[6], rol_presupuesto, tarifa_dia,
+                    format_currency(presupuesto_total),
                 ))
             else:
                 rows.append((
                     '', '', '', personal.nombre, cargo, personal.documento,
-                    '', '', '', '',
+                    '', '', '', '', rol_presupuesto, tarifa_dia, '',
                 ))
     return _vertical_workbook_response(rows)
 
@@ -329,6 +355,13 @@ def _parse_row(row):
         people.append(_one(PersonalCuadrilla.objects.filter(documento__iexact=token), token, 'Personal'))
     if len({str(person.pk) for person in people}) != len(people):
         raise ValidationError('Personal contiene una persona repetida.')
+    # #225 Sprint C: el primer documento listado en 'Personal' define el
+    # supervisor presupuestario (ProgramacionSemanalConstruccionPersonal.rol_presupuesto).
+    # La UI ya exige exactamente 1 supervisor presupuestario por programación
+    # (Sprint B); sin personal no hay forma de satisfacer esa regla, así que
+    # una fila sin 'Personal' es un error de validación explícito.
+    if not people:
+        raise ValidationError('Personal es obligatorio: se requiere al menos un supervisor presupuestario.')
     vehicle_objects = [_one(Vehiculo.objects.filter(placa__iexact=token), token, 'Vehículo') for token in _tokens(vehiculos)]
     if len({str(vehicle.pk) for vehicle in vehicle_objects}) != len(vehicle_objects):
         raise ValidationError('Vehículos contiene una placa repetida.')
@@ -492,9 +525,30 @@ def _importar_historico(data_rows, proyecto):
                 fields = {key: value for key, value in group.items() if key not in ('row', 'personal')}
                 programacion = ProgramacionSemanalConstruccion.objects.create(**fields)
                 ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                    construir_asignacion_presupuestada(programacion, person)
-                    for person in people
+                    construir_asignacion_presupuestada(
+                        programacion, person,
+                        # #225 Sprint C: el plano histórico no trae una columna
+                        # 'Personal' con lista; cada fila es una persona propia
+                        # del bloque Fecha+Cuadrilla. La primera fila del
+                        # bloque (orden de aparición) define el supervisor
+                        # presupuestario, igual que el primer documento de la
+                        # columna 'Personal' del importador moderno.
+                        rol_presupuesto=(
+                            ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR
+                            if index == 0
+                            else ProgramacionSemanalConstruccionPersonal.RolPresupuesto.COLABORADOR
+                        ),
+                    )
+                    for index, person in enumerate(people)
                 ])
+                result.presupuestos.append({
+                    'programacion_id': str(programacion.pk),
+                    'cuadrilla': programacion.cuadrilla or programacion.subactividad,
+                    'fecha_inicio': programacion.fecha_inicio.isoformat(),
+                    'presupuesto_total': format_currency(
+                        obtener_plan_presupuesto_para_real(programacion.pk).presupuesto_total
+                    ),
+                })
     except ValidationError as exc:
         result.errors.append({'row': 0, 'error': '; '.join(exc.messages)})
         return result
@@ -583,13 +637,29 @@ def importar_programacion_semanal(uploaded_file, proyecto_historico=None):
                 programacion = ProgramacionSemanalConstruccion.objects.create(**item)
                 validar_personal_elegible(programacion, [person.pk for person in people])
                 ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                    construir_asignacion_presupuestada(programacion, person)
-                    for person in people
+                    construir_asignacion_presupuestada(
+                        programacion, person,
+                        # #225 Sprint C: el primer documento de 'Personal' es
+                        # el supervisor presupuestario; el resto, colaboradores.
+                        rol_presupuesto=(
+                            ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR
+                            if index == 0
+                            else ProgramacionSemanalConstruccionPersonal.RolPresupuesto.COLABORADOR
+                        ),
+                    )
+                    for index, person in enumerate(people)
                 ])
                 ProgramacionSemanalConstruccionVehiculo.objects.bulk_create([
                     ProgramacionSemanalConstruccionVehiculo(programacion=programacion, vehiculo=vehicle)
                     for vehicle in vehicles
                 ])
+                plan = obtener_plan_presupuesto_para_real(programacion.pk)
+                result.presupuestos.append({
+                    'programacion_id': str(programacion.pk),
+                    'cuadrilla': programacion.cuadrilla or programacion.subactividad,
+                    'fecha_inicio': programacion.fecha_inicio.isoformat(),
+                    'presupuesto_total': format_currency(plan.presupuesto_total),
+                })
     except ValidationError as exc:
         result.errors.append({
             'row': numero,
