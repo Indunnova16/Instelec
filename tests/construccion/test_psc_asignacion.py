@@ -12,6 +12,7 @@ from apps.construccion.models import (
     ProgramacionSemanalConstruccionVehiculo,
     ProyectoConstruccion,
 )
+from apps.construccion.services_psc_presupuesto import construir_asignacion_presupuestada
 from apps.cuadrillas.models import Cargo, PersonalCuadrilla, Vehiculo
 
 
@@ -198,3 +199,25 @@ def test_detalle_separa_categorias_y_expone_selectores_buscables(admin_user, cli
     assert 'id="psc-personal-administrativo"' in html
     assert 'id="psc-personal-operativo"' in html
     assert html.count('class="js-tomselect') >= 2
+
+
+@pytest.mark.django_db
+def test_detalle_tarifa_cero_legitima_no_se_muestra_como_sin_snapshot(admin_user, client, asignacion_data):
+    """#225 (hallazgo validador-cierre): `{% if tarifa_diaria_snapshot %}` trataba
+    Decimal('0.0000') como falsy -- una tarifa correctamente calculada en $0
+    (personal + Cargo sin salario configurado, caso real de la mayoría del
+    maestro en prod) se mostraba como "Sin snapshot", indistinguible de una
+    fila legacy que nunca tomó snapshot (`None`)."""
+    programacion, personal, _, _ = asignacion_data
+    assert personal.salario_base in (None, 0)
+    assert (personal.rol_cuadrilla.salario_base or 0) == 0
+    asignacion = construir_asignacion_presupuestada(programacion, personal)
+    asignacion.save()
+    assert asignacion.tarifa_diaria_snapshot == 0
+
+    client.force_login(admin_user)
+    response = client.get(reverse('construccion:psc_programacion_detalle', args=[programacion.pk]))
+    html = response.content.decode()
+    assert response.status_code == 200
+    assert 'Sin snapshot' not in html
+    assert '$0' in html

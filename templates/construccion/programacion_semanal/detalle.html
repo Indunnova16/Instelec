@@ -39,7 +39,7 @@
                 <tr class="border-t bg-blue-50">
                     <td class="p-2 font-medium">{{ plan_presupuesto.supervisor.nombre }}</td>
                     <td class="p-2">Supervisor</td>
-                    <td class="p-2">{% if plan_presupuesto.supervisor.tarifa_diaria_snapshot %}${{ plan_presupuesto.supervisor.tarifa_diaria_snapshot|floatformat:0|intcomma }}{% else %}<span class="text-slate-500">Sin snapshot</span>{% endif %}</td>
+                    <td class="p-2">{% if plan_presupuesto.supervisor.tarifa_diaria_snapshot is not None %}${{ plan_presupuesto.supervisor.tarifa_diaria_snapshot|floatformat:0|intcomma }}{% else %}<span class="text-slate-500">Sin snapshot</span>{% endif %}</td>
                     <td class="p-2">{{ plan_presupuesto.supervisor.fuente_tarifa|default:'—' }}</td>
                     <td class="p-2">${{ plan_presupuesto.supervisor.subtotal_persona|floatformat:0|intcomma }}</td>
                 </tr>
@@ -49,7 +49,7 @@
                     <tr class="border-t">
                         <td class="p-2">{{ persona.nombre }}</td>
                         <td class="p-2">Colaborador</td>
-                        <td class="p-2">{% if persona.tarifa_diaria_snapshot %}${{ persona.tarifa_diaria_snapshot|floatformat:0|intcomma }}{% else %}<span class="text-slate-500">Sin snapshot</span>{% endif %}</td>
+                        <td class="p-2">{% if persona.tarifa_diaria_snapshot is not None %}${{ persona.tarifa_diaria_snapshot|floatformat:0|intcomma }}{% else %}<span class="text-slate-500">Sin snapshot</span>{% endif %}</td>
                         <td class="p-2">{{ persona.fuente_tarifa|default:'—' }}</td>
                         <td class="p-2">${{ persona.subtotal_persona|floatformat:0|intcomma }}</td>
                     </tr>
@@ -74,7 +74,7 @@
                     <li class="flex items-center justify-between gap-3 py-3">
                         <div>
                             <p class="font-medium">{{ asignacion.personal.nombre }}{% if asignacion.rol_presupuesto == 'SUPERVISOR' %} <span class="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Supervisor</span>{% endif %}</p>
-                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}{% if asignacion.tarifa_diaria_snapshot %} · Tarifa/día: <span class="rounded bg-slate-100 px-2 py-0.5 font-medium">${{ asignacion.tarifa_diaria_snapshot|floatformat:0|intcomma }}</span>{% endif %}</p>
+                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}{% if asignacion.tarifa_diaria_snapshot is not None %} · Tarifa/día: <span class="rounded bg-slate-100 px-2 py-0.5 font-medium">${{ asignacion.tarifa_diaria_snapshot|floatformat:0|intcomma }}</span>{% endif %}</p>
                         </div>
                         {% if puede_gestionar and not presupuesto_congelado %}
                             <form method="post" action="{% url 'construccion:psc_personal_quitar' pk=programacion.pk personal_pk=asignacion.personal.pk %}">
@@ -97,7 +97,7 @@
                     <li class="flex items-center justify-between gap-3 py-3">
                         <div>
                             <p class="font-medium">{{ asignacion.personal.nombre }}{% if asignacion.rol_presupuesto == 'SUPERVISOR' %} <span class="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Supervisor</span>{% endif %}</p>
-                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}{% if asignacion.tarifa_diaria_snapshot %} · Tarifa/día: <span class="rounded bg-slate-100 px-2 py-0.5 font-medium">${{ asignacion.tarifa_diaria_snapshot|floatformat:0|intcomma }}</span>{% endif %}</p>
+                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}{% if asignacion.tarifa_diaria_snapshot is not None %} · Tarifa/día: <span class="rounded bg-slate-100 px-2 py-0.5 font-medium">${{ asignacion.tarifa_diaria_snapshot|floatformat:0|intcomma }}</span>{% endif %}</p>
                         </div>
                         {% if puede_gestionar and not presupuesto_congelado %}
                             <form method="post" action="{% url 'construccion:psc_personal_quitar' pk=programacion.pk personal_pk=asignacion.personal.pk %}">
