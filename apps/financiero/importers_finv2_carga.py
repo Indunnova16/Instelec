@@ -108,6 +108,15 @@ SINONIMOS_HEADERS = {
     'desc c o movto': {'desc c o movto'},
     'docto': {'docto', 'documento'},
     'ano': {'ano'},
+    # Gap 2 (validador-cierre round-1, Instelec#247): el issue documentó al
+    # cliente el esquema real de la Tabla Maestra -'Concepto Projects' /
+    # 'Código' / 'Cuenta Contable' / 'Descripción'- que NO coincide con el
+    # esquema técnico viejo ('concepto'/'codigo contable'/'grupo'/'tipo'
+    # exactos). Mismo patrón que el parser TRANSELCA: sinónimos
+    # case/acento-insensitive, no un check exacto de string.
+    'concepto': {'concepto', 'concepto projects'},
+    'codigo contable': {'codigo contable', 'cuenta contable', 'codigo'},
+    'descripcion': {'descripcion'},
 }
 
 
@@ -229,10 +238,23 @@ def _lineas_reales(hoja, anio, mes, catalogo):
     return lineas
 
 
-def _lineas_presupuesto(hoja, proyecto, anio, mes, catalogo):
+def _lineas_presupuesto(hoja, anio, mes, catalogo):
+    """Extrae las líneas de BD Ppto del período seleccionado.
+
+    Gap 1 (validador-cierre round-1, Instelec#247): antes se exigía que la
+    columna 'Proyecto' del Excel coincidiera EXACTO (normalizado) con
+    ``Contrato.nombre``. El archivo real del cliente dice 'Transelca' en esa
+    columna pero ningún Contrato del sistema se llama así -> la comparación
+    quedaba estructuralmente inalcanzable. `_lineas_reales` (la función
+    hermana para BD Real) NUNCA verificó `proyecto` -sólo filtra por
+    período- porque la app ya confía en que el usuario eligió el Contrato
+    correcto vía el `<select>` del formulario. Aplicamos el mismo criterio
+    acá: dejamos de usar el texto libre de la columna 'Proyecto' como FILTRO
+    de rechazo. Ese texto se sigue guardando en `referencia`/
+    `datos_origen.proyecto` como trazabilidad del origen del dato.
+    """
     columnas = _columnas(hoja, {'tipo', 'proyecto', 'rubro', 'clasificacion', 'valor', 'mes', 'ano'})
     lineas = []
-    nombre_proyecto = _normalizar(proyecto.nombre)
     for numero, fila in enumerate(hoja.iter_rows(min_row=2, values_only=True), start=2):
         if not any(valor is not None and _texto(valor) for valor in fila):
             continue
@@ -242,8 +264,6 @@ def _lineas_presupuesto(hoja, proyecto, anio, mes, catalogo):
         if (fila_anio, fila_mes) != (anio, mes):
             continue
         origen = _texto(_valor(fila, columnas, 'proyecto'))
-        if _normalizar(origen) != nombre_proyecto:
-            continue
         concepto = _texto(_valor(fila, columnas, 'rubro'))
         grupo = _texto(_valor(fila, columnas, 'clasificacion'))
         if not concepto:
@@ -299,7 +319,7 @@ def procesar_carga_financiera(archivo: BinaryIO, *, proyecto, anio, mes, usuario
             )
         catalogo = _catalogo_homologaciones()
         reales = _lineas_reales(hojas['BD Real'], int(anio), int(mes), catalogo)
-        presupuestos = _lineas_presupuesto(hojas['BD Ppto'], proyecto, int(anio), int(mes), catalogo)
+        presupuestos = _lineas_presupuesto(hojas['BD Ppto'], int(anio), int(mes), catalogo)
         homologaciones = _validar_homologacion(hojas['Homologacion'])
         if not reales and not presupuestos:
             return ResultadoCargaFinanciera(
@@ -343,7 +363,35 @@ def procesar_carga_financiera(archivo: BinaryIO, *, proyecto, anio, mes, usuario
 
 
 def previsualizar_tabla_maestra(archivo: BinaryIO) -> dict:
-    """Lee el XLSX de catálogo sin tocar la BD; cada error conserva hoja/fila."""
+    """Lee el XLSX de catálogo sin tocar la BD; cada error conserva hoja/fila.
+
+    Gap 2 (validador-cierre round-1, Instelec#247): el issue (comentario del
+    cliente, 2026-09-12) documentó estas columnas exactas:
+      INGRESOS (4, SIN Tipo): Concepto Projects | Código | Cuenta Contable | Descripción
+      GASTOS   (5, CON Tipo): Concepto Projects | Código | Cuenta Contable | Tipo | Descripción
+    El código anterior exigía SIEMPRE {grupo, concepto, codigo contable, tipo}
+    en AMBAS hojas -pero 'Grupo' no existe en ninguna hoja real y 'Tipo' no
+    existe en INGRESOS-, por lo que el 100% de las filas de INGRESOS del
+    archivo real fallaban. Decisiones de mapeo (ver HomologacionProjectsContable
+    en models_finv2_carga.py):
+      - 'Concepto Projects' -> campo `concepto` (obligatorio en el modelo;
+        es lo que ya se muestra en el listado/preview y se busca por
+        `buscar=`). Sinónimo agregado a SINONIMOS_HEADERS.
+      - 'Código'/'Cuenta Contable' -> campo `codigo_contable` (obligatorio
+        en el modelo). Sinónimos agregados a SINONIMOS_HEADERS.
+      - 'Descripción' es informativa; no tiene campo propio en el modelo
+        -no se persiste, sólo se tolera como columna presente-.
+      - 'Tipo' (Fijo/Variable) sigue OBLIGATORIO en GASTOS -ya validado-,
+        pero es OPCIONAL en INGRESOS: si la columna no existe o la celda
+        viene vacía, no se exige y queda como cadena vacía (no se inventa
+        un default Fijo/Variable arbitrario).
+      - 'Grupo' no viene en ninguna hoja real del cliente -se deriva del
+        NOMBRE DE LA HOJA (INGRESOS/GASTOS) en vez de exigirse como columna,
+        porque el modelo lo declara `blank=True` (no as no-nulo) pero el
+        listado lo usa para agrupar visualmente.
+    El rango 5000-6999 para el código contable YA era correcto (ambas hojas
+    mezclan 5xxx/6xxx en el archivo real) y no se modifica.
+    """
     try:
         libro = load_workbook(archivo, read_only=True, data_only=True)
     except (OSError, BadZipFile) as exc:
@@ -353,19 +401,21 @@ def previsualizar_tabla_maestra(archivo: BinaryIO) -> dict:
     if faltantes:
         return {'filas': [], 'errores': [f"Faltan hojas requeridas: {', '.join(faltantes)}."]}
     filas, errores, codigos = [], [], set()
-    requeridas = {'grupo', 'concepto', 'codigo contable', 'tipo'}
+    requeridas = {'concepto', 'codigo contable'}
     for nombre, hoja in hojas.items():
         try:
             columnas = _columnas(hoja, requeridas)
         except ValueError as exc:
             errores.append(str(exc))
             continue
+        tipo_obligatorio = _normalizar(nombre) == _normalizar('GASTOS')
+        grupo_derivado = nombre.strip().upper()
         for numero, fila in enumerate(hoja.iter_rows(min_row=2, values_only=True), start=2):
             if not any(_texto(v) for v in fila):
                 continue
             dato = {
                 'tipo': _texto(_valor(fila, columnas, 'tipo')),
-                'grupo': _texto(_valor(fila, columnas, 'grupo')),
+                'grupo': grupo_derivado,
                 'concepto': _texto(_valor(fila, columnas, 'concepto')),
                 'rubro': _texto(_valor(fila, columnas, 'rubro')),
                 'codigo_contable': _texto(_valor(fila, columnas, 'codigo contable')),
@@ -373,10 +423,12 @@ def previsualizar_tabla_maestra(archivo: BinaryIO) -> dict:
                 'hoja': nombre, 'fila': numero,
             }
             errores_fila = []
-            for campo in ('tipo', 'grupo', 'concepto', 'codigo_contable'):
+            for campo in ('concepto', 'codigo_contable'):
                 if not dato[campo]:
                     errores_fila.append(f'{nombre}, fila {numero}, columna {campo}: es obligatorio.')
-            if dato['tipo'].lower() not in {'fijo', 'variable'}:
+            if tipo_obligatorio and not dato['tipo']:
+                errores_fila.append(f'{nombre}, fila {numero}, columna Tipo: es obligatorio.')
+            if dato['tipo'] and dato['tipo'].lower() not in {'fijo', 'variable'}:
                 errores_fila.append(f'{nombre}, fila {numero}, columna Tipo: debe ser Fijo o Variable.')
             codigo = dato['codigo_contable']
             if not (codigo.isdigit() and 5000 <= int(codigo) <= 6999):

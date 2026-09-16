@@ -8,6 +8,7 @@ from .permissions import (
     SUBMODULO_FIN_CHECKLIST_FACTURACION,
     SUBMODULO_FIN_COSTOS_CUADRILLA,
     SUBMODULO_FIN_DASHBOARD,
+    SUBMODULO_FIN_HOMOLOGACION,
     SUBMODULO_FIN_MAESTROS,
     SUBMODULO_FIN_NOMINA,
     SUBMODULO_FIN_PRESUPUESTO_PLANEADO,
@@ -58,6 +59,12 @@ def financiero_menu_context(request):
         'ok_fin_costos_cuadrilla': user_can_access_submodulo(user, SUBMODULO_FIN_COSTOS_CUADRILLA),
         'ok_fin_nomina': user_can_access_submodulo(user, SUBMODULO_FIN_NOMINA),
         'ok_fin_maestros': user_can_access_submodulo(user, SUBMODULO_FIN_MAESTROS),
+        # Gap 3 (validador-cierre round-1, Instelec#247): el módulo de
+        # Homologación/Carga Financiera (3 sprints ya en prod) nunca tuvo
+        # entrada de menú -la URL responde 200 por acceso directo pero
+        # ningún <li> del sidebar apunta a ella-. Mismo patrón que
+        # ok_fin_maestros arriba.
+        'ok_fin_homologacion': user_can_access_submodulo(user, SUBMODULO_FIN_HOMOLOGACION),
         # Facturas de Ingresos y Reporte de facturación (#249) no tienen
         # submodulo granular propio -- sus vistas usan la lista legacy
         # allowed_roles=["admin","director","coordinador"] + admin_bypass.
