@@ -2,6 +2,7 @@
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.core.models import BaseModel
 
@@ -234,6 +235,80 @@ CicloFacturacion.add_to_class(
 CicloFacturacion.add_to_class(
     "referencia_cobro", models.CharField("Referencia de cobro", max_length=100, blank=True)
 )
+# Auditoría de emisión (#249 gap 6): BaseModel solo trae created_at/updated_at
+# (sin autor) -- se agrega el campo mínimo para saber "quién" emitió la
+# factura, análogo a `AuditoriaTercero.usuario` de #261/#262.
+CicloFacturacion.add_to_class(
+    "creado_por",
+    models.CharField("Emitida por", max_length=150, blank=True),
+)
+
+
+def _dias_desde(fecha):
+    if not fecha:
+        return None
+    return (timezone.localdate() - fecha).days
+
+
+def _dias_morosidad(self):
+    """Días de mora sobre la fecha de vencimiento, sólo si aún no está pagada.
+
+    Vencimiento = fecha_factura + plazo_pago_dias (#249 gap 4, usa el plazo
+    de la factura -- que a su vez hereda de `Cliente.plazo_pago_dias`, #261 --
+    no un campo nuevo). Devuelve 0 si todavía no vence o si no hay datos
+    suficientes para calcularlo.
+    """
+    if self.estado == CicloFacturacion.Estado.PAGO_RECIBIDO:
+        return 0
+    if not self.fecha_factura or not self.plazo_pago_dias:
+        return 0
+    vencimiento = self.fecha_factura + timezone.timedelta(days=self.plazo_pago_dias)
+    dias = _dias_desde(vencimiento)
+    return max(0, dias) if dias is not None else 0
+
+
+CicloFacturacion.dias_morosidad = property(_dias_morosidad)
+
+
+class AuditoriaFacturaIngreso(BaseModel):
+    """Bitácora inmutable de cambios sobre una factura de ingreso ya emitida.
+
+    Mismo patrón que `AuditoriaTercero` (#261/#262): campo/anterior/nuevo +
+    quién + cuándo (created_at heredado de BaseModel).
+    """
+
+    ciclo = models.ForeignKey(
+        CicloFacturacion, on_delete=models.CASCADE, related_name="auditoria_factura"
+    )
+    campo = models.CharField(max_length=80)
+    valor_anterior = models.TextField(blank=True)
+    valor_nuevo = models.TextField(blank=True)
+    usuario = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        db_table = "financiero_auditoria_facturas_ingreso"
+        ordering = ["-created_at"]
+
+
+class CargaFacturasIngreso(BaseModel):
+    """Trazabilidad de una importación masiva de facturas de ingreso (#249 gap 3)."""
+
+    archivo_nombre = models.CharField(max_length=255)
+    usuario = models.CharField(max_length=150, blank=True)
+    filas_total = models.PositiveIntegerField(default=0)
+    filas_validas = models.PositiveIntegerField(default=0)
+    filas_error = models.PositiveIntegerField(default=0)
+    filas_creadas = models.PositiveIntegerField(default=0)
+    filas_actualizadas = models.PositiveIntegerField(default=0)
+    resultado = models.CharField(
+        max_length=20,
+        choices=[("PREVIEW", "Vista previa"), ("CONFIRMADA", "Confirmada"), ("RECHAZADA", "Rechazada")],
+    )
+    detalle_errores = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        db_table = "financiero_cargas_facturas_ingreso"
+        ordering = ["-created_at"]
 
 
 class LineaFacturaIngreso(BaseModel):
@@ -259,6 +334,9 @@ class PagoFacturaIngreso(BaseModel):
     fecha = models.DateField("Fecha")
     monto = models.DecimalField("Monto", max_digits=18, decimal_places=2)
     referencia = models.CharField("Referencia", max_length=100)
+    # #249 gap 6: quién registró el pago (created_at ya lo trae BaseModel;
+    # faltaba el autor -- mismo criterio que CicloFacturacion.creado_por).
+    registrado_por = models.CharField("Registrado por", max_length=150, blank=True)
 
     class Meta:
         db_table = "financiero_pagos_factura_ingreso"

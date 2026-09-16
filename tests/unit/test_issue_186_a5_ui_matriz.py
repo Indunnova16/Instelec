@@ -145,7 +145,11 @@ class TestRoleModuloPermisoMatriz186:
         # #247 agrega la hoja FIN_HOMOLOGACION (Tabla Maestra de Homologación
         # Projects->Contabilidad), con lo que el catálogo llega a 31.
         assert "FIN_HOMOLOGACION" in columnas_sub
-        assert len(columnas_sub) == 31
+        # #249 v2 agrega FIN_FACTURAS_INGRESOS (RBAC granular de Facturas de
+        # Ingresos, reemplaza allowed_roles legacy), con lo que el catálogo
+        # llega a 32.
+        assert "FIN_FACTURAS_INGRESOS" in columnas_sub
+        assert len(columnas_sub) == 32
 
     def test_matriz_no_incluye_roles_inactivos(self, admin_client):
         Role.objects.create(

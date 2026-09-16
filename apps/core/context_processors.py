@@ -8,14 +8,13 @@ from .permissions import (
     SUBMODULO_FIN_CHECKLIST_FACTURACION,
     SUBMODULO_FIN_COSTOS_CUADRILLA,
     SUBMODULO_FIN_DASHBOARD,
+    SUBMODULO_FIN_FACTURAS_INGRESOS,
     SUBMODULO_FIN_HOMOLOGACION,
     SUBMODULO_FIN_MAESTROS,
     SUBMODULO_FIN_NOMINA,
     SUBMODULO_FIN_PRESUPUESTO_PLANEADO,
     SUBMODULO_FIN_PRESUPUESTO_REAL,
     user_can_access_submodulo,
-    user_es_admin,
-    user_rol,
 )
 from .utils import get_unidad_negocio
 
@@ -65,14 +64,11 @@ def financiero_menu_context(request):
         # ningún <li> del sidebar apunta a ella-. Mismo patrón que
         # ok_fin_maestros arriba.
         'ok_fin_homologacion': user_can_access_submodulo(user, SUBMODULO_FIN_HOMOLOGACION),
-        # Facturas de Ingresos y Reporte de facturación (#249) no tienen
-        # submodulo granular propio -- sus vistas usan la lista legacy
-        # allowed_roles=["admin","director","coordinador"] + admin_bypass.
-        # Reproducimos EXACTAMENTE ese criterio acá para el link del menu
-        # (bug real encontrado por el validador-cierre: la sección quedaba
-        # con las URLs funcionales pero invisibles en la navegación, mismo
-        # patrón que ya se había corregido para los Maestros).
-        'ok_fin_facturas_ingresos': (
-            user_es_admin(user) or user_rol(user) in ('admin', 'director', 'coordinador')
+        # #249 gap 1 (v2): Facturas de Ingresos migró de allowed_roles legacy
+        # a la hoja granular FIN_FACTURAS_INGRESOS -- mismo patrón que el
+        # resto de Financiero. El seed (migración) preserva el acceso previo
+        # de admin/director/coordinador para no romper a nadie.
+        'ok_fin_facturas_ingresos': user_can_access_submodulo(
+            user, SUBMODULO_FIN_FACTURAS_INGRESOS
         ),
     }

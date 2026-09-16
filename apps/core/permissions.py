@@ -240,6 +240,10 @@ SUBMODULO_FIN_COSTOS_CUADRILLA = 'FIN_COSTOS_CUADRILLA'
 SUBMODULO_FIN_NOMINA = 'FIN_NOMINA'
 SUBMODULO_FIN_MAESTROS = 'FIN_MAESTROS'
 SUBMODULO_FIN_HOMOLOGACION = 'FIN_HOMOLOGACION'
+# #249 gap 1: RBAC granular para Facturas de Ingresos (antes lista fija
+# allowed_roles=["admin","director","coordinador"] -- mismo bug ya corregido
+# en #261/#262 para Maestros y en #247 para Homologación).
+SUBMODULO_FIN_FACTURAS_INGRESOS = 'FIN_FACTURAS_INGRESOS'
 
 SUBMODULOS_FINANCIERO = {
     SUBMODULO_FIN_DASHBOARD,
@@ -250,6 +254,7 @@ SUBMODULOS_FINANCIERO = {
     SUBMODULO_FIN_NOMINA,
     SUBMODULO_FIN_MAESTROS,
     SUBMODULO_FIN_HOMOLOGACION,
+    SUBMODULO_FIN_FACTURAS_INGRESOS,
 }
 
 # === Sub-módulos del bloque CONFIG (issue #186, A2) =====================

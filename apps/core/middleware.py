@@ -28,6 +28,7 @@ from .permissions import (
     SUBMODULO_FIN_CHECKLIST_FACTURACION,
     SUBMODULO_FIN_COSTOS_CUADRILLA,
     SUBMODULO_FIN_DASHBOARD,
+    SUBMODULO_FIN_FACTURAS_INGRESOS,
     SUBMODULO_FIN_MAESTROS,
     SUBMODULO_FIN_HOMOLOGACION,
     SUBMODULO_FIN_NOMINA,
@@ -104,6 +105,11 @@ SUBMODULO_PREFIXES = (
     ('/financiero/exportar-excel/', SUBMODULO_FIN_DASHBOARD),
     ('/financiero/maestros/', SUBMODULO_FIN_MAESTROS),
     ('/financiero/carga-financiera/', SUBMODULO_FIN_HOMOLOGACION),
+    # #249 v2 gap 1: Facturas de Ingresos migró de allowed_roles legacy a la
+    # hoja granular propia -- sin esta entrada específica caía en el
+    # catch-all de abajo (exige FIN_DASHBOARD, un submódulo distinto), mismo
+    # bug de especificidad que #247 corrigió para carga-financiera.
+    ('/financiero/facturas-ingresos/', SUBMODULO_FIN_FACTURAS_INGRESOS),
     ('/financiero/', SUBMODULO_FIN_DASHBOARD),
 )
 
