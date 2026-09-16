@@ -1,4 +1,5 @@
 {% extends "construccion/programacion_semanal/_base.html" %}
+{% load humanize %}
 
 {% block psc_content %}
 <div class="mb-6 flex items-center justify-between"><h1 class="text-2xl font-bold">Programación semanal</h1><a class="rounded bg-blue-600 px-4 py-2 text-white" href="{% url 'construccion:psc_programacion_editar' pk=programacion.pk %}">Editar</a></div>
@@ -12,6 +13,58 @@
     <div><dt class="text-sm text-gray-500">Supervisor</dt><dd>{{ programacion.supervisor|default:'Sin asignar' }}</dd></div>
     <div><dt class="text-sm text-gray-500">Observaciones</dt><dd>{{ programacion.observaciones|default:'Sin observaciones' }}</dd></div>
 </dl>
+<section class="mt-6 rounded-lg bg-white p-6 shadow" aria-labelledby="psc-presupuesto-titulo" data-testid="psc-presupuesto-seccion">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="psc-presupuesto-titulo" class="text-xl font-semibold">Presupuesto de personal</h2>
+        {% if presupuesto_congelado %}
+            <span class="rounded bg-slate-200 px-3 py-1 text-sm font-medium text-slate-700" data-testid="psc-estado-presupuesto" role="status">Congelado el {{ plan_presupuesto.congelado_en|date:'d/m/Y H:i' }}</span>
+        {% else %}
+            <span class="rounded bg-green-100 px-3 py-1 text-sm font-medium text-green-800" data-testid="psc-estado-presupuesto" role="status">Editable</span>
+        {% endif %}
+    </div>
+    {% if presupuesto_congelado %}
+        <p class="mt-2 text-sm text-amber-800" role="status">Esta programación ya registró su primer real de producción: la composición y las tarifas quedaron fijas y no pueden editarse desde acá.</p>
+    {% endif %}
+    {% if plan_presupuesto.supervisor or plan_presupuesto.personas %}
+    {% if not plan_presupuesto.supervisor %}
+        <p class="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" role="alert" data-testid="psc-alerta-sin-supervisor">Falta asignar un supervisor presupuestario; el presupuesto no queda completo hasta hacerlo.</p>
+    {% elif plan_presupuesto.personas|length <= 1 %}
+        <p class="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" role="alert" data-testid="psc-alerta-sin-colaboradores">Falta al menos un colaborador además del supervisor; el mínimo requerido es supervisor + 1.</p>
+    {% endif %}
+    <div class="mt-4 overflow-x-auto">
+        <table class="min-w-full text-sm" data-testid="psc-tabla-presupuesto">
+            <thead><tr class="text-left"><th class="p-2">Persona</th><th class="p-2">Rol</th><th class="p-2">Tarifa/día</th><th class="p-2">Fuente</th><th class="p-2">Subtotal ({{ plan_presupuesto.dias_programados }} día{{ plan_presupuesto.dias_programados|pluralize }})</th></tr></thead>
+            <tbody>
+                {% if plan_presupuesto.supervisor %}
+                <tr class="border-t bg-blue-50">
+                    <td class="p-2 font-medium">{{ plan_presupuesto.supervisor.nombre }}</td>
+                    <td class="p-2">Supervisor</td>
+                    <td class="p-2">{% if plan_presupuesto.supervisor.tarifa_diaria_snapshot %}${{ plan_presupuesto.supervisor.tarifa_diaria_snapshot|floatformat:0|intcomma }}{% else %}<span class="text-slate-500">Sin snapshot</span>{% endif %}</td>
+                    <td class="p-2">{{ plan_presupuesto.supervisor.fuente_tarifa|default:'—' }}</td>
+                    <td class="p-2">${{ plan_presupuesto.supervisor.subtotal_persona|floatformat:0|intcomma }}</td>
+                </tr>
+                {% endif %}
+                {% for persona in plan_presupuesto.personas %}
+                    {% if not persona.es_supervisor %}
+                    <tr class="border-t">
+                        <td class="p-2">{{ persona.nombre }}</td>
+                        <td class="p-2">Colaborador</td>
+                        <td class="p-2">{% if persona.tarifa_diaria_snapshot %}${{ persona.tarifa_diaria_snapshot|floatformat:0|intcomma }}{% else %}<span class="text-slate-500">Sin snapshot</span>{% endif %}</td>
+                        <td class="p-2">{{ persona.fuente_tarifa|default:'—' }}</td>
+                        <td class="p-2">${{ persona.subtotal_persona|floatformat:0|intcomma }}</td>
+                    </tr>
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="border-t-2 font-semibold"><td class="p-2" colspan="4">Presupuesto total</td><td class="p-2" data-testid="psc-presupuesto-total">${{ plan_presupuesto.presupuesto_total|floatformat:0|intcomma }}</td></tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+        <p class="mt-3 text-sm text-slate-600" role="status">Aún no hay supervisor ni colaboradores presupuestados en esta programación.</p>
+    {% endif %}
+</section>
 <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
     <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="personal-administrativo-titulo">
         <h2 id="personal-administrativo-titulo" class="text-xl font-semibold">Personal Administrativo</h2>
@@ -20,10 +73,10 @@
                 {% for asignacion in personal_administrativo %}
                     <li class="flex items-center justify-between gap-3 py-3">
                         <div>
-                            <p class="font-medium">{{ asignacion.personal.nombre }}</p>
-                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}</p>
+                            <p class="font-medium">{{ asignacion.personal.nombre }}{% if asignacion.rol_presupuesto == 'SUPERVISOR' %} <span class="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Supervisor</span>{% endif %}</p>
+                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}{% if asignacion.tarifa_diaria_snapshot %} · Tarifa/día: <span class="rounded bg-slate-100 px-2 py-0.5 font-medium">${{ asignacion.tarifa_diaria_snapshot|floatformat:0|intcomma }}</span>{% endif %}</p>
                         </div>
-                        {% if puede_gestionar %}
+                        {% if puede_gestionar and not presupuesto_congelado %}
                             <form method="post" action="{% url 'construccion:psc_personal_quitar' pk=programacion.pk personal_pk=asignacion.personal.pk %}">
                                 {% csrf_token %}<button class="rounded border border-red-600 px-3 py-1 text-sm text-red-700" type="submit">Quitar</button>
                             </form>
@@ -34,7 +87,7 @@
         {% else %}
             <p class="mt-3 text-sm text-slate-600" role="status">Sin personal administrativo programado.</p>
         {% endif %}
-        {% if puede_gestionar %}{% include "construccion/programacion_semanal/_asignar_personal.html" with categoria='ADMINISTRATIVO' categoria_label='Personal Administrativo' selector_id='psc-personal-administrativo' %}{% endif %}
+        {% if puede_gestionar and not presupuesto_congelado %}{% include "construccion/programacion_semanal/_asignar_personal.html" with categoria='ADMINISTRATIVO' categoria_label='Personal Administrativo' selector_id='psc-personal-administrativo' %}{% elif puede_gestionar and presupuesto_congelado %}<p class="mt-4 rounded border border-slate-300 bg-slate-50 p-3 text-sm text-slate-600" role="status">El presupuesto está congelado: no se puede agregar ni quitar personal.</p>{% endif %}
     </section>
     <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="personal-operativo-titulo">
         <h2 id="personal-operativo-titulo" class="text-xl font-semibold">Personal Operativo</h2>
@@ -43,10 +96,10 @@
                 {% for asignacion in personal_operativo %}
                     <li class="flex items-center justify-between gap-3 py-3">
                         <div>
-                            <p class="font-medium">{{ asignacion.personal.nombre }}</p>
-                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}</p>
+                            <p class="font-medium">{{ asignacion.personal.nombre }}{% if asignacion.rol_presupuesto == 'SUPERVISOR' %} <span class="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Supervisor</span>{% endif %}</p>
+                            <p class="text-sm text-slate-600">Cédula: {{ asignacion.personal.documento }} · Cargo/Rol: {{ asignacion.personal.rol_cuadrilla.nombre }} · {{ asignacion.get_categoria_display }}{% if asignacion.tarifa_diaria_snapshot %} · Tarifa/día: <span class="rounded bg-slate-100 px-2 py-0.5 font-medium">${{ asignacion.tarifa_diaria_snapshot|floatformat:0|intcomma }}</span>{% endif %}</p>
                         </div>
-                        {% if puede_gestionar %}
+                        {% if puede_gestionar and not presupuesto_congelado %}
                             <form method="post" action="{% url 'construccion:psc_personal_quitar' pk=programacion.pk personal_pk=asignacion.personal.pk %}">
                                 {% csrf_token %}<button class="rounded border border-red-600 px-3 py-1 text-sm text-red-700" type="submit">Quitar</button>
                             </form>
@@ -57,7 +110,7 @@
         {% else %}
             <p class="mt-3 text-sm text-slate-600" role="status">Sin personal operativo programado.</p>
         {% endif %}
-        {% if puede_gestionar %}{% include "construccion/programacion_semanal/_asignar_personal.html" with categoria='OPERATIVO' categoria_label='Personal Operativo' selector_id='psc-personal-operativo' %}{% endif %}
+        {% if puede_gestionar and not presupuesto_congelado %}{% include "construccion/programacion_semanal/_asignar_personal.html" with categoria='OPERATIVO' categoria_label='Personal Operativo' selector_id='psc-personal-operativo' %}{% endif %}
     </section>
     <section class="rounded-lg bg-white p-6 shadow" aria-labelledby="vehiculos-asignados-titulo">
         <h2 id="vehiculos-asignados-titulo" class="text-xl font-semibold">Vehículos asignados</h2>

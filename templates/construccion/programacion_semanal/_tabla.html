@@ -1,4 +1,5 @@
 {% extends "construccion/programacion_semanal/_base.html" %}
+{% load humanize %}
 
 {% block psc_content %}
 <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -7,8 +8,8 @@
 </div>
 {% if programaciones %}
   <div id="psc-tabla-semanal" class="overflow-x-auto rounded-lg bg-white shadow" aria-live="polite">
-    <table class="min-w-full"><thead><tr class="text-left"><th class="p-3">Proyecto</th><th class="p-3">Actividad</th><th class="p-3">Periodo</th><th class="p-3">Acciones</th></tr></thead>
-    <tbody>{% for programacion in programaciones %}<tr class="border-t"><td class="p-3">{{ programacion.proyecto }}</td><td class="p-3">{{ programacion.get_tipo_actividad_display }}{% if programacion.subactividad %} — {{ programacion.subactividad }}{% endif %}</td><td class="p-3">{{ programacion.fecha_inicio }} — {{ programacion.fecha_fin }}</td><td class="p-3">{% include "construccion/programacion_semanal/_acciones.html" %}</td></tr>{% endfor %}</tbody></table>
+    <table class="min-w-full"><thead><tr class="text-left"><th class="p-3">Proyecto</th><th class="p-3">Actividad</th><th class="p-3">Periodo</th><th class="p-3">Presupuesto</th><th class="p-3">Acciones</th></tr></thead>
+    <tbody>{% for programacion, plan in filas_programacion %}<tr class="border-t"><td class="p-3">{{ programacion.proyecto }}</td><td class="p-3">{{ programacion.get_tipo_actividad_display }}{% if programacion.subactividad %} — {{ programacion.subactividad }}{% endif %}</td><td class="p-3">{{ programacion.fecha_inicio }} — {{ programacion.fecha_fin }}</td><td class="p-3" data-testid="psc-fila-presupuesto">{% if plan.supervisor %}${{ plan.presupuesto_total|floatformat:0|intcomma }} {% if plan.congelado_en %}<span class="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700">Congelado</span>{% else %}<span class="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800">Editable</span>{% endif %}{% else %}<span class="text-sm text-slate-500">Sin presupuestar</span>{% endif %}</td><td class="p-3">{% include "construccion/programacion_semanal/_acciones.html" %}</td></tr>{% endfor %}</tbody></table>
   </div>
 {% else %}
   <p id="psc-tabla-semanal" class="rounded bg-white p-6 shadow" role="status">No hay programaciones semanales disponibles para su usuario.</p>

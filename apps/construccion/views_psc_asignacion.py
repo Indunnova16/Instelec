@@ -1,4 +1,5 @@
 """Asignación manual de personal y vehículos a una programación PSC (#225, B6)."""
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -17,7 +18,10 @@ from .models import (
     ProgramacionSemanalConstruccionVehiculo,
 )
 from .services_psc_disponibilidad import validar_personal_elegible
-from .services_psc_presupuesto import construir_asignacion_presupuestada
+from .services_psc_presupuesto import (
+    construir_asignacion_presupuestada,
+    obtener_plan_presupuesto_para_real,
+)
 from .views_psc_programacion import PSC_ADMIN_ROLES
 
 
@@ -25,110 +29,175 @@ class _PSCAsignacionAccessMixin(LoginRequiredMixin, RoleRequiredMixin):
     """Las asignaciones manuales solo pueden ser modificadas por PSC admin."""
 
     allowed_roles = PSC_ADMIN_ROLES
-    http_method_names = ['post']
+    http_method_names = ["post"]
 
     @staticmethod
     def detalle_url(pk):
-        return reverse('construccion:psc_programacion_detalle', kwargs={'pk': pk})
+        return reverse("construccion:psc_programacion_detalle", kwargs={"pk": pk})
 
     def http_method_not_allowed(self, request, *args, **kwargs):
-        return HttpResponseNotAllowed(['POST'])
+        return HttpResponseNotAllowed(["POST"])
+
+    @staticmethod
+    def _esta_congelada(programacion):
+        """#225 B1: pregunta al contrato de #252, nunca reimplementa el congelamiento."""
+        return obtener_plan_presupuesto_para_real(programacion.pk).congelado_en is not None
 
 
 class ProgramacionSemanalConstruccionAgregarPersonalView(_PSCAsignacionAccessMixin, View):
     def post(self, request, pk):
         programacion = get_object_or_404(ProgramacionSemanalConstruccion, pk=pk)
-        personal_ids = request.POST.getlist('personal_ids')
-        categoria = request.POST.get('categoria', ProgramacionSemanalConstruccionPersonal.Categoria.OPERATIVO)
+        if self._esta_congelada(programacion):
+            messages.error(
+                request,
+                "El presupuesto de esta programación está congelado y no admite cambios de personal.",
+            )
+            return redirect(self.detalle_url(programacion.pk))
+        personal_ids = request.POST.getlist("personal_ids")
+        categoria = request.POST.get(
+            "categoria", ProgramacionSemanalConstruccionPersonal.Categoria.OPERATIVO
+        )
+        rol_presupuesto = request.POST.get(
+            "rol_presupuesto",
+            ProgramacionSemanalConstruccionPersonal.RolPresupuesto.COLABORADOR,
+        )
         categorias_validas = set(ProgramacionSemanalConstruccionPersonal.Categoria.values)
+        roles_validos = set(ProgramacionSemanalConstruccionPersonal.RolPresupuesto.values)
         if not personal_ids:
-            messages.error(request, 'Seleccione al menos una persona para asignar.')
+            messages.error(request, "Seleccione al menos una persona para asignar.")
             return redirect(self.detalle_url(programacion.pk))
         if categoria not in categorias_validas:
-            messages.error(request, 'Seleccione una categoría válida para el personal.')
+            messages.error(request, "Seleccione una categoría válida para el personal.")
+            return redirect(self.detalle_url(programacion.pk))
+        if rol_presupuesto not in roles_validos:
+            messages.error(
+                request, "Seleccione un rol presupuestario válido (supervisor o colaborador)."
+            )
+            return redirect(self.detalle_url(programacion.pk))
+        if (
+            rol_presupuesto == ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR
+            and len(personal_ids) > 1
+        ):
+            messages.error(request, "Solo puede asignar un supervisor presupuestario a la vez.")
+            return redirect(self.detalle_url(programacion.pk))
+        if (
+            rol_presupuesto == ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR
+            and programacion.asignaciones_personal.filter(
+                rol_presupuesto=ProgramacionSemanalConstruccionPersonal.RolPresupuesto.SUPERVISOR,
+            ).exists()
+        ):
+            messages.error(
+                request,
+                "Esta programación ya tiene un supervisor presupuestario asignado; quítelo antes de reemplazarlo.",
+            )
             return redirect(self.detalle_url(programacion.pk))
         try:
             validar_personal_elegible(programacion, personal_ids)
             personas = list(PersonalCuadrilla.objects.filter(pk__in=personal_ids))
             if len(personas) != len(set(map(str, personal_ids))):
-                raise ValidationError('Una o más personas seleccionadas no existen.')
+                raise ValidationError("Una o más personas seleccionadas no existen.")
             with transaction.atomic():
                 # `ignore_conflicts`: un doble clic (o dos pestañas) mandaba
                 # dos POST que pasaban ambos la validación previa y el segundo
                 # reventaba con IntegrityError 500 contra el UniqueConstraint
                 # (programacion, personal). Reasignar a alguien ya asignado es
                 # idempotente, no un error que deba ver el usuario.
-                ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                    construir_asignacion_presupuestada(
-                        programacion, persona, categoria=categoria,
-                    )
-                    for persona in personas
-                ], ignore_conflicts=True)
+                ProgramacionSemanalConstruccionPersonal.objects.bulk_create(
+                    [
+                        construir_asignacion_presupuestada(
+                            programacion,
+                            persona,
+                            categoria=categoria,
+                            rol_presupuesto=rol_presupuesto,
+                        )
+                        for persona in personas
+                    ],
+                    ignore_conflicts=True,
+                )
         except ValidationError as error:
             messages.error(request, error.messages[0])
         else:
-            messages.success(request, f'{len(personas)} persona(s) asignada(s) a la programación.')
+            messages.success(request, f"{len(personas)} persona(s) asignada(s) a la programación.")
         return redirect(self.detalle_url(programacion.pk))
 
 
 class ProgramacionSemanalConstruccionQuitarPersonalView(_PSCAsignacionAccessMixin, View):
     def post(self, request, pk, personal_pk):
         programacion = get_object_or_404(ProgramacionSemanalConstruccion, pk=pk)
+        if self._esta_congelada(programacion):
+            messages.error(
+                request,
+                "El presupuesto de esta programación está congelado y no admite cambios de personal.",
+            )
+            return redirect(self.detalle_url(programacion.pk))
         eliminados, _ = ProgramacionSemanalConstruccionPersonal.objects.filter(
-            programacion=programacion, personal_id=personal_pk,
+            programacion=programacion,
+            personal_id=personal_pk,
         ).delete()
         if eliminados:
-            messages.success(request, 'La persona fue retirada de la programación.')
+            messages.success(request, "La persona fue retirada de la programación.")
         else:
-            messages.error(request, 'La persona indicada no está asignada a esta programación.')
+            messages.error(request, "La persona indicada no está asignada a esta programación.")
         return redirect(self.detalle_url(programacion.pk))
 
 
 class ProgramacionSemanalConstruccionAgregarVehiculoView(_PSCAsignacionAccessMixin, View):
     def post(self, request, pk):
         programacion = get_object_or_404(ProgramacionSemanalConstruccion, pk=pk)
-        vehiculo_id = request.POST.get('vehiculo_id')
-        conductor_id = request.POST.get('conductor_id')
+        vehiculo_id = request.POST.get("vehiculo_id")
+        conductor_id = request.POST.get("conductor_id")
         if not vehiculo_id:
-            messages.error(request, 'Seleccione un vehículo activo para asignar.')
+            messages.error(request, "Seleccione un vehículo activo para asignar.")
             return redirect(self.detalle_url(programacion.pk))
         vehiculo = Vehiculo.objects.filter(
-            pk=vehiculo_id, estado=Vehiculo.Estado.ACTIVO,
+            pk=vehiculo_id,
+            estado=Vehiculo.Estado.ACTIVO,
         ).first()
         if not vehiculo:
-            messages.error(request, 'El vehículo no existe o no está activo.')
+            messages.error(request, "El vehículo no existe o no está activo.")
             return redirect(self.detalle_url(programacion.pk))
         if ProgramacionSemanalConstruccionVehiculo.objects.filter(
-            programacion=programacion, vehiculo=vehiculo,
+            programacion=programacion,
+            vehiculo=vehiculo,
         ).exists():
-            messages.error(request, 'El vehículo ya está asignado a esta programación.')
+            messages.error(request, "El vehículo ya está asignado a esta programación.")
             return redirect(self.detalle_url(programacion.pk))
         if not conductor_id:
-            messages.error(request, 'Seleccione un conductor activo antes de asociar una placa.')
+            messages.error(request, "Seleccione un conductor activo antes de asociar una placa.")
             return redirect(self.detalle_url(programacion.pk))
-        conductor = PersonalCuadrilla.objects.filter(
-            pk=conductor_id,
-            activo=True,
-            area='CONSTRUCCION',
-            programaciones_semanales_psc__programacion=programacion,
-        ).select_related('rol_cuadrilla').first()
+        conductor = (
+            PersonalCuadrilla.objects.filter(
+                pk=conductor_id,
+                activo=True,
+                area="CONSTRUCCION",
+                programaciones_semanales_psc__programacion=programacion,
+            )
+            .select_related("rol_cuadrilla")
+            .first()
+        )
         if not conductor:
-            messages.error(request, 'El conductor debe estar activo, ser de Construcción y estar asignado a esta programación.')
+            messages.error(
+                request,
+                "El conductor debe estar activo, ser de Construcción y estar asignado a esta programación.",
+            )
             return redirect(self.detalle_url(programacion.pk))
-        if not conductor.rol_cuadrilla_id.startswith('CONDUCTOR'):
-            messages.error(request, 'La placa solo puede asociarse a una persona con cargo de Conductor.')
+        if not conductor.rol_cuadrilla_id.startswith("CONDUCTOR"):
+            messages.error(
+                request, "La placa solo puede asociarse a una persona con cargo de Conductor."
+            )
             return redirect(self.detalle_url(programacion.pk))
         # `get_or_create` en vez de `create`: el `exists()` de arriba deja una
         # ventana para que un doble clic cree dos veces y el segundo POST
         # reviente con IntegrityError 500 contra el UniqueConstraint.
         _, creado = ProgramacionSemanalConstruccionVehiculo.objects.get_or_create(
-            programacion=programacion, vehiculo=vehiculo,
-            defaults={'conductor': conductor},
+            programacion=programacion,
+            vehiculo=vehiculo,
+            defaults={"conductor": conductor},
         )
         if creado:
-            messages.success(request, 'Vehículo asignado a la programación.')
+            messages.success(request, "Vehículo asignado a la programación.")
         else:
-            messages.error(request, 'El vehículo ya está asignado a esta programación.')
+            messages.error(request, "El vehículo ya está asignado a esta programación.")
         return redirect(self.detalle_url(programacion.pk))
 
 
@@ -136,10 +205,11 @@ class ProgramacionSemanalConstruccionQuitarVehiculoView(_PSCAsignacionAccessMixi
     def post(self, request, pk, vehiculo_pk):
         programacion = get_object_or_404(ProgramacionSemanalConstruccion, pk=pk)
         eliminados, _ = ProgramacionSemanalConstruccionVehiculo.objects.filter(
-            programacion=programacion, vehiculo_id=vehiculo_pk,
+            programacion=programacion,
+            vehiculo_id=vehiculo_pk,
         ).delete()
         if eliminados:
-            messages.success(request, 'El vehículo fue retirado de la programación.')
+            messages.success(request, "El vehículo fue retirado de la programación.")
         else:
-            messages.error(request, 'El vehículo indicado no está asignado a esta programación.')
+            messages.error(request, "El vehículo indicado no está asignado a esta programación.")
         return redirect(self.detalle_url(programacion.pk))

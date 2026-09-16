@@ -12,6 +12,21 @@
                 {% endfor %}
             </select>
             <p id="{{ selector_id }}-help" class="mt-1 text-sm text-slate-600">Puede buscar por nombre, cédula o cargo y seleccionar varias personas.</p>
+            <fieldset class="mt-3">
+                <legend class="text-sm font-medium">Rol presupuestario</legend>
+                <div class="mt-1 flex flex-wrap gap-4">
+                    {% if not plan_presupuesto.supervisor %}
+                    <label class="flex items-center gap-2 text-sm" for="{{ selector_id }}-rol-supervisor">
+                        <input type="radio" id="{{ selector_id }}-rol-supervisor" name="rol_presupuesto" value="SUPERVISOR">
+                        Supervisor (solo 1 persona)
+                    </label>
+                    {% endif %}
+                    <label class="flex items-center gap-2 text-sm" for="{{ selector_id }}-rol-colaborador">
+                        <input type="radio" id="{{ selector_id }}-rol-colaborador" name="rol_presupuesto" value="COLABORADOR" checked>
+                        Colaborador
+                    </label>
+                </div>
+            </fieldset>
             <button class="mt-3 rounded bg-blue-600 px-4 py-2 text-white" type="submit">Agregar {{ categoria_label|lower }}</button>
         {% else %}
             <p class="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" role="status">Sin programar: no hay personal habilitado y libre en este periodo.</p>

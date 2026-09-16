@@ -1,4 +1,5 @@
 """Listado, duplicación y eliminación de Programación Semanal (#225, B5)."""
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
@@ -16,11 +17,13 @@ from .models import (
     ProgramacionSemanalConstruccionPersonal,
     ProgramacionSemanalConstruccionVehiculo,
 )
+from .services_psc_presupuesto import (
+    construir_asignacion_presupuestada,
+    obtener_plan_presupuesto_para_real,
+)
 from .views_psc_programacion import PSC_ADMIN_ROLES
-from .services_psc_presupuesto import construir_asignacion_presupuestada
 
-
-PSC_READ_ROLES = [*PSC_ADMIN_ROLES, 'supervisor']
+PSC_READ_ROLES = [*PSC_ADMIN_ROLES, "supervisor"]
 
 
 class _PSCReadAccessMixin(LoginRequiredMixin, RoleRequiredMixin):
@@ -30,17 +33,17 @@ class _PSCReadAccessMixin(LoginRequiredMixin, RoleRequiredMixin):
 
     def test_func(self):
         """PSC no hereda niveles administrativos de otro módulo por accidente."""
-        return (
-            self.request.user.is_authenticated
-            and (
-                self.request.user.is_superuser
-                or getattr(self.request.user, 'rol', '') in self.allowed_roles
-            )
+        return self.request.user.is_authenticated and (
+            self.request.user.is_superuser
+            or getattr(self.request.user, "rol", "") in self.allowed_roles
         )
 
     @property
     def puede_gestionar(self):
-        return getattr(self.request.user, 'rol', '') in PSC_ADMIN_ROLES or self.request.user.is_superuser
+        return (
+            getattr(self.request.user, "rol", "") in PSC_ADMIN_ROLES
+            or self.request.user.is_superuser
+        )
 
 
 class _PSCManageAccessMixin(LoginRequiredMixin, RoleRequiredMixin):
@@ -49,12 +52,9 @@ class _PSCManageAccessMixin(LoginRequiredMixin, RoleRequiredMixin):
     allowed_roles = PSC_ADMIN_ROLES
 
     def test_func(self):
-        return (
-            self.request.user.is_authenticated
-            and (
-                self.request.user.is_superuser
-                or getattr(self.request.user, 'rol', '') in self.allowed_roles
-            )
+        return self.request.user.is_authenticated and (
+            self.request.user.is_superuser
+            or getattr(self.request.user, "rol", "") in self.allowed_roles
         )
 
 
@@ -62,17 +62,18 @@ class ProgramacionSemanalConstruccionListView(_PSCReadAccessMixin, ListView):
     """Lista PSC; un supervisor ve solo lo que lidera o integra."""
 
     model = ProgramacionSemanalConstruccion
-    context_object_name = 'programaciones'
-    template_name = 'construccion/programacion_semanal/_tabla.html'
+    context_object_name = "programaciones"
+    template_name = "construccion/programacion_semanal/_tabla.html"
 
     def get_queryset(self):
         queryset = ProgramacionSemanalConstruccion.objects.select_related(
-            'proyecto', 'supervisor',
-        ).prefetch_related('asignaciones_personal__personal')
+            "proyecto",
+            "supervisor",
+        ).prefetch_related("asignaciones_personal__personal")
         if self.puede_gestionar:
             return queryset
 
-        documento = (getattr(self.request.user, 'documento', '') or '').strip()
+        documento = (getattr(self.request.user, "documento", "") or "").strip()
         visible = Q(supervisor=self.request.user)
         if documento:
             visible |= Q(asignaciones_personal__personal__documento=documento)
@@ -81,19 +82,29 @@ class ProgramacionSemanalConstruccionListView(_PSCReadAccessMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # B5: contrato de contexto de _tabla.html y _acciones.html.
-        context['puede_gestionar'] = self.puede_gestionar
+        context["puede_gestionar"] = self.puede_gestionar
+        # #225 Sprint B (B2): presupuesto total por fila, vía el contrato de
+        # lectura de #252 — una programación legacy sin snapshot sigue
+        # mostrando un total sensato (0.00), nunca un error. Se empareja acá
+        # (no con un templatetag de dict-lookup) para que _tabla.html itere
+        # una sola colección sin depender de filtros nuevos.
+        context["filas_programacion"] = [
+            (programacion, obtener_plan_presupuesto_para_real(programacion.pk))
+            for programacion in context["programaciones"]
+        ]
         return context
 
 
 class ProgramacionSemanalConstruccionDuplicateView(_PSCManageAccessMixin, View):
     """Duplica cabecera y asignaciones sin alterar la programación origen."""
 
-    http_method_names = ['post']
+    http_method_names = ["post"]
 
     def post(self, request, pk):
         origen = get_object_or_404(
             ProgramacionSemanalConstruccion.objects.prefetch_related(
-                'asignaciones_personal', 'asignaciones_vehiculo',
+                "asignaciones_personal",
+                "asignaciones_vehiculo",
             ),
             pk=pk,
         )
@@ -110,35 +121,43 @@ class ProgramacionSemanalConstruccionDuplicateView(_PSCManageAccessMixin, View):
                 supervisor=origen.supervisor,
                 observaciones=origen.observaciones,
             )
-            ProgramacionSemanalConstruccionPersonal.objects.bulk_create([
-                construir_asignacion_presupuestada(
-                    copia, asignacion.personal, categoria=asignacion.categoria,
-                    rol_presupuesto=asignacion.rol_presupuesto,
-                )
-                for asignacion in origen.asignaciones_personal.all()
-            ])
-            ProgramacionSemanalConstruccionVehiculo.objects.bulk_create([
-                ProgramacionSemanalConstruccionVehiculo(
-                    programacion=copia,
-                    vehiculo=asignacion.vehiculo,
-                    conductor=asignacion.conductor,
-                )
-                for asignacion in origen.asignaciones_vehiculo.all()
-            ])
-        messages.success(request, 'La programación fue duplicada; revise las fechas antes de continuar.')
-        return redirect(reverse('construccion:psc_programacion_editar', kwargs={'pk': copia.pk}))
+            ProgramacionSemanalConstruccionPersonal.objects.bulk_create(
+                [
+                    construir_asignacion_presupuestada(
+                        copia,
+                        asignacion.personal,
+                        categoria=asignacion.categoria,
+                        rol_presupuesto=asignacion.rol_presupuesto,
+                    )
+                    for asignacion in origen.asignaciones_personal.all()
+                ]
+            )
+            ProgramacionSemanalConstruccionVehiculo.objects.bulk_create(
+                [
+                    ProgramacionSemanalConstruccionVehiculo(
+                        programacion=copia,
+                        vehiculo=asignacion.vehiculo,
+                        conductor=asignacion.conductor,
+                    )
+                    for asignacion in origen.asignaciones_vehiculo.all()
+                ]
+            )
+        messages.success(
+            request, "La programación fue duplicada; revise las fechas antes de continuar."
+        )
+        return redirect(reverse("construccion:psc_programacion_editar", kwargs={"pk": copia.pk}))
 
 
 class ProgramacionSemanalConstruccionDeleteView(_PSCManageAccessMixin, View):
     """Elimina una programación y sus asignaciones mediante el cascade del modelo."""
 
-    http_method_names = ['post']
+    http_method_names = ["post"]
 
     def post(self, request, pk):
         programacion = get_object_or_404(ProgramacionSemanalConstruccion, pk=pk)
         programacion.delete()
-        messages.success(request, 'La programación semanal fue eliminada.')
-        return redirect('construccion:psc_programacion_lista')
+        messages.success(request, "La programación semanal fue eliminada.")
+        return redirect("construccion:psc_programacion_lista")
 
     def get(self, request, *args, **kwargs):
-        return HttpResponseNotAllowed(['POST'])
+        return HttpResponseNotAllowed(["POST"])
