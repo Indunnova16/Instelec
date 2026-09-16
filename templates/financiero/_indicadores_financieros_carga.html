@@ -1,4 +1,44 @@
-{% comment %}Partial reutilizable: requiere ``indicadores`` de CargaFinancieraView.{% endcomment %}
+{% comment %}Partial reutilizable: requiere ``indicadores``/``desglose_costos``/``tendencia_6_meses``/``resumen_totales``/``resumen_alertas_count``/``resumen_sin_base_count`` de CargaFinancieraView.{% endcomment %}
+<div id="resumen-ejecutivo-financiero" class="mb-4 rounded border border-gray-200 bg-gray-50 p-4">
+  <h3 class="text-sm font-semibold text-gray-700">Resumen ejecutivo</h3>
+  {% if resumen_totales %}
+  <div class="mt-2 grid gap-3 sm:grid-cols-2">
+    <p class="text-sm text-gray-700">Costo real del período: <span class="font-semibold">${{ resumen_totales.costo_real }}</span></p>
+    <p class="text-sm text-gray-700">Costo presupuestado: <span class="font-semibold">${{ resumen_totales.costo_presupuestado }}</span></p>
+  </div>
+  {% endif %}
+  <p class="mt-2 text-sm">
+    {% if resumen_alertas_count %}<span class="font-semibold text-red-700">{{ resumen_alertas_count }} alerta{{ resumen_alertas_count|pluralize }} activa{{ resumen_alertas_count|pluralize }}</span>{% else %}<span class="text-green-700">Sin alertas activas</span>{% endif %}
+    {% if resumen_sin_base_count %}· <span class="text-gray-500">{{ resumen_sin_base_count }} indicador{{ resumen_sin_base_count|pluralize:"es" }} sin base comparable</span>{% endif %}
+  </p>
+</div>
+
 <div id="indicadores-carga" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-  {% for indicador in indicadores %}<article class="rounded border p-4 {% if indicador.alerta %}border-amber-300 bg-amber-50{% else %}border-green-200 bg-green-50{% endif %}"><h3 class="text-sm text-gray-600">{{ indicador.nombre }}</h3><p class="mt-1 text-xl font-bold">{% if indicador.valor is None %}Sin base comparable{% elif indicador.unidad == '$' %}${{ indicador.valor }}{% else %}{{ indicador.valor }}%{% endif %}</p></article>{% endfor %}
+  {% for indicador in indicadores %}<article class="rounded border p-4 {% if indicador.sin_base %}border-gray-200 bg-gray-50{% elif indicador.alerta %}border-red-300 bg-red-50{% else %}border-green-200 bg-green-50{% endif %}">
+    <h3 class="text-sm text-gray-600">{{ indicador.nombre }}</h3>
+    <p class="mt-1 text-xl font-bold">{% if indicador.valor is None %}Sin base comparable{% elif indicador.unidad == '$' %}${{ indicador.valor }}{% else %}{{ indicador.valor }}%{% endif %}</p>
+    {% if indicador.sin_base %}<p class="mt-1 text-xs text-gray-500">ℹ️ {{ indicador.causa }}</p>
+    {% elif indicador.alerta %}<p class="mt-1 text-xs text-red-800">🔴 {{ indicador.causa }}</p>
+    {% endif %}
+  </article>{% endfor %}
+</div>
+
+<div id="desglose-costos" class="mt-6">
+  <h3 class="text-sm font-semibold text-gray-700">Desglose de costos por grupo</h3>
+  {% if desglose_costos %}
+  <table class="mt-2 min-w-full text-sm"><thead><tr class="border-b text-left"><th class="p-2">Grupo</th><th class="p-2">Valor</th><th class="p-2">% del total</th></tr></thead>
+  <tbody>
+    {% for fila in desglose_costos %}<tr class="border-b"><td class="p-2">{{ fila.grupo }}</td><td class="p-2">${{ fila.valor }}</td><td class="p-2">{% if fila.porcentaje is None %}—{% else %}{{ fila.porcentaje }}%{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="mt-2 text-sm text-gray-500">Sin líneas de costo real para este filtro.</p>{% endif %}
+</div>
+
+<div id="tendencia-6-meses" class="mt-6">
+  <h3 class="text-sm font-semibold text-gray-700">Tendencia últimos 6 meses</h3>
+  {% if tendencia_6_meses %}
+  <table class="mt-2 min-w-full text-sm"><thead><tr class="border-b text-left"><th class="p-2">Período</th><th class="p-2">Costo real</th><th class="p-2">Presupuesto</th></tr></thead>
+  <tbody>
+    {% for punto in tendencia_6_meses %}<tr class="border-b {% if punto.es_actual %}bg-blue-50 font-semibold{% endif %}"><td class="p-2">{{ punto.periodo }}</td><td class="p-2">${{ punto.costo_real }}</td><td class="p-2">${{ punto.costo_presupuestado }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="mt-2 text-sm text-gray-500">Sin cargas vigentes previas para trazar tendencia.</p>{% endif %}
 </div>

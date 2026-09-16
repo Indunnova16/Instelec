@@ -4,10 +4,11 @@ from __future__ import annotations
 import csv
 from io import BytesIO
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -77,36 +78,165 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         )
 
     @staticmethod
-    def _indicadores(carga, *, tipo_operacional='', centro_costo=''):
-        if not carga:
-            return []
+    def _base_lineas(carga, *, tipo_operacional='', centro_costo=''):
+        """Aplica los predicados Tipo/CdeC antes de cualquier agregación (#261)."""
         lineas = carga.lineas.all()
         if tipo_operacional:
             lineas = lineas.filter(tipo_operacional=tipo_operacional)
         if centro_costo:
             lineas = lineas.filter(centro_costo=centro_costo)
-        real = sum((linea.valor for linea in lineas.filter(tipo=LineaCargaFinanciera.Tipo.REAL)), ZERO)
-        presupuesto = sum((linea.valor for linea in lineas.filter(tipo=LineaCargaFinanciera.Tipo.PRESUPUESTO)), ZERO)
-        margen = real - presupuesto
-        anterior = CargaFinanciera.objects.filter(
-            proyecto=carga.proyecto,
-        ).exclude(pk=carga.pk).order_by('-anio', '-mes', '-created_at').first()
-        real_anterior = ZERO
+        return lineas
+
+    @classmethod
+    def _totales(cls, carga, *, tipo_operacional='', centro_costo=''):
+        """Costo real ejecutado (`BD Real`) y costo presupuestado (`BD Ppto`).
+
+        El libro TRANSELCA no trae una hoja de facturación/ingresos — ``BD
+        Real`` es costo real incurrido, no venta. Por eso los seis
+        indicadores se calculan sobre bases de costo, nunca inventando una
+        facturación que la fuente no tiene (#246 Sprint B, plan
+        PLAN_2026-09-15_indicadores_246.md sección "Sprint B").
+        """
+        if not carga:
+            return ZERO, ZERO
+        lineas = cls._base_lineas(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo)
+        costo_real = sum((linea.valor for linea in lineas.filter(tipo=LineaCargaFinanciera.Tipo.REAL)), ZERO)
+        costo_presupuestado = sum((linea.valor for linea in lineas.filter(tipo=LineaCargaFinanciera.Tipo.PRESUPUESTO)), ZERO)
+        return costo_real, costo_presupuestado
+
+    @classmethod
+    def _carga_periodo_anterior(cls, carga):
+        """Última carga vigente de un período estrictamente anterior al mismo proyecto."""
+        anteriores = CargaFinanciera.objects.filter(
+            proyecto=carga.proyecto, vigente=True,
+        ).exclude(pk=carga.pk).filter(
+            Q(anio__lt=carga.anio) | Q(anio=carga.anio, mes__lt=carga.mes)
+        )
+        return anteriores.order_by('-anio', '-mes').first()
+
+    @classmethod
+    def _indicadores(cls, carga, *, tipo_operacional='', centro_costo=''):
+        if not carga:
+            return []
+        costo_real, costo_presupuestado = cls._totales(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo)
+        margen = costo_presupuestado - costo_real  # positivo = se gastó menos de lo presupuestado
+        anterior = cls._carga_periodo_anterior(carga)
+        costo_real_anterior = None
         if anterior:
-            anteriores = anterior.lineas.all()
-            if tipo_operacional:
-                anteriores = anteriores.filter(tipo_operacional=tipo_operacional)
-            if centro_costo:
-                anteriores = anteriores.filter(centro_costo=centro_costo)
-            real_anterior = sum((linea.valor for linea in anteriores.filter(tipo=LineaCargaFinanciera.Tipo.REAL)), ZERO)
+            costo_real_anterior, _ = cls._totales(anterior, tipo_operacional=tipo_operacional, centro_costo=centro_costo)
+
+        sin_base_facturacion = 'Sin base comparable: el libro cargado no trae una hoja de facturación/ingresos, sólo costo real y presupuestado.'
+        variacion_mes = _porcentaje(costo_real - costo_real_anterior, costo_real_anterior) if costo_real_anterior is not None else None
+
         return [
-            {'nombre': 'Facturación vs meta', 'valor': _porcentaje(real - presupuesto, presupuesto), 'unidad': '%', 'alerta': presupuesto > real},
-            {'nombre': 'Margen bruto', 'valor': margen, 'unidad': '$', 'alerta': margen < ZERO},
-            {'nombre': 'Ratio costos/facturación', 'valor': _porcentaje(presupuesto, real), 'unidad': '%', 'alerta': bool(real and presupuesto / real > Decimal('0.70'))},
-            {'nombre': 'Rentabilidad operativa', 'valor': _porcentaje(margen, real), 'unidad': '%', 'alerta': margen < ZERO},
-            {'nombre': 'Cumplimiento presupuesto', 'valor': _porcentaje(real, presupuesto), 'unidad': '%', 'alerta': bool(presupuesto and real > presupuesto)},
-            {'nombre': 'Variación mes a mes', 'valor': _porcentaje(real - real_anterior, real_anterior), 'unidad': '%', 'alerta': bool(real_anterior and real < real_anterior)},
+            {
+                'nombre': 'Facturación vs meta',
+                'valor': None,
+                'unidad': '%',
+                'alerta': False,
+                'sin_base': True,
+                'causa': sin_base_facturacion,
+            },
+            {
+                'nombre': 'Margen bruto',
+                'valor': margen,
+                'unidad': '$',
+                'alerta': margen < ZERO,
+                'sin_base': False,
+                'causa': 'Costo real superó el presupuesto del período.' if margen < ZERO else '',
+            },
+            {
+                'nombre': 'Ratio costos/facturación',
+                'valor': None,
+                'unidad': '%',
+                'alerta': False,
+                'sin_base': True,
+                'causa': sin_base_facturacion,
+            },
+            {
+                'nombre': 'Rentabilidad operativa',
+                'valor': None,
+                'unidad': '%',
+                'alerta': False,
+                'sin_base': True,
+                'causa': sin_base_facturacion,
+            },
+            {
+                'nombre': 'Cumplimiento presupuesto',
+                'valor': _porcentaje(costo_real, costo_presupuestado),
+                'unidad': '%',
+                'alerta': bool(costo_presupuestado and costo_real > costo_presupuestado),
+                'sin_base': not costo_presupuestado,
+                'causa': (
+                    'Sin base comparable: el período no tiene presupuesto cargado (BD Ppto vacía).'
+                    if not costo_presupuestado
+                    else (f'Costo real {_porcentaje(costo_real, costo_presupuestado)}% del presupuesto — sobre lo aprobado.' if costo_presupuestado and costo_real > costo_presupuestado else '')
+                ),
+            },
+            {
+                'nombre': 'Variación mes a mes',
+                'valor': variacion_mes,
+                'unidad': '%',
+                'alerta': bool(costo_real_anterior and costo_real > costo_real_anterior),
+                'sin_base': costo_real_anterior is None,
+                'causa': (
+                    'Sin base comparable: no hay carga vigente de un período anterior para este proyecto/filtro.'
+                    if costo_real_anterior is None
+                    else (f'Costo real subió {variacion_mes}% frente al período anterior.' if costo_real_anterior and costo_real > costo_real_anterior else '')
+                ),
+            },
         ]
+
+    @classmethod
+    def _desglose_costos(cls, carga, *, tipo_operacional='', centro_costo=''):
+        """Desglose por grupo cuya suma reconcilia EXACTO con el costo real total (B2)."""
+        if not carga:
+            return []
+        lineas = cls._base_lineas(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo).filter(
+            tipo=LineaCargaFinanciera.Tipo.REAL,
+        )
+        acumulado = defaultdict(lambda: ZERO)
+        for linea in lineas:
+            clave = linea.grupo or 'Sin grupo'
+            acumulado[clave] += linea.valor
+        total = sum(acumulado.values(), ZERO)
+        desglose = []
+        for grupo, valor in sorted(acumulado.items(), key=lambda item: item[1], reverse=True):
+            desglose.append({
+                'grupo': grupo,
+                'valor': valor,
+                'porcentaje': _porcentaje(valor, total) if total else None,
+            })
+        return desglose
+
+    @classmethod
+    def _tendencia_6_meses(cls, carga, *, tipo_operacional='', centro_costo=''):
+        """Costo real/presupuestado de las últimas 6 cargas vigentes del proyecto (B2)."""
+        if not carga:
+            return []
+        cargas = list(
+            CargaFinanciera.objects.filter(proyecto=carga.proyecto, vigente=True)
+            .filter(Q(anio__lt=carga.anio) | Q(anio=carga.anio, mes__lte=carga.mes))
+            .order_by('-anio', '-mes')[:6]
+        )
+        cargas.reverse()
+        serie = []
+        for item in cargas:
+            costo_real, costo_presupuestado = cls._totales(item, tipo_operacional=tipo_operacional, centro_costo=centro_costo)
+            serie.append({
+                'periodo': f'{item.mes:02d}/{item.anio}',
+                'costo_real': costo_real,
+                'costo_presupuestado': costo_presupuestado,
+                'es_actual': item.pk == carga.pk,
+            })
+        return serie
+
+    @classmethod
+    def _resumen_totales(cls, carga, *, tipo_operacional='', centro_costo=''):
+        if not carga:
+            return None
+        costo_real, costo_presupuestado = cls._totales(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo)
+        return {'costo_real': costo_real, 'costo_presupuestado': costo_presupuestado}
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -170,7 +300,12 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'versiones_homologacion': VersionHomologacionProjectsContable.objects.select_related('autor').all()[:20],
             'preview_homologacion': self.request.session.get('homologacion_preview'),
             'importar_homologacion_form': ImportarTablaMaestraForm(),
-            'indicadores': self._indicadores(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo),
+            'indicadores': (indicadores_calculados := self._indicadores(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo)),
+            'desglose_costos': self._desglose_costos(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo),
+            'tendencia_6_meses': self._tendencia_6_meses(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo),
+            'resumen_alertas_count': sum(1 for i in indicadores_calculados if i['alerta']),
+            'resumen_sin_base_count': sum(1 for i in indicadores_calculados if i['sin_base']),
+            'resumen_totales': self._resumen_totales(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo),
         })
         return context
 
