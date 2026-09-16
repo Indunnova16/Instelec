@@ -214,7 +214,13 @@ def test_upload_y_reporte(admin_user, client, excel_data):
     })
     assert response.status_code == 200
     assert ProgramacionSemanalConstruccion.objects.count() == 1
-    assert 'Se importaron 1 programaciones' in response.content.decode()
+    contenido = response.content.decode()
+    assert 'Se importaron 1 programaciones' in contenido
+    # #225 Sprint C: el reporte renderizado (no solo el resultado en memoria)
+    # debe mostrar el presupuesto calculado -- 9000/30=$300/día x 5 días=$1.500,
+    # única persona = supervisor presupuestario por defecto.
+    assert 'Presupuesto total' in contenido
+    assert '$1.500' in contenido
 
 
 @pytest.mark.django_db
