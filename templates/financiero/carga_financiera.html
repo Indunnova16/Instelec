@@ -107,6 +107,30 @@
   </section>
   {% endif %}
 
+  {% if periodo_valido %}
+  {# #246 Sprint D (B4): descarga de reportes del dashboard integrado.
+     RBAC de descarga -- fuente de verdad en
+     views_finv2_dashboard_exportar.FORMATOS_DESCARGA_POR_ROL: Admin/Gerente
+     Financiero ven los 3 botones, Contador solo Excel, cualquier otro rol
+     (Supervisor, Coordinador, etc.) no ve ninguno -- el endpoint responde
+     403 igual si se fuerza la URL directamente. #}
+  <section id="dashboard-exportar-reportes" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <h2 class="text-lg font-semibold">Reportes del dashboard financiero</h2>
+    <p class="mt-1 text-sm text-gray-500">PDF ejecutivo, Excel detallado y PPT para stakeholders, respetando el período/proyecto/tipo/centro de costo filtrado.</p>
+    {% if request.user.is_superuser or request.user.rol == 'admin' or request.user.rol == 'admin_general' or request.user.rol == 'gerente_financiero' or request.user.rol == 'contador' %}
+    <div class="mt-4 flex flex-wrap gap-3">
+      {% if request.user.is_superuser or request.user.rol == 'admin' or request.user.rol == 'admin_general' or request.user.rol == 'gerente_financiero' %}
+      <a id="btn-exportar-pdf" class="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white" href="{% url 'financiero:dashboard_exportar_pdf' %}?{{ request.GET.urlencode }}">Descargar PDF ejecutivo</a>
+      <a id="btn-exportar-ppt" class="rounded bg-orange-600 px-4 py-2 text-sm font-medium text-white" href="{% url 'financiero:dashboard_exportar_ppt' %}?{{ request.GET.urlencode }}">Descargar PPT stakeholders</a>
+      {% endif %}
+      <a id="btn-exportar-excel" class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white" href="{% url 'financiero:dashboard_exportar_excel' %}?{{ request.GET.urlencode }}">Descargar Excel detallado</a>
+    </div>
+    {% else %}
+    <p class="mt-4 text-sm text-gray-500">Su rol no tiene autorización para descargar reportes del dashboard.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% include 'financiero/_homologacion_projects_contable.html' %}
 
   <section id="historial-cargas" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 overflow-x-auto">

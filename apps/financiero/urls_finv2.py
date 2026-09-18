@@ -8,7 +8,12 @@ NO declara app_name propio.
 
 from django.urls import path
 
-from . import urls_finv2_carga, urls_finv2_facturas, urls_finv2_tesoreria
+from . import (
+    urls_finv2_carga,
+    urls_finv2_dashboard_exportar,
+    urls_finv2_facturas,
+    urls_finv2_tesoreria,
+)
 from . import views_finv2_presupuesto as v2
 
 urlpatterns = [
@@ -28,3 +33,5 @@ urlpatterns = [
 urlpatterns += urls_finv2_carga.urlpatterns
 urlpatterns += urls_finv2_facturas.urlpatterns
 urlpatterns += urls_finv2_tesoreria.urlpatterns
+# #246 Sprint D (B4): descarga PDF/Excel/PPT del dashboard integrado.
+urlpatterns += urls_finv2_dashboard_exportar.urlpatterns
