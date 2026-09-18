@@ -1,10 +1,17 @@
-{% comment %}Partial reutilizable: requiere ``indicadores``/``desglose_costos``/``tendencia_6_meses``/``resumen_totales``/``resumen_alertas_count``/``resumen_sin_base_count`` de CargaFinancieraView.{% endcomment %}
+{% comment %}Partial reutilizable: requiere ``indicadores``/``desglose_costos``/``tendencia_6_meses``/``resumen_totales``/``resumen_alertas_count``/``resumen_sin_base_count`` de CargaFinancieraView. #246 Sprint C agrega ``integracion_nomina``/``integracion_gastos``/``integracion_ingresos``/``integracion_clientes`` (ver sección completa en carga_financiera.html#integracion-dashboard).{% endcomment %}
 <div id="resumen-ejecutivo-financiero" class="mb-4 rounded border border-gray-200 bg-gray-50 p-4">
   <h3 class="text-sm font-semibold text-gray-700">Resumen ejecutivo</h3>
   {% if resumen_totales %}
   <div class="mt-2 grid gap-3 sm:grid-cols-2">
     <p class="text-sm text-gray-700">Costo real del período: <span class="font-semibold">${{ resumen_totales.costo_real }}</span></p>
     <p class="text-sm text-gray-700">Costo presupuestado: <span class="font-semibold">${{ resumen_totales.costo_presupuestado }}</span></p>
+  </div>
+  {% endif %}
+  {% if integracion_nomina.con_datos or integracion_gastos.con_datos or integracion_ingresos.con_datos %}
+  <div id="resumen-ejecutivo-integracion" class="mt-2 grid gap-3 sm:grid-cols-3 text-sm text-gray-700">
+    <p>Nómina real: <span class="font-semibold">${{ integracion_nomina.costo_nomina }}</span></p>
+    <p>Gastos reales: <span class="font-semibold">${{ integracion_gastos.total }}</span></p>
+    <p>Ingresos emitidos: <span class="font-semibold">${{ integracion_ingresos.total }}</span></p>
   </div>
   {% endif %}
   <p class="mt-2 text-sm">

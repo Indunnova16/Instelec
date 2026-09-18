@@ -47,6 +47,66 @@
   </section>
   {% else %}<section class="rounded-lg border border-blue-200 bg-blue-50 p-5 text-blue-900">Seleccione un período y cargue un libro válido para ver indicadores, alertas y el plano consolidado.</section>{% endif %}
 
+  {% if periodo_valido %}
+  <section id="integracion-dashboard" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <h2 class="text-lg font-semibold">Nómina, gastos, ingresos y clientes · {{ mes|stringformat:'02d' }}/{{ anio }}{% if proyecto_seleccionado %} · {{ proyecto_seleccionado }}{% endif %}</h2>
+    <p class="mt-1 text-sm text-gray-500">Se recalcula al consultar, directamente de Producción Diaria (#252), Facturas de Gastos (#248), Facturas de Ingresos (#249) y Maestro de Clientes (#261) -- sin cargas manuales.</p>
+
+    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <article id="integracion-nomina" class="rounded border p-4 {% if integracion_nomina.con_datos %}border-gray-200{% else %}border-gray-200 bg-gray-50{% endif %}">
+        <h3 class="text-sm text-gray-600">Nómina (producción diaria)</h3>
+        {% if integracion_nomina.con_datos %}
+        <p class="mt-1 text-xl font-bold">${{ integracion_nomina.costo_nomina }}</p>
+        <p class="mt-1 text-xs text-gray-500">{{ integracion_nomina.cantidad_producciones }} registro{{ integracion_nomina.cantidad_producciones|pluralize }} · {{ integracion_nomina.horas_trabajadas }} h</p>
+        {% else %}<p class="mt-1 text-sm text-gray-500">Sin producción diaria registrada en este período/proyecto.</p>{% endif %}
+      </article>
+
+      <article id="integracion-gastos" class="rounded border p-4 {% if integracion_gastos.con_datos %}border-gray-200{% else %}border-gray-200 bg-gray-50{% endif %}">
+        <h3 class="text-sm text-gray-600">Gastos (facturas de proveedor)</h3>
+        {% if integracion_gastos.con_datos %}
+        <p class="mt-1 text-xl font-bold">${{ integracion_gastos.total }}</p>
+        <p class="mt-1 text-xs text-gray-500">{{ integracion_gastos.cantidad }} factura{{ integracion_gastos.cantidad|pluralize }} · ${{ integracion_gastos.pendiente_pago }} pendiente de pago</p>
+        {% else %}<p class="mt-1 text-sm text-gray-500">Sin facturas de gasto en este período/proyecto.</p>{% endif %}
+      </article>
+
+      <article id="integracion-ingresos" class="rounded border p-4 {% if integracion_ingresos.con_datos %}border-gray-200{% else %}border-gray-200 bg-gray-50{% endif %}">
+        <h3 class="text-sm text-gray-600">Ingresos (facturas emitidas)</h3>
+        {% if integracion_ingresos.con_datos %}
+        <p class="mt-1 text-xl font-bold">${{ integracion_ingresos.total }}</p>
+        <p class="mt-1 text-xs text-gray-500">{{ integracion_ingresos.cantidad }} factura{{ integracion_ingresos.cantidad|pluralize }} · ${{ integracion_ingresos.cobrado }} cobrado</p>
+        {% else %}<p class="mt-1 text-sm text-gray-500">Sin facturas de ingreso emitidas en este período/proyecto.</p>{% endif %}
+      </article>
+
+      <article id="integracion-clientes" class="rounded border p-4 {% if integracion_clientes.con_datos %}border-gray-200{% else %}border-gray-200 bg-gray-50{% endif %}">
+        <h3 class="text-sm text-gray-600">Clientes</h3>
+        <p class="mt-1 text-xl font-bold">{{ integracion_clientes.activos_total }} activo{{ integracion_clientes.activos_total|pluralize }}</p>
+        {% if integracion_clientes.con_datos %}
+        <p class="mt-1 text-xs text-gray-500">{{ integracion_clientes.facturados_periodo }} facturado{{ integracion_clientes.facturados_periodo|pluralize }} en el período</p>
+        {% else %}<p class="mt-1 text-xs text-gray-500">Ningún cliente facturado en este período/proyecto.</p>{% endif %}
+      </article>
+    </div>
+
+    {% if integracion_gastos.con_datos or integracion_ingresos.con_datos %}
+    <div class="mt-6 grid gap-6 lg:grid-cols-2">
+      {% if integracion_gastos.con_datos %}
+      <div id="integracion-gastos-detalle" class="overflow-x-auto">
+        <h3 class="text-sm font-semibold text-gray-700">Procedencia · gastos</h3>
+        <table class="mt-2 min-w-full text-sm"><thead><tr class="border-b text-left"><th class="p-2">Proveedor</th><th class="p-2">Documento</th><th class="p-2">Fecha</th><th class="p-2">Total</th><th class="p-2">Estado</th></tr></thead>
+        <tbody>{% for gasto in integracion_gastos.detalle %}<tr class="border-b"><td class="p-2">{{ gasto.proveedor }}</td><td class="p-2">{{ gasto.numero_documento }}</td><td class="p-2">{{ gasto.fecha|date:'d/m/Y' }}</td><td class="p-2">${{ gasto.total }}</td><td class="p-2">{{ gasto.estado_display }}</td></tr>{% endfor %}</tbody></table>
+      </div>
+      {% endif %}
+      {% if integracion_ingresos.con_datos %}
+      <div id="integracion-ingresos-detalle" class="overflow-x-auto">
+        <h3 class="text-sm font-semibold text-gray-700">Procedencia · ingresos</h3>
+        <table class="mt-2 min-w-full text-sm"><thead><tr class="border-b text-left"><th class="p-2">Cliente</th><th class="p-2">Factura</th><th class="p-2">Fecha</th><th class="p-2">Total</th><th class="p-2">Estado</th></tr></thead>
+        <tbody>{% for ingreso in integracion_ingresos.detalle %}<tr class="border-b"><td class="p-2">{{ ingreso.cliente }}</td><td class="p-2">{{ ingreso.numero_factura }}</td><td class="p-2">{{ ingreso.fecha_factura|date:'d/m/Y' }}</td><td class="p-2">${{ ingreso.total }}</td><td class="p-2">{{ ingreso.estado_display }}</td></tr>{% endfor %}</tbody></table>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% include 'financiero/_homologacion_projects_contable.html' %}
 
   <section id="historial-cargas" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 overflow-x-auto">

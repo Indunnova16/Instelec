@@ -29,6 +29,7 @@ from .models_finv2_carga import (
     LineaCargaFinanciera,
     VersionHomologacionProjectsContable,
 )
+from .services_finv2_indicadores_integracion import construir_contexto_dashboard_integrado
 
 
 ZERO = Decimal('0.00')
@@ -307,7 +308,32 @@ class CargaFinancieraView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             'resumen_sin_base_count': sum(1 for i in indicadores_calculados if i['sin_base']),
             'resumen_totales': self._resumen_totales(carga, tipo_operacional=tipo_operacional, centro_costo=centro_costo),
         })
+        # #246 Sprint C: nómina/gastos/ingresos/clientes reales de las 3
+        # fuentes desplegadas (#252/#248/#249/#261), independiente de si hay
+        # una CargaFinanciera (libro Excel) cargada para el período -- por
+        # eso NO se gatea con `carga` como el resto de este bloque.
+        context.update(self._contexto_integrado(anio, mes, proyecto, periodo_valido))
         return context
+
+    @staticmethod
+    def _contexto_integrado(anio, mes, proyecto, periodo_valido):
+        """Envuelve ``construir_contexto_dashboard_integrado`` (B3) con un
+        estado vacío coherente cuando el período todavía no es válido (mes
+        fuera de 1-12), para no romper ``calendar.monthrange``."""
+        if periodo_valido:
+            return construir_contexto_dashboard_integrado(anio, mes, contrato=proyecto)
+        vacio_lista = {'con_datos': False, 'cantidad': 0, 'detalle': []}
+        return {
+            'integracion_nomina': {
+                'con_datos': False, 'costo_nomina': ZERO, 'horas_trabajadas': ZERO,
+                'cantidad_producciones': 0, 'producciones': [],
+            },
+            'integracion_gastos': {**vacio_lista, 'total': ZERO, 'pendiente_pago': ZERO},
+            'integracion_ingresos': {**vacio_lista, 'total': ZERO, 'cobrado': ZERO},
+            'integracion_clientes': {
+                'con_datos': False, 'activos_total': 0, 'facturados_periodo': 0, 'detalle': [],
+            },
+        }
 
     def post(self, request, *args, **kwargs):
         accion = request.POST.get('accion')
