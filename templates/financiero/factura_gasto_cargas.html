@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Historial de cargas — Facturas de gasto{% endblock %}
+{% block content %}
+<main class="max-w-5xl mx-auto px-4 py-6 space-y-5">
+  <div class="flex justify-between items-center">
+    <h1 class="text-2xl font-bold">Historial de cargas de facturas de gasto</h1>
+    <a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_importar' %}">← Nueva carga</a>
+  </div>
+  <div class="bg-white rounded shadow overflow-x-auto"><table class="min-w-full text-sm"><thead><tr><th class="p-2 text-left">Fecha</th><th class="p-2 text-left">Archivo</th><th class="p-2 text-left">Usuario</th><th class="p-2 text-left">Resultado</th><th class="p-2 text-right">Válidas</th><th class="p-2 text-right">Error</th><th class="p-2 text-right">Creadas</th><th class="p-2 text-right">Actualizadas</th><th class="p-2"></th></tr></thead><tbody>
+  {% for carga in cargas %}<tr class="border-t"><td class="p-2">{{ carga.created_at|date:"d/m/Y H:i" }}</td><td class="p-2">{{ carga.archivo_nombre }}</td><td class="p-2">{{ carga.usuario }}</td><td class="p-2">{{ carga.resultado }}</td><td class="p-2 text-right">{{ carga.filas_validas }}</td><td class="p-2 text-right">{{ carga.filas_error }}</td><td class="p-2 text-right">{{ carga.filas_creadas }}</td><td class="p-2 text-right">{{ carga.filas_actualizadas }}</td><td class="p-2">{% if carga.resultado == "CONFIRMADA" %}<a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_carga_csv' carga.pk %}">CSV</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="9" class="p-4 text-gray-500">Sin cargas registradas.</td></tr>{% endfor %}
+  </tbody></table></div>
+</main>
+{% endblock %}

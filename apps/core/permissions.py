@@ -244,6 +244,11 @@ SUBMODULO_FIN_HOMOLOGACION = 'FIN_HOMOLOGACION'
 # allowed_roles=["admin","director","coordinador"] -- mismo bug ya corregido
 # en #261/#262 para Maestros y en #247 para Homologación).
 SUBMODULO_FIN_FACTURAS_INGRESOS = 'FIN_FACTURAS_INGRESOS'
+# #248 gap: RBAC granular para Facturas de Gastos -- mismo bug de
+# allowed_roles=["admin","director","coordinador"] hardcodeado en
+# views_finv2_gastos.py, corregido por B1 (S1 solo agrega la hoja + el seed
+# de roles nuevos 'contador'/'gerente_financiero' que la consumen).
+SUBMODULO_FIN_FACTURAS_GASTOS = 'FIN_FACTURAS_GASTOS'
 
 SUBMODULOS_FINANCIERO = {
     SUBMODULO_FIN_DASHBOARD,
@@ -255,6 +260,7 @@ SUBMODULOS_FINANCIERO = {
     SUBMODULO_FIN_MAESTROS,
     SUBMODULO_FIN_HOMOLOGACION,
     SUBMODULO_FIN_FACTURAS_INGRESOS,
+    SUBMODULO_FIN_FACTURAS_GASTOS,
 }
 
 # === Sub-módulos del bloque CONFIG (issue #186, A2) =====================

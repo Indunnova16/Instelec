@@ -8,6 +8,7 @@ from .permissions import (
     SUBMODULO_FIN_CHECKLIST_FACTURACION,
     SUBMODULO_FIN_COSTOS_CUADRILLA,
     SUBMODULO_FIN_DASHBOARD,
+    SUBMODULO_FIN_FACTURAS_GASTOS,
     SUBMODULO_FIN_FACTURAS_INGRESOS,
     SUBMODULO_FIN_HOMOLOGACION,
     SUBMODULO_FIN_MAESTROS,
@@ -70,5 +71,13 @@ def financiero_menu_context(request):
         # de admin/director/coordinador para no romper a nadie.
         'ok_fin_facturas_ingresos': user_can_access_submodulo(
             user, SUBMODULO_FIN_FACTURAS_INGRESOS
+        ),
+        # #248 gap: Facturas de Gastos migró de allowed_roles legacy a la
+        # hoja granular FIN_FACTURAS_GASTOS -- mismo patrón que
+        # ok_fin_facturas_ingresos arriba (#249 gap 1). El seed (S1,
+        # migración 0008) preserva el acceso previo de
+        # admin/director/coordinador para no romper a nadie.
+        'ok_fin_facturas_gastos': user_can_access_submodulo(
+            user, SUBMODULO_FIN_FACTURAS_GASTOS
         ),
     }

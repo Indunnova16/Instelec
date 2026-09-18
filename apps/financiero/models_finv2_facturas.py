@@ -151,6 +151,18 @@ class FacturaGasto(BaseModel):
     numero_documento = models.CharField("Número de documento", max_length=100)
     documento = models.FileField("Documento", upload_to="financiero/facturas_gasto/", blank=True)
     fecha = models.DateField("Fecha")
+    fecha_vencimiento = models.DateField(
+        "Fecha de vencimiento",
+        null=True,
+        blank=True,
+        help_text=(
+            "#248: el checklist del cliente pide alertar facturas próximas a "
+            "vencer pero el modelo no traía este campo. Supuesto documentado "
+            "(pendiente de confirmación de Indunnova): si no se indica, se "
+            "calcula fecha + 30 días al guardar (ver forms_finv2_gastos.py y "
+            "views_finv2_gastos.py::GastoImportarPreviewView)."
+        ),
+    )
     concepto = models.CharField("Concepto", max_length=255)
     categoria = models.CharField("Categoría", max_length=255)
     centro_costo = models.CharField("Centro de costo", max_length=100, blank=True)
@@ -341,3 +353,56 @@ class PagoFacturaIngreso(BaseModel):
     class Meta:
         db_table = "financiero_pagos_factura_ingreso"
         ordering = ["-fecha", "-created_at"]
+
+
+class AuditoriaFacturaGasto(BaseModel):
+    """Bitácora inmutable de cambios sobre una factura de gasto (#248).
+
+    Mismo patrón que `AuditoriaFacturaIngreso`/`AuditoriaTercero`: campo +
+    anterior + nuevo + quién + cuándo (created_at heredado de BaseModel).
+    Cubre creación, aprobación, rechazo y pago -- las vistas de
+    `views_finv2_gastos.py` registran cada transición de estado acá.
+    """
+
+    factura = models.ForeignKey(FacturaGasto, on_delete=models.CASCADE, related_name="auditoria")
+    campo = models.CharField(max_length=80)
+    valor_anterior = models.TextField(blank=True)
+    valor_nuevo = models.TextField(blank=True)
+    usuario = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        db_table = "financiero_auditoria_facturas_gasto"
+        ordering = ["-created_at"]
+
+
+class CargaFacturaGasto(BaseModel):
+    """Trazabilidad de una importación masiva de facturas de gasto (#248 gap).
+
+    Mismo patrón que `CargaFacturasIngreso` (#249). `detalle_filas` (además
+    del ya existente `detalle_errores`) conserva un resumen por fila de la
+    carga CONFIRMADA -- es lo que exporta
+    `financiero:factura_gasto_carga_csv` (regla migrations->export del
+    BLUEPRINT) sin necesitar una FK inversa nueva sobre `FacturaGasto`.
+    """
+
+    archivo_nombre = models.CharField(max_length=255)
+    usuario = models.CharField(max_length=150, blank=True)
+    filas_total = models.PositiveIntegerField(default=0)
+    filas_validas = models.PositiveIntegerField(default=0)
+    filas_error = models.PositiveIntegerField(default=0)
+    filas_creadas = models.PositiveIntegerField(default=0)
+    filas_actualizadas = models.PositiveIntegerField(default=0)
+    resultado = models.CharField(
+        max_length=20,
+        choices=[
+            ("PREVIEW", "Vista previa"),
+            ("CONFIRMADA", "Confirmada"),
+            ("RECHAZADA", "Rechazada"),
+        ],
+    )
+    detalle_errores = models.JSONField(default=list, blank=True)
+    detalle_filas = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        db_table = "financiero_cargas_facturas_gasto"
+        ordering = ["-created_at"]

@@ -1,7 +1,35 @@
 {% extends 'base.html' %}
 {% load humanize %}
 {% block content %}
-<main class="max-w-7xl mx-auto px-4 py-6"><div class="flex justify-between items-center"><h1 class="text-2xl font-bold">Facturas de gastos</h1><a class="rounded bg-blue-600 px-4 py-2 text-white" href="{% url 'financiero:factura_gasto_nueva' %}">Registrar gasto</a></div>
+<main class="max-w-7xl mx-auto px-4 py-6"><div class="flex justify-between items-center"><h1 class="text-2xl font-bold">Facturas de gastos</h1><div class="flex gap-2"><a class="rounded border px-4 py-2" href="{% url 'financiero:factura_gasto_importar' %}">Carga masiva</a><a class="rounded bg-blue-600 px-4 py-2 text-white" href="{% url 'financiero:factura_gasto_nueva' %}">Registrar gasto</a></div></div>
 {% if messages %}{% for message in messages %}<div role="alert" class="mt-4 rounded p-3 {% if message.tags == 'error' %}bg-red-100{% else %}bg-green-100{% endif %}">{{ message }}</div>{% endfor %}{% endif %}
-<section id="facturas-gastos-tabla" class="mt-6 overflow-x-auto bg-white rounded shadow"><table class="min-w-full text-sm"><thead><tr><th>Documento</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody>{% for factura in facturas %}<tr class="border-t"><td class="p-3">{{ factura.numero_documento }}</td><td>{{ factura.proveedor }}</td><td>{{ factura.fecha|date:'d/m/Y' }}</td><td>${{ factura.total|floatformat:2 }}</td><td>{{ factura.get_estado_display }}</td><td><a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_detalle' factura.pk %}">Ver</a></td></tr>{% empty %}<tr><td colspan="6" class="p-4 text-gray-500">No hay facturas registradas.</td></tr>{% endfor %}</tbody></table></section></main>
+
+{% if alertas.pendientes_aprobacion or alertas.proximas_vencer or alertas.sin_pagar %}
+<section id="alertas-gastos" class="mt-6 grid gap-4 md:grid-cols-3">
+  <div class="rounded bg-amber-50 border border-amber-200 p-4">
+    <h2 class="font-semibold text-amber-800">Pendientes de aprobación (&gt;$1.000.000)</h2>
+    {% if alertas.pendientes_aprobacion %}<ul class="mt-2 text-sm text-amber-900 space-y-1">{% for factura in alertas.pendientes_aprobacion %}<li><a class="underline" href="{% url 'financiero:factura_gasto_detalle' factura.pk %}">{{ factura.proveedor }} — ${{ factura.total|floatformat:2 }}</a></li>{% endfor %}</ul>{% else %}<p class="mt-2 text-sm text-amber-700">Sin pendientes.</p>{% endif %}
+  </div>
+  <div class="rounded bg-red-50 border border-red-200 p-4">
+    <h2 class="font-semibold text-red-800">Próximas a vencer (7 días)</h2>
+    {% if alertas.proximas_vencer %}<ul class="mt-2 text-sm text-red-900 space-y-1">{% for factura in alertas.proximas_vencer %}<li><a class="underline" href="{% url 'financiero:factura_gasto_detalle' factura.pk %}">{{ factura.proveedor }} — vence {{ factura.fecha_vencimiento|date:'d/m/Y' }}</a></li>{% endfor %}</ul>{% else %}<p class="mt-2 text-sm text-red-700">Sin vencimientos próximos.</p>{% endif %}
+  </div>
+  <div class="rounded bg-slate-50 border border-slate-200 p-4">
+    <h2 class="font-semibold text-slate-800">Sin pagar</h2>
+    {% if alertas.sin_pagar %}<ul class="mt-2 text-sm text-slate-900 space-y-1">{% for factura in alertas.sin_pagar %}<li><a class="underline" href="{% url 'financiero:factura_gasto_detalle' factura.pk %}">{{ factura.proveedor }} — ${{ factura.total|floatformat:2 }}</a></li>{% endfor %}</ul>{% else %}<p class="mt-2 text-sm text-slate-700">Sin facturas pendientes de pago.</p>{% endif %}
+  </div>
+</section>
+{% endif %}
+
+<form method="get" class="mt-4 flex items-end gap-3">
+  <div><label class="block text-sm text-gray-600" for="filtro-estado">Estado</label>
+    <select id="filtro-estado" name="estado" class="border rounded p-2">
+      <option value="" {% if not filtro_estado %}selected{% endif %}>Todos</option>
+      {% for valor, etiqueta in estados %}<option value="{{ valor }}" {% if filtro_estado == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="rounded bg-slate-700 text-white px-4 py-2">Filtrar</button>
+</form>
+
+<section id="facturas-gastos-tabla" class="mt-4 overflow-x-auto bg-white rounded shadow"><table class="min-w-full text-sm"><thead><tr><th>Documento</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody>{% for factura in facturas %}<tr class="border-t"><td class="p-3">{{ factura.numero_documento }}</td><td>{{ factura.proveedor }}</td><td>{{ factura.fecha|date:'d/m/Y' }}</td><td>${{ factura.total|floatformat:2 }}</td><td>{{ factura.get_estado_display }}</td><td><a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_detalle' factura.pk %}">Ver</a></td></tr>{% empty %}<tr><td colspan="6" class="p-4 text-gray-500">No hay facturas registradas.</td></tr>{% endfor %}</tbody></table></section></main>
 {% endblock %}

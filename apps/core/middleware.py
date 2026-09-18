@@ -28,6 +28,7 @@ from .permissions import (
     SUBMODULO_FIN_CHECKLIST_FACTURACION,
     SUBMODULO_FIN_COSTOS_CUADRILLA,
     SUBMODULO_FIN_DASHBOARD,
+    SUBMODULO_FIN_FACTURAS_GASTOS,
     SUBMODULO_FIN_FACTURAS_INGRESOS,
     SUBMODULO_FIN_MAESTROS,
     SUBMODULO_FIN_HOMOLOGACION,
@@ -110,6 +111,10 @@ SUBMODULO_PREFIXES = (
     # catch-all de abajo (exige FIN_DASHBOARD, un submódulo distinto), mismo
     # bug de especificidad que #247 corrigió para carga-financiera.
     ('/financiero/facturas-ingresos/', SUBMODULO_FIN_FACTURAS_INGRESOS),
+    # #248 gap (integración B): mismo caso gemelo que facturas-ingresos --
+    # Facturas de Gastos (B1) también tiene hoja granular propia; sin esta
+    # entrada caía en el catch-all FIN_DASHBOARD de abajo.
+    ('/financiero/facturas-gastos/', SUBMODULO_FIN_FACTURAS_GASTOS),
     ('/financiero/', SUBMODULO_FIN_DASHBOARD),
 )
 
