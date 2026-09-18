@@ -149,7 +149,11 @@ class TestRoleModuloPermisoMatriz186:
         # Ingresos, reemplaza allowed_roles legacy), con lo que el catálogo
         # llega a 32.
         assert "FIN_FACTURAS_INGRESOS" in columnas_sub
-        assert len(columnas_sub) == 32
+        # #248 agrega FIN_FACTURAS_GASTOS (RBAC granular de Facturas de
+        # Gasto, reemplaza allowed_roles legacy), con lo que el catálogo
+        # llega a 33.
+        assert "FIN_FACTURAS_GASTOS" in columnas_sub
+        assert len(columnas_sub) == 33
 
     def test_matriz_no_incluye_roles_inactivos(self, admin_client):
         Role.objects.create(

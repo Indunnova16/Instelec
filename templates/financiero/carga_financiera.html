@@ -108,12 +108,14 @@
   {% endif %}
 
   {% if periodo_valido %}
-  {# #246 Sprint D (B4): descarga de reportes del dashboard integrado.
-     RBAC de descarga -- fuente de verdad en
-     views_finv2_dashboard_exportar.FORMATOS_DESCARGA_POR_ROL: Admin/Gerente
-     Financiero ven los 3 botones, Contador solo Excel, cualquier otro rol
-     (Supervisor, Coordinador, etc.) no ve ninguno -- el endpoint responde
-     403 igual si se fuerza la URL directamente. #}
+  {% comment %}
+    #246 Sprint D (B4): descarga de reportes del dashboard integrado.
+    RBAC de descarga -- fuente de verdad en
+    views_finv2_dashboard_exportar.FORMATOS_DESCARGA_POR_ROL: Admin/Gerente
+    Financiero ven los 3 botones, Contador solo Excel, cualquier otro rol
+    (Supervisor, Coordinador, etc.) no ve ninguno -- el endpoint responde
+    403 igual si se fuerza la URL directamente.
+  {% endcomment %}
   <section id="dashboard-exportar-reportes" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
     <h2 class="text-lg font-semibold">Reportes del dashboard financiero</h2>
     <p class="mt-1 text-sm text-gray-500">PDF ejecutivo, Excel detallado y PPT para stakeholders, respetando el período/proyecto/tipo/centro de costo filtrado.</p>
