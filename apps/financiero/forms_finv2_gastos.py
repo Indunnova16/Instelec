@@ -1,4 +1,6 @@
-"""Formularios del registro y pago de facturas de gasto (#248)."""
+"""Formularios del registro, pago e importación masiva de facturas de gasto (#248)."""
+
+from datetime import timedelta
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -11,6 +13,7 @@ class FacturaGastoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["proveedor"].queryset = Proveedor.objects.filter(activo=True)
+
     class Meta:
         model = FacturaGasto
         fields = (
@@ -51,10 +54,28 @@ class FacturaGastoForm(forms.ModelForm):
         factura.iva = totales["iva"]
         factura.total = totales["total"]
         factura.estado = estado_inicial_gasto(factura.total)
+        if not factura.fecha_vencimiento and factura.fecha:
+            # #248: el checklist pide alertar "próximas a vencer" pero el
+            # modelo no tenía ese campo -- supuesto documentado (30 días
+            # desde la fecha de factura), ver models_finv2_facturas.py.
+            factura.fecha_vencimiento = factura.fecha + timedelta(days=30)
         if commit:
             factura.save()
             self.save_m2m()
         return factura
+
+
+class ImportarFacturasGastoForm(forms.Form):
+    """Sube el archivo de carga masiva (#248 sección 5 del checklist)."""
+
+    archivo = forms.FileField(label="Archivo CSV o XLSX")
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data["archivo"]
+        nombre = archivo.name.lower()
+        if not (nombre.endswith(".csv") or nombre.endswith(".xlsx")):
+            raise ValidationError("El archivo debe ser CSV UTF-8 o XLSX.")
+        return archivo
 
 
 class PagoFacturaGastoForm(forms.ModelForm):
