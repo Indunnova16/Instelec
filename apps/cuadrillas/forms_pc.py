@@ -23,9 +23,14 @@ from django.urls import reverse_lazy
 
 from apps.construccion.models import TorreConstruccion
 from apps.construccion.views import ordenar_torres_construccion
+from apps.core.permissions import AREA_CONSTRUCCION
 
-from .models_base import Vehiculo
-from .models_pc import EjecucionSemanalCuadrilla, ProgramacionSemanalCuadrilla
+from .models_base import PersonalCuadrilla, Vehiculo
+from .models_pc import (
+    EjecucionSemanalCuadrilla,
+    EjecucionSemanalPersonal,
+    ProgramacionSemanalCuadrilla,
+)
 
 # Clase Tailwind compartida (espeja apps/construccion/forms.py::INPUT_CLS).
 INPUT_CLS = (
@@ -235,3 +240,53 @@ class EjecucionSemanalCuadrillaForm(forms.ModelForm):
                 'Solo se pueden asignar vehículos activos.'
             )
         return vehiculo
+
+
+class EjecucionSemanalPersonalAgregarForm(forms.Form):
+    """
+    #270 (sub-item C): alta múltiple de personal a la ejecución.
+
+    El queryset SOLO ofrece `PersonalCuadrilla` activo con
+    `area=Construcción` (pedido explícito del issue). Un colaborador con
+    `area` vacío (dato legacy, ver `models_base.py::PersonalCuadrilla.area`)
+    queda fuera del Select2 -- edge case cubierto en `tests_pc.py`.
+
+    Este form documenta el contrato/queryset; la vista
+    (`views_pc_ejecucion_personal.EjecucionSemanalPersonalAgregarView`) lo
+    reusa para no duplicar el filtro.
+    """
+
+    personal = forms.ModelMultipleChoiceField(
+        queryset=PersonalCuadrilla.objects.filter(
+            activo=True, area=AREA_CONSTRUCCION,
+        ).order_by('nombre'),
+        required=True,
+        widget=forms.SelectMultiple(attrs={
+            'class': INPUT_CLS + ' js-tomselect',
+        }),
+        error_messages={
+            'required': 'Seleccioná al menos una persona.',
+        },
+    )
+
+
+class EjecucionSemanalPersonalEditarForm(forms.ModelForm):
+    """Edición del costo/día snapshot de UNA fila de personal asignado
+    (#270 sub-item C, botón "Editar" de la tabla)."""
+
+    class Meta:
+        model = EjecucionSemanalPersonal
+        fields = ['costo_dia']
+        widgets = {
+            'costo_dia': forms.NumberInput(attrs={
+                'class': INPUT_CLS, 'min': 0, 'step': '0.01',
+            }),
+        }
+
+    def clean_costo_dia(self):
+        costo = self.cleaned_data.get('costo_dia')
+        if costo is not None and costo < 0:
+            raise forms.ValidationError(
+                'El costo por día no puede ser negativo.'
+            )
+        return costo

@@ -20,15 +20,19 @@ para no romper el import en la rama base.
 """
 from django.urls import path
 
+from apps.cuadrillas.views_pc_dashboard import ProgramacionCuadrillaDashboardView
+from apps.cuadrillas.views_pc_ejecucion import EjecucionSemanalUpdateView
+from apps.cuadrillas.views_pc_ejecucion_personal import (
+    EjecucionSemanalPersonalAgregarView,
+    EjecucionSemanalPersonalEditarView,
+    EjecucionSemanalPersonalRemoverView,
+)
 from apps.cuadrillas.views_pc_index import ProgramacionCuadrillaIndexView
 from apps.cuadrillas.views_pc_programacion import (
     ProgramacionCuadrillaCreateView,
     ProgramacionCuadrillaDetailView,
     ProgramacionCuadrillaUpdateView,
 )
-from apps.cuadrillas.views_pc_ejecucion import EjecucionSemanalUpdateView
-from apps.cuadrillas.views_pc_dashboard import ProgramacionCuadrillaDashboardView
-
 
 urlpatterns = [
     # --- B1: entry point / índice ---
@@ -66,5 +70,24 @@ urlpatterns = [
         'programacion-cuadrillas/<uuid:pk>/ejecucion/',
         EjecucionSemanalUpdateView.as_view(),
         name='programacion_cuadrilla_ejecucion_save',
+    ),
+    # --- #270 sub-item C: gestión de personal en la ejecución (POST AJAX) ---
+    # `pk` = UUID de la PROGRAMACIÓN (mismo contrato que arriba) -- hace
+    # upsert de la ejecución si todavía no existe.
+    path(
+        'programacion-cuadrillas/<uuid:pk>/ejecucion/personal/agregar/',
+        EjecucionSemanalPersonalAgregarView.as_view(),
+        name='programacion_cuadrilla_ejecucion_personal_agregar',
+    ),
+    # `pk` = UUID de la FILA EjecucionSemanalPersonal (no de la programación).
+    path(
+        'programacion-cuadrillas/ejecucion/personal/<uuid:pk>/editar/',
+        EjecucionSemanalPersonalEditarView.as_view(),
+        name='programacion_cuadrilla_ejecucion_personal_editar',
+    ),
+    path(
+        'programacion-cuadrillas/ejecucion/personal/<uuid:pk>/remover/',
+        EjecucionSemanalPersonalRemoverView.as_view(),
+        name='programacion_cuadrilla_ejecucion_personal_remover',
     ),
 ]

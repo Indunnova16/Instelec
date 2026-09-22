@@ -26,12 +26,15 @@ vía path explícito:
 import json
 
 import pytest
+from django.db import IntegrityError
 from django.test import Client
 from django.urls import NoReverseMatch, reverse
 
-from apps.cuadrillas.models import Cuadrilla, Vehiculo
+from apps.core.permissions import AREA_CONSTRUCCION, AREA_MANTENIMIENTO
+from apps.cuadrillas.models import Cargo, Cuadrilla, PersonalCuadrilla, Vehiculo
 from apps.cuadrillas.models_pc import (
     EjecucionSemanalCuadrilla,
+    EjecucionSemanalPersonal,
     ProgramacionSemanalCuadrilla,
 )
 from apps.usuarios.models import Usuario
@@ -76,6 +79,36 @@ def _crear_vehiculo(placa='PC-VEH-01', estado=None, capacidad=6):
     if estado is not None:
         kwargs['estado'] = estado
     return Vehiculo.objects.create(**kwargs)
+
+
+def _crear_cargo(codigo='PC-CARGO-01', nombre='Liniero PC', salario_base='60000'):
+    """#270 (sub-item C): Cargo dedicado con `salario_base` conocido, para
+    poder afirmar el valor exacto de `costo_dia` snapshoteado (el seed
+    LINIERO_I de 0019_seed_cargos.py no garantiza un valor estable para el
+    test)."""
+    cargo, _ = Cargo.objects.get_or_create(
+        codigo=codigo,
+        defaults={'nombre': nombre, 'salario_base': salario_base, 'activo': True},
+    )
+    return cargo
+
+
+def _crear_personal(
+    documento, nombre='Colaborador PC', area=AREA_CONSTRUCCION,
+    activo=True, cargo=None,
+):
+    """#270 (sub-item C): PersonalCuadrilla de prueba. `area=''` (blank)
+    simula el dato LEGACY pre-#186 (colaboradores sin área asignada) --
+    edge case explícito del sub-item."""
+    if cargo is None:
+        cargo = _crear_cargo()
+    return PersonalCuadrilla.objects.create(
+        documento=documento,
+        nombre=nombre,
+        area=area,
+        activo=activo,
+        rol_cuadrilla_id=cargo.codigo,
+    )
 
 
 def _login(client, usuario):
@@ -545,6 +578,217 @@ class TestEjecucionSemanalCuadrillaFormVehiculo:
         # nivel de ModelChoiceField antes de llegar a clean_vehiculo.
         assert not form.is_valid()
         assert 'vehiculo' in form.errors
+
+
+# ===========================================================================
+# 3.6 Gestión de personal en la ejecución (#270, sub-item C)
+# ===========================================================================
+
+@pytest.mark.django_db
+class TestEjecucionSemanalPersonalModel:
+    """Modelo `EjecucionSemanalPersonal` (through FK+FK, #270 sub-item C)."""
+
+    def test_str_y_creacion_basica(self):
+        prog = _crear_programacion(torres=5)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+        personal = _crear_personal('PC-C-001', nombre='Juan Pérez')
+        ep = EjecucionSemanalPersonal.objects.create(
+            ejecucion=ejecucion, personal=personal, costo_dia='60000',
+        )
+        assert 'Juan Pérez' in str(ep)
+        ep.refresh_from_db()
+        assert ep.costo_dia == 60000
+
+    def test_unique_together_rechaza_persona_duplicada_en_la_misma_ejecucion(self):
+        """Edge — constraint de BD: la MISMA persona no puede estar dos veces
+        en la misma ejecución (respaldo del chequeo de aplicación en la
+        vista)."""
+        prog = _crear_programacion(torres=5)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+        personal = _crear_personal('PC-C-002', nombre='Duplicado Test')
+        EjecucionSemanalPersonal.objects.create(ejecucion=ejecucion, personal=personal)
+        with pytest.raises(IntegrityError):
+            EjecucionSemanalPersonal.objects.create(ejecucion=ejecucion, personal=personal)
+
+
+@pytest.mark.django_db
+class TestEjecucionSemanalPersonalAgregarForm:
+    """`forms_pc.EjecucionSemanalPersonalAgregarForm` — queryset filtrado
+    (#270 sub-item C)."""
+
+    def test_queryset_excluye_area_vacia_y_otra_area(self):
+        from apps.cuadrillas.forms_pc import EjecucionSemanalPersonalAgregarForm
+
+        construccion = _crear_personal('PC-FORM-001', nombre='De Construcción')
+        legacy = _crear_personal('PC-FORM-002', nombre='Legacy Sin Area', area='')
+        mantenimiento = _crear_personal(
+            'PC-FORM-003', nombre='De Mantenimiento', area=AREA_MANTENIMIENTO,
+        )
+        inactivo = _crear_personal('PC-FORM-004', nombre='Inactivo', activo=False)
+
+        form = EjecucionSemanalPersonalAgregarForm()
+        ids = set(form.fields['personal'].queryset.values_list('pk', flat=True))
+        assert construccion.pk in ids
+        assert legacy.pk not in ids
+        assert mantenimiento.pk not in ids
+        assert inactivo.pk not in ids
+
+
+@pytest.mark.django_db
+class TestEjecucionPersonalAjax:
+    """Vistas AJAX de `views_pc_ejecucion_personal.py` (#270 sub-item C):
+    agregar (alta múltiple) / editar (costo_dia) / remover."""
+
+    def test_happy_agregar_multiple_crea_ejecucion_y_filas_con_costo_snapshot(self):
+        """Happy: la ejecución NO existe todavía (nadie guardó torres/vehículo
+        primero) -> agregar personal la crea (upsert) y la tabla refleja
+        nombre/documento/cargo/costo_dia tomado del Cargo."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=8)
+        cargo = _crear_cargo(codigo='PC-CARGO-HAPPY', salario_base='75000')
+        p1 = _crear_personal('PC-H-001', nombre='Ana Torres', cargo=cargo)
+        p2 = _crear_personal('PC-H-002', nombre='Luis Peña', cargo=cargo)
+
+        assert not EjecucionSemanalCuadrilla.objects.filter(programacion=prog).exists()
+
+        url = reverse(
+            'construccion:programacion_cuadrilla_ejecucion_personal_agregar',
+            args=[prog.pk],
+        )
+        resp = client.post(
+            url, data={'personal': [str(p1.pk), str(p2.pk)]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert len(payload['agregados']) == 2
+        nombres = {fila['nombre'] for fila in payload['agregados']}
+        assert nombres == {'Ana Torres', 'Luis Peña'}
+        fila_ana = next(f for f in payload['agregados'] if f['nombre'] == 'Ana Torres')
+        assert fila_ana['documento'] == 'PC-H-001'
+        assert float(fila_ana['costo_dia']) == 75000.0
+
+        # BD: la ejecución se creó (upsert) y tiene 2 filas de personal.
+        ejecucion = EjecucionSemanalCuadrilla.objects.get(programacion=prog)
+        assert ejecucion.personal_asignado.count() == 2
+
+    def test_edge_agregar_persona_duplicada_no_crea_fila_extra(self):
+        """Edge — agregar la MISMA persona dos veces (llamadas separadas):
+        la segunda va a `duplicados`, no crea una segunda fila."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=8)
+        personal = _crear_personal('PC-DUP-001', nombre='Repetido')
+        url = reverse(
+            'construccion:programacion_cuadrilla_ejecucion_personal_agregar',
+            args=[prog.pk],
+        )
+        client.post(url, data={'personal': [str(personal.pk)]},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        resp2 = client.post(url, data={'personal': [str(personal.pk)]},
+                             HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        assert resp2.status_code == 200
+        payload = json.loads(resp2.content)
+        assert payload['agregados'] == []
+        assert payload['duplicados'] == [str(personal.pk)]
+
+        ejecucion = EjecucionSemanalCuadrilla.objects.get(programacion=prog)
+        assert ejecucion.personal_asignado.count() == 1
+
+    def test_edge_area_vacia_dato_legacy_no_se_puede_agregar(self):
+        """Edge — dato legacy: un `PersonalCuadrilla` con `area=''` (colaborador
+        pre-#186 sin área asignada) NO se puede agregar -> va a `no_validos`,
+        400 si es el ÚNICO id enviado."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=8)
+        legacy = _crear_personal('PC-LEGACY-001', nombre='Legacy Sin Area', area='')
+        url = reverse(
+            'construccion:programacion_cuadrilla_ejecucion_personal_agregar',
+            args=[prog.pk],
+        )
+        resp = client.post(url, data={'personal': [str(legacy.pk)]},
+                            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        assert resp.status_code == 400
+
+    def test_edge_remover_el_unico_miembro_deja_ejecucion_sin_personal(self):
+        """Edge — remover el único miembro asignado: la ejecución sigue
+        existiendo, solo queda sin personal (no se borra la ejecución)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=8)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(
+            programacion=prog, torres_ejecutadas=3,
+        )
+        personal = _crear_personal('PC-REM-001', nombre='Único Miembro')
+        ep = EjecucionSemanalPersonal.objects.create(
+            ejecucion=ejecucion, personal=personal, costo_dia='50000',
+        )
+        url = reverse(
+            'construccion:programacion_cuadrilla_ejecucion_personal_remover',
+            args=[ep.pk],
+        )
+        resp = client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        assert resp.status_code == 200
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+
+        ejecucion.refresh_from_db()
+        assert ejecucion.personal_asignado.count() == 0
+        # La ejecución (y sus otros datos) sigue intacta.
+        assert ejecucion.torres_ejecutadas == 3
+
+    def test_happy_editar_costo_dia_persiste_el_nuevo_valor(self):
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=8)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+        personal = _crear_personal('PC-EDIT-001', nombre='A Editar')
+        ep = EjecucionSemanalPersonal.objects.create(
+            ejecucion=ejecucion, personal=personal, costo_dia='50000',
+        )
+        url = reverse(
+            'construccion:programacion_cuadrilla_ejecucion_personal_editar',
+            args=[ep.pk],
+        )
+        resp = client.post(url, data={'costo_dia': '65000.50'},
+                            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        assert resp.status_code == 200
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert float(payload['fila']['costo_dia']) == 65000.50
+
+        ep.refresh_from_db()
+        assert ep.costo_dia == pytest.approx(65000.50)
+
+    def test_edge_editar_costo_dia_negativo_400(self):
+        """Edge — costo_dia negativo se rechaza (400), no se persiste."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=8)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+        personal = _crear_personal('PC-EDIT-NEG-001', nombre='Costo Negativo')
+        ep = EjecucionSemanalPersonal.objects.create(
+            ejecucion=ejecucion, personal=personal, costo_dia='50000',
+        )
+        url = reverse(
+            'construccion:programacion_cuadrilla_ejecucion_personal_editar',
+            args=[ep.pk],
+        )
+        resp = client.post(url, data={'costo_dia': '-100'},
+                            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        assert resp.status_code == 400
+        ep.refresh_from_db()
+        assert ep.costo_dia == 50000
 
 
 # ===========================================================================

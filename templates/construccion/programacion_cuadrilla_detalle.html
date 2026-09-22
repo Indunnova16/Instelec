@@ -132,6 +132,15 @@
         {% include "construccion/_ejecucion_inline.html" with programacion=programacion ejecucion=ejecucion rendimiento_pct=rendimiento_pct vehiculos_activos=vehiculos_activos %}
     </div>
 
+    {# ---- Personal asignado a la ejecución (#270, sub-item C) ---- #}
+    {% comment %}
+      Partial propio (NO comparte archivo con B3/#270-B, ver cabecera de
+      `_ejecucion_personal_inline.html`). Include INCONDICIONAL -- mismo
+      criterio que el resto de este template (el `include` de este build de
+      Django no soporta `ignore missing`).
+    {% endcomment %}
+    {% include "construccion/_ejecucion_personal_inline.html" with programacion=programacion personal_asignado=personal_asignado personal_disponible=personal_disponible %}
+
     {# ---- Dashboard de cumplimiento (inline, #155 sub-2) ---- #}
     {% comment %} Reemplaza el placeholder: la vista pasa los datos vía calculators_pc
        (misma lógica del dashboard B4, no duplicada). Include INCONDICIONAL

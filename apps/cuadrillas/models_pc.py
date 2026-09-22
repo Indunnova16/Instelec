@@ -17,7 +17,7 @@ from django.db import models
 
 from apps.core.models import BaseModel
 
-from .models_base import Vehiculo
+from .models_base import PersonalCuadrilla, Vehiculo
 
 
 class ProgramacionSemanalCuadrilla(BaseModel):
@@ -178,3 +178,60 @@ class EjecucionSemanalCuadrilla(BaseModel):
         if programadas <= 0:
             return 0.0
         return (self.torres_ejecutadas / programadas) * 100
+
+
+class EjecucionSemanalPersonal(BaseModel):
+    """
+    Personal asignado a la ejecución semanal (#270, sub-item C).
+
+    Through-model explícito `EjecucionSemanalCuadrilla` <-> `PersonalCuadrilla`
+    (M2M con datos propios: mismo patrón que `CuadrillaMiembro` en
+    `models_base.py`, FK+FK en vez de un `ManyToManyField(through=...)`
+    -- más simple de manejar desde las vistas AJAX de alta/edición/baja).
+
+    `costo_dia` es un SNAPSHOT tomado al agregar (desde
+    `PersonalCuadrilla.rol_cuadrilla.salario_base`, mismo origen y misma
+    convención de nombre que `views.py::CostoRolAPIView` / `CuadrillaMiembro.
+    costo_dia` -- issue #176 A2 ya documentó que el campo se llama "por día"
+    pero en la práctica guarda el valor MENSUAL del Cargo; se mantiene esa
+    misma convención acá para no divergir del resto del portafolio, corregir
+    la unidad es fuera de alcance de #270) y queda editable después por si el
+    costo real de la semana difiere del default del cargo (ej. bono puntual,
+    ajuste manual). No se recalcula solo si el `Cargo` referenciado cambia de
+    `salario_base` más tarde -- es intencional, es un valor histórico de ESA
+    semana ejecutada.
+
+    `unique_together` evita agregar dos veces a la misma persona en la misma
+    ejecución (edge case "agregar duplicado" del sub-item).
+    """
+
+    ejecucion = models.ForeignKey(
+        EjecucionSemanalCuadrilla,
+        on_delete=models.CASCADE,
+        related_name='personal_asignado',
+        verbose_name='Ejecución',
+    )
+    personal = models.ForeignKey(
+        PersonalCuadrilla,
+        on_delete=models.CASCADE,
+        related_name='ejecuciones_semanales_personal',
+        verbose_name='Personal',
+    )
+    costo_dia = models.DecimalField(
+        'Costo por día',
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Costo diario de esta persona para la semana ejecutada '
+                  '(snapshot editable, tomado del cargo al agregar).',
+    )
+
+    class Meta:
+        db_table = 'ejecucion_semanal_personal'
+        verbose_name = 'Personal de Ejecución Semanal'
+        verbose_name_plural = 'Personal de Ejecución Semanal'
+        ordering = ['personal__nombre']
+        unique_together = ['ejecucion', 'personal']
+
+    def __str__(self):
+        return f"{self.personal} — {self.ejecucion}"

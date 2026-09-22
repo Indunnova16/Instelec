@@ -1,0 +1,311 @@
+{% load l10n %}
+{% comment %}
+  #270 (sub-item C) — Gestión de personal en la ejecución semanal.
+
+  Partial NUEVO (no toca `_ejecucion_inline.html`, propiedad del sub-item B
+  del mismo sprint) incluido directo desde
+  `templates/construccion/programacion_cuadrilla_detalle.html` en una card
+  propia "Personal asignado".
+
+  Contexto que espera del detalle (`ProgramacionCuadrillaDetailView.
+  get_context_data`):
+    - `programacion`       : instancia ProgramacionSemanalCuadrilla.
+    - `personal_asignado`  : queryset EjecucionSemanalPersonal (vacío si la
+                              ejecución todavía no existe).
+    - `personal_disponible`: queryset PersonalCuadrilla activo + área
+                              Construcción, para el Select2 de alta múltiple.
+
+  Guarda inline vía Alpine fetch() a los 3 endpoints AJAX de
+  `views_pc_ejecucion_personal.py` (agregar/editar/remover), con
+  X-CSRFToken. Igual que `_ejecucion_inline.html` (#270 sub-item B): NADA de
+  JSON/float crudo interpolado dentro de un `<script>` (rompe con la coma
+  decimal es-CO) -- los datos iniciales viajan por data-attributes de
+  marcadores HTML (`.fila-inicial`), Alpine los lee UNA vez en `init()` y de
+  ahí en más todo es JS puro (`filas` reactivo).
+
+  Las URLs de editar/remover son por-fila (pk = EjecucionSemanalPersonal, no
+  la programación) -- se arman en el cliente reemplazando un UUID plantilla
+  fijo (`00000000-...`) en la URL ya resuelta por Django, mismo truco que el
+  resto del portafolio usa para evitar reverse() en JS.
+{% endcomment %}
+
+{% localize off %}
+<div id="personal-inline"
+     class="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
+     data-url-agregar="{% url 'construccion:programacion_cuadrilla_ejecucion_personal_agregar' pk=programacion.id %}"
+     data-url-editar-tpl="{% url 'construccion:programacion_cuadrilla_ejecucion_personal_editar' pk='00000000-0000-0000-0000-000000000000' %}"
+     data-url-remover-tpl="{% url 'construccion:programacion_cuadrilla_ejecucion_personal_remover' pk='00000000-0000-0000-0000-000000000000' %}"
+     x-data="personalEjecucionInline($el)">
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+    Personal asignado
+  </h2>
+
+  {% comment %}Toast de estado (success / error).{% endcomment %}
+  <div x-show="toast.visible"
+       x-transition.opacity
+       :class="toast.tipo === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300'"
+       class="rounded border px-4 py-2 text-sm mb-3"
+       style="display:none"
+       x-text="toast.mensaje"></div>
+
+  <form @submit.prevent="agregar()" class="mb-4 space-y-2">
+    {% csrf_token %}
+    <label for="id_personal_agregar"
+           class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+      Agregar personal (área Construcción)
+    </label>
+    <select id="id_personal_agregar"
+            name="personal"
+            multiple
+            :disabled="agregando"
+            class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 js-tomselect">
+      {% for p in personal_disponible %}
+      <option value="{{ p.pk }}">{{ p.nombre }} — {{ p.documento }} ({{ p.get_rol_cuadrilla_display }})</option>
+      {% endfor %}
+    </select>
+    <button type="submit"
+            data-action="agregar-personal"
+            :disabled="agregando"
+            class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+      <svg x-show="agregando" style="display:none" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span x-text="agregando ? 'Agregando…' : 'Agregar'"></span>
+    </button>
+  </form>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm divide-y divide-gray-200 dark:divide-gray-700">
+      <thead>
+        <tr class="text-left text-gray-500 dark:text-gray-400">
+          <th class="py-2 pr-4">Nombre</th>
+          <th class="py-2 pr-4">Documento</th>
+          <th class="py-2 pr-4">Cargo/Rol</th>
+          <th class="py-2 pr-4">Costo/día</th>
+          <th class="py-2 pr-4">Acciones</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+        <template x-if="filas.length === 0">
+          <tr>
+            <td colspan="5" class="py-3 text-center text-gray-400" data-empty-personal>
+              Sin personal asignado todavía.
+            </td>
+          </tr>
+        </template>
+        <template x-for="fila in filas" :key="fila.id">
+          <tr class="text-gray-900 dark:text-white" :data-personal-fila-id="fila.id">
+            <td class="py-2 pr-4" x-text="fila.nombre"></td>
+            <td class="py-2 pr-4" x-text="fila.documento"></td>
+            <td class="py-2 pr-4" x-text="fila.cargoRol"></td>
+            <td class="py-2 pr-4">
+              <span x-show="!fila.editando" x-text="fila.costoDia"></span>
+              <input x-show="fila.editando"
+                     type="number" min="0" step="0.01"
+                     x-model="fila.costoDiaEdit"
+                     :disabled="fila.guardando"
+                     class="w-28 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm text-sm">
+            </td>
+            <td class="py-2 pr-4 space-x-2 whitespace-nowrap">
+              <button type="button"
+                      x-show="!fila.editando"
+                      @click="empezarEditar(fila)"
+                      data-action="editar-personal"
+                      class="text-blue-600 hover:underline text-sm">Editar</button>
+              <template x-if="fila.editando">
+                <span class="space-x-2">
+                  <button type="button"
+                          @click="guardarEdicion(fila)"
+                          :disabled="fila.guardando"
+                          class="text-green-600 hover:underline text-sm disabled:opacity-50">
+                    <span x-text="fila.guardando ? 'Guardando…' : 'Guardar'"></span>
+                  </button>
+                  <button type="button"
+                          @click="cancelarEdicion(fila)"
+                          :disabled="fila.guardando"
+                          class="text-gray-500 hover:underline text-sm">Cancelar</button>
+                </span>
+              </template>
+              <button type="button"
+                      @click="remover(fila)"
+                      :disabled="fila.removiendo || fila.editando"
+                      data-action="remover-personal"
+                      class="text-red-600 hover:underline text-sm disabled:opacity-50">
+                <span x-text="fila.removiendo ? 'Quitando…' : 'Remover'"></span>
+              </button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  {% comment %}
+    Marcadores de datos iniciales -- NUNCA un JSON crudo inlineado en
+    <script>. `init()` los lee una sola vez y arma `filas`.
+  {% endcomment %}
+  <div x-ref="datosIniciales" class="hidden" aria-hidden="true">
+    {% for fila in personal_asignado %}
+    <span class="fila-inicial"
+          data-id="{{ fila.pk }}"
+          data-nombre="{{ fila.personal.nombre }}"
+          data-documento="{{ fila.personal.documento }}"
+          data-cargo-rol="{{ fila.personal.get_rol_cuadrilla_display }}"
+          data-costo-dia="{{ fila.costo_dia }}"></span>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+function personalEjecucionInline(el) {
+  return {
+    urlAgregar: el.dataset.urlAgregar,
+    urlEditarTpl: el.dataset.urlEditarTpl,
+    urlRemoverTpl: el.dataset.urlRemoverTpl,
+    csrfToken: document.cookie.split('csrftoken=')[1]?.split(';')[0] || '',
+    filas: [],
+    agregando: false,
+    toast: { visible: false, mensaje: '', tipo: 'ok' },
+    init() {
+      var marcadores = this.$refs.datosIniciales.querySelectorAll('.fila-inicial');
+      this.filas = Array.from(marcadores).map(function (m) {
+        return {
+          id: m.dataset.id,
+          nombre: m.dataset.nombre,
+          documento: m.dataset.documento,
+          cargoRol: m.dataset.cargoRol,
+          costoDia: m.dataset.costoDia,
+          costoDiaEdit: m.dataset.costoDia,
+          editando: false,
+          guardando: false,
+          removiendo: false,
+        };
+      });
+      if (!this.csrfToken) {
+        var inp = el.querySelector('input[name=csrfmiddlewaretoken]');
+        if (inp) this.csrfToken = inp.value;
+      }
+    },
+    showToast(mensaje, tipo) {
+      this.toast = { visible: true, mensaje: mensaje, tipo: tipo };
+      setTimeout(() => { this.toast.visible = false; }, 3500);
+    },
+    urlEditar(id) {
+      return this.urlEditarTpl.replace('00000000-0000-0000-0000-000000000000', id);
+    },
+    urlRemover(id) {
+      return this.urlRemoverTpl.replace('00000000-0000-0000-0000-000000000000', id);
+    },
+    async agregar() {
+      if (this.agregando) return;
+      var select = el.querySelector('select[name=personal]');
+      var ids = select ? Array.from(select.selectedOptions).map(function (o) { return o.value; }) : [];
+      if (ids.length === 0) {
+        this.showToast('Seleccioná al menos una persona.', 'error');
+        return;
+      }
+      this.agregando = true;
+      try {
+        var fd = new FormData();
+        ids.forEach(function (id) { fd.append('personal', id); });
+        const r = await fetch(this.urlAgregar, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          (data.agregados || []).forEach((fila) => {
+            this.filas.push({
+              id: fila.id,
+              nombre: fila.nombre,
+              documento: fila.documento,
+              cargoRol: fila.cargo_rol,
+              costoDia: fila.costo_dia,
+              costoDiaEdit: fila.costo_dia,
+              editando: false,
+              guardando: false,
+              removiendo: false,
+            });
+          });
+          let mensaje = (data.agregados || []).length + ' persona(s) agregada(s).';
+          if ((data.duplicados || []).length) {
+            mensaje += ' ' + data.duplicados.length + ' ya estaban asignadas.';
+          }
+          if ((data.no_validos || []).length) {
+            mensaje += ' ' + data.no_validos.length + ' no válida(s) (inactiva o fuera de Construcción).';
+          }
+          this.showToast(mensaje, (data.agregados || []).length ? 'ok' : 'error');
+          if (select) {
+            if (select.tomselect) { select.tomselect.clear(); } else { select.selectedIndex = -1; }
+          }
+        } else {
+          this.showToast(data.error || 'No se pudo agregar el personal.', 'error');
+        }
+      } catch (e) {
+        this.showToast('Error de red. Reintentá.', 'error');
+      } finally {
+        this.agregando = false;
+      }
+    },
+    empezarEditar(fila) {
+      fila.costoDiaEdit = fila.costoDia;
+      fila.editando = true;
+    },
+    cancelarEdicion(fila) {
+      fila.editando = false;
+      fila.costoDiaEdit = fila.costoDia;
+    },
+    async guardarEdicion(fila) {
+      if (fila.guardando) return;
+      fila.guardando = true;
+      try {
+        var fd = new FormData();
+        fd.append('costo_dia', fila.costoDiaEdit);
+        const r = await fetch(this.urlEditar(fila.id), {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          fila.costoDia = data.fila.costo_dia;
+          fila.editando = false;
+          this.showToast('Costo actualizado.', 'ok');
+        } else {
+          this.showToast((data && data.error) || 'No se pudo actualizar el costo.', 'error');
+        }
+      } catch (e) {
+        this.showToast('Error de red. Reintentá.', 'error');
+      } finally {
+        fila.guardando = false;
+      }
+    },
+    async remover(fila) {
+      if (fila.removiendo) return;
+      if (!window.confirm('¿Quitar a ' + fila.nombre + ' de la ejecución de esta semana?')) return;
+      fila.removiendo = true;
+      try {
+        const r = await fetch(this.urlRemover(fila.id), {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          this.filas = this.filas.filter((f) => f.id !== fila.id);
+          this.showToast('Persona removida.', 'ok');
+        } else {
+          this.showToast((data && data.error) || 'No se pudo remover.', 'error');
+        }
+      } catch (e) {
+        this.showToast('Error de red. Reintentá.', 'error');
+      } finally {
+        fila.removiendo = false;
+      }
+    },
+  };
+}
+</script>
+{% endlocalize %}

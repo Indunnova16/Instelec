@@ -36,10 +36,11 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
+from apps.core.permissions import AREA_CONSTRUCCION
 
 from . import calculators_pc
 from .forms_pc import ProgramacionSemanalCuadrillaForm
-from .models_base import Vehiculo
+from .models_base import PersonalCuadrilla, Vehiculo
 from .models_pc import ProgramacionSemanalCuadrilla
 
 # Roles con acceso administrativo (espeja apps/construccion/views.py::ALL_ADMIN_ROLES).
@@ -166,6 +167,22 @@ class ProgramacionCuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, Det
                 Q(estado=Vehiculo.Estado.ACTIVO) | Q(pk=ejecucion.vehiculo_id)
             )
         context['vehiculos_activos'] = vehiculo_qs.order_by('placa')
+
+        # #270 (sub-item C): personal ya asignado a la ejecución (tabla) +
+        # catálogo disponible para el Select2 de alta múltiple (activo +
+        # área Construcción -- personal con área vacía/legacy queda fuera,
+        # mismo criterio que `forms_pc.EjecucionSemanalPersonalAgregarForm`).
+        if ejecucion is not None:
+            context['personal_asignado'] = (
+                ejecucion.personal_asignado
+                .select_related('personal', 'personal__rol_cuadrilla')
+                .order_by('personal__nombre')
+            )
+        else:
+            context['personal_asignado'] = []
+        context['personal_disponible'] = PersonalCuadrilla.objects.filter(
+            activo=True, area=AREA_CONSTRUCCION,
+        ).order_by('nombre')
 
         # #155 sub-2: dashboard de cumplimiento inline (reemplaza el placeholder).
         # Reusa la MISMA lógica que ProgramacionCuadrillaDashboardView vía

@@ -16,7 +16,11 @@ from django.contrib import admin
 
 from apps.core.admin import BaseModelAdmin
 
-from .models_pc import EjecucionSemanalCuadrilla, ProgramacionSemanalCuadrilla
+from .models_pc import (
+    EjecucionSemanalCuadrilla,
+    EjecucionSemanalPersonal,
+    ProgramacionSemanalCuadrilla,
+)
 
 
 class EjecucionSemanalInline(admin.StackedInline):
@@ -104,3 +108,20 @@ class EjecucionSemanalCuadrillaAdmin(BaseModelAdmin):
         if obj is None or obj.pk is None:
             return '—'
         return f"{obj.rendimiento_pct:.1f}%"
+
+
+@admin.register(EjecucionSemanalPersonal)
+class EjecucionSemanalPersonalAdmin(BaseModelAdmin):
+    """#270 (sub-item C): personal asignado a la ejecución semanal."""
+
+    list_display = ('personal', 'ejecucion', 'costo_dia')
+    list_filter = (
+        'ejecucion__programacion__anio', 'ejecucion__programacion__semana',
+        'ejecucion__programacion__cuadrilla',
+    )
+    search_fields = (
+        'personal__nombre', 'personal__documento',
+        'ejecucion__programacion__cuadrilla__codigo',
+    )
+    raw_id_fields = ('ejecucion', 'personal')
+    readonly_fields = ('id', 'created_at', 'updated_at')
