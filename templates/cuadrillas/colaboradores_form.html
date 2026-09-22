@@ -71,10 +71,25 @@
                 </div>
 
                 <div>
-                    <label for="{{ form.fecha_ingreso.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Fecha de ingreso
+                    <label for="{{ form.fecha_firma_contrato.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Fecha de firma de contrato
                     </label>
-                    {{ form.fecha_ingreso }}
+                    {{ form.fecha_firma_contrato }}
+                    {% if form.fecha_firma_contrato.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.fecha_firma_contrato.errors|join:" " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <!-- Issue #271 (A2): split de la antigua "Fecha de ingreso" -- ésta es la
+                         fecha operativa de disponibilidad para ser programado en el proyecto. -->
+                    <label for="{{ form.fecha_ingreso_proyecto.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Fecha de ingreso a proyecto
+                    </label>
+                    {{ form.fecha_ingreso_proyecto }}
+                    {% if form.fecha_ingreso_proyecto.errors %}
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ form.fecha_ingreso_proyecto.errors|join:" " }}</p>
+                    {% endif %}
                 </div>
 
                 <div>

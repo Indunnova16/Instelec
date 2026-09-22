@@ -30,7 +30,8 @@ class PersonalCuadrillaForm(forms.ModelForm):
             "rol_cuadrilla",
             "area",
             "salario_base",
-            "fecha_ingreso",
+            "fecha_firma_contrato",
+            "fecha_ingreso_proyecto",
             "fecha_salida",
         ]
         widgets = {
@@ -56,7 +57,13 @@ class PersonalCuadrillaForm(forms.ModelForm):
                     "placeholder": "0",
                 }
             ),
-            "fecha_ingreso": forms.DateInput(
+            "fecha_firma_contrato": forms.DateInput(
+                attrs={
+                    "class": INPUT_CLS,
+                    "type": "date",
+                }
+            ),
+            "fecha_ingreso_proyecto": forms.DateInput(
                 attrs={
                     "class": INPUT_CLS,
                     "type": "date",
@@ -105,12 +112,17 @@ class PersonalCuadrillaForm(forms.ModelForm):
         return nombre
 
     def clean(self):
-        """Edge case: fecha_salida no puede ser anterior a fecha_ingreso."""
+        """Edge case (issue #271, A2): fecha_salida no puede ser anterior a
+        fecha_ingreso_proyecto -- reformulado desde la comparación legacy
+        contra `fecha_ingreso` (deprecado en A1, ya no expuesto en este
+        form). `fecha_ingreso_proyecto` es la fecha operativa de
+        disponibilidad, por eso es el punto de comparación correcto contra
+        el retiro del colaborador."""
         cleaned = super().clean()
-        fecha_ingreso = cleaned.get("fecha_ingreso")
+        fecha_ingreso_proyecto = cleaned.get("fecha_ingreso_proyecto")
         fecha_salida = cleaned.get("fecha_salida")
-        if fecha_ingreso and fecha_salida and fecha_salida < fecha_ingreso:
+        if fecha_ingreso_proyecto and fecha_salida and fecha_salida < fecha_ingreso_proyecto:
             raise forms.ValidationError(
-                "La fecha de salida no puede ser anterior a la fecha de ingreso."
+                "La fecha de salida no puede ser anterior a la fecha de ingreso a proyecto."
             )
         return cleaned

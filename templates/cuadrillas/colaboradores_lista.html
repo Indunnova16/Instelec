@@ -107,7 +107,8 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Área</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cargo</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Salario Base</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha Ingreso</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha Firma Contrato</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha Ingreso Proyecto</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                     </tr>
@@ -120,7 +121,8 @@
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.get_area_display|default:"-" }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.get_rol_cuadrilla_display }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-gray-600 dark:text-gray-400">${{ colaborador.salario_base|floatformat:0|intcomma }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.fecha_ingreso|date:"d/m/Y"|default:"-" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.fecha_firma_contrato|date:"d/m/Y"|default:"-" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{{ colaborador.fecha_ingreso_proyecto|date:"d/m/Y"|default:"-" }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-center">
                             {% if colaborador.activo %}
                             <span class="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full" role="status">Activo</span>
@@ -144,7 +146,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="9" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                             No hay colaboradores {% if estado_filtro %}con este filtro{% endif %}.
                         </td>
                     </tr>
