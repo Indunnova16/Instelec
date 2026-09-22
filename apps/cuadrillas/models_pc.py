@@ -17,7 +17,7 @@ from django.db import models
 
 from apps.core.models import BaseModel
 
-from .models_base import PersonalCuadrilla, Vehiculo
+from .models_base import Asistencia, PersonalCuadrilla, Vehiculo
 
 
 class ProgramacionSemanalCuadrilla(BaseModel):
@@ -235,3 +235,91 @@ class EjecucionSemanalPersonal(BaseModel):
 
     def __str__(self):
         return f"{self.personal} — {self.ejecucion}"
+
+
+class AsistenciaEjecucionSemanal(BaseModel):
+    """
+    Asistencia diaria por persona dentro de la ejecución semanal (#270,
+    sub-item D). Tabla Lun-Dom por cada fila del roster que gestiona el
+    sub-item C (`EjecucionSemanalPersonal`): esta ejecución + esta persona +
+    este día = a lo más UN registro (`unique_together`).
+
+    NO reusa el modelo `Asistencia` (`models_base.py`, keyed por `usuario`
+    FK a `usuarios.Usuario`): `PersonalCuadrilla` (el roster de la ejecución
+    semanal, sub-item C) NO tiene FK a `Usuario` -- son entidades distintas
+    (personal "de campo" del catálogo de `models_base.py` vs. usuarios del
+    sistema con login), por eso `Asistencia.usuario` no aplica acá. Sí se
+    REUSA `Asistencia.TipoNovedad` (el enum de choices) para no divergir del
+    vocabulario de novedades ya usado en el resto del portafolio
+    (PRESENTE/VACACIONES/INCAPACIDAD/PERMISO/...).
+
+    Decisiones de dominio tomadas en el sub-item (documentadas para F3
+    hermanos y F5 -- issue #270 no las especificaba):
+    - `tipo_novedad != PRESENTE` con `horas_trabajadas` enviado > 0: la vista
+      de guardado (`views_pc_ejecucion_asistencia.py`) SE LIMPIA (fuerza a
+      0) -- una persona en vacaciones/incapacidad/permiso no acumula horas
+      trabajadas ese día. No es un error 400, es una normalización silenciosa
+      documentada en la vista.
+    - `horas_extra` sin `horas_trabajadas` (>0 con horas_trabajadas=0): SE
+      PERMITE -- puede haber horas extra sin jornada base ese día (ej. un
+      llamado de emergencia un día de descanso/festivo).
+    - Persona agregada al roster (C) a mitad de semana: NO hay backfill
+      automático de días anteriores. Los días sin registro simplemente no
+      tienen fila en `AsistenciaEjecucionSemanal` hasta que alguien la
+      guarda explícitamente -- la UI los muestra en blanco/"sin guardar".
+    """
+
+    ejecucion = models.ForeignKey(
+        EjecucionSemanalCuadrilla,
+        on_delete=models.CASCADE,
+        related_name='asistencias',
+        verbose_name='Ejecución',
+    )
+    personal = models.ForeignKey(
+        PersonalCuadrilla,
+        on_delete=models.CASCADE,
+        related_name='asistencias_ejecucion_semanal',
+        verbose_name='Personal',
+    )
+    fecha = models.DateField(
+        'Fecha',
+        help_text='Día (dentro de la semana ISO de la programación) al que '
+                  'corresponde este registro.',
+    )
+    tipo_novedad = models.CharField(
+        'Tipo de novedad',
+        max_length=20,
+        choices=Asistencia.TipoNovedad.choices,
+        default=Asistencia.TipoNovedad.PRESENTE,
+        help_text='Reusa el vocabulario de novedades de Asistencia '
+                  '(PRESENTE/VACACIONES/INCAPACIDAD/PERMISO/...).',
+    )
+    horas_trabajadas = models.DecimalField(
+        'Horas trabajadas',
+        max_digits=4,
+        decimal_places=1,
+        default=0,
+        help_text='Horas trabajadas ese día. Se fuerza a 0 cuando '
+                  'tipo_novedad != PRESENTE (ver docstring de la clase).',
+    )
+    horas_extra = models.DecimalField(
+        'Horas extra',
+        max_digits=4,
+        decimal_places=1,
+        default=0,
+        help_text='Horas extra del día (puede existir sin horas_trabajadas, '
+                  'ver docstring de la clase).',
+    )
+
+    class Meta:
+        db_table = 'asistencia_ejecucion_semanal'
+        verbose_name = 'Asistencia de Ejecución Semanal'
+        verbose_name_plural = 'Asistencias de Ejecución Semanal'
+        ordering = ['fecha', 'personal__nombre']
+        unique_together = ['ejecucion', 'personal', 'fecha']
+        indexes = [
+            models.Index(fields=['ejecucion', 'fecha']),
+        ]
+
+    def __str__(self):
+        return f"{self.personal} — {self.fecha} ({self.get_tipo_novedad_display()})"

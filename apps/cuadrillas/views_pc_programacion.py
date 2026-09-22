@@ -40,8 +40,8 @@ from apps.core.permissions import AREA_CONSTRUCCION
 
 from . import calculators_pc
 from .forms_pc import ProgramacionSemanalCuadrillaForm
-from .models_base import PersonalCuadrilla, Vehiculo
-from .models_pc import ProgramacionSemanalCuadrilla
+from .models_base import Asistencia, PersonalCuadrilla, Vehiculo
+from .models_pc import AsistenciaEjecucionSemanal, ProgramacionSemanalCuadrilla
 
 # Roles con acceso administrativo (espeja apps/construccion/views.py::ALL_ADMIN_ROLES).
 PROGRAMACION_ROLES = [
@@ -183,6 +183,44 @@ class ProgramacionCuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, Det
         context['personal_disponible'] = PersonalCuadrilla.objects.filter(
             activo=True, area=AREA_CONSTRUCCION,
         ).order_by('nombre')
+
+        # #270 (sub-item D): asistencia semanal por persona/día -- DEPENDE
+        # del roster de C (`personal_asignado`, ya resuelto arriba). Arma la
+        # matriz Lun-Dom (`date.fromisocalendar`, evita aritmética manual de
+        # offsets en los bordes de año) × fila del roster, con el registro
+        # existente de `AsistenciaEjecucionSemanal` si ya se guardó ese día
+        # (None si todavía no -- persona agregada a mitad de semana o día
+        # nunca guardado, sin backfill automático).
+        context['dias_semana'] = [
+            date.fromisocalendar(programacion.anio, programacion.semana, dia_iso)
+            for dia_iso in range(1, 8)
+        ]
+        if ejecucion is not None:
+            personal_filas = list(context['personal_asignado'])
+            registros_por_celda = {
+                (asistencia.personal_id, asistencia.fecha): asistencia
+                for asistencia in AsistenciaEjecucionSemanal.objects.filter(
+                    ejecucion=ejecucion,
+                ).select_related('personal')
+            }
+            context['asistencia_matriz'] = [
+                {
+                    'fila': fila,
+                    'dias': [
+                        {
+                            'fecha': dia,
+                            'registro': registros_por_celda.get((fila.personal_id, dia)),
+                        }
+                        for dia in context['dias_semana']
+                    ],
+                }
+                for fila in personal_filas
+            ]
+        else:
+            context['asistencia_matriz'] = []
+        # Choices para el <select> de tipo_novedad del partial (reusa el
+        # mismo enum que Asistencia -- ver docstring del modelo nuevo).
+        context['tipo_novedad_choices'] = Asistencia.TipoNovedad.choices
 
         # #155 sub-2: dashboard de cumplimiento inline (reemplaza el placeholder).
         # Reusa la MISMA lógica que ProgramacionCuadrillaDashboardView vía

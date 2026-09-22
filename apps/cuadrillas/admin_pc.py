@@ -17,6 +17,7 @@ from django.contrib import admin
 from apps.core.admin import BaseModelAdmin
 
 from .models_pc import (
+    AsistenciaEjecucionSemanal,
     EjecucionSemanalCuadrilla,
     EjecucionSemanalPersonal,
     ProgramacionSemanalCuadrilla,
@@ -116,6 +117,26 @@ class EjecucionSemanalPersonalAdmin(BaseModelAdmin):
 
     list_display = ('personal', 'ejecucion', 'costo_dia')
     list_filter = (
+        'ejecucion__programacion__anio', 'ejecucion__programacion__semana',
+        'ejecucion__programacion__cuadrilla',
+    )
+    search_fields = (
+        'personal__nombre', 'personal__documento',
+        'ejecucion__programacion__cuadrilla__codigo',
+    )
+    raw_id_fields = ('ejecucion', 'personal')
+    readonly_fields = ('id', 'created_at', 'updated_at')
+
+
+@admin.register(AsistenciaEjecucionSemanal)
+class AsistenciaEjecucionSemanalAdmin(BaseModelAdmin):
+    """#270 (sub-item D): asistencia diaria por persona/día de la ejecución."""
+
+    list_display = (
+        'personal', 'fecha', 'tipo_novedad', 'horas_trabajadas', 'horas_extra',
+    )
+    list_filter = (
+        'tipo_novedad',
         'ejecucion__programacion__anio', 'ejecucion__programacion__semana',
         'ejecucion__programacion__cuadrilla',
     )

@@ -1,0 +1,175 @@
+{% load l10n %}
+{% comment %}
+  #270 (sub-item D) — Asistencia semanal por persona/día.
+
+  DEPENDE del roster de C (`personal_asignado` / `EjecucionSemanalPersonal`):
+  la tabla Lun-Dom se arma sobre esas filas, no sobre `PersonalCuadrilla`
+  directo. Partial NUEVO (no toca `_ejecucion_personal_inline.html`, propiedad
+  del sub-item C) incluido desde
+  `templates/construccion/programacion_cuadrilla_detalle.html` en su propia
+  card "Asistencia semanal".
+
+  Contexto que espera del detalle
+  (`ProgramacionCuadrillaDetailView.get_context_data`):
+    - `dias_semana`        : lista de 7 `date` (Lun-Dom de la semana ISO de
+                              la programación, vía `date.fromisocalendar`).
+    - `asistencia_matriz`  : lista de {'fila': EjecucionSemanalPersonal,
+                              'dias': [{'fecha': date, 'registro':
+                              AsistenciaEjecucionSemanal|None}, ...]} — vacía
+                              si la ejecución todavía no existe o el roster
+                              está vacío.
+    - `tipo_novedad_choices`: choices de `Asistencia.TipoNovedad` (reusado,
+                              NO redefinido) para el `<select>` de cada celda.
+
+  Cada celda (persona × día) es un componente Alpine INDEPENDIENTE
+  (`celdaAsistencia`, un `x-data` por `<td>`) en vez de una matriz reactiva
+  única -- simplifica el guardado per-celda (upsert por
+  `(ejecucion, personal, fecha)`, ver `views_pc_ejecucion_asistencia.py`) sin
+  tener que reconciliar un array JS contra 7×N celdas.
+
+  Mismo criterio anti-bug es-CO que el resto del módulo (`_ejecucion_inline.
+  html`, `_ejecucion_personal_inline.html`): los valores iniciales viajan por
+  data-attributes en el `<td>` (nunca JSON/float crudo interpolado dentro de
+  un `<script>` o de un `x-data="fn({...})"` con valores del backend) --
+  Alpine los lee en `init()`/`closest()`, de ahí en más todo es JS puro.
+{% endcomment %}
+
+{% localize off %}
+<div id="asistencia-inline"
+     class="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
+     data-url-guardar-tpl="{% url 'construccion:programacion_cuadrilla_ejecucion_asistencia_guardar' pk='00000000-0000-0000-0000-000000000000' fecha='2000-01-01' %}">
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+    Asistencia semanal
+  </h2>
+
+  {% if not asistencia_matriz %}
+  <p class="text-sm text-gray-400" data-empty-asistencia>
+    Agregá personal en "Personal asignado" para registrar su asistencia de la semana.
+  </p>
+  {% else %}
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm divide-y divide-gray-200 dark:divide-gray-700">
+      <thead>
+        <tr class="text-left text-gray-500 dark:text-gray-400">
+          <th class="py-2 pr-4 sticky left-0 bg-white dark:bg-gray-800">Persona</th>
+          {% for dia in dias_semana %}
+          <th class="py-2 pr-2 text-center whitespace-nowrap">{{ dia|date:"D d/m" }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+        {% for entrada in asistencia_matriz %}
+        <tr data-personal-fila-id="{{ entrada.fila.pk }}">
+          <td class="py-2 pr-4 font-medium text-gray-900 dark:text-white whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800">
+            {{ entrada.fila.personal.nombre }}
+          </td>
+          {% for celda in entrada.dias %}
+          <td class="py-2 pr-2 align-top"
+              data-asistencia-celda
+              data-fila-id="{{ entrada.fila.pk }}"
+              data-fecha="{{ celda.fecha|date:'Y-m-d' }}"
+              data-registro-id="{% if celda.registro %}{{ celda.registro.pk }}{% endif %}"
+              data-tipo-novedad="{% if celda.registro %}{{ celda.registro.tipo_novedad }}{% else %}PRESENTE{% endif %}"
+              data-horas-trabajadas="{% if celda.registro %}{{ celda.registro.horas_trabajadas }}{% else %}8.0{% endif %}"
+              data-horas-extra="{% if celda.registro %}{{ celda.registro.horas_extra }}{% else %}0.0{% endif %}"
+              data-guardado="{% if celda.registro %}1{% else %}0{% endif %}">
+            <div x-data="celdaAsistencia($el)" class="space-y-1 min-w-[9rem]">
+              <select :disabled="guardando"
+                      x-model="tipoNovedad"
+                      class="w-full text-xs rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-blue-500 focus:ring-blue-500">
+                {% for value, label in tipo_novedad_choices %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+              <div class="flex gap-1">
+                <input type="number" min="0" max="24" step="0.1"
+                       :disabled="guardando"
+                       x-model="horasTrabajadas"
+                       title="Horas trabajadas"
+                       class="w-14 text-xs rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-blue-500 focus:ring-blue-500">
+                <input type="number" min="0" max="24" step="0.1"
+                       :disabled="guardando"
+                       x-model="horasExtra"
+                       title="Horas extra"
+                       class="w-14 text-xs rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-blue-500 focus:ring-blue-500">
+              </div>
+              <button type="button"
+                      @click="guardar()"
+                      :disabled="guardando"
+                      data-action="guardar-asistencia"
+                      class="w-full text-xs rounded px-2 py-1 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      :class="error ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : (guardado ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-blue-600 text-white hover:bg-blue-700')">
+                <span x-text="guardando ? 'Guardando…' : (error ? 'Reintentar' : (guardado ? 'Guardado ✓' : 'Guardar'))"></span>
+              </button>
+              <p x-show="error" x-text="error" class="text-xs text-red-600 dark:text-red-400" style="display:none"></p>
+            </div>
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function celdaAsistencia(el) {
+  var celda = el.closest('[data-asistencia-celda]');
+  return {
+    filaId: celda.dataset.filaId,
+    fecha: celda.dataset.fecha,
+    tipoNovedad: celda.dataset.tipoNovedad,
+    horasTrabajadas: celda.dataset.horasTrabajadas,
+    horasExtra: celda.dataset.horasExtra,
+    guardando: false,
+    guardado: celda.dataset.guardado === '1',
+    error: '',
+    csrfToken() {
+      var cookie = document.cookie.split('csrftoken=')[1];
+      if (cookie) return cookie.split(';')[0];
+      var inp = document.querySelector('input[name=csrfmiddlewaretoken]');
+      return inp ? inp.value : '';
+    },
+    urlGuardar() {
+      var tpl = document.getElementById('asistencia-inline').dataset.urlGuardarTpl;
+      return tpl
+        .replace('00000000-0000-0000-0000-000000000000', this.filaId)
+        .replace('2000-01-01', this.fecha);
+    },
+    async guardar() {
+      if (this.guardando) return;
+      this.guardando = true;
+      this.error = '';
+      try {
+        var fd = new FormData();
+        fd.append('tipo_novedad', this.tipoNovedad);
+        fd.append('horas_trabajadas', this.horasTrabajadas);
+        fd.append('horas_extra', this.horasExtra);
+        const r = await fetch(this.urlGuardar(), {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken() },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          this.tipoNovedad = data.registro.tipo_novedad;
+          this.horasTrabajadas = data.registro.horas_trabajadas;
+          this.horasExtra = data.registro.horas_extra;
+          this.guardado = true;
+        } else {
+          this.error = (data && data.error) || 'No se pudo guardar.';
+          this.guardado = false;
+        }
+      } catch (e) {
+        this.error = 'Error de red. Reintentá.';
+        this.guardado = false;
+      } finally {
+        this.guardando = false;
+      }
+    },
+  };
+}
+</script>
+{% endlocalize %}

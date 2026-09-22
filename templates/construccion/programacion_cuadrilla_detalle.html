@@ -141,6 +141,15 @@
     {% endcomment %}
     {% include "construccion/_ejecucion_personal_inline.html" with programacion=programacion personal_asignado=personal_asignado personal_disponible=personal_disponible %}
 
+    {# ---- Asistencia semanal por persona/día (#270, sub-item D) ---- #}
+    {% comment %}
+      Partial propio (NO comparte archivo con B/C). Depende del roster de C
+      (`asistencia_matriz` ya viene armado sobre `personal_asignado`). Include
+      INCONDICIONAL -- mismo criterio que el resto de este template (el
+      `include` de este build de Django no soporta `ignore missing`).
+    {% endcomment %}
+    {% include "construccion/_ejecucion_asistencia_inline.html" with dias_semana=dias_semana asistencia_matriz=asistencia_matriz tipo_novedad_choices=tipo_novedad_choices %}
+
     {# ---- Dashboard de cumplimiento (inline, #155 sub-2) ---- #}
     {% comment %} Reemplaza el placeholder: la vista pasa los datos vía calculators_pc
        (misma lógica del dashboard B4, no duplicada). Include INCONDICIONAL

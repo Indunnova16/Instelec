@@ -25,8 +25,9 @@ from apps.construccion.models import TorreConstruccion
 from apps.construccion.views import ordenar_torres_construccion
 from apps.core.permissions import AREA_CONSTRUCCION
 
-from .models_base import PersonalCuadrilla, Vehiculo
+from .models_base import Asistencia, PersonalCuadrilla, Vehiculo
 from .models_pc import (
+    AsistenciaEjecucionSemanal,
     EjecucionSemanalCuadrilla,
     EjecucionSemanalPersonal,
     ProgramacionSemanalCuadrilla,
@@ -290,3 +291,70 @@ class EjecucionSemanalPersonalEditarForm(forms.ModelForm):
                 'El costo por día no puede ser negativo.'
             )
         return costo
+
+
+class AsistenciaEjecucionSemanalForm(forms.ModelForm):
+    """
+    Guardado de UNA celda (persona × día) de la tabla de asistencia semanal
+    (#270 sub-item D). La vista
+    (`views_pc_ejecucion_asistencia.AsistenciaEjecucionSemanalGuardarView`)
+    asigna `ejecucion` / `personal` / `fecha` (no se exponen en el form --
+    los resuelve la URL, mismo criterio que `programacion` en
+    `EjecucionSemanalCuadrillaForm`).
+
+    Edge cases de dominio (documentados también en el docstring del modelo):
+    - `tipo_novedad != PRESENTE` con `horas_trabajadas` > 0 enviado: SE
+      LIMPIA en `clean()` (se fuerza a 0), no es un error de validación.
+    - `horas_extra` > 0 con `horas_trabajadas` == 0: SE PERMITE tal cual.
+    """
+
+    class Meta:
+        model = AsistenciaEjecucionSemanal
+        fields = ['tipo_novedad', 'horas_trabajadas', 'horas_extra']
+        widgets = {
+            'tipo_novedad': forms.Select(attrs={'class': INPUT_CLS}),
+            'horas_trabajadas': forms.NumberInput(attrs={
+                'class': INPUT_CLS, 'min': 0, 'max': 24, 'step': '0.1',
+            }),
+            'horas_extra': forms.NumberInput(attrs={
+                'class': INPUT_CLS, 'min': 0, 'max': 24, 'step': '0.1',
+            }),
+        }
+
+    def clean_horas_trabajadas(self):
+        horas = self.cleaned_data.get('horas_trabajadas')
+        if horas is None:
+            return 0
+        if horas < 0:
+            raise forms.ValidationError(
+                'Las horas trabajadas no pueden ser negativas.'
+            )
+        if horas > 24:
+            raise forms.ValidationError(
+                'Las horas trabajadas no pueden superar 24 en un día.'
+            )
+        return horas
+
+    def clean_horas_extra(self):
+        horas = self.cleaned_data.get('horas_extra')
+        if horas is None:
+            return 0
+        if horas < 0:
+            raise forms.ValidationError(
+                'Las horas extra no pueden ser negativas.'
+            )
+        if horas > 24:
+            raise forms.ValidationError(
+                'Las horas extra no pueden superar 24 en un día.'
+            )
+        return horas
+
+    def clean(self):
+        """Edge — tipo_novedad != PRESENTE con horas_trabajadas > 0: se
+        LIMPIA (normalización silenciosa, no error). horas_extra sin
+        horas_trabajadas queda tal cual (permitido, ver docstring)."""
+        cleaned = super().clean()
+        tipo = cleaned.get('tipo_novedad')
+        if tipo and tipo != Asistencia.TipoNovedad.PRESENTE:
+            cleaned['horas_trabajadas'] = 0
+        return cleaned

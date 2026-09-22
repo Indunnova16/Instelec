@@ -24,6 +24,7 @@ vía path explícito:
     python3.12 -m pytest apps/cuadrillas/tests_pc.py -v
 """
 import json
+from datetime import date
 
 import pytest
 from django.db import IntegrityError
@@ -31,8 +32,9 @@ from django.test import Client
 from django.urls import NoReverseMatch, reverse
 
 from apps.core.permissions import AREA_CONSTRUCCION, AREA_MANTENIMIENTO
-from apps.cuadrillas.models import Cargo, Cuadrilla, PersonalCuadrilla, Vehiculo
+from apps.cuadrillas.models import Asistencia, Cargo, Cuadrilla, PersonalCuadrilla, Vehiculo
 from apps.cuadrillas.models_pc import (
+    AsistenciaEjecucionSemanal,
     EjecucionSemanalCuadrilla,
     EjecucionSemanalPersonal,
     ProgramacionSemanalCuadrilla,
@@ -789,6 +791,257 @@ class TestEjecucionPersonalAjax:
         assert resp.status_code == 400
         ep.refresh_from_db()
         assert ep.costo_dia == 50000
+
+
+# ===========================================================================
+# 3.5. Asistencia semanal por persona/día (#270, sub-item D) — DEPENDE del
+# roster de C (`EjecucionSemanalPersonal`).
+# ===========================================================================
+
+def _crear_fila_roster(personal=None, ejecucion=None, prog=None):
+    """Helper D — arma una fila `EjecucionSemanalPersonal` (roster de C)
+    lista para colgarle asistencia. Si no se pasa `ejecucion`/`prog`, crea
+    ambos."""
+    if ejecucion is None:
+        if prog is None:
+            prog = _crear_programacion(torres=8)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+    if personal is None:
+        personal = _crear_personal('PC-D-DEFAULT', nombre='Default Asistencia')
+    return EjecucionSemanalPersonal.objects.create(ejecucion=ejecucion, personal=personal)
+
+
+@pytest.mark.django_db
+class TestAsistenciaEjecucionSemanalModel:
+    """Modelo `AsistenciaEjecucionSemanal` (#270 sub-item D)."""
+
+    def test_str_y_creacion_basica(self):
+        ep = _crear_fila_roster()
+        registro = AsistenciaEjecucionSemanal.objects.create(
+            ejecucion=ep.ejecucion, personal=ep.personal,
+            fecha='2026-04-27', tipo_novedad=Asistencia.TipoNovedad.PRESENTE,
+            horas_trabajadas='8.0',
+        )
+        assert 'Default Asistencia' in str(registro)
+        assert '2026-04-27' in str(registro)
+
+    def test_unique_together_rechaza_mismo_dia_dos_veces(self):
+        """Edge — constraint de BD: (ejecucion, personal, fecha) es único."""
+        ep = _crear_fila_roster()
+        AsistenciaEjecucionSemanal.objects.create(
+            ejecucion=ep.ejecucion, personal=ep.personal, fecha='2026-04-27',
+        )
+        with pytest.raises(IntegrityError):
+            AsistenciaEjecucionSemanal.objects.create(
+                ejecucion=ep.ejecucion, personal=ep.personal, fecha='2026-04-27',
+            )
+
+    def test_reusa_choices_de_asistencia_no_las_redefine(self):
+        """El enum de tipo_novedad ES el mismo objeto que Asistencia.TipoNovedad
+        (issue explícito: reusar, no redefinir)."""
+        field = AsistenciaEjecucionSemanal._meta.get_field('tipo_novedad')
+        assert dict(field.choices) == dict(Asistencia.TipoNovedad.choices)
+
+
+@pytest.mark.django_db
+class TestAsistenciaEjecucionSemanalForm:
+    """`forms_pc.AsistenciaEjecucionSemanalForm` (#270 sub-item D)."""
+
+    def test_clean_fuerza_horas_trabajadas_a_cero_si_tipo_no_es_presente(self):
+        """Edge del dominio: tipo_novedad != PRESENTE con horas_trabajadas > 0
+        enviado -- SE LIMPIA (no es error, se normaliza a 0)."""
+        from apps.cuadrillas.forms_pc import AsistenciaEjecucionSemanalForm
+
+        form = AsistenciaEjecucionSemanalForm(data={
+            'tipo_novedad': Asistencia.TipoNovedad.VACACIONES,
+            'horas_trabajadas': '8.0',
+            'horas_extra': '0',
+        })
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['horas_trabajadas'] == 0
+
+    def test_horas_extra_sin_horas_trabajadas_se_permite(self):
+        """Edge — horas_extra > 0 con horas_trabajadas = 0: PERMITIDO
+        (ej. llamado de emergencia un día de descanso)."""
+        from apps.cuadrillas.forms_pc import AsistenciaEjecucionSemanalForm
+
+        form = AsistenciaEjecucionSemanalForm(data={
+            'tipo_novedad': Asistencia.TipoNovedad.PRESENTE,
+            'horas_trabajadas': '0',
+            'horas_extra': '3.0',
+        })
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['horas_trabajadas'] == 0
+        assert form.cleaned_data['horas_extra'] == 3.0
+
+    def test_horas_negativas_rechazadas(self):
+        from apps.cuadrillas.forms_pc import AsistenciaEjecucionSemanalForm
+
+        form = AsistenciaEjecucionSemanalForm(data={
+            'tipo_novedad': Asistencia.TipoNovedad.PRESENTE,
+            'horas_trabajadas': '-1',
+            'horas_extra': '0',
+        })
+        assert not form.is_valid()
+        assert 'horas_trabajadas' in form.errors
+
+
+@pytest.mark.django_db
+class TestAsistenciaEjecucionAjax:
+    """Vista AJAX `views_pc_ejecucion_asistencia.
+    AsistenciaEjecucionSemanalGuardarView` (#270 sub-item D)."""
+
+    def _url(self, ep, fecha):
+        return reverse(
+            'construccion:programacion_cuadrilla_ejecucion_asistencia_guardar',
+            args=[ep.pk, fecha],
+        )
+
+    def test_happy_7_dias_x_2_personas_default_presente_horas_visibles(self):
+        """Happy: 7 días × 2 personas, tipo_novedad por defecto PRESENTE,
+        horas visibles en la respuesta y persistidas."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(anio=2026, semana=18, torres=8)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+        p1 = _crear_personal('PC-D-H-001', nombre='Persona Uno')
+        p2 = _crear_personal('PC-D-H-002', nombre='Persona Dos')
+        ep1 = EjecucionSemanalPersonal.objects.create(ejecucion=ejecucion, personal=p1)
+        ep2 = EjecucionSemanalPersonal.objects.create(ejecucion=ejecucion, personal=p2)
+
+        # Semana ISO 2026-S18 = 2026-04-27 (lunes) a 2026-05-03 (domingo).
+        dias = [date.fromisocalendar(2026, 18, d) for d in range(1, 8)]
+        for ep in (ep1, ep2):
+            for dia in dias:
+                resp = client.post(
+                    self._url(ep, dia.isoformat()),
+                    data={'tipo_novedad': 'PRESENTE', 'horas_trabajadas': '8.0', 'horas_extra': '0'},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+                )
+                assert resp.status_code == 200, resp.content
+                payload = json.loads(resp.content)
+                assert payload['ok'] is True
+                assert payload['registro']['tipo_novedad'] == 'PRESENTE'
+                assert float(payload['registro']['horas_trabajadas']) == 8.0
+
+        assert AsistenciaEjecucionSemanal.objects.filter(ejecucion=ejecucion).count() == 14
+
+    def test_edge_persona_agregada_a_mitad_de_semana_sin_backfill(self):
+        """Edge — agregar una persona al roster (C) NO crea automáticamente
+        registros de asistencia para los días previos: quedan sin fila hasta
+        que alguien guarda explícitamente."""
+        ep = _crear_fila_roster()
+        assert AsistenciaEjecucionSemanal.objects.filter(
+            ejecucion=ep.ejecucion, personal=ep.personal,
+        ).count() == 0
+
+    def test_edge_tipo_novedad_no_presente_limpia_horas_trabajadas(self):
+        """Edge — tipo_novedad != PRESENTE con horas_trabajadas enviado > 0:
+        se limpia (fuerza a 0) en vez de rechazar con 400."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        ep = _crear_fila_roster()
+        prog = ep.ejecucion.programacion
+        fecha = date.fromisocalendar(prog.anio, prog.semana, 3)
+        resp = client.post(
+            self._url(ep, fecha.isoformat()),
+            data={'tipo_novedad': 'INCAPACIDAD', 'horas_trabajadas': '8.0', 'horas_extra': '0'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        payload = json.loads(resp.content)
+        assert payload['registro']['tipo_novedad'] == 'INCAPACIDAD'
+        assert float(payload['registro']['horas_trabajadas']) == 0.0
+
+        registro = AsistenciaEjecucionSemanal.objects.get(
+            ejecucion=ep.ejecucion, personal=ep.personal, fecha=fecha,
+        )
+        assert registro.horas_trabajadas == 0
+
+    def test_edge_horas_extra_sin_horas_trabajadas_se_guarda(self):
+        """Edge — horas_extra > 0 con horas_trabajadas = 0: se persiste tal
+        cual, sin error (ver docstring del modelo)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        ep = _crear_fila_roster()
+        prog = ep.ejecucion.programacion
+        fecha = date.fromisocalendar(prog.anio, prog.semana, 6)
+        resp = client.post(
+            self._url(ep, fecha.isoformat()),
+            data={'tipo_novedad': 'PRESENTE', 'horas_trabajadas': '0', 'horas_extra': '4.0'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        payload = json.loads(resp.content)
+        assert float(payload['registro']['horas_trabajadas']) == 0.0
+        assert float(payload['registro']['horas_extra']) == 4.0
+
+    def test_edge_fecha_fuera_de_la_semana_iso_400(self):
+        """Edge — una fecha que NO pertenece a la semana ISO de la
+        programación se rechaza con 400 (no se persiste nada)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(anio=2026, semana=18, torres=8)
+        ep = _crear_fila_roster(prog=prog)
+        fecha_fuera = date.fromisocalendar(2026, 19, 1)  # semana SIGUIENTE
+        resp = client.post(
+            self._url(ep, fecha_fuera.isoformat()),
+            data={'tipo_novedad': 'PRESENTE', 'horas_trabajadas': '8.0', 'horas_extra': '0'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 400
+        assert not AsistenciaEjecucionSemanal.objects.filter(ejecucion=ep.ejecucion).exists()
+
+    def test_guardar_dos_veces_el_mismo_dia_actualiza_no_duplica(self):
+        """Upsert: guardar la MISMA celda dos veces actualiza el registro
+        existente, no crea un segundo (respalda el unique_together)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        ep = _crear_fila_roster()
+        prog = ep.ejecucion.programacion
+        fecha = date.fromisocalendar(prog.anio, prog.semana, 2)
+        url = self._url(ep, fecha.isoformat())
+        client.post(url, data={'tipo_novedad': 'PRESENTE', 'horas_trabajadas': '8.0', 'horas_extra': '0'},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        resp2 = client.post(url, data={'tipo_novedad': 'PRESENTE', 'horas_trabajadas': '4.0', 'horas_extra': '1.0'},
+                             HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        assert resp2.status_code == 200
+        assert AsistenciaEjecucionSemanal.objects.filter(
+            ejecucion=ep.ejecucion, personal=ep.personal, fecha=fecha,
+        ).count() == 1
+        registro = AsistenciaEjecucionSemanal.objects.get(
+            ejecucion=ep.ejecucion, personal=ep.personal, fecha=fecha,
+        )
+        assert float(registro.horas_trabajadas) == 4.0
+        assert float(registro.horas_extra) == 1.0
+
+    def test_dato_legacy_personal_area_vacia_ya_en_roster_puede_registrar_asistencia(self):
+        """Dato legacy (mismo criterio que TestDatoLegacy del módulo): un
+        `PersonalCuadrilla` con `area=''` (colaborador pre-#186) que YA
+        estaba en el roster de una ejecución -- agregado antes de que #270
+        existiera, vía fixture/admin -- debe poder registrar asistencia sin
+        romperse, aunque hoy quedaría excluido del Select2 de alta de C."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        legacy = _crear_personal('PC-D-LEGACY-001', nombre='Legacy Sin Area', area='')
+        ep = _crear_fila_roster(personal=legacy)
+        prog = ep.ejecucion.programacion
+        fecha = date.fromisocalendar(prog.anio, prog.semana, 4)
+        resp = client.post(
+            self._url(ep, fecha.isoformat()),
+            data={'tipo_novedad': 'PRESENTE', 'horas_trabajadas': '8.0', 'horas_extra': '0'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        assert AsistenciaEjecucionSemanal.objects.filter(
+            ejecucion=ep.ejecucion, personal=legacy, fecha=fecha,
+        ).exists()
 
 
 # ===========================================================================

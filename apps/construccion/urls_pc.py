@@ -22,6 +22,9 @@ from django.urls import path
 
 from apps.cuadrillas.views_pc_dashboard import ProgramacionCuadrillaDashboardView
 from apps.cuadrillas.views_pc_ejecucion import EjecucionSemanalUpdateView
+from apps.cuadrillas.views_pc_ejecucion_asistencia import (
+    AsistenciaEjecucionSemanalGuardarView,
+)
 from apps.cuadrillas.views_pc_ejecucion_personal import (
     EjecucionSemanalPersonalAgregarView,
     EjecucionSemanalPersonalEditarView,
@@ -89,5 +92,14 @@ urlpatterns = [
         'programacion-cuadrillas/ejecucion/personal/<uuid:pk>/remover/',
         EjecucionSemanalPersonalRemoverView.as_view(),
         name='programacion_cuadrilla_ejecucion_personal_remover',
+    ),
+    # --- #270 sub-item D: asistencia semanal por persona/día (POST AJAX) ---
+    # `pk` = UUID de la fila EjecucionSemanalPersonal (roster de C),
+    # `fecha` = 'AAAA-MM-DD' del día dentro de la semana ISO de la
+    # programación. Upsert por (ejecucion, personal, fecha).
+    path(
+        'programacion-cuadrillas/ejecucion/personal/<uuid:pk>/asistencia/<str:fecha>/',
+        AsistenciaEjecucionSemanalGuardarView.as_view(),
+        name='programacion_cuadrilla_ejecucion_asistencia_guardar',
     ),
 ]
