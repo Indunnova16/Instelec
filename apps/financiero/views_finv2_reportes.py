@@ -261,7 +261,8 @@ class TerceroAuditoriaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
 
 
 class ImportarTercerosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Preview primero; la confirmación crea todo el lote o nada."""
+    """Preview primero; la confirmación persiste las filas válidas aunque
+    otras filas del mismo archivo tengan error de validación (#261)."""
 
     template_name = "financiero/terceros_importar.html"
     required_submodulo = SUBMODULO_FIN_MAESTROS
@@ -302,9 +303,10 @@ class ImportarTercerosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
         clave = f"importacion_{self.tipo}"
         if request.POST.get("confirmar"):
             preview = request.session.get(clave)
-            if not preview or preview.get("errores"):
+            if not preview or not preview.get("filas"):
                 messages.error(request, "No hay una vista previa válida para confirmar.")
                 return redirect(request.path)
+            errores_pendientes = preview.get("errores") or []
             with transaction.atomic():
                 for fila_preview in preview["filas"]:
                     fila = dict(fila_preview)
@@ -328,11 +330,21 @@ class ImportarTercerosView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
                         self.model.objects.create(**fila)
                 CargaTerceros.objects.create(
                     tercero_tipo=self.tipo, archivo_nombre=preview["archivo_nombre"],
-                    usuario=request.user.get_username(), filas_total=len(preview["filas"]),
-                    filas_validas=len(preview["filas"]), resultado="CONFIRMADA",
+                    usuario=request.user.get_username(),
+                    filas_total=len(preview["filas"]) + len(errores_pendientes),
+                    filas_validas=len(preview["filas"]), filas_error=len(errores_pendientes),
+                    resultado="CONFIRMADA", detalle_errores=errores_pendientes,
                 )
             del request.session[clave]
-            messages.success(request, f"Carga de {self.tipo.lower()}s confirmada correctamente.")
+            if errores_pendientes:
+                messages.success(
+                    request,
+                    f"Carga de {self.tipo.lower()}s confirmada: {len(preview['filas'])} fila(s) "
+                    f"guardada(s). {len(errores_pendientes)} fila(s) con error NO se guardaron "
+                    "— corríjalas y vuelva a cargarlas.",
+                )
+            else:
+                messages.success(request, f"Carga de {self.tipo.lower()}s confirmada correctamente.")
             return redirect(self.listado_url)
         archivo = request.FILES.get("archivo")
         if not archivo:
