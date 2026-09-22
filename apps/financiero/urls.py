@@ -36,6 +36,19 @@ path('checklist-facturacion/', views.ChecklistFacturacionView.as_view(), name='c
     path('plantilla-excel/', views.DescargarPlantillaExcelView.as_view(), name='plantilla_excel'),
     path('cargar-costos-cuadrilla/', views.CargarCostosCuadrillaView.as_view(), name='cargar_costos_cuadrilla'),
     path('nomina/', views.NominaView.as_view(), name='nomina'),
+    # #247: URL adivinada por el cliente (analogía con Parametrización→Maestros)
+    # nunca existió — 404 confirmado en vivo. Redirect a la pantalla real
+    # (financiero:carga_financiera, definida en urls_finv2_carga.py) reusando
+    # LITERAL el patrón de 'presupuesto-planeado/' de arriba.
+    path(
+        'maestros/homologacion/',
+        RedirectView.as_view(
+            pattern_name='financiero:carga_financiera',
+            permanent=False,
+            query_string=True,
+        ),
+        name='homologacion_redirect_legacy',
+    ),
 ]
 
 # Financiero v2 (mapeo contable) — B1 (#120) llena urls_finv2.urlpatterns

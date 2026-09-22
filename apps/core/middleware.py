@@ -104,6 +104,16 @@ SUBMODULO_PREFIXES = (
     ('/financiero/editar-mapeo/', SUBMODULO_FIN_PRESUPUESTO_PLANEADO),
     ('/financiero/plantilla-excel/', SUBMODULO_FIN_PRESUPUESTO_PLANEADO),
     ('/financiero/exportar-excel/', SUBMODULO_FIN_DASHBOARD),
+    # #247 (reproceso #2): redirect legacy de la URL adivinada por el cliente
+    # (`financiero:homologacion_redirect_legacy`, urls.py) -- MÁS específico
+    # que `/financiero/maestros/` de abajo (FIN_MAESTROS) y debe ir ANTES en
+    # la tupla: sin esta entrada, `/financiero/maestros/homologacion/` caía
+    # en el prefijo `/financiero/maestros/` y exigía FIN_MAESTROS en vez de
+    # FIN_HOMOLOGACION -- un rol con FIN_HOMOLOGACION pero sin FIN_MAESTROS
+    # (p.ej. `contador`) era denegado por el middleware ANTES de llegar al
+    # RedirectView, aunque sí tiene permiso sobre el destino real. Mismo
+    # patrón de especificidad que facturas-ingresos/facturas-gastos abajo.
+    ('/financiero/maestros/homologacion/', SUBMODULO_FIN_HOMOLOGACION),
     ('/financiero/maestros/', SUBMODULO_FIN_MAESTROS),
     ('/financiero/carga-financiera/', SUBMODULO_FIN_HOMOLOGACION),
     # #249 v2 gap 1: Facturas de Ingresos migró de allowed_roles legacy a la
