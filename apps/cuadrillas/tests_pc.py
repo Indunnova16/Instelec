@@ -29,7 +29,7 @@ import pytest
 from django.test import Client
 from django.urls import NoReverseMatch, reverse
 
-from apps.cuadrillas.models import Cuadrilla
+from apps.cuadrillas.models import Cuadrilla, Vehiculo
 from apps.cuadrillas.models_pc import (
     EjecucionSemanalCuadrilla,
     ProgramacionSemanalCuadrilla,
@@ -67,6 +67,15 @@ def _crear_programacion(cuadrilla=None, anio=2026, semana=18, torres=10):
         torres_programadas=torres,
         actividades_programadas='Tendido de torres',
     )
+
+
+def _crear_vehiculo(placa='PC-VEH-01', estado=None, capacidad=6):
+    """#270 (sub-item B): vehículo de prueba. `estado` default ACTIVO (el
+    ``save()`` de Vehiculo sincroniza el puente legacy ``activo``)."""
+    kwargs = {'placa': placa, 'capacidad_personas': capacidad}
+    if estado is not None:
+        kwargs['estado'] = estado
+    return Vehiculo.objects.create(**kwargs)
 
 
 def _login(client, usuario):
@@ -197,6 +206,31 @@ class TestDatoLegacy:
         assert legacy.programaciones_semanales.count() == 1
         assert prog.ejecucion.rendimiento_pct == 90.0
 
+    def test_asignar_vehiculo_a_ejecucion_legacy_no_rompe_dato_pre_existente(self):
+        """#270 sub-item B: un vehículo creado ANTES de esta feature (solo
+        con el puente legacy `activo=True`, sin `estado` explícito -- dato
+        legacy real del maestro de vehículos) debe poder asignarse a una
+        ejecución sin migrarlo ni tocarlo."""
+        vehiculo_legacy = Vehiculo.objects.create(
+            placa='LEGACY-VEH-01', activo=True,
+        )
+        placa_original = vehiculo_legacy.placa
+        prog = _crear_programacion(torres=10)
+
+        EjecucionSemanalCuadrilla.objects.create(
+            programacion=prog, torres_ejecutadas=9, vehiculo=vehiculo_legacy,
+        )
+
+        vehiculo_legacy.refresh_from_db()
+        # El vehículo legacy queda intacto (save() sincronizó estado=ACTIVO
+        # vía el puente activo->estado, ya existente desde #226).
+        assert vehiculo_legacy.placa == placa_original
+        assert vehiculo_legacy.estado == Vehiculo.Estado.ACTIVO
+
+        prog.refresh_from_db()
+        assert prog.ejecucion.vehiculo_id == vehiculo_legacy.pk
+        assert prog.ejecucion.vehiculo.placa == 'LEGACY-VEH-01'
+
 
 # ===========================================================================
 # 3. Vistas (B1–B4) — por URL name del contrato. Corren en F4 (árbol integrado).
@@ -315,6 +349,202 @@ class TestEjecucionAjax:
         assert float(payload.get('rendimiento_pct')) == 90.0
         # Sigue habiendo UNA sola ejecución para esta programación.
         assert EjecucionSemanalCuadrilla.objects.filter(programacion=prog).count() == 1
+
+
+# ===========================================================================
+# 3.5 Asignación de vehículo a la ejecución (#270, sub-item B)
+# ===========================================================================
+
+@pytest.mark.django_db
+class TestEjecucionVehiculoAjax:
+    """B3 EjecucionSemanalUpdateView — asignación/reasignación de vehículo vía
+    el mismo POST AJAX (upsert) de la ejecución."""
+
+    def test_happy_asignar_vehiculo_activo_devuelve_placa_tipo_capacidad(self):
+        """Happy: asignar un vehículo ACTIVO -> JSON.vehiculo con
+        placa/tipo/capacidad, y queda persistido en BD."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=10)
+        vehiculo = _crear_vehiculo(
+            placa='ABC-123', capacidad=8,
+        )
+        url = reverse('construccion:programacion_cuadrilla_ejecucion_save', args=[prog.pk])
+        resp = client.post(
+            url,
+            data={
+                'torres_ejecutadas': 7,
+                'vehiculo': str(vehiculo.pk),
+                'observaciones': '',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert payload['vehiculo'] is not None
+        assert payload['vehiculo']['placa'] == 'ABC-123'
+        assert payload['vehiculo']['capacidad_personas'] == 8
+        assert payload['vehiculo']['tipo']  # get_tipo_display() no vacío
+
+        prog.refresh_from_db()
+        assert prog.ejecucion.vehiculo_id == vehiculo.pk
+
+    def test_edge_vehiculo_en_mantenimiento_rechaza_asignacion_nueva(self):
+        """Edge — un vehículo EN_MANTENIMIENTO/INACTIVO NO se puede asignar
+        de nuevo (400 con mensaje de dominio), sin romper la ejecución ya
+        guardada (torres_ejecutadas no se pierde)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=10)
+        vehiculo_mant = _crear_vehiculo(
+            placa='MANT-01', estado=Vehiculo.Estado.EN_MANTENIMIENTO,
+        )
+        # Primero, un guardado válido sin vehículo (para que exista la
+        # ejecución 1:1 y confirmar que el rechazo no la corrompe).
+        url = reverse('construccion:programacion_cuadrilla_ejecucion_save', args=[prog.pk])
+        client.post(url, data={'torres_ejecutadas': 5, 'vehiculo': ''},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        resp = client.post(
+            url,
+            data={'torres_ejecutadas': 6, 'vehiculo': str(vehiculo_mant.pk)},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 400
+        payload = json.loads(resp.content)
+        assert 'vehículo' in payload['error'].lower()
+        assert 'activo' in payload['error'].lower()
+
+        # La ejecución previa sigue intacta (no se sobre-escribió con el POST
+        # rechazado).
+        prog.refresh_from_db()
+        assert prog.ejecucion.torres_ejecutadas == 5
+        assert prog.ejecucion.vehiculo_id is None
+
+    def test_edge_reasignar_vehiculo_upsert_reemplaza_el_anterior(self):
+        """Edge — reasignar: un segundo POST con OTRO vehículo ACTIVO
+        reemplaza al primero (upsert, no acumula ni falla)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=10)
+        vehiculo_1 = _crear_vehiculo(placa='V1-001')
+        vehiculo_2 = _crear_vehiculo(placa='V2-002')
+        url = reverse('construccion:programacion_cuadrilla_ejecucion_save', args=[prog.pk])
+
+        client.post(url, data={'torres_ejecutadas': 3, 'vehiculo': str(vehiculo_1.pk)},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        resp2 = client.post(
+            url, data={'torres_ejecutadas': 3, 'vehiculo': str(vehiculo_2.pk)},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp2.status_code == 200
+        payload = json.loads(resp2.content)
+        assert payload['vehiculo']['placa'] == 'V2-002'
+
+        prog.refresh_from_db()
+        assert prog.ejecucion.vehiculo_id == vehiculo_2.pk
+        # Sigue habiendo UNA sola ejecución (OneToOne respetado).
+        assert EjecucionSemanalCuadrilla.objects.filter(programacion=prog).count() == 1
+
+    def test_edge_reenviar_el_mismo_vehiculo_ya_en_mantenimiento_no_lo_bloquea(self):
+        """Edge (contrato del docstring de la vista) — si el vehículo YA
+        asignado pasa a EN_MANTENIMIENTO después, reenviar el MISMO id (sin
+        cambiarlo) no debe rechazarse -- solo se bloquea asignar uno NUEVO
+        que no esté activo."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=10)
+        vehiculo = _crear_vehiculo(placa='YA-ASIG-01')
+        url = reverse('construccion:programacion_cuadrilla_ejecucion_save', args=[prog.pk])
+        client.post(url, data={'torres_ejecutadas': 4, 'vehiculo': str(vehiculo.pk)},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # El vehículo pasa a mantenimiento DESPUÉS de asignado.
+        vehiculo.estado = Vehiculo.Estado.EN_MANTENIMIENTO
+        vehiculo.save(update_fields=['estado'])
+
+        resp = client.post(
+            url, data={'torres_ejecutadas': 4, 'vehiculo': str(vehiculo.pk)},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert payload['vehiculo']['placa'] == 'YA-ASIG-01'
+
+    def test_edge_vacio_desasigna_vehiculo(self):
+        """Edge — enviar 'vehiculo' vacío desasigna (vehiculo=None), no es
+        un error."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=10)
+        vehiculo = _crear_vehiculo(placa='DESASIG-01')
+        url = reverse('construccion:programacion_cuadrilla_ejecucion_save', args=[prog.pk])
+        client.post(url, data={'torres_ejecutadas': 2, 'vehiculo': str(vehiculo.pk)},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        resp = client.post(url, data={'torres_ejecutadas': 2, 'vehiculo': ''},
+                            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        assert resp.status_code == 200
+        payload = json.loads(resp.content)
+        assert payload['vehiculo'] is None
+
+        prog.refresh_from_db()
+        assert prog.ejecucion.vehiculo_id is None
+
+    def test_edge_vehiculo_id_inexistente_400(self):
+        """Edge — un uuid de vehículo que no existe en absoluto -> 400."""
+        import uuid as uuid_module
+
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=10)
+        url = reverse('construccion:programacion_cuadrilla_ejecucion_save', args=[prog.pk])
+        resp = client.post(
+            url,
+            data={'torres_ejecutadas': 1, 'vehiculo': str(uuid_module.uuid4())},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestEjecucionSemanalCuadrillaFormVehiculo:
+    """`forms_pc.EjecucionSemanalCuadrillaForm` — queryset y validación del
+    campo `vehiculo` (#270 sub-item B)."""
+
+    def test_queryset_excluye_vehiculo_inactivo_no_asignado(self):
+        from apps.cuadrillas.forms_pc import EjecucionSemanalCuadrillaForm
+
+        _crear_vehiculo(placa='FORM-ACTIVO')
+        inactivo = _crear_vehiculo(placa='FORM-INACTIVO', estado=Vehiculo.Estado.INACTIVO)
+        form = EjecucionSemanalCuadrillaForm()
+        ids = set(form.fields['vehiculo'].queryset.values_list('pk', flat=True))
+        assert inactivo.pk not in ids
+
+    def test_clean_vehiculo_rechaza_no_activo_si_no_es_el_ya_asignado(self):
+        from apps.cuadrillas.forms_pc import EjecucionSemanalCuadrillaForm
+
+        prog = _crear_programacion(torres=5)
+        vehiculo_mant = _crear_vehiculo(
+            placa='FORM-MANT', estado=Vehiculo.Estado.EN_MANTENIMIENTO,
+        )
+        form = EjecucionSemanalCuadrillaForm(
+            data={'torres_ejecutadas': 1, 'vehiculo': str(vehiculo_mant.pk), 'observaciones': ''},
+            instance=EjecucionSemanalCuadrilla(programacion=prog),
+        )
+        # queryset por defecto no incluye el vehículo en mantenimiento (no
+        # está asignado a esta instancia todavía) -> el form lo rechaza a
+        # nivel de ModelChoiceField antes de llegar a clean_vehiculo.
+        assert not form.is_valid()
+        assert 'vehiculo' in form.errors
 
 
 # ===========================================================================

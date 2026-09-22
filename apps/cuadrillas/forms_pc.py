@@ -8,8 +8,8 @@ Construcción.
 
 `EjecucionSemanalCuadrillaForm` lo deja preparado B2 para que B3 lo reutilice en
 el guardado inline AJAX (lectura compartida declarada en el BLUEPRINT). Es un
-ModelForm mínimo sobre `EjecucionSemanalCuadrilla` (solo `torres_ejecutadas` +
-`observaciones`; la FK `programacion` la asigna la vista).
+ModelForm sobre `EjecucionSemanalCuadrilla` (`torres_ejecutadas` + `vehiculo`
+[#270 sub-item B] + `observaciones`; la FK `programacion` la asigna la vista).
 
 Notas es-CO (lecciones de memoria):
 - Los campos numéricos (`anio`, `semana`, `torres_programadas`,
@@ -18,11 +18,13 @@ Notas es-CO (lecciones de memoria):
 - No se inyecta JSON/float crudo en `x-data`; el form no usa Alpine.
 """
 from django import forms
+from django.db.models import Q
 from django.urls import reverse_lazy
 
 from apps.construccion.models import TorreConstruccion
 from apps.construccion.views import ordenar_torres_construccion
 
+from .models_base import Vehiculo
 from .models_pc import EjecucionSemanalCuadrilla, ProgramacionSemanalCuadrilla
 
 # Clase Tailwind compartida (espeja apps/construccion/forms.py::INPUT_CLS).
@@ -166,21 +168,47 @@ class EjecucionSemanalCuadrillaForm(forms.ModelForm):
     """
     Form de ejecución semanal — preparado por B2 para reuso de B3 (inline AJAX).
     La FK `programacion` la asigna la vista (no se expone en el form).
+
+    #270 (sub-item B): `vehiculo` es editable/reasignable. El queryset ofrecido
+    solo incluye vehículos ACTIVOS (mismo criterio que
+    `apps/construccion/views_psc_asignacion.py::ProgramacionSemanalConstruccionAgregarVehiculoView`)
+    -- MÁS el vehículo ya asignado a esta instancia aunque haya pasado a
+    EN_MANTENIMIENTO/INACTIVO después de asignarlo, para no romper el render de
+    una ejecución existente ni forzar su desasignación silenciosa.
     """
 
     class Meta:
         model = EjecucionSemanalCuadrilla
-        fields = ['torres_ejecutadas', 'observaciones']
+        fields = ['torres_ejecutadas', 'vehiculo', 'observaciones']
         widgets = {
             'torres_ejecutadas': forms.NumberInput(attrs={
                 'class': INPUT_CLS, 'min': 0, 'step': 1,
                 'name': 'torres_ejecutadas',
             }),
+            # Select2/TomSelect (js-tomselect, init global en base.html) —
+            # el label muestra placa/tipo/capacidad vía label_from_instance
+            # (ver __init__), no hay <option> anidado que romper.
+            'vehiculo': forms.Select(attrs={'class': INPUT_CLS + ' js-tomselect'}),
             'observaciones': forms.Textarea(attrs={
                 'class': INPUT_CLS, 'rows': 2,
                 'placeholder': 'Observaciones de la ejecución (opcional)',
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['vehiculo'].required = False
+        self.fields['vehiculo'].empty_label = '— Sin vehículo asignado —'
+        vehiculo_qs = Vehiculo.objects.filter(estado=Vehiculo.Estado.ACTIVO)
+        if self.instance and self.instance.pk and self.instance.vehiculo_id:
+            vehiculo_qs = Vehiculo.objects.filter(
+                Q(estado=Vehiculo.Estado.ACTIVO)
+                | Q(pk=self.instance.vehiculo_id)
+            )
+        self.fields['vehiculo'].queryset = vehiculo_qs.order_by('placa')
+        self.fields['vehiculo'].label_from_instance = (
+            lambda v: f"{v.placa} — {v.get_tipo_display()} (cap. {v.capacidad_personas})"
+        )
 
     def clean_torres_ejecutadas(self):
         torres = self.cleaned_data.get('torres_ejecutadas')
@@ -189,3 +217,21 @@ class EjecucionSemanalCuadrillaForm(forms.ModelForm):
                 'Las torres ejecutadas no pueden ser negativas.'
             )
         return torres
+
+    def clean_vehiculo(self):
+        """Edge case: solo se puede ASIGNAR (cambiar a) un vehículo ACTIVO.
+        Un vehículo ya asignado que pasó a EN_MANTENIMIENTO/INACTIVO se puede
+        seguir viendo/mantener sin cambios, pero no volver a elegir tras
+        haberlo quitado."""
+        vehiculo = self.cleaned_data.get('vehiculo')
+        if vehiculo is None:
+            return vehiculo
+        ya_asignado = (
+            self.instance and self.instance.pk
+            and self.instance.vehiculo_id == vehiculo.pk
+        )
+        if not ya_asignado and vehiculo.estado != Vehiculo.Estado.ACTIVO:
+            raise forms.ValidationError(
+                'Solo se pueden asignar vehículos activos.'
+            )
+        return vehiculo

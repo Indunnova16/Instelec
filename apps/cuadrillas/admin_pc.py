@@ -9,7 +9,8 @@ import *`) que dejó el scaffolding S1, para no tocar el `admin.py` monolítico.
   ejecución 1:1 editable inline (torres ejecutadas + rendimiento de solo
   lectura).
 - `EjecucionSemanalCuadrilla`: registro propio con el rendimiento derivado
-  expuesto como columna calculada de solo lectura.
+  expuesto como columna calculada de solo lectura. Incluye `vehiculo`
+  (#270 sub-item B) como `raw_id_fields` (catálogo puede crecer).
 """
 from django.contrib import admin
 
@@ -23,8 +24,9 @@ class EjecucionSemanalInline(admin.StackedInline):
 
     model = EjecucionSemanalCuadrilla
     extra = 0
-    fields = ('torres_ejecutadas', 'rendimiento_pct_display', 'observaciones')
+    fields = ('torres_ejecutadas', 'vehiculo', 'rendimiento_pct_display', 'observaciones')
     readonly_fields = ('rendimiento_pct_display',)
+    raw_id_fields = ('vehiculo',)
 
     @admin.display(description='Rendimiento')
     def rendimiento_pct_display(self, obj):
@@ -73,18 +75,19 @@ class ProgramacionSemanalCuadrillaAdmin(BaseModelAdmin):
 
 @admin.register(EjecucionSemanalCuadrilla)
 class EjecucionSemanalCuadrillaAdmin(BaseModelAdmin):
-    list_display = ('programacion', 'torres_ejecutadas', 'rendimiento_display')
+    list_display = ('programacion', 'torres_ejecutadas', 'vehiculo', 'rendimiento_display')
     list_filter = ('programacion__anio', 'programacion__semana', 'programacion__cuadrilla')
     search_fields = (
         'programacion__cuadrilla__codigo',
         'programacion__cuadrilla__nombre',
         'observaciones',
+        'vehiculo__placa',
     )
-    raw_id_fields = ('programacion',)
+    raw_id_fields = ('programacion', 'vehiculo')
 
     fieldsets = (
         (None, {
-            'fields': ('programacion', 'torres_ejecutadas', 'rendimiento_display')
+            'fields': ('programacion', 'torres_ejecutadas', 'vehiculo', 'rendimiento_display')
         }),
         ('Observaciones', {
             'fields': ('observaciones',)

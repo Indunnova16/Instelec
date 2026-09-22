@@ -17,6 +17,8 @@ from django.db import models
 
 from apps.core.models import BaseModel
 
+from .models_base import Vehiculo
+
 
 class ProgramacionSemanalCuadrilla(BaseModel):
     """
@@ -136,6 +138,21 @@ class EjecucionSemanalCuadrilla(BaseModel):
         'Torres ejecutadas',
         default=0,
         help_text='Cantidad de torres realmente ejecutadas en la semana',
+    )
+    # #270 (sub-item B): vehículo asignado a la ejecución. Editable/reasignable
+    # -- se guarda por el mismo upsert AJAX de `EjecucionSemanalUpdateView`
+    # (torres_ejecutadas/observaciones). SET_NULL: si el vehículo se elimina
+    # del catálogo, la ejecución queda "sin vehículo" en vez de perder el
+    # registro (mismo patrón que `Cuadrilla.vehiculo`, models_base.py).
+    vehiculo = models.ForeignKey(
+        Vehiculo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ejecuciones_semanales_cuadrilla',
+        verbose_name='Vehículo asignado',
+        help_text='Vehículo asignado a la ejecución de esta semana '
+                  '(editable/reasignable).',
     )
     observaciones = models.TextField(
         'Observaciones',

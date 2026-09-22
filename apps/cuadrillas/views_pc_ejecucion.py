@@ -36,6 +36,7 @@ from django.views import View
 
 from apps.core.mixins import RoleRequiredMixin
 
+from .models_base import Vehiculo
 from .models_pc import EjecucionSemanalCuadrilla, ProgramacionSemanalCuadrilla
 
 
@@ -56,14 +57,25 @@ OPERARIO_ROLES = [
 class EjecucionSemanalUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
     """POST AJAX para registrar/actualizar la ejecución de una programación.
 
-    Recibe `torres_ejecutadas` (entero ≥ 0) y `observaciones` (opcional).
-    Hace upsert de `EjecucionSemanalCuadrilla` (OneToOne a la programación) y
-    devuelve el `rendimiento_pct` recalculado por el modelo.
+    Recibe `torres_ejecutadas` (entero ≥ 0), `vehiculo` (uuid opcional, #270
+    sub-item B) y `observaciones` (opcional). Hace upsert de
+    `EjecucionSemanalCuadrilla` (OneToOne a la programación) y devuelve el
+    `rendimiento_pct` recalculado por el modelo + el vehículo asignado.
+
+    `vehiculo`: editable/reasignable en cada POST. Cadena vacía / ausente →
+    desasigna (vehiculo=None). Un uuid que no corresponde a un vehículo con
+    `estado=ACTIVO` → 400 (mismo criterio que
+    `ProgramacionSemanalConstruccionAgregarVehiculoView` en
+    `apps/construccion/views_psc_asignacion.py`), salvo que sea el MISMO
+    vehículo ya asignado (permite reenviar el form sin tocarlo aunque haya
+    pasado a EN_MANTENIMIENTO/INACTIVO después de asignado).
 
     Respuestas:
       - 200 {'ok': True, 'rendimiento_pct': <float 1 dec>,
-             'torres_ejecutadas': <int>, 'torres_programadas': <int>}
-      - 400 {'error': <str>}  (torres_ejecutadas inválido / faltante)
+             'torres_ejecutadas': <int>, 'torres_programadas': <int>,
+             'vehiculo': {'id', 'placa', 'tipo', 'capacidad_personas'} | None}
+      - 400 {'error': <str>}  (torres_ejecutadas inválido/faltante,
+             vehículo inexistente/no activo)
       - 404 si la programación no existe.
       - 403 (RoleRequiredMixin) si el rol no está permitido.
     """
@@ -105,15 +117,53 @@ class EjecucionSemanalUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
 
         observaciones = (request.POST.get('observaciones') or '').strip()
 
+        # --- Validación del vehículo (#270 sub-item B, opcional/reasignable) -
+        # Ejecución existente (si la hay) para permitir reenviar el MISMO
+        # vehículo aunque ya no esté ACTIVO (edge case, ver docstring).
+        ejecucion_previa = EjecucionSemanalCuadrilla.objects.filter(
+            programacion=programacion,
+        ).first()
+        vehiculo_previo_id = (
+            ejecucion_previa.vehiculo_id if ejecucion_previa else None
+        )
+        raw_vehiculo_id = (request.POST.get('vehiculo') or '').strip()
+        vehiculo = None
+        if raw_vehiculo_id:
+            es_el_mismo = (
+                vehiculo_previo_id is not None
+                and str(vehiculo_previo_id) == raw_vehiculo_id
+            )
+            if es_el_mismo:
+                vehiculo = Vehiculo.objects.filter(pk=raw_vehiculo_id).first()
+            else:
+                vehiculo = Vehiculo.objects.filter(
+                    pk=raw_vehiculo_id, estado=Vehiculo.Estado.ACTIVO,
+                ).first()
+            if vehiculo is None:
+                return JsonResponse(
+                    {'error': 'El vehículo seleccionado no existe o no está activo.'},
+                    status=400,
+                )
+
         # --- Upsert ---------------------------------------------------------
         # 1:1: la primera vez crea la ejecución, luego la actualiza.
         ejecucion, _created = EjecucionSemanalCuadrilla.objects.update_or_create(
             programacion=programacion,
             defaults={
                 'torres_ejecutadas': torres_ejecutadas,
+                'vehiculo': vehiculo,
                 'observaciones': observaciones,
             },
         )
+
+        vehiculo_payload = None
+        if ejecucion.vehiculo_id:
+            vehiculo_payload = {
+                'id': str(ejecucion.vehiculo_id),
+                'placa': ejecucion.vehiculo.placa,
+                'tipo': ejecucion.vehiculo.get_tipo_display(),
+                'capacidad_personas': ejecucion.vehiculo.capacidad_personas,
+            }
 
         # `rendimiento_pct` es propiedad calculada del modelo (S1) — guarda
         # div/0 (programadas == 0 → 0.0). Redondeamos a 1 decimal para la UI.
@@ -123,4 +173,5 @@ class EjecucionSemanalUpdateView(LoginRequiredMixin, RoleRequiredMixin, View):
             'torres_ejecutadas': ejecucion.torres_ejecutadas,
             'torres_programadas': programadas,
             'sobre_ejecucion': sobre_ejecucion,
+            'vehiculo': vehiculo_payload,
         })

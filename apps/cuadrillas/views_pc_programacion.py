@@ -31,6 +31,7 @@ from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, UpdateView
 
@@ -38,6 +39,7 @@ from apps.core.mixins import RoleRequiredMixin
 
 from . import calculators_pc
 from .forms_pc import ProgramacionSemanalCuadrillaForm
+from .models_base import Vehiculo
 from .models_pc import ProgramacionSemanalCuadrilla
 
 # Roles con acceso administrativo (espeja apps/construccion/views.py::ALL_ADMIN_ROLES).
@@ -154,6 +156,16 @@ class ProgramacionCuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, Det
         context['rendimiento_pct'] = (
             ejecucion.rendimiento_pct if ejecucion is not None else None
         )
+        # #270 (sub-item B): vehículos disponibles para el Select2 de
+        # asignación de la ejecución. Solo ACTIVOS + el ya asignado (si
+        # existe) aunque haya pasado a EN_MANTENIMIENTO/INACTIVO después de
+        # asignarlo -- mismo criterio que el form (forms_pc.py).
+        vehiculo_qs = Vehiculo.objects.filter(estado=Vehiculo.Estado.ACTIVO)
+        if ejecucion is not None and ejecucion.vehiculo_id:
+            vehiculo_qs = Vehiculo.objects.filter(
+                Q(estado=Vehiculo.Estado.ACTIVO) | Q(pk=ejecucion.vehiculo_id)
+            )
+        context['vehiculos_activos'] = vehiculo_qs.order_by('placa')
 
         # #155 sub-2: dashboard de cumplimiento inline (reemplaza el placeholder).
         # Reusa la MISMA lógica que ProgramacionCuadrillaDashboardView vía

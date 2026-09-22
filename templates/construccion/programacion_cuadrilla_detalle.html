@@ -10,6 +10,10 @@
   button[data-action=guardar-ejecucion] los aporta B3 dentro del partial
   construccion/_ejecucion_inline.html que se incluye más abajo.
 
+  #270 (sub-item B): la vista agrega `vehiculos_activos` al contexto (ACTIVOS +
+  el ya asignado si lo hay) y este template lo reenvía al include para el
+  Select2 de asignación de vehículo dentro del mismo partial de ejecución.
+
   - OJO (hallazgo verificado contra el Django 5.1.15 de este repo): el tag
     `include` de este build NO acepta `ignore missing` (su do_include solo
     conoce `with`/`only`) → usar `{% include ... ignore missing %}` rompe el
@@ -125,7 +129,7 @@
           include de este Django build — ver nota de cabecera). El partial existe
           tras el merge F4 (contrato del parent template declarado en S1).
         {% endcomment %}
-        {% include "construccion/_ejecucion_inline.html" with programacion=programacion ejecucion=ejecucion rendimiento_pct=rendimiento_pct %}
+        {% include "construccion/_ejecucion_inline.html" with programacion=programacion ejecucion=ejecucion rendimiento_pct=rendimiento_pct vehiculos_activos=vehiculos_activos %}
     </div>
 
     {# ---- Dashboard de cumplimiento (inline, #155 sub-2) ---- #}
