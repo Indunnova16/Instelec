@@ -198,6 +198,44 @@ class PersonalCuadrilla(BaseModel):
         'Fecha de ingreso',
         null=True,
         blank=True,
+        help_text=(
+            'DEPRECADO (issue #271, A1): reemplazado por fecha_firma_contrato + '
+            'fecha_ingreso_proyecto. Se mantiene en el model state (NO se remueve '
+            'todavía vía SeparateDatabaseAndState) porque los consumidores de este '
+            'campo (forms_personal.py, services_psc_disponibilidad.py, '
+            'views_psc_aprobaciones.py, excel_psc.py, import/export de views.py y su '
+            'cobertura de tests) migran a los campos nuevos en A2-A7, despachados '
+            'DESPUÉS de A1 en el mismo worktree -- remover el campo ahora rompe '
+            "'manage.py check' completo (ModelForm.Meta.fields se valida en import) "
+            'y toda esa suite de tests, que es exactamente el trabajo que A2-A7 '
+            'todavía no hicieron. Cleanup real (RemoveField del model state, sin '
+            'dropear la columna física) queda para un sub-item de cierre una vez '
+            'que ningún consumidor activo referencie ya fecha_ingreso -- ver '
+            'notas_para_orquestador de A1.'
+        ),
+    )
+    fecha_firma_contrato = models.DateField(
+        'Fecha de Firma de Contrato',
+        null=True,
+        blank=True,
+        help_text=(
+            'Issue #271 (A1): split de la antigua "Fecha de ingreso" en 2 conceptos '
+            'operativos distintos -- ésta es la fecha de firma de contrato (RRHH/legal). '
+            'Backfill: poblada con el valor legacy de fecha_ingreso para los colaboradores '
+            'que ya la tenían (163/224 filas en prod, verificado 2026-09-22).'
+        ),
+    )
+    fecha_ingreso_proyecto = models.DateField(
+        'Fecha de Ingreso a Proyecto',
+        null=True,
+        blank=True,
+        help_text=(
+            'Issue #271 (A1): split de la antigua "Fecha de ingreso" -- ésta es la fecha '
+            'operativa de disponibilidad para SER PROGRAMADO en el proyecto (usada por '
+            'personal_elegible() y por la validación de aprobaciones). NO se backfillea '
+            'automáticamente desde el legacy fecha_ingreso: es un dato nuevo que el '
+            'cliente diligencia colaborador por colaborador.'
+        ),
     )
     fecha_salida = models.DateField(
         'Fecha de salida',
