@@ -1926,7 +1926,15 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
     Salario Base | Fecha Ingreso | Fecha Salida. Las 3 columnas nuevas son
     opcionales (retrocompatible con el formato original de 3 columnas) --
     si faltan, quedan en su default del modelo (salario_base=0,
-    fecha_ingreso/fecha_salida=None -> activo=True).
+    fecha_firma_contrato/fecha_ingreso_proyecto/fecha_salida=None ->
+    activo=True).
+
+    Issue #271 (A3): 'Fecha Ingreso' (legado) o 'Fecha Firma Contrato'
+    (encabezado canónico que emite el export vigente) pueblan
+    `fecha_firma_contrato` (compat retro, split de A1) -- ya NO puebla el
+    `fecha_ingreso` deprecado. 'Fecha Ingreso Proyecto' es una columna nueva
+    y opcional, sin posición legacy (ningún archivo previo la traía): solo
+    se resuelve por encabezado.
 
     Nombre y Documento se resuelven por encabezado cuando la planilla los
     declara, porque el export vigente los entrega como Documento | Nombre.
@@ -2036,7 +2044,22 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
             # Formato legacy: Nombre | Documento | Cargo | Salario Base | fechas.
             idx_cargo = encabezados.get('CARGO', 2)
             idx_salario = encabezados.get('SALARIO BASE', 3)
-            idx_fecha_ingreso = encabezados.get('FECHA INGRESO', 4)
+            # Issue #271 (A3): 'FECHA INGRESO' es el encabezado legado -- se
+            # mantiene por retrocompatibilidad pero ahora puebla
+            # fecha_firma_contrato (split de A1), NO el fecha_ingreso
+            # deprecado. El export vigente (ColaboradorExportView) ya emite
+            # el encabezado canónico 'FECHA FIRMA CONTRATO' -- se prioriza
+            # sobre el legado para que un archivo recién exportado haga
+            # round-trip sin perder la fecha (si solo cae al legado, un
+            # archivo SIN 'FECHA INGRESO' terminaría resolviendo por la
+            # posición legacy 4, que en el export nuevo es Salario Base).
+            # 'FECHA INGRESO PROYECTO' es la columna nueva y opcional (sin
+            # posición legacy: ningún archivo previo la traía); solo se
+            # resuelve si el encabezado está presente.
+            idx_fecha_ingreso = encabezados.get(
+                'FECHA FIRMA CONTRATO', encabezados.get('FECHA INGRESO', 4)
+            )
+            idx_fecha_ingreso_proyecto = encabezados.get('FECHA INGRESO PROYECTO')
             idx_fecha_salida = encabezados.get('FECHA SALIDA', 5)
             areas_por_alias = {
                 self._normalizar_texto_excel(alias): codigo
@@ -2063,7 +2086,12 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                         if idx_area is not None and len(row) > idx_area and row[idx_area] else ''
                     )
                     salario_raw = row[idx_salario] if len(row) > idx_salario else None
-                    fecha_ingreso_raw = row[idx_fecha_ingreso] if len(row) > idx_fecha_ingreso else None
+                    fecha_firma_contrato_raw = row[idx_fecha_ingreso] if len(row) > idx_fecha_ingreso else None
+                    fecha_ingreso_proyecto_raw = (
+                        row[idx_fecha_ingreso_proyecto]
+                        if idx_fecha_ingreso_proyecto is not None and len(row) > idx_fecha_ingreso_proyecto
+                        else None
+                    )
                     fecha_salida_raw = row[idx_fecha_salida] if len(row) > idx_fecha_salida else None
 
                     if not nombre or not documento:
@@ -2089,7 +2117,8 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                         )
                         continue
                     salario_base = self._parse_decimal(salario_raw)
-                    fecha_ingreso = self._parse_fecha(fecha_ingreso_raw)
+                    fecha_firma_contrato = self._parse_fecha(fecha_firma_contrato_raw)
+                    fecha_ingreso_proyecto = self._parse_fecha(fecha_ingreso_proyecto_raw)
                     fecha_salida = self._parse_fecha(fecha_salida_raw)
 
                     defaults = {
@@ -2097,7 +2126,14 @@ class PersonalCuadrillaUploadView(LoginRequiredMixin, RoleRequiredMixin, View):
                         'rol_cuadrilla_id': rol,
                         'area': area_raw,
                         'salario_base': salario_base,
-                        'fecha_ingreso': fecha_ingreso,
+                        # Issue #271 (A3): split de la antigua fecha_ingreso -- el
+                        # header legado 'FECHA INGRESO' puebla fecha_firma_contrato
+                        # (compat retro); 'FECHA INGRESO PROYECTO' (nueva, opcional)
+                        # puebla fecha_ingreso_proyecto. El campo legacy
+                        # fecha_ingreso queda deprecado (A1) y ya NO se escribe
+                        # desde este importador (mismo criterio que el form, A2).
+                        'fecha_firma_contrato': fecha_firma_contrato,
+                        'fecha_ingreso_proyecto': fecha_ingreso_proyecto,
                         'fecha_salida': fecha_salida,
                         # activo se resuelve en PersonalCuadrilla.save(): True salvo
                         # que fecha_salida venga poblada (issue #176, A2).
@@ -2852,7 +2888,13 @@ class CargoExportView(LoginRequiredMixin, RoleRequiredMixin, View):
 
 
 class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Exporta el maestro de Colaboradores a xlsx (issue #176, A6)."""
+    """Exporta el maestro de Colaboradores a xlsx (issue #176, A6).
+
+    Issue #271 (A3): la columna única 'Fecha Ingreso' se reemplaza por
+    'Fecha Firma Contrato' + 'Fecha Ingreso Proyecto' (split de A1). El
+    export es reimportable por `PersonalCuadrillaUploadView`, que resuelve
+    ambos encabezados nuevos por nombre (ver docstring de esa vista).
+    """
     allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente']
 
     def get(self, request, *args, **kwargs):
@@ -2862,7 +2904,10 @@ class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = 'Colaboradores'
-        ws.append(['Documento', 'Nombre', 'Área', 'Cargo', 'Salario Base', 'Fecha Ingreso', 'Fecha Salida'])
+        ws.append([
+            'Documento', 'Nombre', 'Área', 'Cargo', 'Salario Base',
+            'Fecha Firma Contrato', 'Fecha Ingreso Proyecto', 'Fecha Salida',
+        ])
         for p in PersonalCuadrilla.objects.select_related('rol_cuadrilla').all().order_by('nombre'):
             # El documento sigue siendo una clave de texto en el modelo. Sólo
             # los valores numéricos sin ceros iniciales se escriben como número
@@ -2879,7 +2924,8 @@ class ColaboradorExportView(LoginRequiredMixin, RoleRequiredMixin, View):
                 p.get_area_display() if p.area else '',
                 p.rol_cuadrilla.nombre if p.rol_cuadrilla_id else '',
                 float(p.salario_base),
-                p.fecha_ingreso.strftime('%Y-%m-%d') if p.fecha_ingreso else '',
+                p.fecha_firma_contrato.strftime('%Y-%m-%d') if p.fecha_firma_contrato else '',
+                p.fecha_ingreso_proyecto.strftime('%Y-%m-%d') if p.fecha_ingreso_proyecto else '',
                 p.fecha_salida.strftime('%Y-%m-%d') if p.fecha_salida else '',
             ])
             if isinstance(documento_excel, int):
