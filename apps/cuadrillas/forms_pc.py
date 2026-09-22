@@ -18,6 +18,10 @@ Notas es-CO (lecciones de memoria):
 - No se inyecta JSON/float crudo en `x-data`; el form no usa Alpine.
 """
 from django import forms
+from django.urls import reverse_lazy
+
+from apps.construccion.models import TorreConstruccion
+from apps.construccion.views import ordenar_torres_construccion
 
 from .models_pc import EjecucionSemanalCuadrilla, ProgramacionSemanalCuadrilla
 
@@ -36,12 +40,25 @@ class ProgramacionSemanalCuadrillaForm(forms.ModelForm):
         model = ProgramacionSemanalCuadrilla
         fields = [
             'cuadrilla', 'proyecto', 'bloque', 'anio', 'semana',
-            'torres_programadas', 'horas_planeadas', 'actividades_programadas', 'observaciones',
+            'torres_programadas', 'torres', 'horas_planeadas',
+            'actividades_programadas', 'observaciones',
         ]
         widgets = {
             # #155: clase js-tomselect → buscador (init global único en base.html).
             'cuadrilla': forms.Select(attrs={'class': INPUT_CLS + ' js-tomselect'}),
-            'proyecto': forms.Select(attrs={'class': INPUT_CLS + ' js-tomselect'}),
+            # #269: al cambiar 'proyecto', HTMX pide el fragmento de <option>
+            # de torres ACTIVAS de ese proyecto y reemplaza el innerHTML del
+            # <select id="id_torres"> -- mismo patrón que la cascada
+            # Línea→Tramo (#188/#209, TramosPorLineaAPIView). El listener
+            # global de base.html (htmx:afterSwap) re-sincroniza el TomSelect
+            # de 'torres' tras el swap (sync()+clear()), sin JS propio.
+            'proyecto': forms.Select(attrs={
+                'class': INPUT_CLS + ' js-tomselect',
+                'hx-get': reverse_lazy('construccion:torres_activas_fragmento'),
+                'hx-trigger': 'change',
+                'hx-target': '#id_torres',
+                'hx-swap': 'innerHTML',
+            }),
             'bloque': forms.Select(attrs={'class': INPUT_CLS}),
             'anio': forms.NumberInput(attrs={
                 'class': INPUT_CLS, 'min': 2000, 'max': 2100, 'step': 1,
@@ -53,6 +70,13 @@ class ProgramacionSemanalCuadrillaForm(forms.ModelForm):
             }),
             'torres_programadas': forms.NumberInput(attrs={
                 'class': INPUT_CLS, 'min': 0, 'step': 1, 'placeholder': '0',
+            }),
+            # #269: multi-select TomSelect. `placeholder` lo lee TomSelect del
+            # atributo nativo del <select> cuando no hay <option> (proyecto
+            # todavía sin elegir) -- sin JS propio.
+            'torres': forms.SelectMultiple(attrs={
+                'class': INPUT_CLS + ' js-tomselect',
+                'placeholder': 'Selecciona primero un proyecto',
             }),
             'horas_planeadas': forms.NumberInput(attrs={
                 'class': INPUT_CLS, 'min': 0, 'step': '0.01', 'placeholder': '0.00',
@@ -76,6 +100,25 @@ class ProgramacionSemanalCuadrillaForm(forms.ModelForm):
         self.fields['cuadrilla'].queryset = (
             self.fields['cuadrilla'].queryset.order_by('codigo')
         )
+        # #269: 'torres' es opcional y depende de 'proyecto' (cascada HTMX en
+        # el widget). El queryset del ModelMultipleChoiceField DEBE incluir
+        # los ids que el POST puede traer -- si se deja `.none()` a secas, un
+        # submit real con torres elegidas falla la validación ("esa opción no
+        # es una de las disponibles") aunque el HTML las haya listado bien.
+        self.fields['torres'].required = False
+        proyecto_id = None
+        if self.data.get('proyecto'):
+            proyecto_id = self.data.get('proyecto')
+        elif self.instance and self.instance.pk and self.instance.proyecto_id:
+            proyecto_id = self.instance.proyecto_id
+        if proyecto_id:
+            self.fields['torres'].queryset = ordenar_torres_construccion(
+                TorreConstruccion.objects.filter(
+                    proyecto_id=proyecto_id, anulada=False,
+                )
+            )
+        else:
+            self.fields['torres'].queryset = TorreConstruccion.objects.none()
 
     def clean_semana(self):
         """Edge case: semana ISO válida (1..53)."""

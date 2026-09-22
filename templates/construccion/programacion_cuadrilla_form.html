@@ -6,6 +6,12 @@
   Contrato de selectores (BLUEPRINT.evidence.template_evidence):
     select[name=cuadrilla], input[name=torres_programadas], button[type=submit]
 
+  #269: select[name=torres] (multi, TomSelect) -- cascada dependiente de
+  select[name=proyecto] vía HTMX (hx-get a construccion:torres_activas_fragmento,
+  hx-target=#id_torres, hx-swap=innerHTML). Nace vacío/sin <option> hasta elegir
+  proyecto (mismo patrón que la cascada Línea→Tramo, #188/#209). NO reemplaza
+  torres_programadas (conteo manual editable, intacto).
+
   Render del form: cada widget ya trae sus clases Tailwind desde
   forms_pc.ProgramacionSemanalCuadrillaForm. No se inyecta JSON/float en x-data
   (sin Alpine) → no aplica el bug "algo rompe Alpine inline". Campos numéricos
@@ -65,6 +71,21 @@
             {% endif %}
             {% if form.proyecto.errors %}
             <p class="mt-1 text-sm text-red-600">{{ form.proyecto.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
+        <div>
+            <label for="{{ form.torres.id_for_label }}"
+                   class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ form.torres.label }}
+            </label>
+            {{ form.torres }}
+            <p class="mt-1 text-xs text-gray-500">
+                Selección informativa/trazabilidad -- no reemplaza "Torres programadas".
+                {% if not form.torres.field.queryset %}Elegí un proyecto para ver sus torres activas.{% endif %}
+            </p>
+            {% if form.torres.errors %}
+            <p class="mt-1 text-sm text-red-600">{{ form.torres.errors|striptags }}</p>
             {% endif %}
         </div>
 

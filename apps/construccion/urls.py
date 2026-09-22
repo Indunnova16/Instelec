@@ -21,6 +21,16 @@ urlpatterns = [
     path("<uuid:proyecto_id>/preliminares/", views.PreliminaresView.as_view(), name="preliminares"),
     # Torres
     path("<uuid:proyecto_id>/torres/", views.TorresListView.as_view(), name="torres_lista"),
+    # #269: fragmento HTMX de <option> (torres activas de ?proyecto=<uuid>) --
+    # path plano (no bajo <uuid:proyecto_id>/) porque el proyecto llega como
+    # querystring, no como segmento de URL (cascada Proyecto→Torres del form
+    # de Programación de Cuadrillas). No colisiona con <uuid:proyecto_id>/
+    # arriba: "torres" no matchea el converter uuid.
+    path(
+        "torres/activas-fragmento/",
+        views.TorresActivasFragmentoView.as_view(),
+        name="torres_activas_fragmento",
+    ),
     path("<uuid:proyecto_id>/torres/crear/", views.TorreCreateView.as_view(), name="torre_crear"),
     path(
         "<uuid:proyecto_id>/torres/<uuid:pk>/editar/",

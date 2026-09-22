@@ -4,6 +4,8 @@ Views for the construccion (construction) app.
 from django.views import View
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
+from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404, redirect
 from django.db.models import Q, IntegerField, Value, F, Func, Max, Case, When
@@ -145,6 +147,48 @@ class TorresListView(LoginRequiredMixin, RoleRequiredMixin, ListView):
         proyecto_id = self.kwargs.get('proyecto_id')
         context['proyecto'] = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
         return context
+
+
+class TorresActivasFragmentoView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """GET /construccion/torres/activas-fragmento/?proyecto=<uuid> (#269).
+
+    Devuelve <option> ya renderizados con las torres ACTIVAS del proyecto
+    (``aplica=True`` vía `ordenar_torres_construccion` + ``anulada=False`` --
+    unión conservadora confirmada por F2: ni fuera de alcance ni canceladas),
+    para repoblar el `<select id="id_torres">` de Programación de Cuadrillas
+    vía HTMX (`hx-target=#id_torres`, `hx-swap=innerHTML`). Mismo patrón que
+    `TramosPorLineaAPIView` (#188/#209): el listener global de base.html
+    (`htmx:afterSwap`) reinicializa/resincroniza el TomSelect del target sin
+    JS propio de este feature.
+
+    Roles: mismos que el CRUD de Programación de Cuadrillas (sin operarios --
+    solo quienes pueden crear/editar programaciones consumen este endpoint).
+    Sin proyecto en el querystring o proyecto inexistente → fragmento vacío
+    (HTTP 200), nunca 404/500: es un widget dependiente, no una vista de
+    detalle.
+    """
+    allowed_roles = ['admin', 'director', 'coordinador', 'ing_residente',
+                     'admin_general', 'coordinador_general', 'admin_construccion']
+
+    def get(self, request, *args, **kwargs):
+        proyecto_id = (request.GET.get('proyecto') or '').strip()
+        html = ''
+        if proyecto_id:
+            try:
+                torres = ordenar_torres_construccion(
+                    TorreConstruccion.objects.filter(
+                        proyecto_id=proyecto_id, anulada=False,
+                    )
+                )
+                html = ''.join(
+                    f'<option value="{torre.pk}">{torre.numero}</option>'
+                    for torre in torres
+                )
+            except (ValueError, ValidationError):
+                # proyecto_id no es un UUID válido (widget manipulado/valor
+                # stale) -- fragmento vacío, nunca 500.
+                html = ''
+        return HttpResponse(html, content_type='text/html')
 
 
 class TorreCreateView(LoginRequiredMixin, RoleRequiredMixin, CreateView):

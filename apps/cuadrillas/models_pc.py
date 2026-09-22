@@ -73,6 +73,20 @@ class ProgramacionSemanalCuadrilla(BaseModel):
         default=0,
         help_text='Cantidad de torres planeadas para la semana',
     )
+    # #269: selección real de torres del proyecto (M2M, ADITIVA/trazabilidad).
+    # NO reemplaza `torres_programadas` (que sigue siendo el conteo manual
+    # editable e independiente usado por `rendimiento_pct` y por los goldens
+    # del corpus) -- es puramente informativa: qué torres concretas del
+    # proyecto quedaron incluidas en esta programación semanal.
+    torres = models.ManyToManyField(
+        'construccion.TorreConstruccion',
+        blank=True,
+        related_name='programaciones_cuadrilla',
+        verbose_name='Torres',
+        help_text='Torres reales del proyecto incluidas en esta programación '
+                  '(selección informativa/trazabilidad; no reemplaza "Torres '
+                  'programadas", que sigue siendo el conteo manual editable).',
+    )
     horas_planeadas = models.DecimalField(
         'Horas planeadas',
         max_digits=8,
