@@ -31,16 +31,18 @@ from django.db import IntegrityError
 from django.test import Client
 from django.urls import NoReverseMatch, reverse
 
+from apps.construccion.models import ProyectoConstruccion, TorreConstruccion
+from apps.contratos.models import Contrato
 from apps.core.permissions import AREA_CONSTRUCCION, AREA_MANTENIMIENTO
 from apps.cuadrillas.models import Asistencia, Cargo, Cuadrilla, PersonalCuadrilla, Vehiculo
 from apps.cuadrillas.models_pc import (
     AsistenciaEjecucionSemanal,
     EjecucionSemanalCuadrilla,
     EjecucionSemanalPersonal,
+    EjecucionSemanalTorre,
     ProgramacionSemanalCuadrilla,
 )
 from apps.usuarios.models import Usuario
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -110,6 +112,28 @@ def _crear_personal(
         area=area,
         activo=activo,
         rol_cuadrilla_id=cargo.codigo,
+    )
+
+
+def _crear_proyecto(codigo='TEST-270-A-001'):
+    """#270 (sub-item A): proyecto de construcción real, para poder colgarle
+    torres (mismo helper que `tests_issue_269.py`)."""
+    contrato = Contrato.objects.create(
+        unidad_negocio=Contrato.UnidadNegocio.CONSTRUCCION,
+        codigo=codigo,
+        nombre='Contrato test #270-A',
+        cliente='Test Cliente #270-A',
+    )
+    return ProyectoConstruccion.objects.create(
+        contrato=contrato,
+        nombre='Proyecto #270-A test',
+        estado='EJECUCION',
+    )
+
+
+def _crear_torre(proyecto, numero, aplica=True, anulada=False):
+    return TorreConstruccion.objects.create(
+        proyecto=proyecto, numero=numero, aplica=aplica, anulada=anulada,
     )
 
 
@@ -1087,3 +1111,242 @@ class TestCalculatorRendimiento:
             ProgramacionSemanalCuadrilla.objects.none()
         )
         assert resultado == [] or list(resultado) == []
+
+
+# ===========================================================================
+# 5. Trazabilidad de torres nombradas (#270, sub-item A)
+# ===========================================================================
+
+@pytest.mark.django_db
+class TestEjecucionSemanalTorreModel:
+    """Modelo `EjecucionSemanalTorre` — trazabilidad, NO reemplaza los
+    conteos manuales `torres_programadas`/`torres_ejecutadas`."""
+
+    def test_str_y_creacion_basica(self):
+        proyecto = _crear_proyecto()
+        torre = _crear_torre(proyecto, 'T-1')
+        prog = _crear_programacion(torres=5)
+        prog.proyecto = proyecto
+        prog.save(update_fields=['proyecto'])
+        prog.torres.add(torre)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(
+            programacion=prog, torres_ejecutadas=1,
+        )
+        fila = EjecucionSemanalTorre.objects.create(
+            ejecucion=ejecucion, torre=torre, ejecutada=True,
+        )
+        assert 'T-1' in str(fila)
+        assert 'ejecutada' in str(fila)
+
+    def test_unique_together_rechaza_torre_duplicada_en_la_misma_ejecucion(self):
+        proyecto = _crear_proyecto()
+        torre = _crear_torre(proyecto, 'T-2')
+        prog = _crear_programacion(torres=5)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+        EjecucionSemanalTorre.objects.create(ejecucion=ejecucion, torre=torre)
+        with pytest.raises(IntegrityError):
+            EjecucionSemanalTorre.objects.create(ejecucion=ejecucion, torre=torre)
+
+    def test_no_toca_torres_programadas_ni_torres_ejecutadas(self):
+        """Contrato de diseño de F3 (ajustado respecto al plan original de
+        F2, ver notas_para_orquestador): el M2M de trazabilidad es ADITIVO,
+        no deriva ni reemplaza los conteos manuales."""
+        proyecto = _crear_proyecto()
+        torre = _crear_torre(proyecto, 'T-3')
+        prog = _crear_programacion(torres=10)
+        prog.proyecto = proyecto
+        prog.save(update_fields=['proyecto'])
+        prog.torres.add(torre)
+        ejecucion = EjecucionSemanalCuadrilla.objects.create(
+            programacion=prog, torres_ejecutadas=7,
+        )
+        EjecucionSemanalTorre.objects.create(ejecucion=ejecucion, torre=torre)
+
+        prog.refresh_from_db()
+        ejecucion.refresh_from_db()
+        assert prog.torres_programadas == 10
+        assert ejecucion.torres_ejecutadas == 7
+        assert ejecucion.rendimiento_pct == 70.0
+
+
+@pytest.mark.django_db
+class TestEjecucionTorresGuardarAjax:
+    """Vista AJAX `EjecucionSemanalTorresGuardarView` (#270 sub-item A):
+    guardado de estado completo (ejecutadas + motivo por no-ejecutada +
+    sobre-ejecución)."""
+
+    def _url(self, prog):
+        return reverse(
+            'construccion:programacion_cuadrilla_ejecucion_torres_guardar',
+            args=[prog.pk],
+        )
+
+    def test_happy_marcar_n_de_m_programadas_ejecutadas_no_altera_cumplimiento(self):
+        """Happy: marcar N torres ejecutadas de M programadas. El
+        %cumplimiento (`rendimiento_pct`) sigue gobernado por los conteos
+        manuales -- este guardado NO lo toca, solo agrega trazabilidad."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        proyecto = _crear_proyecto(codigo='TEST-270-A-HAPPY')
+        t1 = _crear_torre(proyecto, 'T-10')
+        t2 = _crear_torre(proyecto, 'T-11')
+        t3 = _crear_torre(proyecto, 'T-12')
+        prog = _crear_programacion(torres=3)
+        prog.proyecto = proyecto
+        prog.save(update_fields=['proyecto'])
+        prog.torres.set([t1, t2, t3])
+        EjecucionSemanalCuadrilla.objects.create(programacion=prog, torres_ejecutadas=2)
+
+        resp = client.post(
+            self._url(prog),
+            data={
+                'torres_ejecutadas': [str(t1.pk), str(t2.pk)],
+                f'motivo_cambio_{t3.pk}': 'Lluvia impidió el acceso',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert len(payload['torres_ejecutadas']) == 2
+        assert len(payload['torres_no_ejecutadas']) == 1
+        assert payload['torres_no_ejecutadas'][0]['motivo_cambio'] == 'Lluvia impidió el acceso'
+
+        ejecucion = EjecucionSemanalCuadrilla.objects.get(programacion=prog)
+        assert set(
+            ejecucion.torres_detalle.filter(ejecutada=True).values_list('torre_id', flat=True)
+        ) == {t1.pk, t2.pk}
+        # El conteo manual NO cambió por este guardado.
+        assert ejecucion.torres_ejecutadas == 2
+
+    def test_edge_torre_programada_no_ejecutada_sin_motivo_400(self):
+        """Edge: torre programada que no se marcó como ejecutada y no trae
+        motivo_cambio -> 400 con el detalle de cuáles faltan."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        proyecto = _crear_proyecto(codigo='TEST-270-A-MOTIVO')
+        t1 = _crear_torre(proyecto, 'T-20')
+        t2 = _crear_torre(proyecto, 'T-21')
+        prog = _crear_programacion(torres=2)
+        prog.proyecto = proyecto
+        prog.save(update_fields=['proyecto'])
+        prog.torres.set([t1, t2])
+
+        resp = client.post(
+            self._url(prog),
+            data={'torres_ejecutadas': [str(t1.pk)]},  # t2 queda sin motivo
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 400
+        payload = json.loads(resp.content)
+        assert str(t2.pk) in payload['faltan_motivo']
+        assert not EjecucionSemanalTorre.objects.filter(torre=t2).exists()
+
+    def test_edge_sobre_ejecucion_torre_no_programada(self):
+        """Edge: torre ejecutada que NO estaba programada (sobre-ejecución)
+        -- se guarda igual, sin exigir motivo (es informativo)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        proyecto = _crear_proyecto(codigo='TEST-270-A-SOBRE')
+        t_programada = _crear_torre(proyecto, 'T-30')
+        t_extra = _crear_torre(proyecto, 'T-31')
+        prog = _crear_programacion(torres=1)
+        prog.proyecto = proyecto
+        prog.save(update_fields=['proyecto'])
+        prog.torres.set([t_programada])
+
+        resp = client.post(
+            self._url(prog),
+            data={'torres_ejecutadas': [str(t_programada.pk), str(t_extra.pk)]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert payload['no_validos'] == []
+        ejecucion = EjecucionSemanalCuadrilla.objects.get(programacion=prog)
+        ids_ejecutadas = set(
+            ejecucion.torres_detalle.filter(ejecutada=True).values_list('torre_id', flat=True)
+        )
+        assert ids_ejecutadas == {t_programada.pk, t_extra.pk}
+
+    def test_edge_torre_aplica_false_o_anulada_excluida_no_validos(self):
+        """Edge: una torre `aplica=False` o `anulada=True` no puede marcarse
+        ejecutada -- va a `no_validos`, no se guarda."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        proyecto = _crear_proyecto(codigo='TEST-270-A-APLICA')
+        t_no_aplica = _crear_torre(proyecto, 'T-40', aplica=False)
+        t_anulada = _crear_torre(proyecto, 'T-41', anulada=True)
+        prog = _crear_programacion(torres=0)
+        prog.proyecto = proyecto
+        prog.save(update_fields=['proyecto'])
+
+        resp = client.post(
+            self._url(prog),
+            data={'torres_ejecutadas': [str(t_no_aplica.pk), str(t_anulada.pk)]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert set(payload['no_validos']) == {str(t_no_aplica.pk), str(t_anulada.pk)}
+        assert payload['torres_ejecutadas'] == []
+        assert not EjecucionSemanalTorre.objects.filter(
+            torre__in=[t_no_aplica, t_anulada],
+        ).exists()
+
+    def test_regresion_sin_torres_programadas_guarda_sin_error(self):
+        """Regresión: sin torres programadas (M2M de #269 vacío) el guardado
+        no debe fallar -- guard equivalente al div/0 de rendimiento_pct."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        prog = _crear_programacion(torres=0)
+
+        resp = client.post(
+            self._url(prog),
+            data={},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        payload = json.loads(resp.content)
+        assert payload['ok'] is True
+        assert payload['torres_ejecutadas'] == []
+        assert payload['torres_no_ejecutadas'] == []
+
+    def test_precondicion_c_ejecucion_vacia_creada_por_personal_no_rompe(self):
+        """Precondición heredada del sub-item C: agregar personal puede
+        crear una EjecucionSemanalCuadrilla con torres_ejecutadas=0 (default)
+        ANTES de que nadie guarde torres. El guardado de A sobre esa
+        ejecución pre-existente-vacía debe funcionar igual (upsert, no
+        crea una segunda ejecución)."""
+        client = Client()
+        admin = _crear_usuario_admin()
+        _login(client, admin)
+        proyecto = _crear_proyecto(codigo='TEST-270-A-PRECOND-C')
+        torre = _crear_torre(proyecto, 'T-50')
+        prog = _crear_programacion(torres=1)
+        prog.proyecto = proyecto
+        prog.save(update_fields=['proyecto'])
+        prog.torres.set([torre])
+        # Simula lo que hace EjecucionSemanalPersonalAgregarView: get_or_create
+        # sin torres_ejecutadas -> queda en el default (0).
+        ejecucion_vacia = EjecucionSemanalCuadrilla.objects.create(programacion=prog)
+        assert ejecucion_vacia.torres_ejecutadas == 0
+
+        resp = client.post(
+            self._url(prog),
+            data={'torres_ejecutadas': [str(torre.pk)]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        assert resp.status_code == 200, resp.content
+        # Sigue siendo la MISMA ejecución (no se duplicó por el upsert).
+        assert EjecucionSemanalCuadrilla.objects.filter(programacion=prog).count() == 1
+        ejecucion_vacia.refresh_from_db()
+        assert ejecucion_vacia.torres_ejecutadas == 0  # el conteo manual no lo tocó A
+        assert ejecucion_vacia.torres_detalle.filter(ejecutada=True).count() == 1

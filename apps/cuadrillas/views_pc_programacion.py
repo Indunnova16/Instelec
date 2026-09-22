@@ -35,13 +35,18 @@ from django.db.models import Q
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, UpdateView
 
+from apps.construccion.views import ordenar_torres_construccion
 from apps.core.mixins import RoleRequiredMixin
 from apps.core.permissions import AREA_CONSTRUCCION
 
 from . import calculators_pc
 from .forms_pc import ProgramacionSemanalCuadrillaForm
 from .models_base import Asistencia, PersonalCuadrilla, Vehiculo
-from .models_pc import AsistenciaEjecucionSemanal, ProgramacionSemanalCuadrilla
+from .models_pc import (
+    AsistenciaEjecucionSemanal,
+    EjecucionSemanalTorre,
+    ProgramacionSemanalCuadrilla,
+)
 
 # Roles con acceso administrativo (espeja apps/construccion/views.py::ALL_ADMIN_ROLES).
 PROGRAMACION_ROLES = [
@@ -183,6 +188,48 @@ class ProgramacionCuadrillaDetailView(LoginRequiredMixin, RoleRequiredMixin, Det
         context['personal_disponible'] = PersonalCuadrilla.objects.filter(
             activo=True, area=AREA_CONSTRUCCION,
         ).order_by('nombre')
+
+        # #270 (sub-item A): trazabilidad de torres nombradas -- torres
+        # PROGRAMADAS (M2M de #269, `programacion.torres`) + estado guardado
+        # de la ejecución (`EjecucionSemanalTorre`, sub-item A) si ya existe.
+        # `torres_programadas_detalle` arma, por cada torre programada, si ya
+        # hay una fila de ejecución (ejecutada/no-ejecutada+motivo) o
+        # `None` si todavía no se guardó nada para esa torre. `torres_sobre_
+        # ejecucion` son filas ejecutadas que NO estaban en `programacion.
+        # torres` (sobre-ejecución, #270 tests_requeridos).
+        torres_programadas_qs = ordenar_torres_construccion(
+            programacion.torres.all(), incluir_no_aplica=True,
+        )
+        ejecucion_torres_por_id = {}
+        if ejecucion is not None:
+            ejecucion_torres_por_id = {
+                str(fila.torre_id): fila
+                for fila in EjecucionSemanalTorre.objects.filter(
+                    ejecucion=ejecucion,
+                ).select_related('torre')
+            }
+        programadas_ids = {str(t.pk) for t in torres_programadas_qs}
+        context['torres_programadas_detalle'] = [
+            {
+                'torre': torre,
+                'fila': ejecucion_torres_por_id.get(str(torre.pk)),
+            }
+            for torre in torres_programadas_qs
+        ]
+        context['torres_sobre_ejecucion'] = [
+            fila for tid, fila in ejecucion_torres_por_id.items()
+            if tid not in programadas_ids and fila.ejecutada
+        ]
+        # Catálogo para el selector de sobre-ejecución (torres activas del
+        # proyecto que NO están en `programacion.torres` -- mismo criterio
+        # aplica=True/anulada=False que `TorresActivasFragmentoView`, #269).
+        if programacion.proyecto_id:
+            context['torres_disponibles_extra'] = ordenar_torres_construccion(
+                programacion.proyecto.torres.filter(anulada=False)
+                .exclude(pk__in=programadas_ids)
+            )
+        else:
+            context['torres_disponibles_extra'] = torres_programadas_qs.none()
 
         # #270 (sub-item D): asistencia semanal por persona/día -- DEPENDE
         # del roster de C (`personal_asignado`, ya resuelto arriba). Arma la

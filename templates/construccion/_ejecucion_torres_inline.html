@@ -1,0 +1,241 @@
+{% load l10n %}
+{% comment %}
+  #270 (sub-item A) — Trazabilidad de torres nombradas en la ejecución semanal.
+
+  Partial NUEVO (no toca `_ejecucion_inline.html` de B ni
+  `_ejecucion_personal_inline.html` de C) incluido directo desde
+  `templates/construccion/programacion_cuadrilla_detalle.html` en una card
+  propia "Torres ejecutadas".
+
+  Contexto que espera del detalle (`ProgramacionCuadrillaDetailView.
+  get_context_data`):
+    - `programacion`               : instancia ProgramacionSemanalCuadrilla.
+    - `torres_programadas_detalle` : lista de {'torre', 'fila'} -- una por
+                                      cada torre de `programacion.torres`
+                                      (M2M de #269). `fila` es la
+                                      EjecucionSemanalTorre existente o None
+                                      si todavía no se guardó nada.
+    - `torres_sobre_ejecucion`     : filas ejecutada=True cuya torre NO
+                                      estaba en `programacion.torres`.
+    - `torres_disponibles_extra`   : queryset TorreConstruccion activas del
+                                      proyecto que NO están programadas, para
+                                      el selector de sobre-ejecución.
+
+  Guarda inline vía Alpine fetch() a UN único endpoint AJAX
+  (`views_pc_ejecucion_torres.EjecucionSemanalTorresGuardarView`), con
+  X-CSRFToken -- guardado de ESTADO COMPLETO (como el resto de la card: el
+  botón "Guardar" manda el conjunto entero de torres marcadas + motivos).
+
+  Sin torres programadas y sin sobre-ejecución -> la card igual se muestra
+  (permite arrancar por sobre-ejecución sin haber seleccionado torres en el
+  form de programación).
+{% endcomment %}
+
+{% localize off %}
+<div id="torres-inline"
+     class="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
+     data-url-guardar="{% url 'construccion:programacion_cuadrilla_ejecucion_torres_guardar' pk=programacion.id %}"
+     x-data="torresEjecucionInline($el)">
+
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+    Torres ejecutadas
+  </h2>
+
+  {% comment %}Toast de estado (success / error).{% endcomment %}
+  <div x-show="toast.visible"
+       x-transition.opacity
+       :class="toast.tipo === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-300' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-300'"
+       class="rounded border px-4 py-2 text-sm mb-3"
+       style="display:none"
+       x-text="toast.mensaje"></div>
+
+  <template x-if="filas.length === 0 && extras.length === 0">
+    <p class="text-sm text-gray-400 mb-3" data-empty-torres>
+      Sin torres programadas ni ejecutadas todavía.
+    </p>
+  </template>
+
+  <div class="overflow-x-auto" x-show="filas.length > 0">
+    <table class="min-w-full text-sm divide-y divide-gray-200 dark:divide-gray-700">
+      <thead>
+        <tr class="text-left text-gray-500 dark:text-gray-400">
+          <th class="py-2 pr-4">Torre</th>
+          <th class="py-2 pr-4">Ejecutada</th>
+          <th class="py-2 pr-4">Motivo del cambio</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+        <template x-for="fila in filas" :key="fila.torreId">
+          <tr class="text-gray-900 dark:text-white" :data-torre-id="fila.torreId">
+            <td class="py-2 pr-4" x-text="fila.numero"></td>
+            <td class="py-2 pr-4">
+              <input type="checkbox" :checked="fila.ejecutada" @change="fila.ejecutada = $event.target.checked" data-action="toggle-torre-ejecutada">
+            </td>
+            <td class="py-2 pr-4">
+              <input type="text"
+                     x-show="!fila.ejecutada"
+                     x-model="fila.motivoCambio"
+                     placeholder="¿Por qué no se ejecutó?"
+                     class="w-64 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm text-sm">
+              <span x-show="fila.ejecutada" class="text-gray-400">—</span>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <div x-show="extras.length > 0" class="mt-3">
+    <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+      Sobre-ejecución (torres ejecutadas que no estaban programadas)
+    </p>
+    <ul class="text-sm space-y-1">
+      <template x-for="extra in extras" :key="extra.torreId">
+        <li :data-torre-id="extra.torreId" class="flex items-center gap-2">
+          <span x-text="extra.numero"></span>
+          <button type="button" @click="quitarExtra(extra)" data-action="quitar-sobre-ejecucion"
+                  class="text-red-600 hover:underline text-xs">Quitar</button>
+        </li>
+      </template>
+    </ul>
+  </div>
+
+  <form @submit.prevent="agregarExtra()" class="mt-4 flex items-end gap-2">
+    {% csrf_token %}
+    <div class="flex-1">
+      <label for="id_torre_extra" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        Agregar torre ejecutada no programada
+      </label>
+      <select id="id_torre_extra" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 js-tomselect">
+        <option value="">— Seleccionar torre —</option>
+        {% for torre in torres_disponibles_extra %}
+        <option value="{{ torre.pk }}" data-numero="{{ torre.numero }}">{{ torre.numero }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" data-action="agregar-sobre-ejecucion"
+            class="rounded-md bg-gray-200 dark:bg-gray-700 px-3 py-2 text-sm font-medium text-gray-800 dark:text-white hover:bg-gray-300">
+      Agregar
+    </button>
+  </form>
+
+  <button type="button"
+          @click="guardar()"
+          :disabled="guardando"
+          data-action="guardar-torres"
+          class="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+    <svg x-show="guardando" style="display:none" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+    <span x-text="guardando ? 'Guardando…' : 'Guardar'"></span>
+  </button>
+
+  {% comment %}
+    Marcadores de datos iniciales -- NUNCA un JSON crudo inlineado en
+    <script>. `init()` los lee una sola vez y arma `filas`/`extras`.
+  {% endcomment %}
+  <div x-ref="datosIniciales" class="hidden" aria-hidden="true">
+    {% for item in torres_programadas_detalle %}
+    <span class="torre-programada-inicial"
+          data-torre-id="{{ item.torre.pk }}"
+          data-numero="{{ item.torre.numero }}"
+          data-ejecutada="{% if item.fila %}{{ item.fila.ejecutada|yesno:'1,0' }}{% else %}1{% endif %}"
+          data-motivo="{% if item.fila %}{{ item.fila.motivo_cambio }}{% endif %}"></span>
+    {% endfor %}
+    {% for extra in torres_sobre_ejecucion %}
+    <span class="torre-extra-inicial"
+          data-torre-id="{{ extra.torre_id }}"
+          data-numero="{{ extra.torre.numero }}"></span>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+function torresEjecucionInline(el) {
+  return {
+    urlGuardar: el.dataset.urlGuardar,
+    csrfToken: document.cookie.split('csrftoken=')[1]?.split(';')[0] || '',
+    filas: [],
+    extras: [],
+    guardando: false,
+    toast: { visible: false, mensaje: '', tipo: 'ok' },
+    init() {
+      var progs = this.$refs.datosIniciales.querySelectorAll('.torre-programada-inicial');
+      this.filas = Array.from(progs).map(function (m) {
+        return {
+          torreId: m.dataset.torreId,
+          numero: m.dataset.numero,
+          ejecutada: m.dataset.ejecutada === '1',
+          motivoCambio: m.dataset.motivo || '',
+        };
+      });
+      var extras = this.$refs.datosIniciales.querySelectorAll('.torre-extra-inicial');
+      this.extras = Array.from(extras).map(function (m) {
+        return { torreId: m.dataset.torreId, numero: m.dataset.numero };
+      });
+      if (!this.csrfToken) {
+        var inp = el.querySelector('input[name=csrfmiddlewaretoken]');
+        if (inp) this.csrfToken = inp.value;
+      }
+    },
+    showToast(mensaje, tipo) {
+      this.toast = { visible: true, mensaje: mensaje, tipo: tipo };
+      setTimeout(() => { this.toast.visible = false; }, 3500);
+    },
+    agregarExtra() {
+      var select = el.querySelector('select#id_torre_extra');
+      if (!select || !select.value) {
+        this.showToast('Seleccioná una torre.', 'error');
+        return;
+      }
+      var torreId = select.value;
+      var numero = select.options[select.selectedIndex].dataset.numero;
+      if (this.filas.some((f) => f.torreId === torreId) || this.extras.some((e) => e.torreId === torreId)) {
+        this.showToast('Esa torre ya está en la lista.', 'error');
+        return;
+      }
+      this.extras.push({ torreId: torreId, numero: numero });
+      if (select.tomselect) { select.tomselect.clear(); } else { select.value = ''; }
+    },
+    quitarExtra(extra) {
+      this.extras = this.extras.filter((e) => e.torreId !== extra.torreId);
+    },
+    async guardar() {
+      if (this.guardando) return;
+      // Motivo obligatorio para toda programada marcada como NO ejecutada.
+      var faltantes = this.filas.filter((f) => !f.ejecutada && !f.motivoCambio.trim());
+      if (faltantes.length > 0) {
+        this.showToast('Falta el motivo del cambio para ' + faltantes.length + ' torre(s) no ejecutada(s).', 'error');
+        return;
+      }
+      this.guardando = true;
+      try {
+        var fd = new FormData();
+        this.filas.filter((f) => f.ejecutada).forEach((f) => fd.append('torres_ejecutadas', f.torreId));
+        this.extras.forEach((e) => fd.append('torres_ejecutadas', e.torreId));
+        this.filas.filter((f) => !f.ejecutada).forEach((f) => fd.append('motivo_cambio_' + f.torreId, f.motivoCambio.trim()));
+        const r = await fetch(this.urlGuardar, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': this.csrfToken },
+          body: fd,
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          this.showToast('Torres ejecutadas guardadas.', 'ok');
+          if ((data.no_validos || []).length) {
+            this.showToast((data.no_validos.length) + ' torre(s) inválida(s) ignorada(s).', 'error');
+          }
+        } else {
+          this.showToast((data && data.error) || 'No se pudo guardar.', 'error');
+        }
+      } catch (e) {
+        this.showToast('Error de red. Reintentá.', 'error');
+      } finally {
+        this.guardando = false;
+      }
+    },
+  };
+}
+</script>
+{% endlocalize %}

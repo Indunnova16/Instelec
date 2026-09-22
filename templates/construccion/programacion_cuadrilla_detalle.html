@@ -132,6 +132,14 @@
         {% include "construccion/_ejecucion_inline.html" with programacion=programacion ejecucion=ejecucion rendimiento_pct=rendimiento_pct vehiculos_activos=vehiculos_activos %}
     </div>
 
+    {# ---- Torres ejecutadas (trazabilidad nombrada, #270 sub-item A) ---- #}
+    {% comment %}
+      Partial propio (NO comparte archivo con B/C/D). Include INCONDICIONAL --
+      mismo criterio que el resto de este template (el `include` de este
+      build de Django no soporta `ignore missing`).
+    {% endcomment %}
+    {% include "construccion/_ejecucion_torres_inline.html" with programacion=programacion torres_programadas_detalle=torres_programadas_detalle torres_sobre_ejecucion=torres_sobre_ejecucion torres_disponibles_extra=torres_disponibles_extra %}
+
     {# ---- Personal asignado a la ejecución (#270, sub-item C) ---- #}
     {% comment %}
       Partial propio (NO comparte archivo con B3/#270-B, ver cabecera de

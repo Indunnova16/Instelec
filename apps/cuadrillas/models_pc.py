@@ -237,6 +237,78 @@ class EjecucionSemanalPersonal(BaseModel):
         return f"{self.personal} — {self.ejecucion}"
 
 
+class EjecucionSemanalTorre(BaseModel):
+    """
+    Trazabilidad de torres NOMBRADAS por ejecución semanal (#270, sub-item A).
+
+    Through-model explícito `EjecucionSemanalCuadrilla` <-> `construccion.
+    TorreConstruccion` (mismo patrón FK+FK que `EjecucionSemanalPersonal`, en
+    vez de `ManyToManyField(through=...)` -- más simple de manejar desde la
+    vista AJAX de guardado, que hace upsert masivo por POST).
+
+    Decisión de diseño (ajustada en F3 respecto al plan original de F2, ver
+    `notas_para_orquestador` del output): `torres_programadas` /
+    `torres_ejecutadas` (los `PositiveIntegerField` de arriba) se MANTIENEN
+    como conteos manuales editables -- NO se convierten en propiedad derivada
+    de este M2M. Es el mismo precedente que #269 ya fijó para el lado
+    "programado" (`ProgramacionSemanalCuadrilla.torres`, ver su docstring):
+    `rendimiento_pct` y los cálculos de los 6 archivos consumidores
+    (`services_produccion_analisis.py`, `calculators_pc.py`,
+    `views_pc_dashboard.py`, `views_pc_programacion.py`,
+    `views_produccion_diaria_alertas.py`, `admin_pc.py`) siguen intactos.
+    Este modelo es PURAMENTE de trazabilidad: qué torres nombradas del
+    proyecto quedaron marcadas como ejecutadas o no-ejecutadas esta semana,
+    en paralelo al conteo manual.
+
+    `ejecutada=False` representa una torre que SÍ estaba en
+    `programacion.torres` (M2M de #269) pero NO se ejecutó -- `motivo_cambio`
+    es obligatorio en ese caso (lo exige la vista, no el modelo, para poder
+    dar un mensaje de dominio claro en vez de un `IntegrityError`).
+    `ejecutada=True` con una torre que NO estaba en `programacion.torres`
+    representa sobre-ejecución (torre ejecutada que no estaba programada);
+    `motivo_cambio` es opcional en ese caso (nota informativa).
+
+    `unique_together` evita duplicar la misma torre en la misma ejecución.
+    """
+
+    ejecucion = models.ForeignKey(
+        EjecucionSemanalCuadrilla,
+        on_delete=models.CASCADE,
+        related_name='torres_detalle',
+        verbose_name='Ejecución',
+    )
+    torre = models.ForeignKey(
+        'construccion.TorreConstruccion',
+        on_delete=models.CASCADE,
+        related_name='ejecuciones_semanales_cuadrilla',
+        verbose_name='Torre',
+    )
+    ejecutada = models.BooleanField(
+        'Ejecutada',
+        default=True,
+        help_text='False = estaba programada pero NO se ejecutó esta semana '
+                  '(requiere motivo_cambio).',
+    )
+    motivo_cambio = models.TextField(
+        'Motivo del cambio',
+        blank=True,
+        help_text='Obligatorio cuando ejecutada=False (torre programada que '
+                  'no se ejecutó). Opcional/informativo si es una torre '
+                  'ejecutada que no estaba programada (sobre-ejecución).',
+    )
+
+    class Meta:
+        db_table = 'ejecucion_semanal_torre'
+        verbose_name = 'Torre de Ejecución Semanal'
+        verbose_name_plural = 'Torres de Ejecución Semanal'
+        ordering = ['torre__numero']
+        unique_together = ['ejecucion', 'torre']
+
+    def __str__(self):
+        estado = 'ejecutada' if self.ejecutada else 'no ejecutada'
+        return f"{self.torre} — {estado} ({self.ejecucion})"
+
+
 class AsistenciaEjecucionSemanal(BaseModel):
     """
     Asistencia diaria por persona dentro de la ejecución semanal (#270,

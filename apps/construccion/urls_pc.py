@@ -30,6 +30,9 @@ from apps.cuadrillas.views_pc_ejecucion_personal import (
     EjecucionSemanalPersonalEditarView,
     EjecucionSemanalPersonalRemoverView,
 )
+from apps.cuadrillas.views_pc_ejecucion_torres import (
+    EjecucionSemanalTorresGuardarView,
+)
 from apps.cuadrillas.views_pc_index import ProgramacionCuadrillaIndexView
 from apps.cuadrillas.views_pc_programacion import (
     ProgramacionCuadrillaCreateView,
@@ -92,6 +95,14 @@ urlpatterns = [
         'programacion-cuadrillas/ejecucion/personal/<uuid:pk>/remover/',
         EjecucionSemanalPersonalRemoverView.as_view(),
         name='programacion_cuadrilla_ejecucion_personal_remover',
+    ),
+    # --- #270 sub-item A: trazabilidad de torres nombradas (POST AJAX) ---
+    # `pk` = UUID de la PROGRAMACIÓN (mismo contrato que arriba) -- guardado
+    # masivo de estado completo (torres ejecutadas + motivo por no-ejecutada).
+    path(
+        'programacion-cuadrillas/<uuid:pk>/ejecucion/torres/guardar/',
+        EjecucionSemanalTorresGuardarView.as_view(),
+        name='programacion_cuadrilla_ejecucion_torres_guardar',
     ),
     # --- #270 sub-item D: asistencia semanal por persona/día (POST AJAX) ---
     # `pk` = UUID de la fila EjecucionSemanalPersonal (roster de C),

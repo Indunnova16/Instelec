@@ -20,6 +20,7 @@ from .models_pc import (
     AsistenciaEjecucionSemanal,
     EjecucionSemanalCuadrilla,
     EjecucionSemanalPersonal,
+    EjecucionSemanalTorre,
     ProgramacionSemanalCuadrilla,
 )
 
@@ -125,6 +126,28 @@ class EjecucionSemanalPersonalAdmin(BaseModelAdmin):
         'ejecucion__programacion__cuadrilla__codigo',
     )
     raw_id_fields = ('ejecucion', 'personal')
+    readonly_fields = ('id', 'created_at', 'updated_at')
+
+
+@admin.register(EjecucionSemanalTorre)
+class EjecucionSemanalTorreAdmin(BaseModelAdmin):
+    """#270 (sub-item A): trazabilidad de torres nombradas (programado vs
+    ejecutado). `torres_ejecutadas` (int, en `EjecucionSemanalCuadrillaAdmin`
+    arriba) sigue siendo el conteo manual -- este registro es la lista
+    NOMBRADA de torres y su estado, independiente de ese conteo."""
+
+    list_display = ('torre', 'ejecucion', 'ejecutada', 'motivo_cambio')
+    list_filter = (
+        'ejecutada',
+        'ejecucion__programacion__anio', 'ejecucion__programacion__semana',
+        'ejecucion__programacion__cuadrilla',
+    )
+    search_fields = (
+        'torre__numero',
+        'ejecucion__programacion__cuadrilla__codigo',
+        'motivo_cambio',
+    )
+    raw_id_fields = ('ejecucion', 'torre')
     readonly_fields = ('id', 'created_at', 'updated_at')
 
 
