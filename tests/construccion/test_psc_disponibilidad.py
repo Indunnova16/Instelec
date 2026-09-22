@@ -45,6 +45,37 @@ def test_filtro_intervalo(psc_data):
 
 
 @pytest.mark.django_db
+def test_excluye_por_fecha_ingreso_proyecto_futura(psc_data):
+    """Issue #271 (A4): la elegibilidad usa fecha_ingreso_proyecto, no el
+    legacy fecha_ingreso (que la fixture ya tiene poblado en 2025-01-01 y
+    NO debe influir en este filtro)."""
+    proyecto, persona = psc_data
+    persona.fecha_ingreso_proyecto = date(2026, 9, 1)
+    persona.save(update_fields=['fecha_ingreso_proyecto'])
+    assert not personal_elegible(proyecto.pk, date(2026, 8, 17), date(2026, 8, 23)).exists()
+
+
+@pytest.mark.django_db
+def test_fecha_ingreso_proyecto_null_sigue_elegible_no_regresion(psc_data):
+    """Issue #271 (A4): NULL sigue siendo 'sin restricción' -- no regresión
+    para las 163/224 filas legacy sin fecha_ingreso_proyecto diligenciada."""
+    proyecto, persona = psc_data
+    assert persona.fecha_ingreso_proyecto is None
+    disponibles = personal_elegible(proyecto.pk, date(2026, 8, 17), date(2026, 8, 23))
+    assert list(disponibles) == [persona]
+
+
+@pytest.mark.django_db
+def test_incluye_fecha_ingreso_proyecto_igual_a_fecha_fin(psc_data):
+    """Borde: fecha_ingreso_proyecto == fecha_fin del intervalo -> incluida (lte)."""
+    proyecto, persona = psc_data
+    persona.fecha_ingreso_proyecto = date(2026, 8, 23)
+    persona.save(update_fields=['fecha_ingreso_proyecto'])
+    disponibles = personal_elegible(proyecto.pk, date(2026, 8, 17), date(2026, 8, 23))
+    assert list(disponibles) == [persona]
+
+
+@pytest.mark.django_db
 def test_placa_conductor(psc_data):
     proyecto, persona = psc_data
     programacion = ProgramacionSemanalConstruccion.objects.create(

@@ -81,6 +81,33 @@ class TestAprobacionPersonalProyecto(TestCase):
         self.assertEqual(AsignacionPersonalProyectoConstruccion.objects.count(), 1)
         self.assertContains(response, 'se cruza con el intervalo', status_code=400)
 
+    def test_rechaza_por_fecha_ingreso_proyecto_mensaje_dinamico(self):
+        """Issue #271 (A4/entregable #3): mensaje dinámico con nombre y
+        fecha exacta -- reemplaza el genérico anterior. Usa
+        fecha_ingreso_proyecto, NO el legacy fecha_ingreso (poblado en
+        setUp con 2025-01-01, que NO debe bloquear esto)."""
+        self.personal.fecha_ingreso_proyecto = date(2026, 9, 20)
+        self.personal.save(update_fields=['fecha_ingreso_proyecto'])
+        response = self.client.post(self.url, self._payload(
+            fecha_inicio='2026-08-17', fecha_fin='2026-08-23',
+        ))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AsignacionPersonalProyectoConstruccion.objects.count(), 0)
+        self.assertContains(
+            response, 'Ana Personal no está disponible hasta el 20/09/2026.',
+            status_code=400,
+        )
+
+    def test_permite_fecha_igual_o_posterior_a_fecha_ingreso_proyecto(self):
+        """No falso positivo: fecha_inicio == fecha_ingreso_proyecto pasa."""
+        self.personal.fecha_ingreso_proyecto = date(2026, 8, 17)
+        self.personal.save(update_fields=['fecha_ingreso_proyecto'])
+        response = self.client.post(self.url, self._payload(
+            fecha_inicio='2026-08-17', fecha_fin='2026-08-23',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(AsignacionPersonalProyectoConstruccion.objects.count(), 1)
+
     def test_dato_legacy_sin_fecha_fin_permanece_vigente(self):
         legacy = AsignacionPersonalProyectoConstruccion.objects.create(
             proyecto=self.proyecto, personal=self.personal,

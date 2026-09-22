@@ -42,7 +42,12 @@ def personal_elegible(proyecto_id, fecha_inicio, fecha_fin):
         area='CONSTRUCCION',
         aprobaciones_proyecto_construccion__in=aprobaciones_vigentes,
     ).filter(
-        Q(fecha_ingreso__isnull=True) | Q(fecha_ingreso__lte=fecha_fin),
+        # Issue #271 (A4): la elegibilidad para SER PROGRAMADO se rige por
+        # fecha_ingreso_proyecto (disponibilidad operativa), no por el legacy
+        # fecha_ingreso (firma de contrato/RRHH). NULL sigue siendo "sin
+        # restricción" -- no regresión para las filas legacy sin este dato
+        # nuevo diligenciado todavía.
+        Q(fecha_ingreso_proyecto__isnull=True) | Q(fecha_ingreso_proyecto__lte=fecha_fin),
         Q(fecha_salida__isnull=True) | Q(fecha_salida__gte=fecha_inicio),
     ).exclude(pk__in=ocupados).select_related('rol_cuadrilla').distinct().order_by('nombre')
 

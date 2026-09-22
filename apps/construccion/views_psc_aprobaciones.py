@@ -105,8 +105,16 @@ class AprobacionPersonalProyectoView(LoginRequiredMixin, RoleRequiredMixin, View
             return 'Ingrese una fecha de fin válida.'
         if fecha_fin and fecha_fin < fecha_inicio:
             return 'La fecha de fin no puede ser anterior a la fecha de inicio.'
-        if personal.fecha_ingreso and fecha_inicio < personal.fecha_ingreso:
-            return 'La aprobación no puede iniciar antes del ingreso de la persona.'
+        if personal.fecha_ingreso_proyecto and fecha_inicio < personal.fecha_ingreso_proyecto:
+            # Issue #271 (A4/entregable #3): mensaje dinámico con nombre y
+            # fecha exacta -- reemplaza el genérico "no puede iniciar antes
+            # del ingreso de la persona." Usa fecha_ingreso_proyecto (fecha
+            # operativa de disponibilidad), NO el legacy fecha_ingreso
+            # (firma de contrato/RRHH).
+            return (
+                f'{personal.nombre} no está disponible hasta el '
+                f'{personal.fecha_ingreso_proyecto:%d/%m/%Y}.'
+            )
         if personal.fecha_salida and (not fecha_fin or fecha_fin > personal.fecha_salida):
             return 'La aprobación no puede extenderse después de la salida de la persona.'
         return None
