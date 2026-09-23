@@ -61,6 +61,7 @@ Dependencias de generación:
   de asumir que faltaba: no estaba en ningún ``requirements/*.txt`` del
   repo ni instalada en el venv del worktree.
 """
+
 from __future__ import annotations
 
 import csv
@@ -94,7 +95,7 @@ from .permissions_fin import (
 )
 from .views_fin import ProyectoFinMixin, _kpi_cards_finv2_bd, _to_decimal
 
-ZERO = Decimal('0.00')
+ZERO = Decimal("0.00")
 
 
 def _money(valor: Any) -> str:
@@ -117,8 +118,8 @@ def _pct1(valor: Any) -> str:
 def _leer_mes_querystring(request) -> int | None:
     """``?mes=`` opcional — ``None`` = reporte del año fiscal completo
     (mismo default que la pestaña Tabla/Matriz). Nunca lanza."""
-    mes_raw = request.GET.get('mes')
-    if mes_raw in (None, ''):
+    mes_raw = request.GET.get("mes")
+    if mes_raw in (None, ""):
         return None
     try:
         mes = int(mes_raw)
@@ -129,7 +130,7 @@ def _leer_mes_querystring(request) -> int | None:
 
 def _leer_anio_querystring(request) -> int:
     try:
-        return int(request.GET.get('anio', date.today().year))
+        return int(request.GET.get("anio", date.today().year))
     except (TypeError, ValueError):
         return date.today().year
 
@@ -145,63 +146,67 @@ def construir_contexto_reporte(proyecto, anio: int, mes: int | None = None) -> d
     UI — nunca un 404: una descarga que el usuario pidió a propósito no
     debe romperse por falta de dato, solo decirlo).
     """
-    presupuesto = (
-        PresupuestoDetalladoConstruccion.objects
-        .filter(proyecto=proyecto, anio=anio,
-                tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO)
-        .first()
-    )
+    presupuesto = PresupuestoDetalladoConstruccion.objects.filter(
+        proyecto=proyecto, anio=anio, tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO
+    ).first()
     datos = presupuesto.datos if presupuesto and isinstance(presupuesto.datos, dict) else {}
-    filas_detalle_anio = ((datos.get('finv2_bd') or {}).get('filas_detalle')) or []
+    filas_detalle_anio = ((datos.get("finv2_bd") or {}).get("filas_detalle")) or []
 
     if mes is not None:
         filas_efectivas = [
-            f for f in filas_detalle_anio
-            if isinstance(f, dict) and f.get('mes') == mes and f.get('anio') == anio
+            f
+            for f in filas_detalle_anio
+            if isinstance(f, dict) and f.get("mes") == mes and f.get("anio") == anio
         ]
         datos_periodo = (
-            {'finv2_bd': _construir_finv2_bd_desde_filas_planas(filas_efectivas)}
-            if filas_efectivas else {}
+            {"finv2_bd": _construir_finv2_bd_desde_filas_planas(filas_efectivas)}
+            if filas_efectivas
+            else {}
         )
     else:
         filas_efectivas = filas_detalle_anio
         datos_periodo = datos
 
     rubro_rows, rubro_total = build_rubro_display_rows(datos_periodo)
-    matrix_rows, totales_columna, meses_fiscales, matrix_total = (
-        build_rubro_matrix_rows(datos_periodo)
+    matrix_rows, totales_columna, meses_fiscales, matrix_total = build_rubro_matrix_rows(
+        datos_periodo
     )
     kpi_cards = _kpi_cards_finv2_bd(datos_periodo)
 
     return {
-        'presupuesto': presupuesto,
-        'rubro_rows': rubro_rows,
-        'rubro_total': rubro_total,
-        'matrix_rows': matrix_rows,
-        'totales_columna': totales_columna,
-        'meses_fiscales': meses_fiscales,
-        'matrix_total': matrix_total,
-        'kpi_cards': kpi_cards,
-        'filas_detalle': filas_efectivas,
-        'tiene_datos': bool(filas_efectivas) or bool(rubro_rows),
+        "presupuesto": presupuesto,
+        "rubro_rows": rubro_rows,
+        "rubro_total": rubro_total,
+        "matrix_rows": matrix_rows,
+        "totales_columna": totales_columna,
+        "meses_fiscales": meses_fiscales,
+        "matrix_total": matrix_total,
+        "kpi_cards": kpi_cards,
+        "filas_detalle": filas_efectivas,
+        "tiene_datos": bool(filas_efectivas) or bool(rubro_rows),
     }
 
 
 def _periodo_label(anio: int, mes: int | None) -> str:
-    return f'{mes:02d}/{anio}' if mes else f'Año fiscal {anio}'
+    return f"{mes:02d}/{anio}" if mes else f"Año fiscal {anio}"
 
 
 # ===========================================================================
 # 1. PDF ejecutivo (Fase 5.1) — WeasyPrint
 # ===========================================================================
 def _construir_html_pdf_presupuesto(
-    proyecto, anio: int, mes: int | None, ctx: dict, generado_en=None, usuario=None,
+    proyecto,
+    anio: int,
+    mes: int | None,
+    ctx: dict,
+    generado_en=None,
+    usuario=None,
 ) -> str:
     """HTML fuente del PDF ejecutivo — función separada y pública a propósito
     (ver docstring del módulo: es lo que los tests verifican, no el binario)."""
     periodo = _periodo_label(anio, mes)
-    kpi = ctx['kpi_cards']
-    rubro_rows = ctx['rubro_rows']
+    kpi = ctx["kpi_cards"]
+    rubro_rows = ctx["rubro_rows"]
 
     filas_rubros = (
         "".join(
@@ -215,7 +220,7 @@ def _construir_html_pdf_presupuesto(
         or "<tr><td colspan='3'>Sin rubros cargados para el período.</td></tr>"
     )
 
-    alertas_rojo = [r for r in rubro_rows if r['semaforo'] == 'rojo']
+    alertas_rojo = [r for r in rubro_rows if r["semaforo"] == "rojo"]
     filas_alertas = (
         "".join(
             f"<li>{escape(str(r['rubro']))}: {_pct1(r['pct'])} sobre |Total Año| "
@@ -251,10 +256,10 @@ def _construir_html_pdf_presupuesto(
 
   <h2>KPI Ejecutivos</h2>
   <div class="resumen">
-    <div><strong>Ingreso</strong><br>{_money(kpi['ingreso'])}</div>
-    <div><strong>Costos Fijos</strong><br>{_money(kpi['costos_fijos'])}</div>
-    <div><strong>Costos Variables</strong><br>{_money(kpi['costos_variables'])}</div>
-    <div><strong>Resultado</strong><br>{_money(kpi['resultado'])}</div>
+    <div><strong>Ingreso</strong><br>{_money(kpi["ingreso"])}</div>
+    <div><strong>Costos Fijos</strong><br>{_money(kpi["costos_fijos"])}</div>
+    <div><strong>Costos Variables</strong><br>{_money(kpi["costos_variables"])}</div>
+    <div><strong>Resultado</strong><br>{_money(kpi["resultado"])}</div>
   </div>
 
   <h2>Rubros ({len(rubro_rows)})</h2>
@@ -262,7 +267,7 @@ def _construir_html_pdf_presupuesto(
     <thead><tr><th>Rubro</th><th>Total</th><th>% sobre |Total Año|</th></tr></thead>
     <tbody>{filas_rubros}</tbody>
   </table>
-  <p style="font-size:9pt;color:#6b7280;">Total general: {_money(ctx['rubro_total'])}</p>
+  <p style="font-size:9pt;color:#6b7280;">Total general: {_money(ctx["rubro_total"])}</p>
 
   <h2>Alertas (semáforo rojo, &gt;100%)</h2>
   <ul>{filas_alertas}</ul>
@@ -277,11 +282,15 @@ def _construir_html_pdf_presupuesto(
     return html
 
 
-def generar_pdf_presupuesto(proyecto, anio: int, mes: int | None = None, generado_en=None, usuario=None) -> bytes:
+def generar_pdf_presupuesto(
+    proyecto, anio: int, mes: int | None = None, generado_en=None, usuario=None
+) -> bytes:
     from weasyprint import HTML
 
     ctx = construir_contexto_reporte(proyecto, anio, mes)
-    html = _construir_html_pdf_presupuesto(proyecto, anio, mes, ctx, generado_en=generado_en, usuario=usuario)
+    html = _construir_html_pdf_presupuesto(
+        proyecto, anio, mes, ctx, generado_en=generado_en, usuario=usuario
+    )
     return HTML(string=html).write_pdf()
 
 
@@ -294,67 +303,67 @@ def generar_excel_presupuesto(proyecto, anio: int, mes: int | None = None) -> by
 
     ctx = construir_contexto_reporte(proyecto, anio, mes)
     periodo = _periodo_label(anio, mes)
-    kpi = ctx['kpi_cards']
+    kpi = ctx["kpi_cards"]
 
     libro = Workbook()
 
     # --- Hoja 1: Resumen -----------------------------------------------
     hoja_resumen = libro.active
-    hoja_resumen.title = 'Resumen'
-    hoja_resumen.append(['Presupuesto Planeado — Reporte Ejecutivo'])
-    hoja_resumen['A1'].font = Font(bold=True, size=14)
-    hoja_resumen.append(['Proyecto', proyecto.nombre])
-    hoja_resumen.append(['Período', periodo])
+    hoja_resumen.title = "Resumen"
+    hoja_resumen.append(["Presupuesto Planeado — Reporte Ejecutivo"])
+    hoja_resumen["A1"].font = Font(bold=True, size=14)
+    hoja_resumen.append(["Proyecto", proyecto.nombre])
+    hoja_resumen.append(["Período", periodo])
     hoja_resumen.append([])
-    hoja_resumen.append(['Indicador', 'Valor'])
-    hoja_resumen.append(['Ingreso', float(kpi['ingreso'])])
-    hoja_resumen.append(['Costos Fijos', float(kpi['costos_fijos'])])
-    hoja_resumen.append(['Costos Variables', float(kpi['costos_variables'])])
-    hoja_resumen.append(['Resultado', float(kpi['resultado'])])
-    hoja_resumen.append(['Total Rubros', ctx['rubro_total']])
+    hoja_resumen.append(["Indicador", "Valor"])
+    hoja_resumen.append(["Ingreso", float(kpi["ingreso"])])
+    hoja_resumen.append(["Costos Fijos", float(kpi["costos_fijos"])])
+    hoja_resumen.append(["Costos Variables", float(kpi["costos_variables"])])
+    hoja_resumen.append(["Resultado", float(kpi["resultado"])])
+    hoja_resumen.append(["Total Rubros", ctx["rubro_total"]])
 
     # --- Hoja 2: Matriz (rubro × 12 meses fiscales) ---------------------
-    hoja_matriz = libro.create_sheet('Matriz')
+    hoja_matriz = libro.create_sheet("Matriz")
     encabezados = (
-        ['Rubro'] + [label for _key, label, _num in ctx['meses_fiscales']]
-        + ['Total', '% Total', 'Semáforo']
+        ["Rubro"]
+        + [label for _key, label, _num in ctx["meses_fiscales"]]
+        + ["Total", "% Total", "Semáforo"]
     )
     hoja_matriz.append(encabezados)
-    for fila in ctx['matrix_rows']:
+    for fila in ctx["matrix_rows"]:
         hoja_matriz.append(
-            [fila['rubro'], *fila['meses'], fila['total'], fila['pct'], fila['semaforo']]
+            [fila["rubro"], *fila["meses"], fila["total"], fila["pct"], fila["semaforo"]]
         )
-    hoja_matriz.append(
-        ['TOTAL', *ctx['totales_columna'], ctx['matrix_total'], '', '']
-    )
+    hoja_matriz.append(["TOTAL", *ctx["totales_columna"], ctx["matrix_total"], "", ""])
 
     # --- Hoja 3: Rubros --------------------------------------------------
-    hoja_rubros = libro.create_sheet('Rubros')
-    hoja_rubros.append(['Rubro', 'Total', '% sobre |Total Año|', 'Semáforo'])
-    for fila in ctx['rubro_rows']:
-        hoja_rubros.append([fila['rubro'], fila['total'], fila['pct'], fila['semaforo']])
+    hoja_rubros = libro.create_sheet("Rubros")
+    hoja_rubros.append(["Rubro", "Total", "% sobre |Total Año|", "Semáforo"])
+    for fila in ctx["rubro_rows"]:
+        hoja_rubros.append([fila["rubro"], fila["total"], fila["pct"], fila["semaforo"]])
 
     # --- Hoja 4: Histórico (A3 — últimas 50 cargas del proyecto) --------
-    hoja_hist = libro.create_sheet('Histórico')
-    hoja_hist.append(['Fecha', 'Usuario', 'Filas', 'Valor total', 'Estado', 'Período'])
+    hoja_hist = libro.create_sheet("Histórico")
+    hoja_hist.append(["Fecha", "Usuario", "Filas", "Valor total", "Estado", "Período"])
     cargas = (
-        HistorialCargaPresupuestoConstruccion.objects
-        .filter(proyecto=proyecto)
-        .select_related('usuario')
-        .order_by('-fecha')[:50]
+        HistorialCargaPresupuestoConstruccion.objects.filter(proyecto=proyecto)
+        .select_related("usuario")
+        .order_by("-fecha")[:50]
     )
     for carga in cargas:
-        usuario_nombre = '—'
+        usuario_nombre = "—"
         if carga.usuario:
             usuario_nombre = carga.usuario.get_full_name() or carga.usuario.username
-        hoja_hist.append([
-            carga.fecha.strftime('%d/%m/%Y %H:%M:%S') if carga.fecha else '',
-            usuario_nombre,
-            carga.filas_procesadas,
-            float(carga.valor_total or 0),
-            carga.get_estado_display(),
-            carga.periodo_display,
-        ])
+        hoja_hist.append(
+            [
+                carga.fecha.strftime("%d/%m/%Y %H:%M:%S") if carga.fecha else "",
+                usuario_nombre,
+                carga.filas_procesadas,
+                float(carga.valor_total or 0),
+                carga.get_estado_display(),
+                carga.periodo_display,
+            ]
+        )
 
     salida = BytesIO()
     libro.save(salida)
@@ -364,42 +373,76 @@ def generar_excel_presupuesto(proyecto, anio: int, mes: int | None = None) -> by
 # ===========================================================================
 # 3. CSV contable (Fase 5.4) — reusa LITERAL el layout de PlanoFinancieroCsvView
 # ===========================================================================
-def escribir_csv_presupuesto(response: HttpResponse, proyecto, anio: int, mes: int | None = None) -> None:
+def escribir_csv_presupuesto(
+    response: HttpResponse, proyecto, anio: int, mes: int | None = None
+) -> None:
     """Escribe el CSV contable en ``response`` (ya abierto por el caller con
     ``content_type``/``Content-Disposition`` seteados) — mismo patrón
     (BOM + ``csv.writer`` + agrupar/sumar + orden alfabético) que
     ``PlanoFinancieroCsvView``, ver mapeo de columnas en el docstring del
-    módulo."""
+    módulo.
+
+    Fallback (hallazgo del validador-cierre, 2026-09-23): ``filas_detalle``
+    solo existe para presupuestos cargados por el importador plano (A2) — un
+    presupuesto cargado por el importador CONTABLE legacy (el caso real hoy
+    en prod) no tiene esa llave y antes producía un CSV con SOLO encabezado,
+    sin aviso. Si no hay ``filas_detalle`` pero SÍ hay ``rubro_rows``
+    (dato legacy real), se emite una fila anual por rubro con el MISMO total
+    que ya muestran la pestaña Tabla / hoja "Rubros" del Excel (A10) —
+    ``build_rubro_display_rows``, sin inventar un desglose mensual que este
+    formato de dato no tiene."""
     ctx = construir_contexto_reporte(proyecto, anio, mes)
-    filas = ctx['filas_detalle']
+    filas = ctx["filas_detalle"]
 
-    response.write('﻿')
+    response.write("﻿")
     writer = csv.writer(response)
-    writer.writerow(['Código', 'Concepto', 'Centro', 'Proyecto', 'Mes', 'Valor', 'Referencia'])
+    writer.writerow(["Código", "Concepto", "Centro", "Proyecto", "Mes", "Valor", "Referencia"])
 
-    agrupadas: dict = defaultdict(lambda: {'valor': ZERO, 'referencias': set()})
+    if not filas:
+        for fila in ctx["rubro_rows"]:
+            writer.writerow(
+                [
+                    "SIN_HOMOLOGAR",
+                    fila["rubro"],
+                    "",
+                    proyecto.nombre,
+                    _periodo_label(anio, mes),
+                    fila["total"],
+                    "",
+                ]
+            )
+        return
+
+    agrupadas: dict = defaultdict(lambda: {"valor": ZERO, "referencias": set()})
     for f in filas:
         if not isinstance(f, dict):
             continue
-        codigo = f.get('codigo_contable') or 'SIN_HOMOLOGAR'
-        concepto = f.get('rubro') or ''
-        centro = f.get('ciudad') or ''
-        mes_f = f.get('mes')
-        anio_f = f.get('anio')
+        codigo = f.get("codigo_contable") or "SIN_HOMOLOGAR"
+        concepto = f.get("rubro") or ""
+        centro = f.get("ciudad") or ""
+        mes_f = f.get("mes")
+        anio_f = f.get("anio")
         llave = (codigo, concepto, centro, mes_f, anio_f)
-        agrupadas[llave]['valor'] += _to_decimal(f.get('valor'))
-        clasificacion = f.get('clasificacion')
+        agrupadas[llave]["valor"] += _to_decimal(f.get("valor"))
+        clasificacion = f.get("clasificacion")
         if clasificacion:
-            agrupadas[llave]['referencias'].add(str(clasificacion))
+            agrupadas[llave]["referencias"].add(str(clasificacion))
 
     for (codigo, concepto, centro, mes_f, anio_f), info in sorted(
-        agrupadas.items(), key=lambda kv: (kv[0][0] or '', kv[0][1] or '', kv[0][2] or '')
+        agrupadas.items(), key=lambda kv: (kv[0][0] or "", kv[0][1] or "", kv[0][2] or "")
     ):
-        mes_label = f'{mes_f:02d}-{anio_f}' if mes_f and anio_f else str(anio_f or anio)
-        writer.writerow([
-            codigo, concepto, centro, proyecto.nombre, mes_label,
-            info['valor'], ' | '.join(sorted(info['referencias'])),
-        ])
+        mes_label = f"{mes_f:02d}-{anio_f}" if mes_f and anio_f else str(anio_f or anio)
+        writer.writerow(
+            [
+                codigo,
+                concepto,
+                centro,
+                proyecto.nombre,
+                mes_label,
+                info["valor"],
+                " | ".join(sorted(info["referencias"])),
+            ]
+        )
 
 
 # ===========================================================================
@@ -411,9 +454,9 @@ def generar_ppt_presupuesto(proyecto, anio: int, mes: int | None = None) -> byte
 
     ctx = construir_contexto_reporte(proyecto, anio, mes)
     periodo = _periodo_label(anio, mes)
-    kpi = ctx['kpi_cards']
-    rubro_rows = ctx['rubro_rows']
-    alertas_rojo = [r for r in rubro_rows if r['semaforo'] == 'rojo']
+    kpi = ctx["kpi_cards"]
+    rubro_rows = ctx["rubro_rows"]
+    alertas_rojo = [r for r in rubro_rows if r["semaforo"] == "rojo"]
 
     prs = Presentation()
     layout_titulo = prs.slide_layouts[0]
@@ -429,7 +472,12 @@ def generar_ppt_presupuesto(proyecto, anio: int, mes: int | None = None) -> byte
 
         n_filas = len(filas) if filas else 1
         tabla_shape = slide.shapes.add_table(
-            n_filas + 1, len(encabezados), Inches(0.4), Inches(1.1), Inches(9), Inches(0.4 * (n_filas + 1)),
+            n_filas + 1,
+            len(encabezados),
+            Inches(0.4),
+            Inches(1.1),
+            Inches(9),
+            Inches(0.4 * (n_filas + 1)),
         )
         tabla = tabla_shape.table
         for c, encabezado in enumerate(encabezados):
@@ -444,81 +492,79 @@ def generar_ppt_presupuesto(proyecto, anio: int, mes: int | None = None) -> byte
 
     # Slide 1: Portada
     slide1 = prs.slides.add_slide(layout_titulo)
-    slide1.shapes.title.text = 'Presupuesto Planeado — Reporte Ejecutivo'
-    slide1.placeholders[1].text = f'{proyecto.nombre}\nPeríodo {periodo}'
+    slide1.shapes.title.text = "Presupuesto Planeado — Reporte Ejecutivo"
+    slide1.placeholders[1].text = f"{proyecto.nombre}\nPeríodo {periodo}"
 
     # Slide 2: KPI Ejecutivos
     slide2 = prs.slides.add_slide(layout_contenido)
-    slide2.shapes.title.text = 'KPI Ejecutivos'
+    slide2.shapes.title.text = "KPI Ejecutivos"
     cuerpo = slide2.placeholders[1].text_frame
     cuerpo.text = f"Ingreso: {_money(kpi['ingreso'])}"
     for etiqueta, valor in (
-        ('Costos Fijos', kpi['costos_fijos']),
-        ('Costos Variables', kpi['costos_variables']),
-        ('Resultado', kpi['resultado']),
+        ("Costos Fijos", kpi["costos_fijos"]),
+        ("Costos Variables", kpi["costos_variables"]),
+        ("Resultado", kpi["resultado"]),
     ):
         parrafo = cuerpo.add_paragraph()
-        parrafo.text = f'{etiqueta}: {_money(valor)}'
+        parrafo.text = f"{etiqueta}: {_money(valor)}"
 
     # Slide 3: Rubros (top 10 por total)
     _slide_tabla(
-        'Rubros (top 10)',
-        ['Rubro', 'Total', '% sobre |Total Año|', 'Semáforo'],
-        [
-            (r['rubro'], _money(r['total']), _pct1(r['pct']), r['semaforo'])
-            for r in rubro_rows[:10]
-        ],
-        'Sin rubros cargados para el período.',
+        "Rubros (top 10)",
+        ["Rubro", "Total", "% sobre |Total Año|", "Semáforo"],
+        [(r["rubro"], _money(r["total"]), _pct1(r["pct"]), r["semaforo"]) for r in rubro_rows[:10]],
+        "Sin rubros cargados para el período.",
     )
 
     # Slide 4: Alertas (semáforo rojo)
     _slide_tabla(
-        'Alertas — Rubros en rojo (>100%)',
-        ['Rubro', 'Total', '% sobre |Total Año|'],
-        [(r['rubro'], _money(r['total']), _pct1(r['pct'])) for r in alertas_rojo],
-        'Ningún rubro supera el 100% de |Total Año| en el período.',
+        "Alertas — Rubros en rojo (>100%)",
+        ["Rubro", "Total", "% sobre |Total Año|"],
+        [(r["rubro"], _money(r["total"]), _pct1(r["pct"])) for r in alertas_rojo],
+        "Ningún rubro supera el 100% de |Total Año| en el período.",
     )
 
     # Slide 5: Matriz mensual (totales por columna)
     _slide_tabla(
-        'Totales por mes (matriz)',
-        [label for _key, label, _num in ctx['meses_fiscales']],
-        [tuple(_money(v) for v in ctx['totales_columna'])] if ctx['matrix_rows'] else [],
-        'Sin datos de matriz mensual para el período.',
+        "Totales por mes (matriz)",
+        [label for _key, label, _num in ctx["meses_fiscales"]],
+        [tuple(_money(v) for v in ctx["totales_columna"])] if ctx["matrix_rows"] else [],
+        "Sin datos de matriz mensual para el período.",
     )
 
     # Slide 6: Historial de cargas (últimas 5)
     cargas = list(
-        HistorialCargaPresupuestoConstruccion.objects
-        .filter(proyecto=proyecto)
-        .select_related('usuario')
-        .order_by('-fecha')[:5]
+        HistorialCargaPresupuestoConstruccion.objects.filter(proyecto=proyecto)
+        .select_related("usuario")
+        .order_by("-fecha")[:5]
     )
     _slide_tabla(
-        'Historial de Cargas (últimas 5)',
-        ['Fecha', 'Usuario', 'Filas', 'Valor total', 'Estado'],
+        "Historial de Cargas (últimas 5)",
+        ["Fecha", "Usuario", "Filas", "Valor total", "Estado"],
         [
             (
-                c.fecha.strftime('%d/%m/%Y') if c.fecha else '',
-                (c.usuario.get_full_name() or c.usuario.username) if c.usuario else '—',
+                c.fecha.strftime("%d/%m/%Y") if c.fecha else "",
+                (c.usuario.get_full_name() or c.usuario.username) if c.usuario else "—",
                 c.filas_procesadas,
                 _money(c.valor_total),
                 c.get_estado_display(),
             )
             for c in cargas
         ],
-        'Aún no hay cargas registradas para este proyecto.',
+        "Aún no hay cargas registradas para este proyecto.",
     )
 
     # Slide 7: Cierre / notas
     slide7 = prs.slides.add_slide(layout_contenido)
-    slide7.shapes.title.text = 'Notas del reporte'
+    slide7.shapes.title.text = "Notas del reporte"
     cuerpo7 = slide7.placeholders[1].text_frame
-    cuerpo7.text = f'Fuente: Presupuesto Planeado {periodo}, proyecto {proyecto.nombre}.'
+    cuerpo7.text = f"Fuente: Presupuesto Planeado {periodo}, proyecto {proyecto.nombre}."
     p2 = cuerpo7.add_paragraph()
-    p2.text = 'Los valores reflejan la misma agregación que la pestaña "Tabla" del módulo financiero.'
+    p2.text = (
+        'Los valores reflejan la misma agregación que la pestaña "Tabla" del módulo financiero.'
+    )
     p3 = cuerpo7.add_paragraph()
-    p3.text = 'Generado automáticamente por el sistema financiero de Construcción Instelec (Indunnova S.A.S.).'
+    p3.text = "Generado automáticamente por el sistema financiero de Construcción Instelec (Indunnova S.A.S.)."
 
     salida = BytesIO()
     prs.save(salida)
@@ -539,23 +585,24 @@ class _ReportePresupuestoBaseView(ProyectoFinMixin, View):
     ``permissions_fin.user_puede_descargar_reporte`` — NUNCA basta con
     ocultar el botón en el template.
     """
-    active_subtab = 'presupuesto_planeado'
+
+    active_subtab = "presupuesto_planeado"
     formato_reporte: str | None = None
-    content_type: str = 'application/octet-stream'
-    extension: str = 'bin'
+    content_type: str = "application/octet-stream"
+    extension: str = "bin"
 
     def _nombre_archivo(self, proyecto, anio, mes):
         """``ProyectoConstruccion`` no tiene un campo ``codigo`` corto (solo
         ``nombre``/``pk`` UUID) — se usa el ``pk`` como identificador estable
         y sin espacios/acentos para el nombre de archivo."""
-        periodo = f'{mes:02d}_{anio}' if mes else str(anio)
-        return f'Presupuesto_Planeado_{proyecto.pk}_{periodo}.{self.extension}'
+        periodo = f"{mes:02d}_{anio}" if mes else str(anio)
+        return f"Presupuesto_Planeado_{proyecto.pk}_{periodo}.{self.extension}"
 
     def get(self, request, *args, **kwargs):
         if not user_puede_descargar_reporte(request.user, self.formato_reporte):
             raise PermissionDenied(
-                'Su rol no tiene permiso para descargar reportes en formato '
-                f'{self.formato_reporte!r}.'
+                "Su rol no tiene permiso para descargar reportes en formato "
+                f"{self.formato_reporte!r}."
             )
         proyecto = self.get_proyecto()
         anio = _leer_anio_querystring(request)
@@ -568,50 +615,61 @@ class _ReportePresupuestoBaseView(ProyectoFinMixin, View):
 
 class ReportePresupuestoPdfView(_ReportePresupuestoBaseView):
     formato_reporte = FORMATO_PDF
-    content_type = 'application/pdf'
-    extension = 'pdf'
+    content_type = "application/pdf"
+    extension = "pdf"
 
     def _generar_response(self, request, proyecto, anio, mes):
         contenido = generar_pdf_presupuesto(
-            proyecto, anio, mes,
-            generado_en=None, usuario=request.user if request.user.is_authenticated else None,
+            proyecto,
+            anio,
+            mes,
+            generado_en=None,
+            usuario=request.user if request.user.is_authenticated else None,
         )
         response = HttpResponse(contenido, content_type=self.content_type)
-        response['Content-Disposition'] = f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        response["Content-Disposition"] = (
+            f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        )
         return response
 
 
 class ReportePresupuestoExcelView(_ReportePresupuestoBaseView):
     formato_reporte = FORMATO_EXCEL
-    content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    extension = 'xlsx'
+    content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    extension = "xlsx"
 
     def _generar_response(self, request, proyecto, anio, mes):
         contenido = generar_excel_presupuesto(proyecto, anio, mes)
         response = HttpResponse(contenido, content_type=self.content_type)
-        response['Content-Disposition'] = f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        response["Content-Disposition"] = (
+            f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        )
         return response
 
 
 class ReportePresupuestoCsvView(_ReportePresupuestoBaseView):
     formato_reporte = FORMATO_CSV
-    content_type = 'text/csv; charset=utf-8'
-    extension = 'csv'
+    content_type = "text/csv; charset=utf-8"
+    extension = "csv"
 
     def _generar_response(self, request, proyecto, anio, mes):
         response = HttpResponse(content_type=self.content_type)
-        response['Content-Disposition'] = f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        response["Content-Disposition"] = (
+            f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        )
         escribir_csv_presupuesto(response, proyecto, anio, mes)
         return response
 
 
 class ReportePresupuestoPptView(_ReportePresupuestoBaseView):
     formato_reporte = FORMATO_PPT
-    content_type = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-    extension = 'pptx'
+    content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    extension = "pptx"
 
     def _generar_response(self, request, proyecto, anio, mes):
         contenido = generar_ppt_presupuesto(proyecto, anio, mes)
         response = HttpResponse(contenido, content_type=self.content_type)
-        response['Content-Disposition'] = f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        response["Content-Disposition"] = (
+            f'attachment; filename="{self._nombre_archivo(proyecto, anio, mes)}"'
+        )
         return response
