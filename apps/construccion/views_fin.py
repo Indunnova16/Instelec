@@ -59,6 +59,7 @@ from apps.financiero.importers_finv2 import (
     build_rubro_display_rows,
     build_rubro_matrix_rows,
 )
+from apps.financiero.models_finv2_mapeo import RUBRO_NO_CLASIFICADO
 
 
 # Roles administrativos con acceso al financiero (espejo de views.py::ALL_ADMIN_ROLES).
@@ -309,6 +310,134 @@ class DashboardFinancieroConstruccionView(ProyectoFinMixin, TemplateView):
 
 
 # ===========================================================================
+# UPSERT por período — merge granular de ``datos`` JSON (Instelec#267 F.1.2)
+# ===========================================================================
+# Bug de origen: el POST hacía ``merged.update(res['datos'])`` a nivel RAÍZ,
+# reemplazando la llave 'finv2_bd' (o una sección legacy ingreso/variables/
+# fijos) COMPLETA en cada carga — si Janet cargaba Septiembre y luego Octubre,
+# Octubre borraba los rubros/meses de Septiembre que no reaparecieran en el
+# archivo nuevo. Mismo patrón de bug ya confirmado roto en #261 ("Reemplaza
+# período, no duplica"), y EXACTAMENTE lo que #267 (Fase 1.2) pide evitar:
+# "UPSERT: Reemplaza período, no duplica" — el mes/rubro que SÍ viene en el
+# archivo nuevo reemplaza (upsert) su propio valor; lo que NO viene se
+# PRESERVA tal cual estaba.
+def _merge_seccion_mensual(existente, nuevo):
+    """Merge por (concepto, mes) de una sección legacy ``{concepto: {mes: valor}}``
+    (formato de ``PresupuestoConstruccionExcelImporter``: ingreso/variables/fijos).
+
+    Por cada concepto, la recarga de UN mes reemplaza solo ese mes (upsert);
+    los conceptos/meses que el archivo nuevo no trae se conservan intactos.
+    """
+    resultado = {
+        concepto: dict(meses or {})
+        for concepto, meses in (existente or {}).items()
+    }
+    for concepto, meses_nuevo in (nuevo or {}).items():
+        meses_actual = dict(resultado.get(concepto) or {})
+        meses_actual.update(meses_nuevo or {})
+        resultado[concepto] = meses_actual
+    return resultado
+
+
+def _merge_finv2_bd(existente, nuevo):
+    """Merge por (rubro, mes) del bloque ``finv2_bd`` (BD contable, #120/#267).
+
+    Reconstruye cada rubro a partir de sus cuentas: por cuenta equivalente
+    (``cta_equivalente``) mezcla el diccionario de ``meses`` — el mes que SÍ
+    trae el archivo nuevo reemplaza su propio valor (upsert), el resto se
+    preserva — y recalcula ``total`` de cuenta/rubro/general a partir de los
+    meses ya mezclados, para que la paridad ``sum(meses) == total`` se
+    mantenga íntegra después de N cargas.
+    """
+    if not nuevo:
+        return dict(existente or {})
+    if not existente:
+        return dict(nuevo)
+
+    rubros_actual = {
+        rubro: {
+            'total': info.get('total', 0.0),
+            'meses': dict(info.get('meses') or {}),
+            'cuentas': [dict(c) for c in (info.get('cuentas') or [])],
+        }
+        for rubro, info in (existente.get('rubros') or {}).items()
+    }
+
+    for rubro, info_nuevo in (nuevo.get('rubros') or {}).items():
+        destino = rubros_actual.setdefault(
+            rubro, {'total': 0.0, 'meses': {}, 'cuentas': []})
+        cuentas_por_cta = {
+            c.get('cta_equivalente'): dict(c)
+            for c in destino.get('cuentas') or []
+        }
+        for cuenta_nueva in info_nuevo.get('cuentas') or []:
+            cta = cuenta_nueva.get('cta_equivalente')
+            actual_cta = cuentas_por_cta.get(cta) or {
+                'cta_equivalente': cta,
+                'descripcion': cuenta_nueva.get('descripcion', ''),
+                'total': 0.0,
+                'meses': {},
+            }
+            meses_cta = dict(actual_cta.get('meses') or {})
+            meses_cta.update(cuenta_nueva.get('meses') or {})
+            actual_cta['meses'] = meses_cta
+            actual_cta['total'] = round(sum(meses_cta.values()), 2)
+            if cuenta_nueva.get('descripcion'):
+                actual_cta['descripcion'] = cuenta_nueva['descripcion']
+            cuentas_por_cta[cta] = actual_cta
+
+        destino['cuentas'] = list(cuentas_por_cta.values())
+        meses_rubro = {}
+        for cuenta in destino['cuentas']:
+            for mk, mv in (cuenta.get('meses') or {}).items():
+                meses_rubro[mk] = round(meses_rubro.get(mk, 0.0) + mv, 2)
+        destino['meses'] = meses_rubro
+        destino['total'] = round(sum(meses_rubro.values()), 2)
+        rubros_actual[rubro] = destino
+
+    total_general = round(sum(r['total'] for r in rubros_actual.values()), 2)
+    cuentas_no_clasificado = (
+        rubros_actual.get(RUBRO_NO_CLASIFICADO, {}).get('cuentas') or [])
+    cuentas_no_mapeadas = sorted({
+        c.get('cta_equivalente') for c in cuentas_no_clasificado
+        if c.get('cta_equivalente')
+    })
+    cuentas_count = sum(len(r.get('cuentas') or []) for r in rubros_actual.values())
+
+    return {
+        'rubros': rubros_actual,
+        'total': total_general,
+        'cuentas_count': cuentas_count,
+        'cuentas_no_mapeadas': cuentas_no_mapeadas,
+        # Diagnóstico acumulado (no participa de ningún cálculo): filas sin
+        # fecha reconocible a través de TODAS las cargas hechas hasta ahora.
+        'filas_sin_mes': (
+            (existente.get('filas_sin_mes') or 0)
+            + (nuevo.get('filas_sin_mes') or 0)
+        ),
+    }
+
+
+def _merge_presupuesto_datos(existente, nuevo):
+    """UPSERT por período (Instelec#267 Fase 1.2): reemplaza SOLO lo que el
+    archivo nuevo trae (rubro/concepto + mes), preserva el resto tal cual.
+
+    Reemplaza el ``merged.update(res['datos'])`` a nivel raíz que causaba el
+    bug de origen (colapsaba 'finv2_bd', o una sección legacy completa, en
+    cada carga).
+    """
+    merged = dict(existente or {})
+    for key, valor_nuevo in (nuevo or {}).items():
+        if key == 'finv2_bd':
+            merged['finv2_bd'] = _merge_finv2_bd(merged.get('finv2_bd'), valor_nuevo)
+        elif key in ('ingreso', 'variables', 'fijos') and isinstance(valor_nuevo, dict):
+            merged[key] = _merge_seccion_mensual(merged.get(key), valor_nuevo)
+        else:
+            merged[key] = valor_nuevo
+    return merged
+
+
+# ===========================================================================
 # 2. PRESUPUESTO PLANEADO
 # ===========================================================================
 class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
@@ -388,9 +517,7 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
                 tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO,
                 defaults={'datos': {}},
             )
-            merged = dict(obj.datos or {})
-            merged.update(res.get('datos') or {})
-            obj.datos = merged
+            obj.datos = _merge_presupuesto_datos(obj.datos, res.get('datos'))
             obj.save(update_fields=['datos', 'updated_at'])
             messages.success(request, res.get('mensaje') or 'Importación completada.')
             if res.get('advertencia'):
