@@ -9,7 +9,8 @@ Construcción (financiero_presupuesto_planeado.html, construccion) para no diver
 Contexto requerido (ambas vistas lo proveen con el MISMO contrato):
   tiene_datos_bd : bool          — hay datos contables cargados
   vista          : 'matriz'|'mes'— pestaña activa (desde ?vista=)
-  matrix_rows    : [{rubro, meses[12], total, pct}]   (orden julio→junio)
+  matrix_rows    : [{rubro, meses[12], total, pct, semaforo}]   (orden julio→junio;
+                    pct/semaforo A4 #267: |total|/|total_general|*100 + banda)
   totales_columna: [float × 12]
   meses_fiscales : [(key, label, num) × 12]
   matrix_total   : float
@@ -81,6 +82,7 @@ matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
                             <th class="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ label }}</th>
                             {% endfor %}
                             <th class="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">TOTAL</th>
+                            <th class="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">% Total</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -91,6 +93,16 @@ matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
                             <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">${{ valor|floatformat:0|intcomma }}</td>
                             {% endfor %}
                             <td class="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">${{ fila.total|floatformat:0|intcomma }}</td>
+                            <td class="px-3 py-2 text-right whitespace-nowrap">
+                                <span class="semaforo-{{ fila.semaforo }} inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
+                                             {% if fila.semaforo == 'rojo' %}bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300
+                                             {% elif fila.semaforo == 'amarillo' %}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300
+                                             {% else %}bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300{% endif %}"
+                                      data-semaforo="{{ fila.semaforo }}"
+                                      title="% sobre |Total Año| — {{ fila.semaforo }}">
+                                    {{ fila.pct }}%
+                                </span>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -101,6 +113,7 @@ matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
                             <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">${{ total_col|floatformat:0|intcomma }}</td>
                             {% endfor %}
                             <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">${{ matrix_total|floatformat:0|intcomma }}</td>
+                            <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">—</td>
                         </tr>
                     </tfoot>
                 </table>

@@ -447,12 +447,41 @@ class ContableCompleteImporter:
         }
 
 
+def calc_pct_semaforo(valor, total):
+    """% de ``valor`` sobre |``total``| + banda de semáforo (A4, #267 Fase 3.1).
+
+    El issue pide el denominador en valor ABSOLUTO (``|Total Año|``) — de lo
+    contrario un ``total_general`` negativo (rubros de Ingresos, que se
+    cargan como negativos en el contable) produce porcentajes negativos sin
+    sentido de negocio. El numerador también se toma en absoluto por la
+    misma razón: lo que importa es la MAGNITUD del rubro frente al total, no
+    su signo contable.
+
+    Bandas (issue #267 Fase 3.1): verde <50% · amarillo 50-100% (ambos
+    límites inclusive del lado bajo) · rojo >100%.
+
+    Devuelve ``(pct_redondeado_1_decimal, 'verde'|'amarillo'|'rojo')``.
+    ``total`` == 0 → ``(0.0, 'verde')`` (sin denominador, no hay sobre-costo
+    que señalar).
+    """
+    total_abs = abs(total) if total else 0.0
+    pct = (abs(valor) / total_abs * 100) if total_abs else 0.0
+    pct = round(pct, 1)
+    if pct < 50:
+        semaforo = 'verde'
+    elif pct <= 100:
+        semaforo = 'amarillo'
+    else:
+        semaforo = 'rojo'
+    return pct, semaforo
+
+
 def build_rubro_display_rows(datos):
     """Construye filas para el template a partir de ``datos['finv2_bd']``.
 
-    Cada fila: {'rubro': str, 'total': float, 'pct': float, 'cuentas': [...]}.
-    Devuelve (rows, total_general). Tolerante a datos vacíos / legacy sin
-    la llave finv2_bd (devuelve ([], 0)).
+    Cada fila: {'rubro': str, 'total': float, 'pct': float, 'semaforo': str,
+    'cuentas': [...]}. Devuelve (rows, total_general). Tolerante a datos
+    vacíos / legacy sin la llave finv2_bd (devuelve ([], 0)).
     """
     bloque = (datos or {}).get('finv2_bd') or {}
     rubros = bloque.get('rubros') or {}
@@ -463,11 +492,12 @@ def build_rubro_display_rows(datos):
         rubros.items(), key=lambda kv: kv[1].get('total', 0), reverse=True
     ):
         rubro_total = info.get('total', 0.0)
-        pct = (rubro_total / total_general * 100) if total_general else 0.0
+        pct, semaforo = calc_pct_semaforo(rubro_total, total_general)
         rows.append({
             'rubro': rubro,
             'total': rubro_total,
-            'pct': round(pct, 1),
+            'pct': pct,
+            'semaforo': semaforo,
             'cuentas': info.get('cuentas', []),
         })
     return rows, total_general
@@ -483,7 +513,8 @@ def build_rubro_matrix_rows(datos):
           {'rubro': str,
            'meses': [float, ...],        # 12 valores, orden julio..junio
            'total': float,               # total ANUAL del rubro (incl. sin_mes)
-           'pct': float}
+           'pct': float,                 # |total| / |total_general| * 100 (A4, #267)
+           'semaforo': str}              # 'verde' | 'amarillo' | 'rojo' (A4, #267)
 
     - ``totales_columna``: lista de 12 floats (suma por columna mensual).
     - ``meses_fiscales``: ``MESES_FISCALES`` (para render del encabezado).
@@ -512,12 +543,13 @@ def build_rubro_matrix_rows(datos):
             totales_columna[i] += valor
 
         rubro_total = info.get('total', 0.0)
-        pct = (rubro_total / total_general * 100) if total_general else 0.0
+        pct, semaforo = calc_pct_semaforo(rubro_total, total_general)
         rows.append({
             'rubro': rubro,
             'meses': fila_meses,
             'total': rubro_total,
-            'pct': round(pct, 1),
+            'pct': pct,
+            'semaforo': semaforo,
         })
 
     totales_columna = [round(v, 2) for v in totales_columna]
