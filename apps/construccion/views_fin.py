@@ -41,6 +41,11 @@ from apps.financiero.importers_finv2 import (
     build_rubro_display_rows,
     build_rubro_matrix_rows,
 )
+# Instelec#267 A5 — mismo patrón de reuso cross-módulo que importers.py ya
+# aplica: normalización de texto (acentos/mayúsculas/espacios) para comparar
+# la Clasificación cruda de ``filas_detalle`` contra el vocabulario fijo
+# {ingresos, fijo, variable} sin depender de cómo la tipeó el cliente en Excel.
+from apps.financiero.importers_finv2_carga import _normalizar as _fin_normalizar
 from apps.financiero.indicadores_finv2 import (
     calcular_indicadores_tecnico_financieros,
     calcular_resumen_ans,
@@ -460,6 +465,76 @@ def _merge_finv2_bd(existente, nuevo):
     return resultado
 
 
+# ===========================================================================
+# KPI Cards ejecutivos por Clasificación real (Instelec#267 Fase 4, A5)
+# ===========================================================================
+# Ejemplo LITERAL del issue (Fase 4):
+#   INGRESO: -$23.511.292.673 | COSTOS VARIABLES: +$2.813.662.061
+#   COSTOS FIJOS: +$4.243.284.093 | RESULTADO: -$30.568.238.827
+_CLASIFICACION_INGRESOS = 'ingresos'
+_CLASIFICACION_FIJO = 'fijo'
+_CLASIFICACION_VARIABLE = 'variable'
+
+
+def _kpi_cards_finv2_bd(datos):
+    """4 KPI cards ejecutivos agrupando ``datos['finv2_bd']['filas_detalle']``
+    (A2) por Clasificación REAL de cada fila cruda.
+
+    A propósito NO reusa ``ProyectoFinMixin._resumen_presupuesto`` /
+    ``_sumar_seccion``: esos helpers agrupan por las secciones legacy
+    ``ingreso``/``variables``/``fijos`` del formato de columnas-por-mes
+    (``PresupuestoConstruccionExcelImporter``), que el formato plano nuevo
+    (``PresupuestoPlanoConstruccionExcelImporter``, A2) NO produce — ese
+    importador solo deja ``finv2_bd`` con ``rubros`` (agregado, sin
+    Clasificación) + ``filas_detalle`` (crudo, CON Clasificación por fila,
+    fuente de verdad para A5/A8).
+
+        INGRESO           = SUM(valor) donde Clasificacion == 'Ingresos'
+        COSTOS_FIJOS       = SUM(valor) donde Clasificacion == 'Fijo'
+        COSTOS_VARIABLES   = SUM(valor) donde Clasificacion == 'Variable'
+        RESULTADO          = INGRESO - (COSTOS_FIJOS + COSTOS_VARIABLES)
+
+    La comparación se hace vía ``_fin_normalizar`` (lower + sin acentos +
+    espacios colapsados) — la Clasificación se persiste TAL CUAL la tipeó el
+    cliente en el Excel (``test_issue_267_a2_importador_plano.py`` confirma
+    ``filas_detalle[i]['clasificacion'] == 'Fijo'``, sin normalizar), así que
+    comparar por ``==`` literal sería frágil ante "FIJO"/"fijo "/variaciones.
+
+    Edge case (presupuesto legacy sin A2, o ``finv2_bd`` ausente/vacío):
+    ``filas_detalle`` no existe → 4 ceros + ``tiene_filas_detalle=False``,
+    el template NO pinta las cards nuevas (no hay Clasificación real que
+    agrupar, y NO hay que confundir al usuario con ceros falsos).
+    """
+    filas = ((datos or {}).get('finv2_bd') or {}).get('filas_detalle') or []
+    ingreso = Decimal('0')
+    costos_fijos = Decimal('0')
+    costos_variables = Decimal('0')
+    for fila in filas:
+        if not isinstance(fila, dict):
+            continue
+        clasificacion = _fin_normalizar(fila.get('clasificacion'))
+        valor = _to_decimal(fila.get('valor'))
+        if clasificacion == _CLASIFICACION_INGRESOS:
+            ingreso += valor
+        elif clasificacion == _CLASIFICACION_FIJO:
+            costos_fijos += valor
+        elif clasificacion == _CLASIFICACION_VARIABLE:
+            costos_variables += valor
+        # Clasificación desconocida: no debería ocurrir (A2 la valida en
+        # carga contra CLASIFICACIONES_PRESUPUESTO_PLANO), pero si un dato
+        # legacy trae algo distinto simplemente no suma a ninguna card —
+        # nunca lanza.
+
+    resultado = ingreso - (costos_fijos + costos_variables)
+    return {
+        'ingreso': ingreso,
+        'costos_fijos': costos_fijos,
+        'costos_variables': costos_variables,
+        'resultado': resultado,
+        'tiene_filas_detalle': bool(filas),
+    }
+
+
 def _merge_presupuesto_datos(existente, nuevo):
     """UPSERT por período (Instelec#267 Fase 1.2): reemplaza SOLO lo que el
     archivo nuevo trae (rubro/concepto + mes), preserva el resto tal cual.
@@ -556,6 +631,10 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
         ctx['rubro_rows'] = rubro_rows
         ctx['rubro_total'] = rubro_total
         ctx['tiene_datos_bd'] = bool(rubro_rows)
+        # A5 (#267 Fase 4): 4 KPI cards ejecutivos por Clasificación real
+        # (Ingreso/Costos Fijos/Costos Variables/Resultado), fuente de verdad
+        # filas_detalle de A2 — independiente de rubro_rows/tiene_datos_bd.
+        ctx['kpi_cards'] = _kpi_cards_finv2_bd(ctx['datos'])
         # A3 (#120): vista bi-modal (matriz 12 meses + filtro mes), espejo de
         # Mantenimiento, reusando el partial compartido.
         ctx.update(self._bimodal_context(ctx['datos']))
@@ -690,6 +769,11 @@ class PresupuestoRealConstruccionView(ProyectoFinMixin, TemplateView):
         ctx['sin_datos'] = presupuesto is None
         ctx['resumen'] = self._resumen_presupuesto(
             proyecto, anio, PresupuestoDetalladoConstruccion.Tipo.REAL)
+        # A5 (#267 Fase 4): mismo partial compartido con Planeado — si algún
+        # día el REAL también recibe finv2_bd/filas_detalle, las cards ya
+        # están conectadas; hoy con datos legacy simplemente no se pintan
+        # (tiene_filas_detalle=False).
+        ctx['kpi_cards'] = _kpi_cards_finv2_bd(ctx['datos'])
         # Total ejecutado derivado de costos registrados (cruce con CostosConstruccion).
         total_costos = Decimal('0')
         for c in CostosConstruccion.objects.filter(

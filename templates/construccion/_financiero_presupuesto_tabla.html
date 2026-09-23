@@ -64,7 +64,40 @@ Cada sección es colapsable (Alpine). Empty state cuando sin_datos.
     </section>
     {% endif %}
 
-    <!-- Resumen superior -->
+    <!-- KPI Cards ejecutivos por Clasificación real (#267 Fase 4, A5) -->
+    {% if kpi_cards.tiene_filas_detalle %}
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-3">KPI Ejecutivos</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="rounded-lg border-l-4 border-green-500 bg-gray-50 dark:bg-gray-900/40 p-4"
+                 data-kpi="ingreso">
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">INGRESO</p>
+                <p class="text-xl font-bold {% if kpi_cards.ingreso < 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                    ${{ kpi_cards.ingreso|floatformat:0|intcomma }}
+                </p>
+            </div>
+            <div class="rounded-lg border-l-4 border-red-500 bg-gray-50 dark:bg-gray-900/40 p-4"
+                 data-kpi="costos_fijos">
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">COSTOS FIJOS</p>
+                <p class="text-xl font-bold text-red-600">${{ kpi_cards.costos_fijos|floatformat:0|intcomma }}</p>
+            </div>
+            <div class="rounded-lg border-l-4 border-orange-500 bg-gray-50 dark:bg-gray-900/40 p-4"
+                 data-kpi="costos_variables">
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">COSTOS VARIABLES</p>
+                <p class="text-xl font-bold text-orange-600">${{ kpi_cards.costos_variables|floatformat:0|intcomma }}</p>
+            </div>
+            <div class="rounded-lg border-l-4 border-blue-500 bg-gray-50 dark:bg-gray-900/40 p-4"
+                 data-kpi="resultado">
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">RESULTADO</p>
+                <p class="text-xl font-bold {% if kpi_cards.resultado >= 0 %}text-blue-600{% else %}text-red-600{% endif %}">
+                    ${{ kpi_cards.resultado|floatformat:0|intcomma }}
+                </p>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Resumen superior (legacy: secciones ingreso/variables/fijos por mes) -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border-l-4 border-green-500">
             <p class="text-xs uppercase text-gray-500">Ingreso</p>
