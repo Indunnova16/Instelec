@@ -5,8 +5,12 @@ from datetime import timedelta
 from django import forms
 from django.core.exceptions import ValidationError
 
-from .models import FacturaGasto, PagoFacturaGasto, Presupuesto, Proveedor
-from .services_finv2_gastos import calcular_totales, estado_inicial_gasto
+from .models import CargaFinanciera, FacturaGasto, PagoFacturaGasto, Presupuesto, Proveedor
+from .services_finv2_gastos import (
+    calcular_totales,
+    cargas_elegibles_para_generar_gastos,
+    estado_inicial_gasto,
+)
 
 
 class FacturaGastoForm(forms.ModelForm):
@@ -65,17 +69,24 @@ class FacturaGastoForm(forms.ModelForm):
         return factura
 
 
-class ImportarFacturasGastoForm(forms.Form):
-    """Sube el archivo de carga masiva (#248 sección 5 del checklist)."""
+class GenerarFacturasGastoForm(forms.Form):
+    """Selecciona la `CargaFinanciera` (proyecto+período) origen (#248).
 
-    archivo = forms.FileField(label="Archivo CSV o XLSX")
+    Reemplaza `ImportarFacturasGastoForm`: en vez de subir un archivo con
+    columnas propias, las facturas de gasto se generan 1:1 desde las líneas
+    YA cargadas y homologadas por #246 (`LineaCargaFinanciera`, tipo=REAL) --
+    ver PLAN_2026-09-23_248_facturas_gasto_desde_carga_financiera.md.
+    """
 
-    def clean_archivo(self):
-        archivo = self.cleaned_data["archivo"]
-        nombre = archivo.name.lower()
-        if not (nombre.endswith(".csv") or nombre.endswith(".xlsx")):
-            raise ValidationError("El archivo debe ser CSV UTF-8 o XLSX.")
-        return archivo
+    carga_financiera = forms.ModelChoiceField(
+        queryset=CargaFinanciera.objects.none(),
+        label="Carga financiera (proyecto y período)",
+        empty_label="Seleccione una carga procesada con líneas reales",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["carga_financiera"].queryset = cargas_elegibles_para_generar_gastos()
 
 
 class PagoFacturaGastoForm(forms.ModelForm):

@@ -5,8 +5,11 @@ esta sub-feature (RUN previo, ver comentario del 2026-09-08 en el issue).
 Este archivo cubre el GAP confirmado en la pre-validación de Andrea del
 2026-09-15:
 
-1. Carga masiva CSV con UPSERT (proveedor_nit + fecha_factura), preview sin
-   persistir, confirmación transaccional e historial.
+1. (Corrección 2026-09-23, rechazo del 22-sep) La generación de facturas de
+   gasto desde `LineaCargaFinanciera` (#246) tiene su propia suite en
+   `test_issue_248_generar_desde_carga.py` -- el upload CSV con columnas
+   inventadas que cubría este archivo antes fue retirado por ser la causa
+   raíz del rechazo (ver PLAN_2026-09-23_248...).
 2. Alertas del listado: pendientes de aprobación (>$1M).
 3. RBAC granular (`FIN_FACTURAS_GASTOS`) en vez de `allowed_roles` legacy --
    rol `contador` (sembrado por S1) gestiona, un rol sin el submódulo no ve.
@@ -14,7 +17,6 @@ Este archivo cubre el GAP confirmado en la pre-validación de Andrea del
    (facturas creadas antes de la migración 0023, sin `fecha_vencimiento`).
 """
 
-import io
 from datetime import date
 from decimal import Decimal
 
@@ -26,7 +28,6 @@ from apps.core.models import Role, RoleModuloPermiso
 from apps.core.permissions import SUBMODULOS_FINANCIERO
 from apps.financiero.models import (
     AuditoriaFacturaGasto,
-    CargaFacturaGasto,
     FacturaGasto,
     HomologacionProjectsContable,
     Proveedor,
@@ -49,171 +50,6 @@ def datos_gasto(db):
         activo=True,
     )
     return proveedor, contrato, homologacion
-
-
-def _csv_gastos(filas):
-    encabezado = (
-        "proveedor_nit,fecha_factura,concepto,valor_neto,proyecto,"
-        "centro_costo,requiere_aprobacion\n"
-    )
-    cuerpo = "\n".join(",".join(str(v) for v in fila) for fila in filas)
-    archivo = io.BytesIO((encabezado + cuerpo + "\n").encode("utf-8"))
-    archivo.name = "carga_gastos.csv"
-    return archivo
-
-
-# ---------------------------------------------------------------------------
-# importar_csv_nit_invalido_error_fila
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_importar_csv_nit_invalido_error_fila(client, admin_user, datos_gasto):
-    _, contrato, homologacion = datos_gasto
-    client.force_login(admin_user)
-    archivo = _csv_gastos(
-        [
-            [
-                "000000000",
-                "2026-09-10",
-                "Servicio",
-                "500000",
-                contrato.codigo,
-                homologacion.centro_costo,
-                "",
-            ]
-        ]
-    )
-    respuesta = client.post(
-        "/financiero/facturas-gastos/importar/", {"archivo": archivo}, follow=True
-    )
-    assert respuesta.status_code == 200
-    assert b"no existe un proveedor" in respuesta.content
-    # No confirma nada con errores pendientes.
-    assert not FacturaGasto.objects.exists()
-    carga = CargaFacturaGasto.objects.latest("created_at")
-    assert carga.resultado == "RECHAZADA"
-    assert carga.filas_error == 1
-
-
-@pytest.mark.django_db
-def test_importar_csv_centro_costo_invalido_error_fila(client, admin_user, datos_gasto):
-    """Edge case adicional: `centro_costo` que no existe en la Homologación
-    Projects→Contabilidad activa (#247) -- checklist #248 sección 6."""
-    proveedor, contrato, _ = datos_gasto
-    client.force_login(admin_user)
-    archivo = _csv_gastos(
-        [[proveedor.nit, "2026-09-10", "Servicio", "500000", contrato.codigo, "CC-INEXISTENTE", ""]]
-    )
-    respuesta = client.post(
-        "/financiero/facturas-gastos/importar/", {"archivo": archivo}, follow=True
-    )
-    assert b"no existe en Homolog" in respuesta.content
-    assert not FacturaGasto.objects.exists()
-
-
-# ---------------------------------------------------------------------------
-# importar_valido_preview_confirmar_historial
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_importar_valido_preview_confirmar_historial(client, admin_user, datos_gasto):
-    proveedor, contrato, homologacion = datos_gasto
-    client.force_login(admin_user)
-    archivo = _csv_gastos(
-        [
-            [
-                proveedor.nit,
-                "2026-09-10",
-                "Compra de materiales",
-                "500000",
-                contrato.codigo,
-                homologacion.centro_costo,
-                "SI",  # requiere_aprobacion aditivo aunque no supera el umbral
-            ]
-        ]
-    )
-    respuesta = client.post(
-        "/financiero/facturas-gastos/importar/", {"archivo": archivo}, follow=True
-    )
-    assert respuesta.status_code == 200
-    assert b"nueva" in respuesta.content or b"1 fila" in respuesta.content.lower()
-
-    confirmar = client.post("/financiero/facturas-gastos/importar/preview/", {"confirmar": "1"})
-    assert confirmar.status_code == 302
-
-    factura = FacturaGasto.objects.get(proveedor=proveedor, fecha=date(2026, 9, 10))
-    assert factura.subtotal == Decimal("500000.00")
-    assert factura.iva == Decimal("95000.00")
-    assert factura.total == Decimal("595000.00")
-    # requiere_aprobacion=SI fuerza aprobación aunque el total no supere $1M.
-    assert factura.estado == FacturaGasto.Estado.PENDIENTE_APROBACION
-    assert factura.numero_documento.startswith("CM-20260910-")
-    assert factura.fecha_vencimiento == date(2026, 10, 10)
-    assert AuditoriaFacturaGasto.objects.filter(factura=factura, campo="creacion").exists()
-
-    carga = CargaFacturaGasto.objects.latest("created_at")
-    assert carga.resultado == "CONFIRMADA"
-    assert carga.filas_creadas == 1
-    assert carga.detalle_filas[0]["proveedor_nit"] == proveedor.nit
-
-    # Historial visible.
-    historial = client.get("/financiero/facturas-gastos/cargas/")
-    assert historial.status_code == 200
-    assert carga.archivo_nombre.encode() in historial.content
-
-    # Export CSV de la carga confirmada (regla migrations->export).
-    csv_resp = client.get(f"/financiero/facturas-gastos/cargas/{carga.pk}/csv/")
-    assert csv_resp.status_code == 200
-    assert proveedor.nit.encode() in csv_resp.content
-    assert factura.numero_documento.encode() in csv_resp.content
-
-
-@pytest.mark.django_db
-def test_importar_upsert_actualiza_no_duplica(client, admin_user, datos_gasto):
-    """Edge case adicional: mismo proveedor+fecha ya existente -> UPSERT
-    actualiza en vez de rechazar como duplicado (mismo criterio de #249)."""
-    proveedor, contrato, homologacion = datos_gasto
-    existente = FacturaGasto.objects.create(
-        proveedor=proveedor,
-        contrato=contrato,
-        numero_documento="MANUAL-001",
-        fecha=date(2026, 9, 10),
-        concepto="Concepto original",
-        categoria="Materiales",
-        centro_costo=homologacion.centro_costo,
-        subtotal=Decimal("200000"),
-        iva=Decimal("38000"),
-        total=Decimal("238000"),
-        estado=FacturaGasto.Estado.PENDIENTE_PAGO,
-    )
-    client.force_login(admin_user)
-    archivo = _csv_gastos(
-        [
-            [
-                proveedor.nit,
-                "2026-09-10",
-                "Concepto corregido",
-                "300000",
-                contrato.codigo,
-                homologacion.centro_costo,
-                "",
-            ]
-        ]
-    )
-    client.post("/financiero/facturas-gastos/importar/", {"archivo": archivo})
-    client.post("/financiero/facturas-gastos/importar/preview/", {"confirmar": "1"})
-
-    assert FacturaGasto.objects.filter(proveedor=proveedor, fecha=date(2026, 9, 10)).count() == 1
-    existente.refresh_from_db()
-    assert existente.numero_documento == "MANUAL-001"  # no se regenera al actualizar
-    assert existente.concepto == "Concepto corregido"
-    assert existente.subtotal == Decimal("300000.00")
-    assert AuditoriaFacturaGasto.objects.filter(factura=existente, campo="concepto").exists()
-    carga = CargaFacturaGasto.objects.latest("created_at")
-    assert carga.filas_actualizadas == 1
-    assert carga.filas_creadas == 0
 
 
 # ---------------------------------------------------------------------------

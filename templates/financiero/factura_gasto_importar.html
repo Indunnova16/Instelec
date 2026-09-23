@@ -1,24 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Carga masiva de facturas de gasto{% endblock %}
+{% block title %}Generar facturas de gasto desde carga financiera{% endblock %}
 {% block content %}
 <main class="max-w-4xl mx-auto px-4 py-6 space-y-5">
   <div class="flex justify-between items-center">
-    <h1 class="text-2xl font-bold">Carga masiva de facturas de gasto</h1>
+    <h1 class="text-2xl font-bold">Generar facturas de gasto desde carga financiera</h1>
     <a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_cargas' %}">Ver historial completo</a>
   </div>
-  <p>Descargue la <a class="text-blue-700 underline" href="?plantilla=csv">plantilla CSV</a>. Columnas requeridas: {{ columnas|join:", " }}.</p>
-  <p class="text-sm text-gray-600">Si ya existe una factura para el mismo proveedor (por NIT) y la misma fecha, la fila <strong>actualiza</strong> esa factura en vez de crear una duplicada. El número de documento de las filas nuevas lo asigna el sistema.</p>
+  <p class="text-sm text-gray-600">Las facturas de gasto se generan 1:1 a partir de las líneas ya cargadas y homologadas en <a class="text-blue-700 underline" href="{% url 'financiero:carga_financiera' %}">Carga Financiera</a> (BD Real). Elija el proyecto y período ya procesado; el sistema previsualiza qué facturas se crearían o actualizarían antes de confirmar.</p>
   {% if messages %}{% for message in messages %}<p role="alert" class="rounded p-3 {% if message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">{{ message }}</p>{% endfor %}{% endif %}
-  <form method="post" enctype="multipart/form-data" class="rounded bg-white p-5 shadow space-y-4">{% csrf_token %}
-    <label class="block">Archivo CSV o XLSX
-      {{ form.archivo }}
-      {% for error in form.archivo.errors %}<p class="text-red-700">{{ error }}</p>{% endfor %}
+  <form method="post" class="rounded bg-white p-5 shadow space-y-4">{% csrf_token %}
+    <label class="block">Carga financiera (proyecto y período)
+      {{ form.carga_financiera }}
+      {% for error in form.carga_financiera.errors %}<p class="text-red-700">{{ error }}</p>{% endfor %}
     </label>
     <button class="btn-primary rounded bg-blue-600 px-4 py-2 text-white" type="submit">Vista previa</button>
   </form>
   <section class="rounded bg-white p-5 shadow">
-    <h2 class="font-semibold">Últimas cargas</h2>
-    <ul class="mt-2 space-y-1 text-sm">{% for carga in historial %}<li>{{ carga.created_at|date:"d/m/Y H:i" }} — {{ carga.archivo_nombre }} — {{ carga.resultado }} ({{ carga.filas_validas }} válidas, {{ carga.filas_error }} con error{% if carga.resultado == "CONFIRMADA" %}, {{ carga.filas_creadas }} creadas, {{ carga.filas_actualizadas }} actualizadas — <a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_carga_csv' carga.pk %}">CSV</a>{% endif %})</li>{% empty %}<li>Sin cargas previas.</li>{% endfor %}</ul>
+    <h2 class="font-semibold">Últimas generaciones</h2>
+    <ul class="mt-2 space-y-1 text-sm">{% for carga in historial %}<li>{{ carga.created_at|date:"d/m/Y H:i" }} — {{ carga.archivo_nombre }} — {{ carga.resultado }} ({{ carga.filas_validas }} válidas, {{ carga.filas_error }} omitida(s){% if carga.resultado == "CONFIRMADA" %}, {{ carga.filas_creadas }} creadas, {{ carga.filas_actualizadas }} actualizadas — <a class="text-blue-700 underline" href="{% url 'financiero:factura_gasto_carga_csv' carga.pk %}">CSV</a>{% endif %})</li>{% empty %}<li>Sin generaciones previas.</li>{% endfor %}</ul>
   </section>
 </main>
 {% endblock %}

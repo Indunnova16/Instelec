@@ -8,8 +8,7 @@ Ingresos en `views_finv2_ingresos.py` (#249 gap 1) -- la matriz
 es ahora la autoridad, no una lista fija en código.
 """
 
-from datetime import date, timedelta
-from decimal import Decimal
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -21,28 +20,25 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import DetailView, FormView, ListView, TemplateView
 
-from apps.contratos.models import Contrato
 from apps.core.mixins import RoleRequiredMixin
 from apps.core.models_roles import RoleModuloPermiso
 from apps.core.permissions import SUBMODULO_FIN_FACTURAS_GASTOS, user_nivel_acceso_submodulo
 
-from .forms_finv2_gastos import FacturaGastoForm, ImportarFacturasGastoForm, PagoFacturaGastoForm
-from .importers_finv2_gastos import columnas_para, validar_filas
+from .forms_finv2_gastos import FacturaGastoForm, GenerarFacturasGastoForm, PagoFacturaGastoForm
 from .models import (
     AuditoriaFacturaGasto,
     CargaFacturaGasto,
     FacturaGasto,
-    HomologacionProjectsContable,
-    Proveedor,
 )
 from .services_finv2_gastos import (
     UMBRAL_APROBACION,
     aprobar_gasto,
-    calcular_totales,
+    cargas_elegibles_para_generar_gastos,
+    generar_facturas_gasto_desde_carga,
     registrar_pago_gasto,
 )
 
-SESSION_KEY_IMPORTACION_GASTOS = "importacion_facturas_gasto"
+SESSION_KEY_GENERACION_GASTOS = "generacion_facturas_gasto_carga_id"
 
 
 def _registrar_cambio_estado(factura, estado_anterior, usuario):
@@ -176,11 +172,15 @@ class GastoDetailView(LoginRequiredMixin, RoleRequiredMixin, DetailView):
 
 
 class GastoImportarView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Paso 1 de la carga masiva (#248 sección 5): subir archivo + historial.
+    """Paso 1 (#248, corrección post-rechazo 22-sep): elegir la
+    `CargaFinanciera` (proyecto+período) YA cargada y homologada por #246,
+    en vez de subir un CSV con columnas propias que nunca coincidieron con
+    el archivo real del cliente (causa raíz del rechazo de Andrea -- ver
+    SPRINTS/PLAN_2026-09-23_248_facturas_gasto_desde_carga_financiera.md).
 
-    `test_func` exige `ver_editar` incluso para el GET -- mismo criterio de
-    `ImportarFacturasIngresoView` (#249): subir un archivo es una acción
-    mutativa aunque todavía no persista nada hasta la confirmación.
+    `test_func` exige `ver_editar` incluso para el GET -- mismo criterio que
+    antes: elegir la carga origen encadena una mutación (generación) aunque
+    todavía no persista nada hasta la confirmación del paso 2.
     """
 
     template_name = "financiero/factura_gasto_importar.html"
@@ -196,65 +196,28 @@ class GastoImportarView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["columnas"] = columnas_para()
-        context["form"] = kwargs.get("form") or ImportarFacturasGastoForm()
+        context["form"] = kwargs.get("form") or GenerarFacturasGastoForm()
         context["historial"] = CargaFacturaGasto.objects.all()[:10]
         return context
 
-    def get(self, request, *args, **kwargs):
-        if request.GET.get("plantilla") == "csv":
-            respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
-            respuesta["Content-Disposition"] = 'attachment; filename="plantilla_facturas_gasto.csv"'
-            respuesta.write(",".join(columnas_para()) + "\n")
-            return respuesta
-        return self.render_to_response(self.get_context_data())
-
     def post(self, request, *args, **kwargs):
-        form = ImportarFacturasGastoForm(request.POST, request.FILES)
+        form = GenerarFacturasGastoForm(request.POST)
         if not form.is_valid():
-            messages.error(request, "Seleccione un archivo CSV o XLSX válido.")
+            messages.error(request, "Seleccione una carga financiera procesada con líneas reales.")
             return self.render_to_response(self.get_context_data(form=form))
-        archivo = form.cleaned_data["archivo"]
-        try:
-            filas, errores = validar_filas(
-                archivo, Proveedor, Contrato, HomologacionProjectsContable, FacturaGasto
-            )
-        except Exception as exc:  # noqa: BLE001 -- errores de parseo del archivo
-            errores, filas = [{"fila": 1, "error": str(exc)}], []
-        preview = {
-            "archivo_nombre": archivo.name,
-            "filas": [
-                {
-                    campo: (
-                        valor.isoformat()
-                        if hasattr(valor, "isoformat")
-                        else str(valor)
-                        if isinstance(valor, Decimal)
-                        else valor
-                    )
-                    for campo, valor in fila.items()
-                }
-                for fila in filas
-            ],
-            "errores": errores,
-            "nuevas": sum(fila["accion_carga"] == "crear" for fila in filas),
-            "actualizaciones": sum(fila["accion_carga"] == "actualizar" for fila in filas),
-        }
-        request.session[SESSION_KEY_IMPORTACION_GASTOS] = preview
-        CargaFacturaGasto.objects.create(
-            archivo_nombre=archivo.name,
-            usuario=request.user.get_username(),
-            filas_total=len(filas) + len(errores),
-            filas_validas=len(filas),
-            filas_error=len(errores),
-            resultado="PREVIEW" if not errores else "RECHAZADA",
-            detalle_errores=errores,
-        )
+        carga = form.cleaned_data["carga_financiera"]
+        request.session[SESSION_KEY_GENERACION_GASTOS] = str(carga.pk)
         return redirect("financiero:factura_gasto_importar_preview")
 
 
 class GastoImportarPreviewView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Paso 2: vista previa sin persistir + confirmación transaccional + reintento."""
+    """Paso 2: vista previa sin persistir + confirmación transaccional (#248).
+
+    La vista previa vuelve a ejecutar `generar_facturas_gasto_desde_carga`
+    con `commit=False` (misma función que persiste en la confirmación) --
+    así el preview nunca puede desincronizarse de lo que en verdad se va a
+    guardar.
+    """
 
     template_name = "financiero/factura_gasto_importar_preview.html"
     required_submodulo = SUBMODULO_FIN_FACTURAS_GASTOS
@@ -267,140 +230,91 @@ class GastoImportarPreviewView(LoginRequiredMixin, RoleRequiredMixin, TemplateVi
         nivel = user_nivel_acceso_submodulo(self.request.user, self.required_submodulo)
         return nivel == RoleModuloPermiso.VER_EDITAR
 
+    def _carga_seleccionada(self):
+        carga_id = self.request.session.get(SESSION_KEY_GENERACION_GASTOS)
+        if not carga_id:
+            return None
+        return cargas_elegibles_para_generar_gastos().filter(pk=carga_id).first()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["preview"] = self.request.session.get(SESSION_KEY_IMPORTACION_GASTOS)
+        carga = self._carga_seleccionada()
+        context["carga"] = carga
+        context["resultado"] = (
+            generar_facturas_gasto_desde_carga(carga, commit=False) if carga else None
+        )
         return context
 
     def get(self, request, *args, **kwargs):
-        if not request.session.get(SESSION_KEY_IMPORTACION_GASTOS):
-            messages.error(request, "No hay una vista previa activa. Cargue un archivo primero.")
+        if not self._carga_seleccionada():
+            messages.error(request, "No hay una carga financiera seleccionada. Elija una primero.")
             return redirect("financiero:factura_gasto_importar")
         return self.render_to_response(self.get_context_data())
 
     def post(self, request, *args, **kwargs):
-        preview = request.session.get(SESSION_KEY_IMPORTACION_GASTOS)
-        if not preview:
-            messages.error(request, "No hay una vista previa activa. Cargue un archivo primero.")
+        carga = self._carga_seleccionada()
+        if not carga:
+            messages.error(request, "No hay una carga financiera seleccionada. Elija una primero.")
             return redirect("financiero:factura_gasto_importar")
 
         if request.POST.get("cancelar"):
-            del request.session[SESSION_KEY_IMPORTACION_GASTOS]
-            messages.info(request, "Carga descartada. Puede intentar con otro archivo.")
+            request.session.pop(SESSION_KEY_GENERACION_GASTOS, None)
+            messages.info(request, "Generación descartada. Puede elegir otra carga financiera.")
             return redirect("financiero:factura_gasto_importar")
 
         if not request.POST.get("confirmar"):
             messages.error(request, "Acción no reconocida.")
             return self.render_to_response(self.get_context_data())
 
-        if preview.get("errores"):
-            messages.error(request, "Corrija los errores señalados antes de confirmar la carga.")
-            return self.render_to_response(self.get_context_data())
-        if not preview.get("filas"):
-            messages.error(request, "No hay filas válidas para confirmar.")
-            return self.render_to_response(self.get_context_data())
-
-        creadas = actualizadas = 0
-        detalle_filas = []
         usuario = request.user.get_username()
         with transaction.atomic():
-            for fila in preview["filas"]:
-                fecha_factura = date.fromisoformat(fila["fecha_factura"])
-                valor_neto = Decimal(fila["valor_neto"])
-                totales = calcular_totales(valor_neto)
-                homologacion = HomologacionProjectsContable.objects.filter(
-                    centro_costo__iexact=fila["centro_costo"], activo=True
-                ).first()
+            resultado = generar_facturas_gasto_desde_carga(carga, usuario=usuario, commit=True)
 
-                if fila["accion_carga"] == "actualizar":
-                    factura = FacturaGasto.objects.select_for_update().get(pk=fila["_factura_id"])
-                    antes = {
-                        "concepto": factura.concepto,
-                        "subtotal": str(factura.subtotal),
-                        "centro_costo": factura.centro_costo,
-                    }
-                    factura.concepto = fila["concepto"]
-                    factura.centro_costo = fila["centro_costo"]
-                    factura.contrato_id = fila["contrato_id"]
-                    factura.homologacion = homologacion
-                    factura.subtotal = totales["subtotal"]
-                    factura.iva = totales["iva"]
-                    factura.total = totales["total"]
-                    factura.save()
-                    for campo, valor_nuevo in (
-                        ("concepto", fila["concepto"]),
-                        ("subtotal", str(totales["subtotal"])),
-                        ("centro_costo", fila["centro_costo"]),
-                    ):
-                        if antes.get(campo, "") != valor_nuevo:
-                            AuditoriaFacturaGasto.objects.create(
-                                factura=factura,
-                                campo=campo,
-                                valor_anterior=antes.get(campo, ""),
-                                valor_nuevo=valor_nuevo,
-                                usuario=usuario,
-                            )
-                    actualizadas += 1
-                    accion = "actualizar"
-                else:
-                    # #248: el CSV no trae número de documento -- se genera
-                    # uno determinístico y legible (ver importers_finv2_gastos.py).
-                    numero_documento = f"CM-{fecha_factura:%Y%m%d}-{fila['fila']:04d}"
-                    estado = (
-                        FacturaGasto.Estado.PENDIENTE_APROBACION
-                        if totales["total"] > UMBRAL_APROBACION or fila["requiere_aprobacion"]
-                        else FacturaGasto.Estado.PENDIENTE_PAGO
-                    )
-                    factura = FacturaGasto.objects.create(
-                        proveedor_id=fila["proveedor_id"],
-                        contrato_id=fila["contrato_id"],
-                        homologacion=homologacion,
-                        numero_documento=numero_documento,
-                        fecha=fecha_factura,
-                        fecha_vencimiento=fecha_factura + timedelta(days=30),
-                        concepto=fila["concepto"],
-                        categoria="Carga masiva",
-                        centro_costo=fila["centro_costo"],
-                        subtotal=totales["subtotal"],
-                        iva=totales["iva"],
-                        total=totales["total"],
-                        estado=estado,
-                    )
-                    AuditoriaFacturaGasto.objects.create(
-                        factura=factura,
-                        campo="creacion",
-                        valor_anterior="",
-                        valor_nuevo=f"carga masiva — total ${factura.total}",
-                        usuario=usuario,
-                    )
-                    creadas += 1
-                    accion = "crear"
-
+            detalle_filas = []
+            for item in resultado.procesadas:
+                factura = item.factura
+                AuditoriaFacturaGasto.objects.create(
+                    factura=factura,
+                    campo="generacion",
+                    valor_anterior="",
+                    valor_nuevo=(
+                        f"{'creada' if item.accion == 'crear' else 'actualizada'} desde carga "
+                        f"financiera {carga.proyecto.codigo} {carga.mes:02d}/{carga.anio} — "
+                        f"total ${factura.total}"
+                    ),
+                    usuario=usuario,
+                )
                 detalle_filas.append(
                     {
-                        "proveedor_nit": fila["proveedor_nit"],
+                        "proveedor_nit": factura.proveedor.nit or "",
                         "numero_documento": factura.numero_documento,
-                        "fecha": fecha_factura.isoformat(),
+                        "fecha": factura.fecha.isoformat(),
                         "concepto": factura.concepto,
                         "total": str(factura.total),
-                        "accion": accion,
+                        "accion": item.accion,
                     }
                 )
 
             CargaFacturaGasto.objects.create(
-                archivo_nombre=preview["archivo_nombre"],
+                archivo_nombre=f"Carga financiera {carga.proyecto.codigo} {carga.mes:02d}/{carga.anio}",
                 usuario=usuario,
-                filas_total=len(preview["filas"]),
-                filas_validas=len(preview["filas"]),
-                filas_creadas=creadas,
-                filas_actualizadas=actualizadas,
+                filas_total=len(detalle_filas) + resultado.total_omitidas,
+                filas_validas=len(detalle_filas),
+                filas_error=resultado.total_omitidas,
+                filas_creadas=resultado.total_creadas,
+                filas_actualizadas=resultado.total_actualizadas,
                 resultado="CONFIRMADA",
+                detalle_errores=[
+                    {"fila": omitida.fila_origen, "error": f"{omitida.concepto}: {omitida.motivo}"}
+                    for omitida in resultado.omitidas
+                ],
                 detalle_filas=detalle_filas,
             )
-        del request.session[SESSION_KEY_IMPORTACION_GASTOS]
+        request.session.pop(SESSION_KEY_GENERACION_GASTOS, None)
         messages.success(
             request,
-            f"Carga confirmada: {creadas} factura(s) creada(s), {actualizadas} actualizada(s).",
+            f"Generación confirmada: {resultado.total_creadas} factura(s) creada(s), "
+            f"{resultado.total_actualizadas} actualizada(s), {resultado.total_omitidas} omitida(s).",
         )
         return redirect("financiero:facturas_gastos_lista")
 
