@@ -7,6 +7,9 @@ Contexto consumido (todo opcional → render-safe sin él):
                                renderiza un <input type=file> plano equivalente.
   proyecto, anio             — provistos por ProyectoFinMixin (siempre presentes).
   tipo                       — 'PLANEADO' | 'REAL' (provisto por la vista).
+  historial_cargas (#267 A3) — últimas 10 HistorialCargaPresupuestoConstruccion
+                               del proyecto (orden -fecha), ver
+                               PresupuestoPlaneadoConstruccionView.get_context_data.
 
 Nota de scope (B5): la vista PresupuestoPlaneadoConstruccionView (B4) es un
 TemplateView GET; el manejo POST del upload (detect_excel_format_construccion +
@@ -64,8 +67,23 @@ esté cableado procesará el archivo. La UI queda completa y funcional como subi
             {% endif %}
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Formatos aceptados: presupuesto (columnas por mes), base de datos
-                contable (hoja "BD", columna O), o costos (concepto + total).
+                contable (hoja "BD", columna O), o presupuesto plano
+                (Tipo/Proyecto/Rubro/Clasificacion/Valor/mes/año/ciudad).
             </p>
+            {% comment %}
+            A6 (#267 Fase 1.6): descarga de la plantilla del formato plano
+            (encabezados exactos + 10 filas ejemplo + hoja "Instrucciones"),
+            reusando -y homologando con- los Rubros activos del catálogo
+            cuando existen. Consumida por PresupuestoPlanoConstruccionExcelImporter (A2).
+            {% endcomment %}
+            <a href="{% url 'construccion:fin_plantilla_presupuesto_plano' proyecto.id %}?anio={{ anio }}"
+               class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Descargar plantilla de presupuesto (Excel)
+            </a>
         </div>
 
         <div class="flex items-center gap-3">
@@ -96,4 +114,67 @@ esté cableado procesará el archivo. La UI queda completa y funcional como subi
         </p>
     </div>
     {% endif %}
+
+    {% comment %}
+    A3 (#267 Fase 1.3) — Historial de Cargas: Fecha/Usuario/Filas/Valor
+    total/Estado/Período de las últimas cargas del proyecto (éxito o error).
+    {% endcomment %}
+    <div class="mt-8">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+            Historial de Cargas
+        </h3>
+        {% if historial_cargas %}
+        <div class="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900/40">
+                    <tr>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Fecha</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Usuario</th>
+                        <th class="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Filas</th>
+                        <th class="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Valor total</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Período</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    {% for carga in historial_cargas %}
+                    <tr data-historial-carga data-estado="{{ carga.estado }}">
+                        <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                            {{ carga.fecha|date:"d/m/Y H:i:s" }}
+                        </td>
+                        <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                            {{ carga.usuario.get_full_name|default:carga.usuario.username|default:"—" }}
+                        </td>
+                        <td class="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
+                            {{ carga.filas_procesadas }}
+                        </td>
+                        <td class="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
+                            ${{ carga.valor_total|floatformat:0|intcomma }}
+                        </td>
+                        <td class="px-3 py-2 whitespace-nowrap">
+                            {% if carga.estado == 'PROCESADA' %}
+                            <span class="inline-flex items-center gap-1 text-green-700 dark:text-green-400">
+                                ✅ Procesada
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 text-red-700 dark:text-red-400"
+                                  title="{{ carga.detalle_errores.error|default:carga.detalle_errores.advertencia }}">
+                                ❌ Error
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                            {{ carga.periodo_display }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+            Aún no hay cargas registradas para este proyecto.
+        </p>
+        {% endif %}
+    </div>
 </section>

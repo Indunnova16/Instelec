@@ -47,6 +47,12 @@ google-cloud-storage>=2.14
 WeasyPrint>=60.0
 openpyxl>=3.1
 pandas>=2.1
+# Instelec#267 A10 — PPT ejecutivo (7 diapositivas) del Presupuesto Planeado
+# de Construcción. Dependencia NUEVA (no existía en el repo, verificado antes
+# de agregarla): usada en runtime por
+# apps/construccion/reportes_presupuesto.py::generar_ppt_presupuesto, no solo
+# en tests -- por eso va acá y no en requirements/local.txt.
+python-pptx>=1.0
 
 # Image Processing
 Pillow>=10.2

@@ -9,7 +9,8 @@ Construcción (financiero_presupuesto_planeado.html, construccion) para no diver
 Contexto requerido (ambas vistas lo proveen con el MISMO contrato):
   tiene_datos_bd : bool          — hay datos contables cargados
   vista          : 'matriz'|'mes'— pestaña activa (desde ?vista=)
-  matrix_rows    : [{rubro, meses[12], total, pct}]   (orden julio→junio)
+  matrix_rows    : [{rubro, meses[12], total, pct, semaforo}]   (orden julio→junio;
+                    pct/semaforo A4 #267: |total|/|total_general|*100 + banda)
   totales_columna: [float × 12]
   meses_fiscales : [(key, label, num) × 12]
   matrix_total   : float
@@ -20,8 +21,21 @@ Contexto requerido (ambas vistas lo proveen con el MISMO contrato):
   bimodal_base_qs: querystring base SIN vista/mes (p.ej. 'anio=2024&tab=planeado&')
                    para construir los enlaces del toggle / submit del filtro.
 
+Contexto OPCIONAL (Instelec#267 A8 — solo lo provee Construcción, vía
+filas_detalle de A2; Mantenimiento no lo trae y el filtro simplemente no se
+pinta, el resto del partial no cambia):
+  clasificaciones_disponibles : [(valor_normalizado, label)]  — [] si no aplica
+  ciudades_disponibles        : [str]  — ciudades reales de filas_detalle
+  clasificacion_sel           : valor normalizado seleccionado ('todos' default)
+  ciudad_sel                  : valor seleccionado tal cual ('todos' default)
+  filtro_activo               : bool — algún filtro distinto de 'todos'
+  matrix_vacia_por_filtro      : bool — hay datos cargados, pero el filtro
+                                  elegido no matchea ninguna fila (distinto
+                                  de "no hay datos contables cargados")
+
 Estados UI: loading (x-show mientras navega), empty (sin datos), error (sin
-matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
+matriz pese a tener datos), filtro sin resultados (A8: distinto del error de
+datos degradados). Sin {# #} multilínea (anti-regresión del repo).
 {% endcomment %}
 {% load humanize %}
 
@@ -40,6 +54,50 @@ matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
         </button>
     </div>
     {% else %}
+
+    {% comment %} A8 (#267 Fase 2): filtros Clasificación + Ciudad — solo se
+    pinta si el presupuesto trae filas_detalle (A2, formato plano); un
+    presupuesto legacy simplemente no ofrece filtro. {% endcomment %}
+    {% if clasificaciones_disponibles %}
+    <form method="get" class="flex flex-wrap items-end gap-2 text-sm"
+          @submit="cargando = true">
+        {% for k, v in bimodal_hidden_params.items %}
+        {% if k != 'clasificacion' and k != 'ciudad' %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}">
+        {% endif %}
+        {% endfor %}
+        <input type="hidden" name="vista" value="{{ vista }}">
+        <input type="hidden" name="mes" value="{{ mes_sel }}">
+        <label class="flex flex-col">
+            <span class="text-xs text-gray-500">Clasificación</span>
+            <select name="clasificacion"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                    onchange="this.form.submit()">
+                <option value="todos" {% if clasificacion_sel == 'todos' %}selected{% endif %}>Todos</option>
+                {% for valor, label in clasificaciones_disponibles %}
+                <option value="{{ valor }}" {% if clasificacion_sel == valor %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="flex flex-col">
+            <span class="text-xs text-gray-500">Ciudad</span>
+            <select name="ciudad"
+                    class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"
+                    onchange="this.form.submit()">
+                <option value="todos" {% if ciudad_sel == 'todos' %}selected{% endif %}>Todos</option>
+                {% for c in ciudades_disponibles %}
+                <option value="{{ c }}" {% if ciudad_sel == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% if filtro_activo %}
+        <a href="?{{ bimodal_base_qs }}vista={{ vista }}&mes={{ mes_sel }}"
+           class="px-3 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-sm underline">
+            Limpiar filtros
+        </a>
+        {% endif %}
+    </form>
+    {% endif %}
 
     {% comment %} Toggle Vista Matriz | Filtro Mes {% endcomment %}
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -81,16 +139,27 @@ matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
                             <th class="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ label }}</th>
                             {% endfor %}
                             <th class="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">TOTAL</th>
+                            <th class="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">% Total</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                         {% for fila in matrix_rows %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40" data-rubro="{{ fila.rubro }}">
                             <td class="px-3 py-2 text-gray-900 dark:text-white whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800">{{ fila.rubro }}</td>
                             {% for valor in fila.meses %}
                             <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">${{ valor|floatformat:0|intcomma }}</td>
                             {% endfor %}
                             <td class="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">${{ fila.total|floatformat:0|intcomma }}</td>
+                            <td class="px-3 py-2 text-right whitespace-nowrap">
+                                <span class="semaforo-{{ fila.semaforo }} inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
+                                             {% if fila.semaforo == 'rojo' %}bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300
+                                             {% elif fila.semaforo == 'amarillo' %}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300
+                                             {% else %}bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300{% endif %}"
+                                      data-semaforo="{{ fila.semaforo }}"
+                                      title="% sobre |Total Año| — {{ fila.semaforo }}">
+                                    {{ fila.pct }}%
+                                </span>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -101,11 +170,18 @@ matriz pese a tener datos). Sin {# #} multilínea (anti-regresión del repo).
                             <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">${{ total_col|floatformat:0|intcomma }}</td>
                             {% endfor %}
                             <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">${{ matrix_total|floatformat:0|intcomma }}</td>
+                            <td class="px-3 py-2 text-right text-gray-900 dark:text-white whitespace-nowrap">—</td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
         </section>
+        {% elif matrix_vacia_por_filtro %}
+        {% comment %} A8: hay datos cargados, pero el filtro Clasificación/Ciudad
+        elegido no matchea ninguna fila — NO es el mismo caso que datos degradados. {% endcomment %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+            No hay datos para el filtro seleccionado.
+        </div>
         {% else %}
         {% comment %} Error/degradado: hay datos contables pero la matriz vino vacía {% endcomment %}
         <div class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-300">

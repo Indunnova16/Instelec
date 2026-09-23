@@ -2226,6 +2226,203 @@ class DescargarPlantillaExcelView(LoginRequiredMixin, RoleRequiredMixin, Templat
         return response
 
 
+class DescargarPlantillaPresupuestoPlanoView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Plantilla XLSX del formato PLANO de presupuesto (Instelec#267 A6).
+
+    Distinto de ``DescargarPlantillaExcelView`` (arriba): esa genera la
+    grilla de 12 meses (``ESTRUCTURA_COSTOS``), un contrato de columnas
+    incompatible con el importador plano de A2. Esta vista genera el
+    contrato EXACTO que consume ``PresupuestoPlanoConstruccionExcelImporter``
+    (``apps/construccion/importers.py``): columnas
+    ``Tipo|Proyecto|Rubro|Clasificacion|Valor|mes|año|ciudad``. Wireada desde
+    Construcción (``apps/construccion/urls_fin.py``), no desde Mantenimiento
+    -por eso vive junto a la otra plantilla en este archivo pero la
+    referencia real está en el namespace ``construccion``-.
+    """
+    allowed_roles = [
+        'admin', 'director', 'coordinador', 'ing_residente',
+        'admin_general', 'coordinador_general', 'admin_construccion',
+    ]  # espejo de ALL_ADMIN_ROLES (apps/construccion/views_pdeo_complement.py);
+    # copiado en vez de importado para no acoplar financiero -> construccion.
+    template_name = ''  # Not used
+
+    def get(self, request, *args, **kwargs):
+        import io
+
+        from django.http import HttpResponse
+
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+
+        from apps.financiero.models_finv2_carga import HomologacionProjectsContable
+
+        proyecto_id = kwargs.get('proyecto_id')
+        proyecto_nombre = 'Mi Proyecto'
+        if proyecto_id:
+            from apps.construccion.models import ProyectoConstruccion
+
+            proyecto = ProyectoConstruccion.objects.filter(pk=proyecto_id).first()
+            if proyecto is not None:
+                proyecto_nombre = proyecto.nombre
+
+        try:
+            anio = int(request.GET.get('anio') or date.today().year)
+        except (TypeError, ValueError):
+            anio = date.today().year
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'PRESUPUESTO'
+
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'),
+        )
+        money_fmt = '#,##0'
+
+        # Encabezados EXACTOS que espera PresupuestoPlanoConstruccionExcelImporter
+        # (apps/construccion/importers.py, _COLUMNAS_PRESUPUESTO_PLANO). El orden
+        # visual no importa para el parser (detecta por nombre normalizado), pero
+        # se mantiene el orden literal del issue para que el usuario reconozca el
+        # formato.
+        headers = ['Tipo', 'Proyecto', 'Rubro', 'Clasificacion', 'Valor', 'mes', 'año', 'ciudad']
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+
+        widths = [14, 26, 30, 14, 16, 8, 8, 16]
+        for col_idx, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col_idx)].width = w
+
+        # Ejemplos (10 filas): si el catálogo de Homologación (tipo PRESUPUESTO,
+        # activo) ya tiene Rubros cargados, se reusan -así el archivo de ejemplo
+        # pasa la validación dura del importador tal cual se descarga-. Si el
+        # catálogo todavía está vacío (riesgo documentado en A2: "la mayoría de
+        # cargas reales será rechazada hasta poblarlo"), se usan placeholders
+        # marcados explícitamente como EJEMPLO que el usuario DEBE reemplazar.
+        clasificaciones_ciclo = ['Ingresos', 'Fijo', 'Variable']
+        homologados = list(
+            HomologacionProjectsContable.objects
+            .filter(tipo__iexact='PRESUPUESTO', activo=True)
+            .exclude(concepto='')
+            .values_list('concepto', 'grupo')
+            .distinct()[:30]
+        )
+
+        ejemplos = []
+        if homologados:
+            for i in range(10):
+                concepto, grupo = homologados[i % len(homologados)]
+                clasificacion = grupo if grupo in clasificaciones_ciclo else clasificaciones_ciclo[i % 3]
+                mes = (i % 12) + 1
+                valor = 1_000_000 * (i + 1)
+                ejemplos.append(
+                    ['Presupuesto', proyecto_nombre, concepto, clasificacion, valor, mes, anio, 'Bogota']
+                )
+        else:
+            placeholders = [
+                ('EJEMPLO - Ingresos Operacionales', 'Ingresos'),
+                ('EJEMPLO - Otros Ingresos', 'Ingresos'),
+                ('EJEMPLO - Gastos de Personal', 'Fijo'),
+                ('EJEMPLO - Aportes Parafiscales', 'Fijo'),
+                ('EJEMPLO - Arrendamientos', 'Fijo'),
+                ('EJEMPLO - Servicios Publicos', 'Fijo'),
+                ('EJEMPLO - Materiales de Obra', 'Variable'),
+                ('EJEMPLO - Transporte', 'Variable'),
+                ('EJEMPLO - Combustibles', 'Variable'),
+                ('EJEMPLO - Mantenimiento de Equipos', 'Variable'),
+            ]
+            for i, (rubro, clasificacion) in enumerate(placeholders):
+                mes = (i % 12) + 1
+                valor = 1_000_000 * (i + 1)
+                ejemplos.append(['Presupuesto', proyecto_nombre, rubro, clasificacion, valor, mes, anio, 'Bogota'])
+
+        for r_idx, fila in enumerate(ejemplos, 2):
+            for c_idx, val in enumerate(fila, 1):
+                cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                cell.border = thin_border
+                if c_idx == 5:
+                    cell.number_format = money_fmt
+
+        # Hoja Instrucciones
+        ws2 = wb.create_sheet('Instrucciones')
+        ws2['A1'] = 'Instrucciones - Plantilla de presupuesto (formato plano)'
+        ws2['A1'].font = Font(bold=True, size=14)
+
+        filas_instr = [
+            '',
+            'Complete la hoja "PRESUPUESTO" con una fila por concepto/mes. NO cambie',
+            'los nombres de las columnas de la fila 1 ni el orden de las columnas.',
+            '',
+            'Columnas:',
+            '  Tipo          -> Siempre el texto "Presupuesto" (fijo, obligatorio).',
+            '  Proyecto      -> Nombre del proyecto (informativo, no se valida).',
+            '  Rubro         -> Concepto contable. DEBE existir en el catalogo de',
+            '                   Homologacion Projects -> Contabilidad (tipo',
+            '                   PRESUPUESTO), activo. Si el Rubro no esta homologado,',
+            '                   se rechaza TODO el archivo (no se carga nada a medias).',
+            '  Clasificacion -> Uno de estos 3 valores exactos: Ingresos, Fijo, Variable.',
+            '  Valor         -> Numero (sin texto ni simbolo de moneda). Use punto o',
+            '                   coma como separador decimal.',
+            '  mes           -> Numero de mes calendario, 1 (enero) a 12 (diciembre).',
+            '  año           -> Año de 4 digitos (ej. 2026).',
+            '  ciudad        -> Opcional. Texto libre.',
+            '',
+            'Validacion dura: si UNA fila tiene un error (Tipo distinto de',
+            '"Presupuesto", Rubro vacio o no homologado, Clasificacion invalida,',
+            'Valor no numerico, mes/año fuera de rango), se rechaza el archivo',
+            'COMPLETO. El sistema indica la hoja, fila y columna exactas del error.',
+            '',
+            'Clasificaciones validas: Ingresos, Fijo, Variable.',
+        ]
+        for i, txt in enumerate(filas_instr, 2):
+            ws2.cell(row=i, column=1, value=txt)
+        ws2.column_dimensions['A'].width = 92
+
+        if homologados:
+            fila_rubros = len(filas_instr) + 3
+            titulo_cell = ws2.cell(
+                row=fila_rubros, column=1,
+                value='Rubros homologados activos (catalogo actual, tipo PRESUPUESTO):',
+            )
+            titulo_cell.font = Font(bold=True)
+            ws2.cell(row=fila_rubros + 1, column=1, value='Rubro').font = Font(bold=True)
+            ws2.cell(row=fila_rubros + 1, column=2, value='Clasificacion').font = Font(bold=True)
+            for i, (concepto, grupo) in enumerate(homologados, fila_rubros + 2):
+                ws2.cell(row=i, column=1, value=concepto)
+                ws2.cell(row=i, column=2, value=grupo)
+        else:
+            fila_aviso = len(filas_instr) + 3
+            aviso_cell = ws2.cell(
+                row=fila_aviso, column=1,
+                value=(
+                    'AVISO: no hay Rubros homologados activos (tipo PRESUPUESTO) en el '
+                    'catalogo todavia. Los Rubros de ejemplo de la hoja PRESUPUESTO son '
+                    'PLACEHOLDERS: reemplacelos por los Rubros reales una vez que el '
+                    'catalogo de Homologacion este poblado, o la carga sera rechazada.'
+                ),
+            )
+            aviso_cell.font = Font(bold=True, color='C00000')
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        filename = f'Plantilla_Presupuesto_Plano_{anio}.xlsx'
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
 class CargarCostosCuadrillaView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Calculate labor costs from cuadrilla attendance data and fill Presupuesto Real."""
     allowed_roles = ['admin', 'director', 'coordinador']

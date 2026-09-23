@@ -27,6 +27,7 @@ Nota sobre el FK ``actividad`` (CostosConstruccion / CostosActividadConstruccion
 """
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -317,3 +318,91 @@ class IndicadorANSConstruccion(BaseModel):
     def save(self, *args, **kwargs):
         self.estado = self.clasificar_estado()
         super().save(*args, **kwargs)
+
+
+# ===========================================================================
+# 5. HISTORIAL DE CARGAS DE PRESUPUESTO (Instelec#267 Fase 1.3, A3)
+# ===========================================================================
+_MESES_ES_HISTORIAL_CARGA = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre',
+    12: 'Diciembre',
+}
+
+
+class HistorialCargaPresupuestoConstruccion(BaseModel):
+    """Auditoría de CADA POST de carga de presupuesto (éxito o error).
+
+    El issue #267 (Fase 1.3, "Historial de Cargas") pide mostrar la última
+    carga con Fecha/Usuario/Filas/Valor total/Estado/Período; este modelo la
+    persiste para poder listar un historial (no solo la última) y sobrevivir
+    al POST siguiente. Espejo del patrón auditable ``CargaFinanciera`` de
+    ``apps.financiero.models_finv2_carga`` (mismo issue #267, dependencia
+    confirmada #261 — ver ``scope_override_hitl`` de F2), adaptado a
+    construcción: acá NO se persiste línea por línea (eso vive en
+    ``PresupuestoDetalladoConstruccion.datos['finv2_bd']['filas_detalle']``,
+    A2) — este modelo audita únicamente el EVENTO de carga.
+
+    ``anio``/``mes`` son nullable a propósito: los formatos legacy
+    ('contable', 'presupuesto' de columnas por mes) cubren el año completo,
+    no un mes puntual — solo el formato plano (A2) trae mes por fila y
+    permite resolver un período único cuando el archivo es de un solo mes
+    (``PresupuestoPlaneadoConstruccionView.post`` calcula ``mes`` con
+    ``_mes_unico_desde_datos``; ``anio`` es siempre el del formulario).
+    """
+
+    class Estado(models.TextChoices):
+        PROCESADA = 'PROCESADA', 'Procesada'
+        ERROR = 'ERROR', 'Error'
+
+    proyecto = models.ForeignKey(
+        'construccion.ProyectoConstruccion',
+        on_delete=models.CASCADE,
+        related_name='historial_cargas_presupuesto',
+        verbose_name='Proyecto',
+    )
+    anio = models.PositiveIntegerField('Año', null=True, blank=True)
+    mes = models.PositiveSmallIntegerField('Mes', null=True, blank=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historial_cargas_presupuesto_construccion',
+        verbose_name='Usuario',
+    )
+    fecha = models.DateTimeField('Fecha', default=timezone.now)
+    filas_procesadas = models.PositiveIntegerField('Filas procesadas', default=0)
+    valor_total = models.DecimalField(
+        'Valor total', max_digits=18, decimal_places=2, default=Decimal('0'),
+    )
+    estado = models.CharField(
+        'Estado', max_length=10, choices=Estado.choices, default=Estado.ERROR,
+    )
+    archivo_nombre = models.CharField('Archivo de origen', max_length=255, blank=True)
+    detalle_errores = models.JSONField('Detalle de errores', default=dict, blank=True)
+
+    class Meta:
+        db_table = 'construccion_historial_carga_presupuesto'
+        verbose_name = 'Historial de Carga de Presupuesto'
+        verbose_name_plural = 'Historial de Cargas de Presupuesto'
+        ordering = ['-fecha', '-created_at']
+        indexes = [
+            models.Index(fields=['proyecto', '-fecha'], name='idx_hist_carga_ppto_proyecto'),
+        ]
+
+    def __str__(self):
+        periodo = f'{self.mes:02d}/{self.anio}' if self.mes and self.anio else str(self.anio or 's/año')
+        return f'Carga {periodo} — {self.get_estado_display()} ({self.filas_procesadas} filas)'
+
+    @property
+    def periodo_display(self):
+        """Texto legible del período — formato del ejemplo del issue (#267
+        Fase 1.3): ``'Septiembre 2026 (09/2026)'``. Sin mes puntual (formatos
+        legacy que cubren el año completo) muestra solo el año."""
+        if self.mes and self.anio:
+            nombre_mes = _MESES_ES_HISTORIAL_CARGA.get(self.mes, self.mes)
+            return f'{nombre_mes} {self.anio} ({self.mes:02d}/{self.anio})'
+        if self.anio:
+            return str(self.anio)
+        return '—'
