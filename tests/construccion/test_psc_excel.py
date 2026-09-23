@@ -367,6 +367,43 @@ def test_importa_plano_historico_en_dos_grupos_y_hereda_celdas_combinadas(excel_
 
 
 @pytest.mark.django_db
+def test_importar_historico_rechaza_persona_fuera_de_fecha_ingreso_proyecto(excel_data):
+    """Issue #271 (A6): _validar_personal_historico() debe leer
+    fecha_ingreso_proyecto (disponibilidad para ser programado), no el
+    fecha_ingreso legacy ni fecha_firma_contrato (contrato/nómina) -- son
+    conceptos distintos. Una persona aprobada en el proyecto pero cuya fecha
+    de ingreso al proyecto es POSTERIOR a la fecha histórica del plano no
+    puede importarse para esa fecha."""
+    proyecto, persona, _ = excel_data
+    persona.fecha_ingreso_proyecto = date(2025, 1, 1)
+    persona.save()
+    result = importar_programacion_semanal(_historical_file([
+        [datetime(2024, 12, 3), 'Excavación', None, 'Obra Civil 1', persona.nombre, 'Operario', persona.documento],
+    ]), proyecto_historico=proyecto)
+    assert not result.ok
+    assert result.errors == [{
+        'row': 0,
+        'error': f'Fila 2: Personal {persona.documento} fuera de vigencia laboral para la fecha.',
+    }]
+    assert ProgramacionSemanalConstruccion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_importar_historico_permite_persona_dentro_de_fecha_ingreso_proyecto(excel_data):
+    """Contraparte del test anterior: si la fecha histórica cae DESPUÉS de
+    fecha_ingreso_proyecto (y no hay fecha_salida ni cruce), la importación
+    pasa -- el criterio migrado sigue funcionando para el camino feliz."""
+    proyecto, persona, _ = excel_data
+    persona.fecha_ingreso_proyecto = date(2024, 1, 1)
+    persona.save()
+    result = importar_programacion_semanal(_historical_file([
+        [datetime(2024, 12, 3), 'Excavación', None, 'Obra Civil 1', persona.nombre, 'Operario', persona.documento],
+    ]), proyecto_historico=proyecto)
+    assert result.ok, result.errors
+    assert ProgramacionSemanalConstruccion.objects.count() == 1
+
+
+@pytest.mark.django_db
 def test_plano_historico_reporta_la_fila_y_no_persiste_parcialmente(excel_data):
     proyecto, persona, _ = excel_data
     result = importar_programacion_semanal(_historical_file([

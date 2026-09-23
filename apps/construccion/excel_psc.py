@@ -484,9 +484,16 @@ def _validar_personal_historico(group):
         aprobado = AsignacionPersonalProyectoConstruccion.objects.filter(
             proyecto=group['proyecto'], personal=person, fecha_inicio__lte=fecha,
         ).filter(Q(fecha_fin__isnull=True) | Q(fecha_fin__gte=fecha)).exists()
+        # Issue #271 (A6): "vigente" acá es disponibilidad para SER PROGRAMADO
+        # (mismo concepto operativo que personal_elegible() en
+        # services_psc_disponibilidad.py y la validación de aprobaciones en
+        # views_psc_aprobaciones.py) -- NO el concepto de contrato/nómina
+        # (fecha_firma_contrato). Se usa fecha_ingreso_proyecto por
+        # consistencia con esos dos consumidores, en vez del legacy
+        # fecha_ingreso (DEPRECADO, ver models_base.py).
         vigente = (
             (person.activo or person.fecha_salida is not None)
-            and (person.fecha_ingreso is None or person.fecha_ingreso <= fecha)
+            and (person.fecha_ingreso_proyecto is None or person.fecha_ingreso_proyecto <= fecha)
             and (person.fecha_salida is None or person.fecha_salida >= fecha)
         )
         ocupado = ProgramacionSemanalConstruccionPersonal.objects.filter(
