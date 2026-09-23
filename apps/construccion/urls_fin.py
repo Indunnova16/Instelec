@@ -9,6 +9,8 @@ Namespace: ``construccion`` (app_name en urls.py). Reverse:
 """
 from django.urls import path
 
+from apps.financiero.views import DescargarPlantillaPresupuestoPlanoView
+
 from . import views_fin
 
 urlpatterns = [
@@ -21,6 +23,16 @@ urlpatterns = [
         '<uuid:proyecto_id>/financiero/presupuesto-planeado/',
         views_fin.PresupuestoPlaneadoConstruccionView.as_view(),
         name='fin_presupuesto_planeado',
+    ),
+    # A6 (#267 Fase 1.6): plantilla XLSX descargable del formato plano
+    # (Tipo|Proyecto|Rubro|Clasificacion|Valor|mes|año|ciudad) que consume
+    # PresupuestoPlanoConstruccionExcelImporter (A2). Vive en
+    # apps.financiero.views (junto a DescargarPlantillaExcelView) pero se
+    # wirea desde Construcción -es donde vive el botón "Cargar bd" (A2/A3).
+    path(
+        '<uuid:proyecto_id>/financiero/plantilla-presupuesto-plano/',
+        DescargarPlantillaPresupuestoPlanoView.as_view(),
+        name='fin_plantilla_presupuesto_plano',
     ),
     # #120: alias de la carga de BD contable en Construcción (espejo de la URL
     # dedicada de Mantenimiento financiero:cargar_bd_contable). La carga ya vive

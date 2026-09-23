@@ -67,8 +67,23 @@ esté cableado procesará el archivo. La UI queda completa y funcional como subi
             {% endif %}
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Formatos aceptados: presupuesto (columnas por mes), base de datos
-                contable (hoja "BD", columna O), o costos (concepto + total).
+                contable (hoja "BD", columna O), o presupuesto plano
+                (Tipo/Proyecto/Rubro/Clasificacion/Valor/mes/año/ciudad).
             </p>
+            {% comment %}
+            A6 (#267 Fase 1.6): descarga de la plantilla del formato plano
+            (encabezados exactos + 10 filas ejemplo + hoja "Instrucciones"),
+            reusando -y homologando con- los Rubros activos del catálogo
+            cuando existen. Consumida por PresupuestoPlanoConstruccionExcelImporter (A2).
+            {% endcomment %}
+            <a href="{% url 'construccion:fin_plantilla_presupuesto_plano' proyecto.id %}?anio={{ anio }}"
+               class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Descargar plantilla de presupuesto (Excel)
+            </a>
         </div>
 
         <div class="flex items-center gap-3">
