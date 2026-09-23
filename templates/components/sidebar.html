@@ -669,6 +669,7 @@ mantiene intacto; esto agrega la restricción POR HOJA por encima.
                     <li role="none"><a href="{% url 'cuadrillas:cargos_lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Cargos</a></li>
                     <li role="none"><a href="{% url 'core:vehiculos_lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Vehículos</a></li>
                     {% if ok_fin_maestros %}<li role="none"><a href="{% url 'financiero:clientes_lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Maestro de Clientes</a></li><li role="none"><a href="{% url 'financiero:proveedores_lista' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Maestro de Proveedores</a></li>{% endif %}
+                    {% if ok_fin_homologacion %}<li role="none"><a href="{% url 'financiero:carga_financiera' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Homologación Projects → Contabilidad</a></li>{% endif %}
                     <li role="none"><a href="{% url 'core:roles_matriz' %}" role="menuitem" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Roles y Permisos</a></li>
                 </ul>
             </li>
