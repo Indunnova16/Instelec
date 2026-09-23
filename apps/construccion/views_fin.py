@@ -57,6 +57,7 @@ from .models import ProyectoConstruccion
 from .models_fin import (
     CostosConstruccion,
     FacturacionConstruccion,
+    HistorialCargaPresupuestoConstruccion,
     IndicadorANSConstruccion,
     PresupuestoDetalladoConstruccion,
 )
@@ -478,6 +479,54 @@ def _merge_presupuesto_datos(existente, nuevo):
     return merged
 
 
+# ---------------------------------------------------------------------------
+# Historial de cargas (Instelec#267 Fase 1.3, A3) — helpers de lectura de
+# ``res['datos']`` para poblar ``HistorialCargaPresupuestoConstruccion``.
+# ---------------------------------------------------------------------------
+def _mes_unico_desde_datos(datos):
+    """Mes único del archivo importado, o ``None``.
+
+    Solo el formato plano (A2) trae ``finv2_bd['filas_detalle']`` con un
+    ``mes`` por fila — si TODAS las filas comparten el mismo mes, ese es el
+    período de la carga (caso típico: Janet sube 1 archivo/mes). Si el
+    archivo mezcla meses, o es un formato legacy sin ``filas_detalle``
+    ('contable'/'presupuesto' de columnas por mes, que cubren el año
+    completo), no hay un mes puntual que reportar → ``None``.
+    """
+    if not isinstance(datos, dict):
+        return None
+    filas = (datos.get('finv2_bd') or {}).get('filas_detalle') or []
+    meses = {f.get('mes') for f in filas if isinstance(f, dict) and f.get('mes')}
+    return meses.pop() if len(meses) == 1 else None
+
+
+def _valor_total_desde_datos(datos):
+    """Valor total de la carga, para el registro de historial.
+
+    - Formato ``finv2_bd`` (A2 plano / #120 contable): usa el ``total`` que el
+      importer ya calculó.
+    - Formato legacy (columnas por mes → ingreso/variables/fijos): suma las 3
+      secciones (mismo criterio que ``ProyectoFinMixin._sumar_seccion``).
+    Navega defensivamente — nunca lanza, nunca devuelve ``None``.
+    """
+    if not isinstance(datos, dict):
+        return Decimal('0')
+    finv2_bd = datos.get('finv2_bd')
+    if isinstance(finv2_bd, dict) and finv2_bd.get('total') is not None:
+        return _to_decimal(finv2_bd['total'])
+    total = Decimal('0')
+    for key in ('ingreso', 'variables', 'fijos'):
+        seccion = datos.get(key)
+        if isinstance(seccion, dict):
+            for v in seccion.values():
+                if isinstance(v, dict):
+                    for vv in v.values():
+                        total += _to_decimal(vv)
+                else:
+                    total += _to_decimal(v)
+    return total
+
+
 # ===========================================================================
 # 2. PRESUPUESTO PLANEADO
 # ===========================================================================
@@ -510,6 +559,15 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
         # A3 (#120): vista bi-modal (matriz 12 meses + filtro mes), espejo de
         # Mantenimiento, reusando el partial compartido.
         ctx.update(self._bimodal_context(ctx['datos']))
+        # A3 (#267 Fase 1.3): historial de cargas del proyecto — NO se filtra
+        # por año/tipo: Janet carga 1 vez/mes y el historial debe mostrar la
+        # tendencia entre períodos, no solo el año en pantalla.
+        ctx['historial_cargas'] = (
+            HistorialCargaPresupuestoConstruccion.objects
+            .filter(proyecto=proyecto)
+            .select_related('usuario')
+            .order_by('-fecha')[:10]
+        )
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -531,8 +589,13 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
 
         archivo = request.FILES.get('archivo')
         if not archivo:
+            # Sin archivo no hay intento de carga real: no genera registro de
+            # historial (es una validación de formulario, no un evento auditable).
             messages.error(request, 'Seleccione un archivo .xlsx.')
             return redirect(destino)
+
+        nombre_archivo = (getattr(archivo, 'name', '') or '')[:255]
+        usuario = request.user if request.user.is_authenticated else None
 
         formato = detect_excel_format_construccion(archivo)
         try:
@@ -549,13 +612,15 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
             # (Tipo|Proyecto|Rubro|Clasificacion|Valor|mes|año|ciudad).
             res = PresupuestoPlanoConstruccionExcelImporter().procesar(archivo)
         else:
-            messages.error(
-                request,
+            mensaje_formato_no_reconocido = (
                 'Formato no reconocido. Suba la Base de Datos contable (hoja BD), '
                 'el Presupuesto (columnas de mes) o el Presupuesto plano '
-                '(Tipo|Proyecto|Rubro|Clasificacion|Valor|mes|año|ciudad).',
+                '(Tipo|Proyecto|Rubro|Clasificacion|Valor|mes|año|ciudad).'
             )
-            return redirect(destino)
+            res = {
+                'exito': False, 'error': mensaje_formato_no_reconocido,
+                'advertencia': None, 'mensaje': None, 'datos': None, 'filas': 0,
+            }
 
         if res.get('exito'):
             obj, _creado = PresupuestoDetalladoConstruccion.objects.get_or_create(
@@ -568,8 +633,37 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
             messages.success(request, res.get('mensaje') or 'Importación completada.')
             if res.get('advertencia'):
                 messages.warning(request, res['advertencia'])
+            # A3 (#267 Fase 1.3): registrar la carga exitosa en el historial.
+            HistorialCargaPresupuestoConstruccion.objects.create(
+                proyecto=proyecto,
+                anio=anio,
+                mes=_mes_unico_desde_datos(res.get('datos')),
+                usuario=usuario,
+                filas_procesadas=res.get('filas') or 0,
+                valor_total=_valor_total_desde_datos(res.get('datos')),
+                estado=HistorialCargaPresupuestoConstruccion.Estado.PROCESADA,
+                archivo_nombre=nombre_archivo,
+            )
         else:
             messages.error(request, res.get('error') or 'No se pudo procesar el archivo.')
+            # A3 (#267 Fase 1.3): registrar la carga fallida CON detalle — el
+            # detalle de errores sobrevive aunque el mensaje flash de Django
+            # desaparezca tras el próximo request (el historial es la fuente
+            # persistente para que Janet/soporte vean qué pasó).
+            HistorialCargaPresupuestoConstruccion.objects.create(
+                proyecto=proyecto,
+                anio=anio,
+                mes=None,
+                usuario=usuario,
+                filas_procesadas=0,
+                valor_total=Decimal('0'),
+                estado=HistorialCargaPresupuestoConstruccion.Estado.ERROR,
+                archivo_nombre=nombre_archivo,
+                detalle_errores={
+                    'error': res.get('error'),
+                    'advertencia': res.get('advertencia'),
+                },
+            )
         return redirect(destino)
 
 
