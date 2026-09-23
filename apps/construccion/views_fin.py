@@ -20,8 +20,23 @@ GATE DE SUBMÓDULO
 ``'FINANCIERO'`` es un sub-módulo **registrado y válido**:
 ``apps.core.permissions.SUBMODULO_FINANCIERO = 'FINANCIERO'`` ∈ ``TODOS_SUBMODULOS``
 y ya lo usa ``FinancieroGridView`` (views.py). Por eso ``ProyectoFinMixin`` usa
-``SubModuloRequiredMixin`` con ``required_submodulo = 'FINANCIERO'`` sin riesgo de
-403 indebido (los roles admin pasan vía RoleRequiredMixin de todos modos).
+``SubModuloRequiredMixin`` con ``required_submodulo = 'FINANCIERO'``.
+
+⚠️ **Corrección (Instelec#267 A7, 2026-09-23):** el comentario original acá
+decía "los roles admin pasan vía RoleRequiredMixin de todos modos" — es
+INEXACTO. ``RoleRequiredMixin.test_func`` (``apps/core/mixins.py``) resuelve
+el branch ``required_submodulo`` **ANTES** de llegar al bypass
+``admin_bypass``/``user_es_admin``: para estas 6 vistas el acceso lo decide
+**exclusivamente** ``RoleModuloPermiso`` (nivel ``ver``/``ver_editar`` sobre
+``CONSTRUCCION``/``FINANCIERO``), sin importar si el rol tiene
+``nivel='admin'`` en BD. Esto fue la causa raíz real de #267 A7:
+``admin_construccion`` tenía solo ``ver`` (no podía cargar presupuesto) y
+``gerente_financiero``/``contador``/``supervisor`` no tenían fila alguna
+(sin acceso total) — sembrado/corregido por la migración
+``core.0011_seed_construccion_financiero_matriz_roles_267``. Ver
+``apps/construccion/permissions_fin.py`` para la matriz de roles completa
+(cargar/ver/reportes-por-formato) y su fuente (respuesta del cliente en el
+issue).
 
 Templates (``construccion/financiero_*.html``) los crea B5; F4 corre después de
 B5, así que referenciar ``template_name`` aquí es seguro aunque el archivo aún
@@ -58,6 +73,11 @@ from .importers import (
     PresupuestoPlanoConstruccionExcelImporter,
     detect_excel_format_construccion,
 )
+# Instelec#267 A7 — matriz de roles (cargar/ver/reportes-por-formato). Cargar
+# y Ver ya los gatea ProyectoFinMixin vía RoleModuloPermiso (ver docstring de
+# GATE DE SUBMÓDULO arriba); acá solo se consume el permiso POR FORMATO de
+# reporte, que la matriz RBAC genérica no puede expresar (contrato con A10).
+from .permissions_fin import formatos_reporte_permitidos
 # Instelec#267 A8 — reusa el MISMO agregador rubro×mes que el importador (A2)
 # usa para construir finv2_bd desde filas_detalle, en vez de duplicar la
 # lógica de suma. Los filtros de Clasificación/Ciudad solo cambian QUÉ
@@ -149,6 +169,13 @@ class ProyectoFinMixin(LoginRequiredMixin, RoleRequiredMixin, SubModuloRequiredM
         ctx['active_subtab'] = self.active_subtab
         ctx['anio'] = anio
         ctx['mes'] = mes
+        # Instelec#267 A7 — formatos de reporte (pdf/excel/ppt/csv) que el
+        # usuario actual puede descargar, para que CUALQUIER template de
+        # este módulo (hoy o cuando A10 agregue los botones de descarga)
+        # oculte lo que no aplica SIN depender de un segundo gate server-side
+        # distinto del de permissions_fin.py — la fuente de verdad es una
+        # sola. Set vacío = sin botones de descarga (p.ej. supervisor).
+        ctx['formatos_reporte_permitidos'] = formatos_reporte_permitidos(self.request.user)
         return ctx
 
     # ----- Helpers de resumen presupuestal compartidos -------------------
