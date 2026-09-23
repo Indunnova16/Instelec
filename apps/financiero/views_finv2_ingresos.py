@@ -47,15 +47,34 @@ def _filtrar_listado(queryset, params):
     estado = params.get("estado")
     if estado and estado != "TODAS":
         if estado == "VENCIDA":
-            from django.db.models import DateField, ExpressionWrapper, F
+            from django.db.models import DateField, DurationField, ExpressionWrapper, F, IntegerField
+            from django.db.models.functions import Cast
 
             hoy = timezone.localdate()
             queryset = (
                 queryset.exclude(estado=CicloFacturacion.Estado.PAGO_RECIBIDO)
                 .filter(fecha_factura__isnull=False, plazo_pago_dias__isnull=False)
                 .annotate(
+                    # Backend gotcha (#249): plazo_pago_dias es PositiveIntegerField.
+                    # El chequeo de Django para F(int)*timedelta en SQLite
+                    # (django/db/models/expressions.py DurationExpression.as_sqlite)
+                    # solo permite el string literal "IntegerField" -- NO sus
+                    # subtipos ("PositiveIntegerField" incluido) -- y rechaza la
+                    # multiplicación con "Invalid arguments for operator *", aunque
+                    # en Postgres (prod) funciona sin problema. Cast() explícito a
+                    # IntegerField plano antes de multiplicar, portable en ambos
+                    # backends.
+                    _plazo_int=Cast(F("plazo_pago_dias"), output_field=IntegerField())
+                )
+                .annotate(
+                    _plazo_duracion=ExpressionWrapper(
+                        F("_plazo_int") * timezone.timedelta(days=1),
+                        output_field=DurationField(),
+                    )
+                )
+                .annotate(
                     _vencimiento=ExpressionWrapper(
-                        F("fecha_factura") + F("plazo_pago_dias") * timezone.timedelta(days=1),
+                        F("fecha_factura") + F("_plazo_duracion"),
                         output_field=DateField(),
                     )
                 )
