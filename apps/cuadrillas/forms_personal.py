@@ -58,22 +58,25 @@ class PersonalCuadrillaForm(forms.ModelForm):
                 }
             ),
             "fecha_firma_contrato": forms.DateInput(
+                format="%Y-%m-%d",
                 attrs={
                     "class": INPUT_CLS,
                     "type": "date",
-                }
+                },
             ),
             "fecha_ingreso_proyecto": forms.DateInput(
+                format="%Y-%m-%d",
                 attrs={
                     "class": INPUT_CLS,
                     "type": "date",
-                }
+                },
             ),
             "fecha_salida": forms.DateInput(
+                format="%Y-%m-%d",
                 attrs={
                     "class": INPUT_CLS,
                     "type": "date",
-                }
+                },
             ),
         }
 

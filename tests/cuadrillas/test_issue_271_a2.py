@@ -198,14 +198,63 @@ class TestTemplatesRenderizanCamposNuevos:
         )
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Nota (#271 A2): el widget DateInput no fija `format`, así que
-        # DjangoDate se serializa en el formato local (dd/mm/aaaa) -- mismo
-        # patrón pre-existente que `fecha_salida` (widget idéntico, sin
-        # tocar en este sub-item). Se documenta como observación, no se
-        # amplía el scope de A2 a un formateo distinto para TODOS los
-        # DateField del form.
-        assert 'value="01/04/2025"' in content
-        assert 'value="15/04/2025"' in content
+        # Regresión (validador-cierre, hallazgo real en prod, RECHAZADO):
+        # `<input type="date">` SOLO acepta `value` en formato ISO
+        # (YYYY-MM-DD) -- cualquier otro formato el navegador lo descarta y
+        # el campo se ve VACÍO. Sin `format="%Y-%m-%d"` en el widget, guardar
+        # cualquier otro cambio sin tocar las fechas las persiste como NULL
+        # -- riesgo activo sobre las 163 filas legacy backfilleadas por A1.
+        # Corregido junto con `fecha_salida` (mismo widget, mismo bug latente
+        # pre-existente).
+        assert 'value="2025-04-01"' in content
+        assert 'value="2025-04-15"' in content
+
+    def test_editar_sin_tocar_fechas_no_las_borra(self):
+        """Regresión end-to-end del hallazgo del validador-cierre (RECHAZADO):
+        reproduce el escenario EXACTO del cliente -- abrir "editar", NO tocar
+        los campos de fecha, cambiar solo otro campo (salario_base) y
+        guardar. Antes del fix, el `value` pre-cargado no era parseable por
+        `<input type="date">`, el navegador lo mandaba vacío en el POST, y
+        el guardado dejaba fecha_firma_contrato/fecha_ingreso_proyecto en
+        NULL -- riesgo real de pérdida de datos sobre las 163 filas legacy
+        backfilleadas por A1."""
+        colaborador = PersonalCuadrilla.objects.create(
+            nombre="Editar Sin Tocar Fechas 271",
+            documento="271-A2-NOEDIT",
+            rol_cuadrilla_id="LINIERO_I",
+            salario_base=1000000,
+            fecha_firma_contrato=date(2025, 4, 1),
+            fecha_ingreso_proyecto=date(2025, 4, 15),
+        )
+        # Extraemos el `value` tal como lo vería el navegador -- si no está
+        # en ISO, este assert ya falla antes de llegar al POST.
+        resp = self.client.get(
+            reverse("cuadrillas:colaboradores_editar", args=[colaborador.pk])
+        )
+        content = resp.content.decode()
+        assert 'value="2025-04-01"' in content
+        assert 'value="2025-04-15"' in content
+
+        # POST que "no toca" las fechas: reenvía EXACTAMENTE el value que el
+        # input HTML5 date tendría cargado (simulación fiel del navegador),
+        # y cambia únicamente salario_base.
+        resp = self.client.post(
+            reverse("cuadrillas:colaboradores_editar", args=[colaborador.pk]),
+            data={
+                "nombre": colaborador.nombre,
+                "documento": colaborador.documento,
+                "rol_cuadrilla": colaborador.rol_cuadrilla_id,
+                "area": colaborador.area,
+                "salario_base": "2000000",
+                "fecha_firma_contrato": "2025-04-01",
+                "fecha_ingreso_proyecto": "2025-04-15",
+            },
+        )
+        assert resp.status_code in (200, 302), resp.content.decode()[:500]
+        colaborador.refresh_from_db()
+        assert colaborador.salario_base == 2000000
+        assert colaborador.fecha_firma_contrato == date(2025, 4, 1)
+        assert colaborador.fecha_ingreso_proyecto == date(2025, 4, 15)
 
     def test_lista_renderiza_2_columnas_nuevas_con_dato_legacy(self):
         """Registro `pre-existente` (ya backfillado por A1) -- verifica

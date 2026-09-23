@@ -181,7 +181,7 @@ class TorresActivasFragmentoView(LoginRequiredMixin, RoleRequiredMixin, View):
                     )
                 )
                 html = ''.join(
-                    f'<option value="{torre.pk}">{torre.numero}</option>'
+                    f'<option value="{torre.pk}">{torre.numero_display}</option>'
                     for torre in torres
                 )
             except (ValueError, ValidationError):

@@ -245,6 +245,32 @@ class TestTorresActivasFragmentoView:
         assert f'value="{t_anulada.pk}"' not in body
         assert 'T-1' in body and 'T-2' in body
 
+    def test_numero_crudo_se_normaliza_igual_que_el_widget_django(self):
+        """Regresión (validador-cierre, hallazgo real en prod): el fragmento
+        HTML debe mostrar la MISMA etiqueta que el widget ModelMultipleChoiceField
+        de Django (str(torre) == numero_display), no el `numero` crudo de BD.
+        Antes del fix, una torre con numero='E1' se mostraba 'E1' al crear
+        (este endpoint) pero 'T-1' al editar (widget de Django) -- misma
+        torre, dos etiquetas distintas, exactamente el bug que reportó el
+        cliente ("errores de tipeo... trazabilidad confiable")."""
+        proyecto = _crear_proyecto()
+        torre_cruda = _crear_torre(proyecto, 'E1', aplica=True, anulada=False)
+
+        usuario = _crear_usuario_admin()
+        from django.test import Client
+        client = Client()
+        _login(client, usuario)
+        url = reverse('construccion:torres_activas_fragmento')
+        resp = client.get(url, {'proyecto': str(proyecto.pk)})
+
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        assert torre_cruda.numero_display in body, (
+            f"el fragmento debe mostrar '{torre_cruda.numero_display}' "
+            f"(igual que str(torre)/el widget de Django), no el numero crudo"
+        )
+        assert str(torre_cruda) == torre_cruda.numero_display
+
     def test_otro_proyecto_no_mezcla_torres(self):
         """Edge case de scoping: torres de OTRO proyecto no aparecen."""
         proyecto_a = _crear_proyecto(codigo='TEST-269-A')
