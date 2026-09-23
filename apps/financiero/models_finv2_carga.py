@@ -132,6 +132,15 @@ class LineaCargaFinanciera(BaseModel):
         related_name='lineas',
         verbose_name='Carga financiera',
     )
+    proveedor = models.ForeignKey(
+        'financiero.Proveedor',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='lineas_carga_financiera',
+        verbose_name='Proveedor',
+        help_text='Proveedor asociado a la línea, para filtrar/mostrar/enlazar sin parsear datos_origen.',
+    )
     homologacion = models.ForeignKey(
         HomologacionProjectsContable,
         on_delete=models.PROTECT,
@@ -166,6 +175,7 @@ class LineaCargaFinanciera(BaseModel):
             models.Index(fields=['carga', 'tipo'], name='idx_finv2_linea_carga_tipo'),
             models.Index(fields=['homologacion'], name='idx_finv2_linea_homolog'),
             models.Index(fields=['periodo', 'tipo_operacional', 'centro_costo'], name='idx_finv2_linea_filtros'),
+            models.Index(fields=['proveedor'], name='idx_finv2_linea_proveedor'),
         ]
 
     def __str__(self):
