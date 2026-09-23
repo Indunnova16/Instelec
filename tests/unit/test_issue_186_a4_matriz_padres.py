@@ -35,8 +35,11 @@ class TestMatrizPadresA4:
         ],
     )
     def test_guardar_hoja_usa_su_padre_real(self, admin_client, submodulo, modulo):
+        # codigo <= 30 chars (Role.codigo es varchar(30)) -- el submodulo completo
+        # ("MANTENIMIENTO_ACTIVIDADES", "CONFIG_ROLES_PERMISOS") no entra con el
+        # prefijo original; truncado a 16 chars sigue siendo único entre los 2 casos.
         role = Role.objects.create(
-            codigo=f"qa_186_a4_{submodulo.lower()}", nombre="QA A4", nivel=Role.NIVEL_OPERARIO
+            codigo=f"qa186a4_{submodulo[:16].lower()}", nombre="QA A4", nivel=Role.NIVEL_OPERARIO
         )
         response = admin_client.post(
             f"/parametrizacion/roles/matriz/{role.codigo}/{submodulo}/celda/",
