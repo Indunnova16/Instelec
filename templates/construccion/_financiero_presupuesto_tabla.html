@@ -43,7 +43,7 @@ Cada sección es colapsable (Alpine). Empty state cuando sin_datos.
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     {% for fila in rubro_rows %}
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40" data-rubro="{{ fila.rubro }}">
                         <td class="px-4 py-2 text-gray-900 dark:text-white">{{ fila.rubro }}</td>
                         <td class="px-4 py-2 text-right text-gray-700 dark:text-gray-300">${{ fila.total|floatformat:0|intcomma }}</td>
                         <td class="px-4 py-2 text-right">
@@ -55,6 +55,14 @@ Cada sección es colapsable (Alpine). Empty state cuando sin_datos.
                                   title="% sobre |Total Año| — {{ fila.semaforo }}">
                                 {{ fila.pct }}%
                             </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    {% comment %} A8 (#267): hay datos_bd (tiene_datos_bd) pero el
+                    filtro Clasificación/Ciudad elegido no matchea ningún rubro. {% endcomment %}
+                    <tr>
+                        <td colspan="3" class="px-4 py-4 text-center text-gray-400">
+                            No hay rubros para el filtro seleccionado.
                         </td>
                     </tr>
                     {% endfor %}

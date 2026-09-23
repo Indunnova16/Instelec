@@ -58,6 +58,11 @@ from .importers import (
     PresupuestoPlanoConstruccionExcelImporter,
     detect_excel_format_construccion,
 )
+# Instelec#267 A8 — reusa el MISMO agregador rubro×mes que el importador (A2)
+# usa para construir finv2_bd desde filas_detalle, en vez de duplicar la
+# lógica de suma. Los filtros de Clasificación/Ciudad solo cambian QUÉ
+# subconjunto de filas entra, no cómo se agregan.
+from .importers import _construir_finv2_bd_desde_filas_planas
 from .models import ProyectoConstruccion
 from .models_fin import (
     CostosConstruccion,
@@ -535,6 +540,102 @@ def _kpi_cards_finv2_bd(datos):
     }
 
 
+# ===========================================================================
+# Filtros Clasificación + Ciudad (Instelec#267 Fase 2, A8)
+# ===========================================================================
+# Opciones fijas del <select> Clasificación — mismo vocabulario que valida A2
+# (CLASIFICACIONES_PRESUPUESTO_PLANO) y agrupa A5 (_kpi_cards_finv2_bd): el
+# Excel del cliente solo puede traer una de estas 3 (o el archivo se rechaza
+# en la carga), así que no hace falta derivarlas de filas_detalle.
+_FILTRO_TODOS = 'todos'
+_CLASIFICACION_FILTRO_OPCIONES = [
+    (_CLASIFICACION_FIJO, 'Fijos'),
+    (_CLASIFICACION_VARIABLE, 'Variables'),
+    (_CLASIFICACION_INGRESOS, 'Ingresos'),
+]
+
+
+def _opciones_ciudad(filas):
+    """Ciudades REALES presentes en ``filas_detalle`` (A2), orden alfabético,
+    sin vacíos ni duplicados por variación de tipeo.
+
+    Comparación normalizada (``_fin_normalizar``) para deduplicar
+    "Barranquilla"/"barranquilla "/"BARRANQUILLA" como una sola opción — se
+    conserva el primer valor tal cual lo tipeó el cliente para mostrarlo en
+    el ``<option>``.
+    """
+    vistas = {}
+    for f in filas:
+        if not isinstance(f, dict):
+            continue
+        ciudad = (f.get('ciudad') or '').strip()
+        if not ciudad:
+            continue
+        clave = _fin_normalizar(ciudad)
+        vistas.setdefault(clave, ciudad)
+    return sorted(vistas.values(), key=_fin_normalizar)
+
+
+def _filtrar_filas_detalle(filas, clasificacion, ciudad):
+    """Subconjunto de ``filas_detalle`` que matchea Clasificación Y/O Ciudad.
+
+    ``clasificacion``/``ciudad`` vacíos o ``'todos'`` → esa dimensión no
+    filtra. Comparación normalizada (acentos/mayúsculas/espacios) — mismo
+    criterio que ``_kpi_cards_finv2_bd`` para no ser frágil ante cómo el
+    cliente tipeó el valor en el Excel.
+    """
+    clas_norm = (
+        _fin_normalizar(clasificacion)
+        if clasificacion and clasificacion != _FILTRO_TODOS else None
+    )
+    ciudad_norm = (
+        _fin_normalizar(ciudad)
+        if ciudad and ciudad != _FILTRO_TODOS else None
+    )
+    if clas_norm is None and ciudad_norm is None:
+        return list(filas)
+
+    resultado = []
+    for f in filas:
+        if not isinstance(f, dict):
+            continue
+        if clas_norm is not None and _fin_normalizar(f.get('clasificacion')) != clas_norm:
+            continue
+        if ciudad_norm is not None and _fin_normalizar(f.get('ciudad')) != ciudad_norm:
+            continue
+        resultado.append(f)
+    return resultado
+
+
+def _datos_filtrados_por_clasificacion_ciudad(datos, clasificacion, ciudad):
+    """Reconstruye ``datos`` con ``finv2_bd`` recalculado SOLO sobre las filas
+    de ``filas_detalle`` (A2) que pasan el filtro (A8) — alimenta la matriz
+    (Fase 2) y la tabla de Rubros (Fase 3) ya filtradas.
+
+    Reusa ``_construir_finv2_bd_desde_filas_planas`` (el mismo agregador del
+    importador) para no duplicar la suma por rubro/mes.
+
+    Sin ``filas_detalle`` (presupuesto legacy, formato columnas-por-mes) o
+    sin filtro activo → devuelve ``datos`` intacto: Clasificación/Ciudad no
+    existen por fila en el legacy, así que el filtro simplemente no aplica
+    (nunca rompe la vista).
+    """
+    filas = ((datos or {}).get('finv2_bd') or {}).get('filas_detalle') or []
+    if not filas:
+        return datos
+    sin_filtro = (
+        (not clasificacion or clasificacion == _FILTRO_TODOS)
+        and (not ciudad or ciudad == _FILTRO_TODOS)
+    )
+    if sin_filtro:
+        return datos
+
+    filas_filtradas = _filtrar_filas_detalle(filas, clasificacion, ciudad)
+    resultado = dict(datos)
+    resultado['finv2_bd'] = _construir_finv2_bd_desde_filas_planas(filas_filtradas)
+    return resultado
+
+
 def _merge_presupuesto_datos(existente, nuevo):
     """UPSERT por período (Instelec#267 Fase 1.2): reemplaza SOLO lo que el
     archivo nuevo trae (rubro/concepto + mes), preserva el resto tal cual.
@@ -621,23 +722,57 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
         )
         ctx['tipo'] = 'PLANEADO'
         ctx['presupuesto'] = presupuesto
-        ctx['datos'] = presupuesto.datos if presupuesto else {}
+        datos = presupuesto.datos if presupuesto else {}
+        ctx['datos'] = datos
         ctx['sin_datos'] = presupuesto is None
         ctx['resumen'] = self._resumen_presupuesto(
             proyecto, anio, PresupuestoDetalladoConstruccion.Tipo.PLANEADO)
+
+        # A8 (#267 Fase 2): filtros Clasificación + Ciudad, leídos de
+        # ?clasificacion=&ciudad=, aplicados sobre filas_detalle (A2) ANTES
+        # de construir la matriz (Fase 2) y la tabla de Rubros (Fase 3).
+        # KPI cards (A5, Fase 4) NO se filtran — el issue no lo pide ahí — y
+        # el gate ``tiene_datos_bd`` tampoco: debe reflejar si HAY datos
+        # cargados, no si el filtro elegido tiene resultados (un filtro sin
+        # matches no puede colapsar toda la pestaña a "sin datos cargados").
+        filas_sin_filtrar = ((datos or {}).get('finv2_bd') or {}).get('filas_detalle') or []
+        clasificacion_sel = (self.request.GET.get('clasificacion') or _FILTRO_TODOS).strip()
+        clasificacion_sel = _fin_normalizar(clasificacion_sel) or _FILTRO_TODOS
+        ciudad_sel = (self.request.GET.get('ciudad') or _FILTRO_TODOS).strip()
+        ctx['clasificaciones_disponibles'] = (
+            _CLASIFICACION_FILTRO_OPCIONES if filas_sin_filtrar else []
+        )
+        ctx['ciudades_disponibles'] = _opciones_ciudad(filas_sin_filtrar)
+        ctx['clasificacion_sel'] = clasificacion_sel
+        ctx['ciudad_sel'] = ciudad_sel
+        ctx['filtro_activo'] = bool(filas_sin_filtrar) and (
+            clasificacion_sel != _FILTRO_TODOS
+            or _fin_normalizar(ciudad_sel) != _FILTRO_TODOS
+        )
+        datos_filtrados = _datos_filtrados_por_clasificacion_ciudad(
+            datos, clasificacion_sel, ciudad_sel)
+
         # Rubros del contable (espejo #120): cuando la carga fue una BD contable,
         # los datos viven en datos['finv2_bd'] y se muestran agrupados por rubro.
-        rubro_rows, rubro_total = build_rubro_display_rows(ctx['datos'])
+        # (A8) Se construyen sobre datos_filtrados — matrix_rows/rubro_rows
+        # reflejan el filtro elegido, tiene_datos_bd usa el dato SIN filtrar.
+        rubro_rows_sin_filtrar, _rubro_total_sin_filtrar = build_rubro_display_rows(datos)
+        ctx['tiene_datos_bd'] = bool(rubro_rows_sin_filtrar)
+        rubro_rows, rubro_total = build_rubro_display_rows(datos_filtrados)
         ctx['rubro_rows'] = rubro_rows
         ctx['rubro_total'] = rubro_total
-        ctx['tiene_datos_bd'] = bool(rubro_rows)
+        ctx['matrix_vacia_por_filtro'] = (
+            ctx['filtro_activo'] and ctx['tiene_datos_bd'] and not rubro_rows
+        )
         # A5 (#267 Fase 4): 4 KPI cards ejecutivos por Clasificación real
         # (Ingreso/Costos Fijos/Costos Variables/Resultado), fuente de verdad
-        # filas_detalle de A2 — independiente de rubro_rows/tiene_datos_bd.
-        ctx['kpi_cards'] = _kpi_cards_finv2_bd(ctx['datos'])
+        # filas_detalle de A2 — independiente de rubro_rows/tiene_datos_bd,
+        # SIEMPRE sobre el total sin filtrar (Fase 4 del issue no pide filtro).
+        ctx['kpi_cards'] = _kpi_cards_finv2_bd(datos)
         # A3 (#120): vista bi-modal (matriz 12 meses + filtro mes), espejo de
-        # Mantenimiento, reusando el partial compartido.
-        ctx.update(self._bimodal_context(ctx['datos']))
+        # Mantenimiento, reusando el partial compartido. (A8) Alimentada con
+        # datos_filtrados para que la matriz también respete Clasificación/Ciudad.
+        ctx.update(self._bimodal_context(datos_filtrados))
         # A3 (#267 Fase 1.3): historial de cargas del proyecto — NO se filtra
         # por año/tipo: Janet carga 1 vez/mes y el historial debe mostrar la
         # tendencia entre períodos, no solo el año en pantalla.
