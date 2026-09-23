@@ -262,6 +262,9 @@ class TestA5ImporterColaboradores(TestCase):
         return buf
 
     def test_importa_fila_con_campos_nuevos(self):
+        """Issue #271 (A7): el encabezado legacy 'Fecha Ingreso' puebla
+        `fecha_firma_contrato` (compat retro, split de A1/A3) -- ya NO el
+        `fecha_ingreso` deprecado, que la vista dejó de escribir."""
         archivo = self._build_workbook(
             [
                 ["Jose Herrera", "176-2001", "AYUDANTE", 1750905, "2025-02-01", ""],
@@ -273,7 +276,8 @@ class TestA5ImporterColaboradores(TestCase):
         persona = PersonalCuadrilla.objects.get(documento="176-2001")
         self.assertEqual(persona.nombre, "Jose Herrera")
         self.assertEqual(persona.salario_base, Decimal("1750905"))
-        self.assertEqual(persona.fecha_ingreso, date(2025, 2, 1))
+        self.assertEqual(persona.fecha_firma_contrato, date(2025, 2, 1))
+        self.assertIsNone(persona.fecha_ingreso_proyecto)
         self.assertIsNone(persona.fecha_salida)
         self.assertTrue(persona.activo)
 
@@ -507,6 +511,11 @@ class TestIssue237A4UpsertPorDocumento(TestCase):
         )
 
     def test_reimportar_documento_legacy_actualiza_todos_los_campos_sin_duplicar(self):
+        """Issue #271 (A7): la columna legacy 'Fecha Ingreso' del workbook
+        puebla `fecha_firma_contrato` en cada reimportación (compat retro,
+        split de A1/A3) -- el `fecha_ingreso` deprecado del registro original
+        (creado directo por ORM, simulando un dato legacy pre-split) ya no
+        es tocado por el importador."""
         legacy = PersonalCuadrilla.objects.create(
             nombre='Nombre Legacy', documento='237-A4-LEGACY',
             rol_cuadrilla_id='LINIERO_I', area='', salario_base=Decimal('1'),
@@ -527,7 +536,11 @@ class TestIssue237A4UpsertPorDocumento(TestCase):
         self.assertEqual(actualizado.area, 'MANTENIMIENTO')
         self.assertEqual(actualizado.rol_cuadrilla_id, 'CONDUCTOR')
         self.assertEqual(actualizado.salario_base, Decimal('1850000'))
-        self.assertEqual(actualizado.fecha_ingreso, date(2026, 3, 1))
+        self.assertEqual(actualizado.fecha_firma_contrato, date(2026, 3, 1))
+        self.assertIsNone(actualizado.fecha_ingreso_proyecto)
+        # Legacy deprecado: el importador ya no lo escribe -- conserva el
+        # valor original del registro creado directo por ORM.
+        self.assertEqual(actualizado.fecha_ingreso, date(2020, 1, 1))
         self.assertIsNone(actualizado.fecha_salida)
         self.assertTrue(actualizado.activo)
 

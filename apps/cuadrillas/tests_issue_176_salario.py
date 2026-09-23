@@ -357,9 +357,16 @@ class TestA6ImportColaboradoresExpuestoYExport(TestCase):
         self.assertEqual(persona.nombre, "Via Modal Nuevo")
         self.assertEqual(persona.salario_base, Decimal("1750905"))
 
-    def test_export_descarga_xlsx_con_seis_columnas_incluye_registro_legacy(self):
+    def test_export_descarga_xlsx_con_ocho_columnas_incluye_registro_legacy(self):
         """Test contra dato legacy real: Andrea (documento 43482087,
-        LINIERO_I, salario_base=15000.00) debe aparecer en el export."""
+        LINIERO_I, salario_base=15000.00) debe aparecer en el export.
+
+        Issue #271 (A7): el header pasó de 6 a 8 columnas -- 'Área' se agregó
+        (issue #186) y la columna única 'Fecha Ingreso' se dividió en 'Fecha
+        Firma Contrato' + 'Fecha Ingreso Proyecto' (A1/A3). El dato legacy de
+        Andrea simula un registro YA backfillado por la migración 0041 (A1):
+        su fecha_ingreso original quedó en fecha_firma_contrato, no en
+        fecha_ingreso_proyecto (dato nuevo, sin fuente legacy)."""
         cargo = Cargo.objects.filter(codigo="LINIERO_I").first()
         if cargo is None:
             cargo = Cargo.objects.create(codigo="LINIERO_I", nombre="Liniero I")
@@ -369,7 +376,7 @@ class TestA6ImportColaboradoresExpuestoYExport(TestCase):
             documento="43482087",
             rol_cuadrilla_id="LINIERO_I",
             salario_base=Decimal("15000.00"),
-            fecha_ingreso=date(2025, 1, 1),
+            fecha_firma_contrato=date(2025, 1, 1),
         )
 
         url = reverse("cuadrillas:colaboradores_export")
@@ -386,14 +393,25 @@ class TestA6ImportColaboradoresExpuestoYExport(TestCase):
         header = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
         self.assertEqual(
             header,
-            ["Documento", "Nombre", "Cargo", "Salario Base", "Fecha Ingreso", "Fecha Salida"],
+            [
+                "Documento", "Nombre", "Área", "Cargo", "Salario Base",
+                "Fecha Firma Contrato", "Fecha Ingreso Proyecto", "Fecha Salida",
+            ],
         )
+        # Issue #237 (previo, no relacionado a #271): un documento
+        # todo-numérico sin cero inicial se exporta como int (para que Excel
+        # aplique separador de miles) -- la clave del dict es ese int, no el
+        # string original.
         filas = {row[0]: row for row in ws.iter_rows(min_row=2, values_only=True)}
-        self.assertIn("43482087", filas)
-        fila_andrea = filas["43482087"]
+        self.assertIn(43482087, filas)
+        fila_andrea = filas[43482087]
         self.assertEqual(fila_andrea[1], "Andrea")
-        self.assertEqual(fila_andrea[2], "Liniero I")
-        self.assertEqual(fila_andrea[3], 15000.0)
+        self.assertEqual(fila_andrea[3], "Liniero I")
+        self.assertEqual(fila_andrea[4], 15000.0)
+        self.assertEqual(fila_andrea[5], "2025-01-01")
+        # Celda vacía (sin fecha_ingreso_proyecto diligenciada): openpyxl la
+        # lee de vuelta como None, no como ''.
+        self.assertIsNone(fila_andrea[6])
 
     def test_export_colaborador_sin_fecha_salida_exporta_celda_vacia(self):
         """Edge case: colaborador activo (sin fecha_salida) no debe romper

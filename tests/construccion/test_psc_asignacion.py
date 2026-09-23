@@ -28,7 +28,7 @@ def asignacion_data(db):
     )
     personal = PersonalCuadrilla.objects.create(
         nombre='Carla Disponible', documento='PSC-B6-001', rol_cuadrilla=cargo,
-        area='CONSTRUCCION', fecha_ingreso=date(2025, 1, 1),
+        area='CONSTRUCCION', fecha_ingreso_proyecto=date(2025, 1, 1),
     )
     no_elegible = PersonalCuadrilla.objects.create(
         nombre='Nora Sin Aprobación', documento='PSC-B6-002', rol_cuadrilla=cargo_no_conductor, area='CONSTRUCCION',
@@ -130,7 +130,7 @@ def test_rechaza_placa_sin_conductor_o_con_colaborador_no_conductor(admin_user, 
     )
     operario = PersonalCuadrilla.objects.create(
         nombre='Olga Operaria', documento='PSC-B6-003', rol_cuadrilla=cargo_operario,
-        area='CONSTRUCCION', fecha_ingreso=date(2025, 1, 1),
+        area='CONSTRUCCION', fecha_ingreso_proyecto=date(2025, 1, 1),
     )
     ProgramacionSemanalConstruccionPersonal.objects.create(programacion=programacion, personal=personal)
     ProgramacionSemanalConstruccionPersonal.objects.create(programacion=programacion, personal=operario)
@@ -172,7 +172,7 @@ def test_detalle_separa_categorias_y_expone_selectores_buscables(admin_user, cli
     programacion, personal, _, _ = asignacion_data
     administrativo = PersonalCuadrilla.objects.create(
         nombre='Andrea Administrativa', documento='PSC-B6-003', rol_cuadrilla=personal.rol_cuadrilla,
-        area='CONSTRUCCION', fecha_ingreso=date(2025, 1, 1),
+        area='CONSTRUCCION', fecha_ingreso_proyecto=date(2025, 1, 1),
     )
     AsignacionPersonalProyectoConstruccion.objects.create(
         proyecto=programacion.proyecto, personal=administrativo, fecha_inicio=date(2026, 8, 1),
@@ -185,7 +185,7 @@ def test_detalle_separa_categorias_y_expone_selectores_buscables(admin_user, cli
     )
     disponible = PersonalCuadrilla.objects.create(
         nombre='Camilo Disponible', documento='PSC-B6-004', rol_cuadrilla=personal.rol_cuadrilla,
-        area='CONSTRUCCION', fecha_ingreso=date(2025, 1, 1),
+        area='CONSTRUCCION', fecha_ingreso_proyecto=date(2025, 1, 1),
     )
     AsignacionPersonalProyectoConstruccion.objects.create(
         proyecto=programacion.proyecto, personal=disponible, fecha_inicio=date(2026, 8, 1),
