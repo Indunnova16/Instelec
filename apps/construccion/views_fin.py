@@ -35,32 +35,31 @@ from django.shortcuts import get_object_or_404
 from django.views.generic import TemplateView
 
 from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
-
-from apps.financiero.indicadores_finv2 import (
-    calcular_indicadores_tecnico_financieros,
-    calcular_resumen_ans,
-)
-
-from .models import ProyectoConstruccion
-from .models_fin import (
-    PresupuestoDetalladoConstruccion,
-    CostosConstruccion,
-    FacturacionConstruccion,
-    IndicadorANSConstruccion,
-)
-from .importers import (
-    ContableConstruccionExcelImporter,
-    PresupuestoConstruccionExcelImporter,
-    detect_excel_format_construccion,
-)
 from apps.financiero.importers_finv2 import (
     MESES_FISCALES_KEYS,
     build_mes_filter_rows,
     build_rubro_display_rows,
     build_rubro_matrix_rows,
 )
+from apps.financiero.indicadores_finv2 import (
+    calcular_indicadores_tecnico_financieros,
+    calcular_resumen_ans,
+)
 from apps.financiero.models_finv2_mapeo import RUBRO_NO_CLASIFICADO
 
+from .importers import (
+    ContableConstruccionExcelImporter,
+    PresupuestoConstruccionExcelImporter,
+    PresupuestoPlanoConstruccionExcelImporter,
+    detect_excel_format_construccion,
+)
+from .models import ProyectoConstruccion
+from .models_fin import (
+    CostosConstruccion,
+    FacturacionConstruccion,
+    IndicadorANSConstruccion,
+    PresupuestoDetalladoConstruccion,
+)
 
 # Roles administrativos con acceso al financiero (espejo de views.py::ALL_ADMIN_ROLES).
 ALL_ADMIN_ROLES = [
@@ -348,6 +347,22 @@ def _merge_finv2_bd(existente, nuevo):
     preserva — y recalcula ``total`` de cuenta/rubro/general a partir de los
     meses ya mezclados, para que la paridad ``sum(meses) == total`` se
     mantenga íntegra después de N cargas.
+
+    Instelec#267 A2 — dos extensiones sobre lo que dejó A1:
+    - El importador plano (``PresupuestoPlanoConstruccionExcelImporter``) NO
+      produce ``cuentas`` (eso es exclusivo del importador contable BD): un
+      rubro nuevo llega con ``meses`` directo y una lista de ``cuentas``
+      vacía. Reconstruir ``meses`` a partir de ``cuentas`` en ese caso
+      BORRARÍA el dato recién puesto (lista vacía → meses vacíos) — por eso
+      esta función ahora bifurca: si el rubro nuevo trae cuentas, reconcilia
+      por cuenta (comportamiento original, intacto); si no, hace upsert
+      directo sobre ``meses`` del rubro, sin tocar las ``cuentas``
+      pre-existentes de ese rubro (por si alguna vez también recibió una
+      carga contable).
+    - ``filas_detalle`` (fuente de verdad de Clasificación/Ciudad/Código
+      contable por fila, que A8/A5 necesitan y que el agregado ``rubros`` no
+      distingue) se mezcla con el mismo criterio "reemplaza período, no
+      duplica": upsert por (rubro, ciudad, año, mes).
     """
     if not nuevo:
         return dict(existente or {})
@@ -366,33 +381,41 @@ def _merge_finv2_bd(existente, nuevo):
     for rubro, info_nuevo in (nuevo.get('rubros') or {}).items():
         destino = rubros_actual.setdefault(
             rubro, {'total': 0.0, 'meses': {}, 'cuentas': []})
-        cuentas_por_cta = {
-            c.get('cta_equivalente'): dict(c)
-            for c in destino.get('cuentas') or []
-        }
-        for cuenta_nueva in info_nuevo.get('cuentas') or []:
-            cta = cuenta_nueva.get('cta_equivalente')
-            actual_cta = cuentas_por_cta.get(cta) or {
-                'cta_equivalente': cta,
-                'descripcion': cuenta_nueva.get('descripcion', ''),
-                'total': 0.0,
-                'meses': {},
+        cuentas_nuevo = info_nuevo.get('cuentas') or []
+        if cuentas_nuevo:
+            cuentas_por_cta = {
+                c.get('cta_equivalente'): dict(c)
+                for c in destino.get('cuentas') or []
             }
-            meses_cta = dict(actual_cta.get('meses') or {})
-            meses_cta.update(cuenta_nueva.get('meses') or {})
-            actual_cta['meses'] = meses_cta
-            actual_cta['total'] = round(sum(meses_cta.values()), 2)
-            if cuenta_nueva.get('descripcion'):
-                actual_cta['descripcion'] = cuenta_nueva['descripcion']
-            cuentas_por_cta[cta] = actual_cta
+            for cuenta_nueva in cuentas_nuevo:
+                cta = cuenta_nueva.get('cta_equivalente')
+                actual_cta = cuentas_por_cta.get(cta) or {
+                    'cta_equivalente': cta,
+                    'descripcion': cuenta_nueva.get('descripcion', ''),
+                    'total': 0.0,
+                    'meses': {},
+                }
+                meses_cta = dict(actual_cta.get('meses') or {})
+                meses_cta.update(cuenta_nueva.get('meses') or {})
+                actual_cta['meses'] = meses_cta
+                actual_cta['total'] = round(sum(meses_cta.values()), 2)
+                if cuenta_nueva.get('descripcion'):
+                    actual_cta['descripcion'] = cuenta_nueva['descripcion']
+                cuentas_por_cta[cta] = actual_cta
 
-        destino['cuentas'] = list(cuentas_por_cta.values())
-        meses_rubro = {}
-        for cuenta in destino['cuentas']:
-            for mk, mv in (cuenta.get('meses') or {}).items():
-                meses_rubro[mk] = round(meses_rubro.get(mk, 0.0) + mv, 2)
-        destino['meses'] = meses_rubro
-        destino['total'] = round(sum(meses_rubro.values()), 2)
+            destino['cuentas'] = list(cuentas_por_cta.values())
+            meses_rubro = {}
+            for cuenta in destino['cuentas']:
+                for mk, mv in (cuenta.get('meses') or {}).items():
+                    meses_rubro[mk] = round(meses_rubro.get(mk, 0.0) + mv, 2)
+            destino['meses'] = meses_rubro
+        else:
+            # Formato plano (#267 A2): sin cuentas — upsert directo por mes.
+            meses_actual = dict(destino.get('meses') or {})
+            meses_actual.update(info_nuevo.get('meses') or {})
+            destino['meses'] = meses_actual
+
+        destino['total'] = round(sum(destino['meses'].values()), 2)
         rubros_actual[rubro] = destino
 
     total_general = round(sum(r['total'] for r in rubros_actual.values()), 2)
@@ -404,7 +427,22 @@ def _merge_finv2_bd(existente, nuevo):
     })
     cuentas_count = sum(len(r.get('cuentas') or []) for r in rubros_actual.values())
 
-    return {
+    # filas_detalle (#267 A2): mismo criterio "reemplaza período, no duplica"
+    # de A1, a nivel de fila cruda — upsert por (rubro, ciudad, año, mes).
+    filas_existente = list(existente.get('filas_detalle') or [])
+    filas_nuevo = list(nuevo.get('filas_detalle') or [])
+    if filas_nuevo:
+        indice = {
+            (f.get('rubro'), f.get('ciudad'), f.get('anio'), f.get('mes')): f
+            for f in filas_existente
+        }
+        for f in filas_nuevo:
+            indice[(f.get('rubro'), f.get('ciudad'), f.get('anio'), f.get('mes'))] = f
+        filas_detalle = list(indice.values())
+    else:
+        filas_detalle = filas_existente
+
+    resultado = {
         'rubros': rubros_actual,
         'total': total_general,
         'cuentas_count': cuentas_count,
@@ -416,6 +454,9 @@ def _merge_finv2_bd(existente, nuevo):
             + (nuevo.get('filas_sin_mes') or 0)
         ),
     }
+    if filas_detalle:
+        resultado['filas_detalle'] = filas_detalle
+    return resultado
 
 
 def _merge_presupuesto_datos(existente, nuevo):
@@ -503,11 +544,16 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
             res = ContableConstruccionExcelImporter().procesar(archivo)
         elif formato == 'presupuesto':
             res = PresupuestoConstruccionExcelImporter().procesar(archivo)
+        elif formato == 'presupuesto_plano':
+            # Instelec#267 A2: formato plano del cliente
+            # (Tipo|Proyecto|Rubro|Clasificacion|Valor|mes|año|ciudad).
+            res = PresupuestoPlanoConstruccionExcelImporter().procesar(archivo)
         else:
             messages.error(
                 request,
-                'Formato no reconocido. Suba la Base de Datos contable (hoja BD) '
-                'o el Presupuesto (columnas de mes).',
+                'Formato no reconocido. Suba la Base de Datos contable (hoja BD), '
+                'el Presupuesto (columnas de mes) o el Presupuesto plano '
+                '(Tipo|Proyecto|Rubro|Clasificacion|Valor|mes|año|ciudad).',
             )
             return redirect(destino)
 
