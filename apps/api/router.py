@@ -73,9 +73,13 @@ from apps.lineas.api import router as lineas_router
 from apps.cuadrillas.api import router as cuadrillas_router
 from apps.actividades.api import router as actividades_router
 from apps.campo.api import router as campo_router
+from apps.construccion.api import router as construccion_router
 
 api.add_router("/auth/", usuarios_router, tags=["Autenticación"])
 api.add_router("/lineas/", lineas_router, tags=["Líneas y Torres"])
 api.add_router("/cuadrillas/", cuadrillas_router, tags=["Cuadrillas"])
 api.add_router("/actividades/", actividades_router, tags=["Actividades"])
 api.add_router("/campo/", campo_router, tags=["Campo"])
+# Instelec#267 A9 — sin prefijo: el endpoint vive en /api/presupuesto/...
+# (el issue #246 lo consume con esa ruta EXACTA, no /api/construccion/presupuesto/...).
+api.add_router("", construccion_router, tags=["Financiero — Construcción"])
