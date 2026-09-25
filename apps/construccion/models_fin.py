@@ -381,6 +381,12 @@ class HistorialCargaPresupuestoConstruccion(BaseModel):
     )
     archivo_nombre = models.CharField('Archivo de origen', max_length=255, blank=True)
     detalle_errores = models.JSONField('Detalle de errores', default=dict, blank=True)
+    # Instelec#268 — el mismo historial audita las cargas de gastos REALES.
+    # Default PLANEADO: todas las filas previas a #268 son del planeado.
+    tipo = models.CharField(
+        'Tipo', max_length=10, choices=PresupuestoDetalladoConstruccion.Tipo.choices,
+        default=PresupuestoDetalladoConstruccion.Tipo.PLANEADO,
+    )
 
     class Meta:
         db_table = 'construccion_historial_carga_presupuesto'
@@ -406,3 +412,75 @@ class HistorialCargaPresupuestoConstruccion(BaseModel):
         if self.anio:
             return str(self.anio)
         return '—'
+
+
+# ===========================================================================
+# Gastos reales (Instelec#268) — una fila por línea del Excel de 18 columnas
+# ===========================================================================
+class GastoRealConstruccion(BaseModel):
+    """Línea de gasto real (ejecutado) del proyecto, cargada desde el Excel de
+    18 columnas del cliente (Auxiliar … Fijo).
+
+    Se persiste línea por línea (no JSON) porque #268 filtra por proveedor,
+    centro de costo, clasificación y período, y liga cada gasto al maestro de
+    proveedores (#262). Una carga reemplaza TODAS las líneas del proyecto en
+    los períodos que trae el archivo (UPSERT por período).
+    """
+
+    proyecto = models.ForeignKey(
+        'construccion.ProyectoConstruccion',
+        on_delete=models.CASCADE,
+        related_name='gastos_reales',
+        verbose_name='Proyecto',
+    )
+    carga = models.ForeignKey(
+        HistorialCargaPresupuestoConstruccion,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='gastos_reales',
+        verbose_name='Carga',
+    )
+    proveedor = models.ForeignKey(
+        'financiero.Proveedor',
+        on_delete=models.PROTECT, null=True, blank=True,
+        related_name='gastos_reales_construccion',
+        verbose_name='Proveedor (#262)',
+    )
+    periodo = models.CharField('Periodo (AAAAMM)', max_length=6)
+    anio = models.PositiveIntegerField('Año')
+    mes = models.PositiveSmallIntegerField('Mes')
+
+    auxiliar = models.CharField('Auxiliar', max_length=50, blank=True)
+    desc_auxiliar = models.CharField('Desc. auxiliar', max_length=255, blank=True)
+    neto = models.DecimalField('Neto', max_digits=18, decimal_places=2)
+    fecha = models.DateField('Fecha', null=True, blank=True)
+    docto = models.CharField('Docto.', max_length=60, blank=True)
+    tercero_nit = models.CharField('Tercero movto (NIT)', max_length=30, blank=True)
+    tercero_razon_social = models.CharField('Razón social tercero', max_length=255, blank=True)
+    desc_co_movto = models.CharField('Desc. C.O. movto', max_length=255, blank=True)
+    usuario_creacion = models.CharField('Usuario creación', max_length=150, blank=True)
+    co_movto = models.CharField('C.O. movto', max_length=30, blank=True)
+    notas = models.TextField('Notas', blank=True)
+    centro_costo = models.CharField('C.Costo', max_length=50, blank=True)
+    desc_centro_costo = models.CharField('Desc. C.Costo', max_length=255, blank=True)
+    cuenta_equiv = models.CharField('Cuenta Equiv', max_length=150, blank=True)
+    cdec_equiv = models.CharField('CdeC equiv', max_length=150, blank=True)
+    cargo = models.CharField('Cargo', max_length=150, blank=True)
+    fijo = models.CharField('Fijo', max_length=30, blank=True)
+
+    # Derivados en la carga: rubro presupuestal (MapeoCtaRubro, el mismo del
+    # planeado) y clasificación Fijo/Variable (columna "Fijo").
+    rubro = models.CharField('Rubro', max_length=150, blank=True)
+    clasificacion = models.CharField('Clasificación', max_length=10, blank=True)
+
+    class Meta:
+        db_table = 'construccion_gasto_real'
+        verbose_name = 'Gasto real de construcción'
+        verbose_name_plural = 'Gastos reales de construcción'
+        ordering = ['periodo', 'cuenta_equiv', 'fecha']
+        indexes = [
+            models.Index(fields=['proyecto', 'periodo'], name='idx_gasto_real_proy_periodo'),
+            models.Index(fields=['proyecto', 'proveedor'], name='idx_gasto_real_proy_prov'),
+        ]
+
+    def __str__(self):
+        return f'{self.periodo} {self.cuenta_equiv} {self.neto}'

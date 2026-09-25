@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
 {% load humanize %}
 {% comment %}
-B5 (#123 Fase 3.3) — Presupuesto Real de Construcción.
+Instelec#268 — Presupuesto Real (Ejecutado) de Construcción.
 Servido por PresupuestoRealConstruccionView (construccion:fin_presupuesto_real).
-
-Contexto (B4): proyecto, anio, mes, active_subtab, tipo='REAL',
-  presupuesto, datos (dict), sin_datos, resumen, total_costos_registrados.
-Reusa _financiero_cargar_bd.html + _financiero_presupuesto_tabla.html.
+Carga del Excel de 18 columnas (POST a esta misma vista) + comparativo
+Real vs Planeado (#267): KPI cards, filtros, matriz Gastos Reales × Meses con
+Total Real / Presupuesto / Variación / semáforo, proveedores (#262) e historial.
 {% endcomment %}
 
 {% block title %}Financiero — Presupuesto Real · {{ proyecto.nombre }}{% endblock %}
@@ -31,47 +30,224 @@ Reusa _financiero_cargar_bd.html + _financiero_presupuesto_tabla.html.
     </div>
 </nav>
 
-<main class="space-y-4" x-data="{ tab: '{% if sin_datos %}cargar{% else %}tabla{% endif %}' }">
+<main class="space-y-4" x-data="{ tab: '{% if sin_datos or request.GET.tab == 'cargar' %}cargar{% else %}tabla{% endif %}' }">
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Presupuesto Real (Ejecutado)</h1>
             <p class="text-gray-500 dark:text-gray-400">{{ proyecto.nombre }} · Año {{ anio }}</p>
         </div>
-        <form method="get" class="flex items-end gap-2 text-sm">
-            <label class="flex flex-col">
-                <span class="text-xs text-gray-500">Año</span>
-                <input type="number" name="anio" value="{{ anio }}"
-                       class="w-24 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
-            </label>
-            <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Ver</button>
-        </form>
     </header>
 
-    <!-- Cruce con costos registrados -->
-    <div class="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 flex items-center justify-between">
-        <div>
-            <p class="text-sm font-medium text-blue-800 dark:text-blue-300">Costos ejecutados registrados ({{ anio }})</p>
-            <p class="text-xs text-blue-700 dark:text-blue-400">Suma de los registros de costos del año (módulo Costos).</p>
-        </div>
-        <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">${{ total_costos_registrados|default:0|floatformat:0|intcomma }}</p>
-    </div>
 
     <div class="border-b border-gray-200 dark:border-gray-700">
         <nav class="-mb-px flex gap-6" aria-label="Pestañas">
-            <button @click="tab = 'cargar'"
-                    :class="tab === 'cargar' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
-                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">Cargar Ejecución</button>
-            <button @click="tab = 'tabla'"
+            <button @click="tab = 'tabla'" data-testid="tab-comparativo"
                     :class="tab === 'tabla' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
-                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">Ejecución por Rubros</button>
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">Real vs Planeado</button>
+            <button @click="tab = 'cargar'" data-testid="tab-cargar"
+                    :class="tab === 'cargar' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition">Cargar gastos reales</button>
         </nav>
     </div>
 
-    <div x-show="tab === 'cargar'" x-cloak>
-        {% include "construccion/_financiero_cargar_bd.html" %}
-    </div>
-    <div x-show="tab === 'tabla'" x-cloak class="space-y-6">
-        {% include "construccion/_financiero_presupuesto_tabla.html" %}
-    </div>
+    <!-- ============================ CARGA ============================ -->
+    <section x-show="tab === 'cargar'" x-cloak class="space-y-6">
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 space-y-4">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Cargar Excel de gastos reales</h2>
+            <form method="post" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-3 sm:items-end">
+                {% csrf_token %}
+                <label class="flex flex-col text-sm">
+                    <span class="text-xs text-gray-500">Archivo .xlsx (18 columnas)</span>
+                    <input type="file" name="archivo" accept=".xlsx" required data-testid="input-archivo-real"
+                           class="text-sm text-gray-700 dark:text-gray-300">
+                </label>
+                <button type="submit" data-testid="btn-cargar-real"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Cargar</button>
+                <a href="{% url 'construccion:fin_presupuesto_real_plantilla' proyecto.id %}"
+                   class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Descargar plantilla</a>
+            </form>
+            <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                <p><strong>Columnas, en este orden:</strong> {{ columnas_excel|join:" · " }}</p>
+                <p><strong>Validaciones:</strong> el NIT (Tercero movto) debe existir en el
+                    <a class="text-blue-600 underline" href="{% url 'financiero:proveedores_lista' %}">maestro de proveedores</a>
+                    (si está inactivo se avisa pero se carga) · Periodo AAAAMM · Neto positivo ·
+                    Fecha DD/MM/AAAA, no más de 30 días anterior al período · sin líneas duplicadas del mismo Docto.
+                    Si hay un solo error no se guarda nada y se listan todos.</p>
+                <p><strong>Volver a cargar un período lo reemplaza completo</strong> (no duplica).</p>
+            </div>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Historial de cargas</h2>
+            <div class="overflow-x-auto">
+            <table class="min-w-full text-sm" data-testid="historial-cargas-real">
+                <thead class="text-left text-xs text-gray-500 uppercase">
+                    <tr><th class="py-2 pr-4">Fecha</th><th class="py-2 pr-4">Usuario</th><th class="py-2 pr-4">Filas</th>
+                        <th class="py-2 pr-4">Total</th><th class="py-2 pr-4">Período</th><th class="py-2 pr-4">Estado</th><th class="py-2">Archivo</th></tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                {% for h in historial_cargas %}
+                    <tr class="text-gray-700 dark:text-gray-300">
+                        <td class="py-2 pr-4">{{ h.fecha|date:"d/m/Y H:i" }}</td>
+                        <td class="py-2 pr-4">{{ h.usuario|default:"—" }}</td>
+                        <td class="py-2 pr-4">{{ h.filas_procesadas }}</td>
+                        <td class="py-2 pr-4">${{ h.valor_total|floatformat:0|intcomma }}</td>
+                        <td class="py-2 pr-4">{{ h.periodo_display }}</td>
+                        <td class="py-2 pr-4">
+                            {% if h.estado == 'PROCESADA' %}<span class="text-green-700">✅ Procesada</span>
+                            {% else %}<details><summary class="text-red-700 cursor-pointer">❌ Error ({{ h.detalle_errores.total_errores|default:0 }})</summary>
+                                <ul class="mt-1 text-xs text-red-700 list-disc pl-4">{% for e in h.detalle_errores.errores %}<li>{{ e }}</li>{% endfor %}</ul></details>
+                            {% endif %}
+                        </td>
+                        <td class="py-2 text-xs text-gray-500">{{ h.archivo_nombre }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="py-3 text-gray-500">Aún no hay cargas de gastos reales.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================= COMPARATIVO ========================= -->
+    <section x-show="tab === 'tabla'" x-cloak class="space-y-6">
+        <form method="get" class="flex flex-wrap items-end gap-3 text-sm" data-testid="filtros-real">
+            <label class="flex flex-col"><span class="text-xs text-gray-500">Año</span>
+                <input type="number" name="anio" value="{{ anio }}" class="w-24 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm"></label>
+            <label class="flex flex-col"><span class="text-xs text-gray-500">Período</span>
+                <select name="periodo" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+                    <option value="">Todos</option>
+                    {% for p in opciones.periodos %}<option value="{{ p }}" {% if filtros.periodo == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+                </select></label>
+            <label class="flex flex-col"><span class="text-xs text-gray-500">Clasificación</span>
+                <select name="clasificacion" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+                    <option value="">Todas</option>
+                    {% for c in opciones.clasificaciones %}<option value="{{ c }}" {% if filtros.clasificacion == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select></label>
+            <label class="flex flex-col"><span class="text-xs text-gray-500">Proveedor</span>
+                <select name="proveedor" class="max-w-xs rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+                    <option value="">Todos</option>
+                    {% for nit, nombre in opciones.proveedores %}<option value="{{ nit }}" {% if filtros.proveedor == nit %}selected{% endif %}>{{ nombre }} ({{ nit }})</option>{% endfor %}
+                </select></label>
+            <label class="flex flex-col"><span class="text-xs text-gray-500">Centro de costo</span>
+                <select name="centro_costo" class="max-w-xs rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white text-sm">
+                    <option value="">Todos</option>
+                    {% for cc, desc in opciones.centros_costo %}<option value="{{ cc }}" {% if filtros.centro_costo == cc %}selected{% endif %}>{{ cc }}{% if desc %} — {{ desc }}{% endif %}</option>{% endfor %}
+                </select></label>
+            <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Filtrar</button>
+            {% if filtro_activo %}<a href="?anio={{ anio }}" class="px-3 py-2 text-sm text-gray-600 underline">Limpiar</a>{% endif %}
+            <div class="ml-auto flex gap-2">
+                {% if 'pdf' in formatos_reporte_permitidos %}<a href="{% url 'construccion:fin_presupuesto_real_pdf' proyecto.id %}?{{ querystring_filtros }}" class="px-3 py-2 border rounded-lg text-sm">PDF</a>{% endif %}
+                {% if 'excel' in formatos_reporte_permitidos %}<a href="{% url 'construccion:fin_presupuesto_real_excel' proyecto.id %}?{{ querystring_filtros }}" class="px-3 py-2 border rounded-lg text-sm">Excel</a>{% endif %}
+                {% if 'csv' in formatos_reporte_permitidos %}<a href="{% url 'construccion:fin_presupuesto_real_csv' proyecto.id %}?{{ querystring_filtros }}" class="px-3 py-2 border rounded-lg text-sm">CSV</a>{% endif %}
+            </div>
+        </form>
+
+        {% with k=comparativo.kpi %}
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" data-testid="kpi-cards-real">
+            <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                <p class="text-xs uppercase text-gray-500">Planeado</p>
+                <p class="text-xl font-bold text-gray-900 dark:text-white">${{ k.planeado|floatformat:0|intcomma }}</p></div>
+            <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                <p class="text-xs uppercase text-gray-500">Real</p>
+                <p class="text-xl font-bold text-gray-900 dark:text-white">${{ k.real|floatformat:0|intcomma }}</p></div>
+            <div class="rounded-lg border p-4 {% if k.semaforo == 'rojo' %}border-red-300 bg-red-50{% elif k.semaforo == 'amarillo' %}border-yellow-300 bg-yellow-50{% elif k.semaforo == 'verde' %}border-green-300 bg-green-50{% else %}border-gray-200 bg-white dark:bg-gray-800{% endif %}">
+                <p class="text-xs uppercase text-gray-500">Variación total</p>
+                <p class="text-xl font-bold">${{ k.variacion|floatformat:0|intcomma }}</p>
+                <p class="text-xs">{% if k.variacion_pct is not None %}{{ k.variacion_pct }}%{% else %}sin presupuesto{% endif %}</p></div>
+            <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                <p class="text-xs uppercase text-gray-500">Cumplimiento</p>
+                <p class="text-xl font-bold text-gray-900 dark:text-white">{% if k.cumplimiento_pct is not None %}{{ k.cumplimiento_pct }}%{% else %}—{% endif %}</p></div>
+        </div>
+        {% endwith %}
+
+        <p class="text-xs text-gray-500">
+            Presupuesto comparado: {% if filtros.periodo %}período {{ filtros.periodo }}{% elif comparativo.meses_alcance_label %}meses con ejecución cargada ({{ comparativo.meses_alcance_label }} {{ anio }}){% else %}sin ejecución cargada{% endif %}.
+            {% if not comparativo.tiene_planeado %}<strong>No hay presupuesto planeado cargado para {{ anio }}</strong> (pestaña Presupuesto Planeado).{% endif %}
+            Semáforo: 🟢 bajo presupuesto · 🟡 0–10&nbsp;% sobre · 🔴 más de 10&nbsp;% sobre.
+            {% if filtros.proveedor or filtros.centro_costo or filtros.clasificacion %}El presupuesto no se divide por proveedor/centro de costo: con esos filtros se compara lo real filtrado contra el presupuesto de la cuenta.{% endif %}
+        </p>
+
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+            <table class="min-w-full text-xs" data-testid="matriz-gastos-reales">
+                <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                    <tr>
+                        <th class="px-2 py-2 text-left">Rubro / Cuenta Equiv</th>
+                        {% for m in meses_cortos %}<th class="px-2 py-2 text-right">{{ m }}</th>{% endfor %}
+                        <th class="px-2 py-2 text-right">Total Real</th>
+                        <th class="px-2 py-2 text-right">Presupuesto</th>
+                        <th class="px-2 py-2 text-right">Variación ($)</th>
+                        <th class="px-2 py-2 text-right">%</th>
+                        <th class="px-2 py-2 text-center">Semáforo</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-gray-700 dark:text-gray-300">
+                {% for f in comparativo.filas %}
+                    <tr class="{% if f.es_subtotal %}bg-gray-50 dark:bg-gray-900 font-semibold{% endif %}">
+                        <td class="px-2 py-1 whitespace-nowrap">{% if not f.es_subtotal %}<span class="pl-4"></span>{% endif %}{{ f.nombre }}</td>
+                        {% for v in f.meses %}<td class="px-2 py-1 text-right">{% if v %}{{ v|floatformat:0|intcomma }}{% else %}<span class="text-gray-300">—</span>{% endif %}</td>{% endfor %}
+                        <td class="px-2 py-1 text-right">{{ f.total_real|floatformat:0|intcomma }}</td>
+                        <td class="px-2 py-1 text-right">{% if f.presupuesto is not None %}{{ f.presupuesto|floatformat:0|intcomma }}{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+                        <td class="px-2 py-1 text-right">{% if f.variacion is not None %}{{ f.variacion|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+                        <td class="px-2 py-1 text-right">{% if f.variacion_pct is not None %}{{ f.variacion_pct }}%{% else %}—{% endif %}</td>
+                        <td class="px-2 py-1 text-center" data-semaforo="{{ f.semaforo }}">{% if f.semaforo == 'verde' %}🟢{% elif f.semaforo == 'amarillo' %}🟡{% elif f.semaforo == 'rojo' %}🔴{% else %}<span class="text-gray-400" title="Sin presupuesto">⚪</span>{% endif %}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="18" class="px-3 py-4 text-gray-500">{% if filtro_activo %}Ningún gasto real coincide con los filtros.{% else %}Aún no hay gastos reales cargados para {{ anio }}. Use la pestaña «Cargar gastos reales».{% endif %}</td></tr>
+                {% endfor %}
+                </tbody>
+                {% if comparativo.filas %}
+                <tfoot class="bg-gray-100 dark:bg-gray-700 font-bold">
+                    <tr>
+                        <td class="px-2 py-2">Total</td>
+                        {% for v in comparativo.totales_mes %}<td class="px-2 py-2 text-right">{% if v %}{{ v|floatformat:0|intcomma }}{% endif %}</td>{% endfor %}
+                        <td class="px-2 py-2 text-right">{{ comparativo.total_real|floatformat:0|intcomma }}</td>
+                        <td class="px-2 py-2 text-right">{{ comparativo.total_presupuesto|floatformat:0|intcomma }}</td>
+                        <td class="px-2 py-2 text-right">{{ comparativo.kpi.variacion|floatformat:0|intcomma }}</td>
+                        <td class="px-2 py-2 text-right">{% if comparativo.kpi.variacion_pct is not None %}{{ comparativo.kpi.variacion_pct }}%{% endif %}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Proveedores</h2>
+            <div class="overflow-x-auto">
+            <table class="min-w-full text-sm" data-testid="tabla-proveedores-real">
+                <thead class="text-left text-xs text-gray-500 uppercase">
+                    <tr><th class="py-2 pr-4">Proveedor</th><th class="py-2 pr-4">NIT</th><th class="py-2 pr-4">Estado</th>
+                        <th class="py-2 pr-4 text-right">Líneas</th><th class="py-2 pr-4 text-right">Total {% if filtros.periodo %}período{% else %}(filtro){% endif %}</th>
+                        <th class="py-2 pr-4 text-right">Acumulado {{ anio }}</th><th class="py-2"></th></tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-gray-700 dark:text-gray-300">
+                {% for p in comparativo.proveedores %}
+                    <tr>
+                        <td class="py-2 pr-4">{{ p.nombre }}</td>
+                        <td class="py-2 pr-4">{{ p.nit }}</td>
+                        <td class="py-2 pr-4">{% if p.activo is None %}—{% elif p.activo %}<span class="text-green-700">Activo</span>{% else %}<span class="text-red-700">Inactivo</span>{% endif %}</td>
+                        <td class="py-2 pr-4 text-right">{{ p.lineas }}</td>
+                        <td class="py-2 pr-4 text-right">${{ p.total|floatformat:0|intcomma }}</td>
+                        <td class="py-2 pr-4 text-right">${{ p.total_anio|floatformat:0|intcomma }}</td>
+                        <td class="py-2">{% if p.proveedor %}<a class="text-blue-600 underline text-xs" href="{% url 'financiero:proveedor_editar' p.proveedor.pk %}">Ver en maestro</a>{% endif %}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="py-3 text-gray-500">Sin proveedores para el filtro.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        <div class="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 flex items-center justify-between">
+            <div>
+                <p class="text-sm font-medium text-blue-800 dark:text-blue-300">Costos ejecutados registrados en el módulo Costos ({{ anio }})</p>
+                <p class="text-xs text-blue-700 dark:text-blue-400">Referencia: registros manuales del módulo Costos (no incluye la carga de gastos reales).</p>
+            </div>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">${{ total_costos_registrados|default:0|floatformat:0|intcomma }}</p>
+        </div>
+    </section>
 </main>
 {% endblock %}

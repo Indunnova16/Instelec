@@ -12,6 +12,11 @@ from django.urls import path
 from apps.financiero.views import DescargarPlantillaPresupuestoPlanoView
 
 from . import views_fin
+from .reportes_gastos_real import (
+    ReporteGastosRealCsvView,
+    ReporteGastosRealExcelView,
+    ReporteGastosRealPdfView,
+)
 from .reportes_presupuesto import (
     ReportePresupuestoCsvView,
     ReportePresupuestoExcelView,
@@ -78,6 +83,27 @@ urlpatterns = [
         '<uuid:proyecto_id>/financiero/presupuesto-real/',
         views_fin.PresupuestoRealConstruccionView.as_view(),
         name='fin_presupuesto_real',
+    ),
+    # Instelec#268 — plantilla de carga + reportes del Presupuesto Real.
+    path(
+        '<uuid:proyecto_id>/financiero/presupuesto-real/plantilla/',
+        views_fin.PlantillaGastosRealesView.as_view(),
+        name='fin_presupuesto_real_plantilla',
+    ),
+    path(
+        '<uuid:proyecto_id>/financiero/presupuesto-real/pdf/',
+        ReporteGastosRealPdfView.as_view(),
+        name='fin_presupuesto_real_pdf',
+    ),
+    path(
+        '<uuid:proyecto_id>/financiero/presupuesto-real/excel/',
+        ReporteGastosRealExcelView.as_view(),
+        name='fin_presupuesto_real_excel',
+    ),
+    path(
+        '<uuid:proyecto_id>/financiero/presupuesto-real/csv/',
+        ReporteGastosRealCsvView.as_view(),
+        name='fin_presupuesto_real_csv',
     ),
     path(
         '<uuid:proyecto_id>/financiero/nomina/',
