@@ -7,8 +7,6 @@ name: CI
 # tests/e2e quedan EXCLUIDOS (browser/Playwright, no son unit). El --timeout es
 # backstop: ningún test puede colgar el runner (placeholder #actividades_finales).
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
