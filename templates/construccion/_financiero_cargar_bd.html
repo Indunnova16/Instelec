@@ -143,7 +143,7 @@ esté cableado procesará el archivo. La UI queda completa y funcional como subi
                             {{ carga.fecha|date:"d/m/Y H:i:s" }}
                         </td>
                         <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">
-                            {{ carga.usuario.get_full_name|default:carga.usuario.username|default:"—" }}
+                            {{ carga.usuario|default:"—" }}
                         </td>
                         <td class="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
                             {{ carga.filas_procesadas }}

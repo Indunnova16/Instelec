@@ -43,7 +43,8 @@ from ninja import Router
 from apps.api.auth import JWTAuth
 
 from .models import ProyectoConstruccion
-from .models_fin import PresupuestoDetalladoConstruccion
+from . import gastos_real
+from .models_fin import GastoRealConstruccion, PresupuestoDetalladoConstruccion
 from .views_fin import _kpi_cards_finv2_bd, _to_decimal
 
 router = Router(auth=JWTAuth())
@@ -97,4 +98,50 @@ def presupuesto_periodo(
         'costos_variables': float(kpi['costos_variables']),
         'ingresos': float(kpi['ingreso']),
         'total_año': float(total_periodo),
+    }
+
+
+@router.get('/presupuesto-real/{proyecto_id}/periodo/{mes}/{anio}')
+def presupuesto_real_periodo(
+    request: HttpRequest, proyecto_id: UUID, mes: int, anio: int,
+) -> dict:
+    """Instelec#268 — gasto REAL vs presupuesto planeado de un mes puntual,
+    para #246 (Indicadores Financieros). Shape del ejemplo del issue.
+
+    ``por_rubro`` lista cada Cuenta Equiv (Prestaciones Sociales, Seguridad
+    Social…) con su rubro presupuestal. 404 si el mes está fuera de rango, el
+    proyecto no existe o no hay gastos reales cargados para ese período.
+    """
+    if not 1 <= mes <= 12:
+        raise Http404('Mes fuera de rango (1..12)')
+    proyecto = get_object_or_404(ProyectoConstruccion, id=proyecto_id)
+    periodo = f'{anio}{mes:02d}'
+    if not GastoRealConstruccion.objects.filter(proyecto=proyecto, periodo=periodo).exists():
+        raise Http404('No hay gastos reales cargados para ese mes/año')
+
+    comp = gastos_real.construir_comparativo(proyecto, anio, {'periodo': periodo})
+    kpi = comp['kpi']
+
+    def _f(valor):
+        return None if valor is None else float(valor)
+
+    return {
+        'periodo': f'{mes:02d}/{anio}',
+        'proyecto': proyecto.nombre,
+        'gasto_real_total': float(kpi['real']),
+        'presupuesto_total': float(kpi['planeado']),
+        'variacion_pesos': float(kpi['variacion']),
+        'variacion_porcentaje': _f(kpi['variacion_pct']),
+        'cumplimiento_porcentaje': _f(kpi['cumplimiento_pct']),
+        'por_rubro': [
+            {
+                'rubro': f['nombre'],
+                'rubro_presupuestal': f['rubro'],
+                'gasto_real': float(f['total_real']),
+                'presupuesto': _f(f['presupuesto']),
+                'variacion_porcentaje': _f(f['variacion_pct']),
+                'semaforo': f['semaforo'],
+            }
+            for f in comp['filas'] if not f['es_subtotal']
+        ],
     }

@@ -346,7 +346,8 @@ def generar_excel_presupuesto(proyecto, anio: int, mes: int | None = None) -> by
     hoja_hist = libro.create_sheet("Histórico")
     hoja_hist.append(["Fecha", "Usuario", "Filas", "Valor total", "Estado", "Período"])
     cargas = (
-        HistorialCargaPresupuestoConstruccion.objects.filter(proyecto=proyecto)
+        HistorialCargaPresupuestoConstruccion.objects.filter(
+            proyecto=proyecto, tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO)
         .select_related("usuario")
         .order_by("-fecha")[:50]
     )
@@ -534,7 +535,8 @@ def generar_ppt_presupuesto(proyecto, anio: int, mes: int | None = None) -> byte
 
     # Slide 6: Historial de cargas (últimas 5)
     cargas = list(
-        HistorialCargaPresupuestoConstruccion.objects.filter(proyecto=proyecto)
+        HistorialCargaPresupuestoConstruccion.objects.filter(
+            proyecto=proyecto, tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO)
         .select_related("usuario")
         .order_by("-fecha")[:5]
     )

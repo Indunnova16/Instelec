@@ -42,11 +42,14 @@ Templates (``construccion/financiero_*.html``) los crea B5; F4 corre después de
 B5, así que referenciar ``template_name`` aquí es seguro aunque el archivo aún
 no exista en esta branch.
 """
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404
+from django.views import View
 from django.views.generic import TemplateView
 
 from apps.core.mixins import RoleRequiredMixin, SubModuloRequiredMixin
@@ -83,10 +86,12 @@ from .permissions_fin import formatos_reporte_permitidos
 # lógica de suma. Los filtros de Clasificación/Ciudad solo cambian QUÉ
 # subconjunto de filas entra, no cómo se agregan.
 from .importers import _construir_finv2_bd_desde_filas_planas
+from . import gastos_real
 from .models import ProyectoConstruccion
 from .models_fin import (
     CostosConstruccion,
     FacturacionConstruccion,
+    GastoRealConstruccion,
     HistorialCargaPresupuestoConstruccion,
     IndicadorANSConstruccion,
     PresupuestoDetalladoConstruccion,
@@ -805,7 +810,7 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
         # tendencia entre períodos, no solo el año en pantalla.
         ctx['historial_cargas'] = (
             HistorialCargaPresupuestoConstruccion.objects
-            .filter(proyecto=proyecto)
+            .filter(proyecto=proyecto, tipo=PresupuestoDetalladoConstruccion.Tipo.PLANEADO)
             .select_related('usuario')
             .order_by('-fecha')[:10]
         )
@@ -912,37 +917,112 @@ class PresupuestoPlaneadoConstruccionView(ProyectoFinMixin, TemplateView):
 # 3. PRESUPUESTO REAL
 # ===========================================================================
 class PresupuestoRealConstruccionView(ProyectoFinMixin, TemplateView):
-    """Presupuesto REAL del año (ejecutado) (#123 Fase 2.3)."""
+    """Presupuesto REAL (ejecutado) — Instelec#268.
+
+    GET: matriz Gastos Reales × Meses vs Presupuesto Planeado (#267), KPI
+    cards, semáforo, filtros (Clasificación/Proveedor/Centro de costo/Período),
+    relación con el maestro de proveedores (#262) e historial de cargas.
+    POST: carga del Excel de 18 columnas (``gastos_real.procesar_carga_gastos_reales``).
+    """
     template_name = 'construccion/financiero_presupuesto_real.html'
     active_subtab = 'presupuesto_real'
+
+    def _filtros(self):
+        g = self.request.GET
+        filtros = {
+            'clasificacion': (g.get('clasificacion') or '').strip(),
+            'proveedor': (g.get('proveedor') or '').strip(),
+            'centro_costo': (g.get('centro_costo') or '').strip(),
+            'periodo': (g.get('periodo') or '').strip(),
+        }
+        if filtros['clasificacion'] not in (gastos_real.CLASIFICACION_FIJO, gastos_real.CLASIFICACION_VARIABLE):
+            filtros['clasificacion'] = ''
+        if filtros['periodo'] and not re.match(r'^\d{4}(0[1-9]|1[0-2])$', filtros['periodo']):
+            filtros['periodo'] = ''
+        return filtros
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         proyecto, anio = ctx['proyecto'], ctx['anio']
-        presupuesto = (
-            PresupuestoDetalladoConstruccion.objects
-            .filter(proyecto=proyecto, anio=anio,
-                    tipo=PresupuestoDetalladoConstruccion.Tipo.REAL)
-            .first()
-        )
+        filtros = self._filtros()
+        if filtros['periodo'] and int(filtros['periodo'][:4]) != anio:
+            anio = ctx['anio'] = int(filtros['periodo'][:4])
         ctx['tipo'] = 'REAL'
-        ctx['presupuesto'] = presupuesto
-        ctx['datos'] = presupuesto.datos if presupuesto else {}
-        ctx['sin_datos'] = presupuesto is None
-        ctx['resumen'] = self._resumen_presupuesto(
-            proyecto, anio, PresupuestoDetalladoConstruccion.Tipo.REAL)
-        # A5 (#267 Fase 4): mismo partial compartido con Planeado — si algún
-        # día el REAL también recibe finv2_bd/filas_detalle, las cards ya
-        # están conectadas; hoy con datos legacy simplemente no se pintan
-        # (tiene_filas_detalle=False).
-        ctx['kpi_cards'] = _kpi_cards_finv2_bd(ctx['datos'])
-        # Total ejecutado derivado de costos registrados (cruce con CostosConstruccion).
+        ctx['filtros'] = filtros
+        ctx['filtro_activo'] = any(filtros.values())
+        ctx['opciones'] = gastos_real.opciones_filtros(proyecto, anio)
+        ctx['comparativo'] = gastos_real.construir_comparativo(proyecto, anio, filtros)
+        ctx['meses_cortos'] = gastos_real.MESES_CORTOS
+        ctx['columnas_excel'] = gastos_real.COLUMNAS_GASTOS_REALES
+        ctx['sin_datos'] = not GastoRealConstruccion.objects.filter(proyecto=proyecto).exists()
+        ctx['historial_cargas'] = (
+            HistorialCargaPresupuestoConstruccion.objects
+            .filter(proyecto=proyecto, tipo=PresupuestoDetalladoConstruccion.Tipo.REAL)
+            .select_related('usuario')
+            .order_by('-fecha')[:10]
+        )
+        ctx['querystring_filtros'] = urlencode({'anio': anio, **{k: v for k, v in filtros.items() if v}})
+        # Cruce con costos registrados en el módulo Costos (se conserva de #123).
         total_costos = Decimal('0')
-        for c in CostosConstruccion.objects.filter(
-                proyecto=proyecto, fecha__year=anio):
+        for c in CostosConstruccion.objects.filter(proyecto=proyecto, fecha__year=anio):
             total_costos += _to_decimal(c.costo_total)
         ctx['total_costos_registrados'] = total_costos
         return ctx
+
+    def post(self, request, *args, **kwargs):
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        proyecto = self.get_proyecto()
+        archivo = request.FILES.get('archivo')
+        if not archivo:
+            messages.error(request, 'Seleccione el archivo .xlsx de gastos reales.')
+            return redirect(f'{request.path}?tab=cargar')
+
+        res = gastos_real.procesar_carga_gastos_reales(proyecto, archivo, request.user)
+        if res.exito:
+            messages.success(request, res.mensaje)
+            for aviso in res.advertencias:
+                messages.warning(request, aviso)
+            periodo = res.periodos[0] if len(res.periodos) == 1 else ''
+            anio = res.periodos[0][:4]
+            destino = f'{request.path}?anio={anio}' + (f'&periodo={periodo}' if periodo else '')
+            return redirect(destino)
+        total = len(res.errores)
+        detalle = '; '.join(res.errores[:8]) + (f' … y {total - 8} más' if total > 8 else '')
+        messages.error(request, f'No se cargó el archivo ({total} error(es)): {detalle}')
+        return redirect(f'{request.path}?tab=cargar')
+
+
+class PlantillaGastosRealesView(ProyectoFinMixin, View):
+    """Plantilla .xlsx con las 18 columnas exactas del formato de gastos reales (#268)."""
+
+    active_subtab = 'presupuesto_real'
+
+    def get(self, request, *args, **kwargs):
+        from io import BytesIO
+
+        from django.http import HttpResponse
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Gastos reales'
+        ws.append(gastos_real.COLUMNAS_GASTOS_REALES)
+        for celda in ws[1]:
+            celda.font = Font(bold=True)
+        ws.append(['5105', 'SUELDOS', 1500000, '15/02/2026', 'NC-0001', '202602', '900123456',
+                   'PROVEEDOR EJEMPLO S.A.S.', 'OBRA', 'usuario@instelec.com.co', '67', '',
+                   '300102', 'ADMINISTRACION', 'Salarios', 'TRANSELCA', 'Auxiliar', 'Si'])
+        salida = BytesIO()
+        wb.save(salida)
+        response = HttpResponse(
+            salida.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="Plantilla_Gastos_Reales.xlsx"'
+        return response
 
 
 # ===========================================================================
